@@ -67,8 +67,10 @@ export function mapBackupToRicordoData(backup: any): RicordoData {
     notas: p.rubro,
   }));
 
+  // id_receta groups all lines of one producto's recipe under a single id in
+  // some exports — generate a per-line id instead so each row stays unique.
   d.recetas = (backup.recetas ?? []).map((r: any) => ({
-    id: r.id_receta ?? uid("REC"),
+    id: uid("REC"),
     id_producto: r.id_producto,
     tipo: r.tipo,
     concepto: r.concepto,
@@ -217,15 +219,23 @@ export function mapBackupToRicordoData(backup: any): RicordoData {
     categoria: g.proveedor ?? "General",
   }));
 
-  d.caja_movimientos = (backup.caja_movimientos ?? []).map((m: any) => ({
-    id: m.id,
-    fecha: m.fecha,
-    tipo: m.tipo,
-    concepto: m.concepto ?? m.descripcion ?? m.categoria ?? "",
-    monto: m.monto ?? 0,
-    metodo: m.metodo ?? "Efectivo",
-    ref: m.ref,
-  }));
+  // Some exports reuse the same movement id across several line items (one per
+  // ref) — disambiguate so React keys and lookups stay unique.
+  const seenCajaIds = new Set<string>();
+  d.caja_movimientos = (backup.caja_movimientos ?? []).map((m: any) => {
+    let id = m.id ?? uid("CAJ");
+    if (seenCajaIds.has(id)) id = `${id}-${m.ref ?? uid("X")}`;
+    seenCajaIds.add(id);
+    return {
+      id,
+      fecha: m.fecha,
+      tipo: m.tipo,
+      concepto: m.concepto ?? m.descripcion ?? m.categoria ?? "",
+      monto: m.monto ?? 0,
+      metodo: m.metodo ?? "Efectivo",
+      ref: m.ref,
+    };
+  });
 
   d.transferencias_internas = (backup.transferencias_internas ?? []).map((t: any) => ({
     id: t.id ?? uid("TRF"),
@@ -257,12 +267,13 @@ export function mapBackupToRicordoData(backup: any): RicordoData {
     if (ing) ing.seguimiento_stock = true;
   }
 
-  d.conteos_stock = (backup.conteos_stock ?? []).map((c: any) => ({
-    id: c.id,
-    id_producto: c.id_producto,
-    cantidad: c.cantidad ?? 0,
-    fecha: c.fecha,
-  }));
+  const seenConteoIds = new Set<string>();
+  d.conteos_stock = (backup.conteos_stock ?? []).map((c: any) => {
+    let id = c.id ?? uid("CTK");
+    if (seenConteoIds.has(id)) id = `${id}-${c.id_producto}`;
+    seenConteoIds.add(id);
+    return { id, id_producto: c.id_producto, cantidad: c.cantidad ?? 0, fecha: c.fecha };
+  });
 
   // stock_manual: backup mixes {gusto: cantidad, gusto_fecha: date} pairs -> take most recent product per gusto match
   const stockManual: Record<string, number> = {};

@@ -12,6 +12,18 @@ import { Proveedores } from "./Proveedores";
 import { Stock } from "./Stock";
 import { Produccion } from "./Produccion";
 import { Envios } from "./Envios";
+import { Caja } from "./Caja";
+import { Posicion } from "./Posicion";
+import { Flujo } from "./Flujo";
+import { Proyeccion } from "./Proyeccion";
+import { CajaInteligente } from "./CajaInteligente";
+import { Transferencias } from "./Transferencias";
+import { EERR } from "./EERR";
+import { CostosFijos } from "./CostosFijos";
+import { CostosIndirectos } from "./CostosIndirectos";
+import { PuntoEquilibrio } from "./PuntoEquilibrio";
+import { CMV } from "./CMV";
+import { HistorialPrecios } from "./HistorialPrecios";
 
 export const PAGES: Record<string, React.ComponentType> = Object.fromEntries(
   NAV.flatMap((g) => g.items.map((i) => [i.key, Placeholder]))
@@ -28,3 +40,15 @@ PAGES.proveedores = Proveedores;
 PAGES.stock = Stock;
 PAGES.produccion = Produccion;
 PAGES.envios = Envios;
+PAGES.caja = Caja;
+PAGES.posicion = Posicion;
+PAGES.flujo = Flujo;
+PAGES.proyeccion = Proyeccion;
+PAGES["caja-inteligente"] = CajaInteligente;
+PAGES.transferencias = Transferencias;
+PAGES.eerr = EERR;
+PAGES["costos-fijos"] = CostosFijos;
+PAGES["costos-indirectos"] = CostosIndirectos;
+PAGES["punto-equilibrio"] = PuntoEquilibrio;
+PAGES.cmv = CMV;
+PAGES["historial-precios"] = HistorialPrecios;
