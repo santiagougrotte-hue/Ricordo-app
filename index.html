@@ -1,0 +1,1688 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>APEX FC — Rendimiento</title>
+<meta name="theme-color" content="#0A0A0B">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="APEX FC">
+<link rel="apple-touch-icon" href="icon.svg">
+<link rel="manifest" href="manifest.json">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Crect width='100' height='100' rx='20' fill='%230A0A0B'/%3E%3Cpath d='M50 15 L80 35 L68 75 L32 75 L20 35 Z' fill='none' stroke='%2300C853' stroke-width='6'/%3E%3C/svg%3E">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Oswald:wght@400;500;600;700&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg:#0A0A0B;
+  --surface:#151619;
+  --surface-2:#1D1F23;
+  --surface-3:#26282D;
+  --accent:#00C853;
+  --accent-dim:#00A344;
+  --accent-glow:rgba(0,200,83,.18);
+  --text:#F5F6F7;
+  --text-muted:#9AA0A6;
+  --text-faint:#5B5F66;
+  --border:#2A2C30;
+  --danger:#FF5252;
+  --warn:#FFB300;
+  --font-display:'Oswald',sans-serif;
+  --font-body:'Inter',sans-serif;
+  --font-mono:'JetBrains Mono',monospace;
+  --safe-bottom:env(safe-area-inset-bottom,0px);
+}
+*{box-sizing:border-box; -webkit-tap-highlight-color:transparent;}
+html,body{margin:0;padding:0;background:var(--bg);color:var(--text);font-family:var(--font-body);}
+body{
+  min-height:100vh;
+  background-image:
+    radial-gradient(circle at 15% 0%, rgba(0,200,83,.06), transparent 40%),
+    repeating-linear-gradient(90deg, transparent, transparent 119px, rgba(255,255,255,.012) 120px);
+  padding-bottom:calc(76px + var(--safe-bottom));
+}
+h1,h2,h3,h4{font-family:var(--font-display); text-transform:uppercase; letter-spacing:.03em; margin:0;}
+.mono{font-family:var(--font-mono);}
+::selection{background:var(--accent); color:#04140A;}
+button{font-family:inherit;}
+
+/* ===== Top bar ===== */
+.topbar{
+  position:sticky; top:0; z-index:40;
+  display:flex; align-items:center; justify-content:space-between;
+  padding:14px 18px; background:rgba(10,10,11,.85); backdrop-filter:blur(10px);
+  border-bottom:1px solid var(--border);
+}
+.brand{display:flex; align-items:center; gap:10px;}
+.brand-mark{width:30px;height:30px;position:relative;flex:none;}
+.brand-mark svg{width:100%;height:100%;}
+.brand-name{font-family:var(--font-display); font-size:19px; font-weight:700; letter-spacing:.06em;}
+.brand-name span{color:var(--accent);}
+.topbar-actions{display:flex; gap:8px;}
+.icon-btn{
+  width:38px;height:38px; border-radius:10px; border:1px solid var(--border); background:var(--surface);
+  color:var(--text-muted); display:flex; align-items:center; justify-content:center; cursor:pointer;
+}
+.icon-btn:active{transform:scale(.94);}
+
+/* ===== Bottom nav ===== */
+.bottomnav{
+  position:fixed; bottom:0; left:0; right:0; z-index:50;
+  display:flex; background:rgba(13,14,16,.92); backdrop-filter:blur(14px);
+  border-top:1px solid var(--border); padding:6px 4px calc(6px + var(--safe-bottom));
+}
+.navbtn{
+  flex:1; display:flex; flex-direction:column; align-items:center; gap:3px;
+  background:none; border:none; color:var(--text-faint); padding:7px 2px; cursor:pointer; border-radius:10px;
+  font-size:10.5px; letter-spacing:.02em;
+}
+.navbtn svg{width:21px;height:21px;}
+.navbtn.active{color:var(--accent);}
+.navbtn.active .navdot{opacity:1; transform:scale(1);}
+.navdot{width:4px;height:4px;border-radius:50%;background:var(--accent);opacity:0;transform:scale(0);transition:.2s;}
+
+/* ===== Layout ===== */
+.view{display:none; padding:18px; max-width:760px; margin:0 auto; animation:fadein .25s ease;}
+.view.active{display:block;}
+@keyframes fadein{from{opacity:0; transform:translateY(6px);} to{opacity:1; transform:translateY(0);}}
+.section-title{font-size:13px; color:var(--text-faint); margin:22px 0 10px; letter-spacing:.12em; display:flex; align-items:center; gap:8px;}
+.section-title::after{content:''; flex:1; height:1px; background:var(--border);}
+
+/* ===== Cards ===== */
+.card{
+  background:var(--surface); border:1px solid var(--border); border-radius:16px; padding:16px;
+  position:relative; overflow:hidden;
+}
+.card + .card{margin-top:10px;}
+.grid-2{display:grid; grid-template-columns:1fr 1fr; gap:10px;}
+.grid-3{display:grid; grid-template-columns:repeat(3,1fr); gap:10px;}
+
+/* Stat card */
+.stat-card{padding:14px;}
+.stat-label{font-size:10.5px; color:var(--text-faint); text-transform:uppercase; letter-spacing:.08em; margin-bottom:6px;}
+.stat-value{font-family:var(--font-mono); font-size:26px; font-weight:700; line-height:1;}
+.stat-value small{font-size:12px; color:var(--text-muted); font-weight:400; margin-left:3px;}
+.stat-trend{font-size:11px; margin-top:6px; display:flex; align-items:center; gap:4px;}
+.trend-up{color:var(--accent);} .trend-down{color:var(--danger);}
+
+/* Hero / matchday */
+.hero{
+  background:linear-gradient(160deg, var(--surface-2) 0%, var(--surface) 65%);
+  border:1px solid var(--border); border-radius:20px; padding:20px; position:relative; overflow:hidden;
+}
+.hero::before{
+  content:''; position:absolute; right:-40px; top:-40px; width:160px; height:160px; border-radius:50%;
+  background:radial-gradient(circle, var(--accent-glow), transparent 70%);
+}
+.hero-eyebrow{font-size:11px; color:var(--accent); letter-spacing:.16em; font-weight:600; text-transform:uppercase;}
+.hero-title{font-size:26px; margin-top:6px; line-height:1.05;}
+.hero-sub{color:var(--text-muted); font-size:13px; margin-top:6px;}
+.hero-meta{display:flex; gap:18px; margin-top:16px; flex-wrap:wrap;}
+.hero-meta-item{font-family:var(--font-mono); font-size:12px; color:var(--text-muted);}
+.hero-meta-item b{color:var(--text); font-size:15px; display:block; font-family:var(--font-display);}
+.hero-cta{
+  margin-top:16px; background:var(--accent); color:#04140A; border:none; padding:12px 18px; border-radius:12px;
+  font-weight:700; font-size:14px; letter-spacing:.02em; cursor:pointer; display:inline-flex; align-items:center; gap:8px;
+}
+.hero-cta:active{transform:scale(.97);}
+
+/* Progress bar */
+.progress-track{height:7px; background:var(--surface-3); border-radius:99px; overflow:hidden; margin-top:8px;}
+.progress-fill{height:100%; background:linear-gradient(90deg, var(--accent-dim), var(--accent)); border-radius:99px; transition:width .4s ease;}
+
+/* Accordion (block cards) */
+.block-card{
+  background:var(--surface); border:1px solid var(--border); border-radius:14px; margin-bottom:10px; overflow:hidden;
+}
+.block-head{
+  display:flex; align-items:center; gap:12px; padding:14px 16px; cursor:pointer; user-select:none;
+}
+.block-num{
+  width:34px;height:34px;border-radius:9px; background:var(--surface-2); border:1px solid var(--border);
+  display:flex; align-items:center; justify-content:center; font-family:var(--font-mono); font-weight:700; color:var(--accent); flex:none; font-size:14px;
+}
+.block-head-text{flex:1; min-width:0;}
+.block-title{font-size:14px; letter-spacing:.02em;}
+.block-sub{font-size:11.5px; color:var(--text-faint); margin-top:2px; text-transform:none; font-family:var(--font-body);}
+.block-chevron{color:var(--text-faint); transition:transform .25s ease; flex:none;}
+.block-card.open .block-chevron{transform:rotate(180deg);}
+.block-body{max-height:0; overflow:hidden; transition:max-height .3s ease;}
+.block-card.open .block-body{max-height:3600px;}
+.block-body-inner{padding:0 16px 16px;}
+
+.exercise-row-wrap{border-top:1px solid var(--border);}
+.exercise-row-wrap.no-border{border-top:none;}
+.exercise-row{
+  display:flex; align-items:center; gap:10px; padding:10px 0;
+}
+.superset-header{
+  font-size:11px; color:var(--accent); letter-spacing:.08em; text-transform:uppercase; font-weight:700; margin:12px 0 2px;
+}
+.superset-header:first-child{margin-top:0;}
+.superset-header.muted{color:var(--text-faint);}
+.ex-check{
+  width:22px;height:22px;border-radius:7px;border:1.5px solid var(--text-faint); flex:none; cursor:pointer;
+  display:flex; align-items:center; justify-content:center; transition:.15s;
+}
+.ex-check.done{background:var(--accent); border-color:var(--accent);}
+.ex-check.done svg{width:13px;height:13px;color:#04140A;}
+.ex-info{flex:1; min-width:0; cursor:pointer;}
+.ex-name{font-size:13.5px; font-weight:500;}
+.ex-name.done-text{color:var(--text-faint); text-decoration:line-through;}
+.ex-detail{font-family:var(--font-mono); font-size:11px; color:var(--text-muted); margin-top:2px;}
+.ex-arrow{color:var(--text-faint); flex:none;}
+.prog-toggle{
+  flex:none; width:30px; height:30px; border-radius:8px; background:var(--surface-2); border:1px solid var(--border);
+  color:var(--text-muted); font-size:13px; display:flex; align-items:center; justify-content:center; cursor:pointer; padding:0;
+}
+.prog-toggle:active{transform:scale(.94);}
+.progression-wrap{padding:2px 0 12px;}
+.progression-scroll{overflow-x:auto; border-radius:10px; border:1px solid var(--border);}
+.progression-table{width:100%; min-width:420px; border-collapse:collapse; background:var(--surface-2);}
+.progression-table th{
+  font-size:9.5px; text-transform:uppercase; letter-spacing:.05em; color:var(--text-faint); padding:8px 5px; text-align:center;
+  border-bottom:1px solid var(--border); font-weight:600;
+}
+.progression-table td{padding:5px; text-align:center; border-bottom:1px solid var(--border);}
+.progression-table tr:last-child td{border-bottom:none;}
+.progression-table td.mono{font-family:var(--font-mono); color:var(--text-muted); font-size:12px;}
+.progression-table input{
+  width:100%; min-width:44px; background:var(--surface); border:1px solid var(--border); color:var(--text);
+  padding:6px 3px; border-radius:6px; font-size:11px; font-family:var(--font-mono); text-align:center;
+}
+.progression-table input:focus{outline:none; border-color:var(--accent);}
+
+/* Chips / tags */
+.chip{
+  display:inline-flex; align-items:center; padding:4px 10px; border-radius:99px; font-size:10.5px;
+  background:var(--surface-2); border:1px solid var(--border); color:var(--text-muted); letter-spacing:.03em;
+}
+.chip.accent{background:var(--accent-glow); color:var(--accent); border-color:transparent; font-weight:600;}
+.tabs{display:flex; gap:6px; overflow-x:auto; padding-bottom:2px; -ms-overflow-style:none; scrollbar-width:none;}
+.tabs::-webkit-scrollbar{display:none;}
+.tab{
+  flex:none; padding:9px 15px; border-radius:11px; background:var(--surface); border:1px solid var(--border);
+  color:var(--text-muted); font-size:12.5px; font-weight:600; cursor:pointer; white-space:nowrap;
+}
+.tab.active{background:var(--accent); color:#04140A; border-color:var(--accent);}
+
+/* Week rail */
+.week-rail{display:flex; gap:8px; overflow-x:auto; padding:4px 2px 12px; -ms-overflow-style:none; scrollbar-width:none;}
+.week-rail::-webkit-scrollbar{display:none;}
+.week-pill{
+  flex:none; width:52px; height:60px; border-radius:13px; background:var(--surface); border:1px solid var(--border);
+  display:flex; flex-direction:column; align-items:center; justify-content:center; cursor:pointer; gap:2px;
+}
+.week-pill .wl{font-size:9px; color:var(--text-faint); text-transform:uppercase; letter-spacing:.05em;}
+.week-pill .wn{font-family:var(--font-display); font-size:19px;}
+.week-pill.active{background:var(--accent); border-color:var(--accent);}
+.week-pill.active .wl, .week-pill.active .wn{color:#04140A;}
+.week-pill.deload{border-color:var(--warn);}
+.week-pill.deload .wn{color:var(--warn);}
+
+/* Day tabs */
+.day-tabs{display:flex; gap:8px; margin-top:14px;}
+.day-tab{
+  flex:1; padding:11px 0; text-align:center; border-radius:12px; background:var(--surface); border:1px solid var(--border);
+  cursor:pointer; font-size:12.5px; font-weight:600; color:var(--text-muted);
+}
+.day-tab.active{background:var(--surface-2); border-color:var(--accent); color:var(--accent);}
+
+/* Forms */
+.field{margin-bottom:12px;}
+.field label{display:block; font-size:11.5px; color:var(--text-faint); margin-bottom:6px; text-transform:uppercase; letter-spacing:.06em;}
+.field input, .field select{
+  width:100%; background:var(--surface-2); border:1px solid var(--border); color:var(--text); padding:11px 13px;
+  border-radius:11px; font-size:14px; font-family:var(--font-mono);
+}
+.field input:focus, .field select:focus{outline:none; border-color:var(--accent);}
+.btn{
+  background:var(--surface-2); border:1px solid var(--border); color:var(--text); padding:12px 16px; border-radius:12px;
+  font-weight:600; font-size:13.5px; cursor:pointer; width:100%;
+}
+.btn.primary{background:var(--accent); color:#04140A; border-color:var(--accent);}
+.btn:active{transform:scale(.98);}
+.btn-row{display:flex; gap:10px;}
+.btn-row .btn{flex:1;}
+
+/* Modal */
+.modal-backdrop{
+  position:fixed; inset:0; background:rgba(0,0,0,.6); z-index:100; display:none; align-items:flex-end; justify-content:center;
+  backdrop-filter:blur(3px);
+}
+.modal-backdrop.open{display:flex;}
+.modal{
+  background:var(--surface); width:100%; max-width:560px; max-height:88vh; overflow-y:auto; border-radius:22px 22px 0 0;
+  padding:22px; border:1px solid var(--border); border-bottom:none; animation:slideup .25s ease;
+}
+@keyframes slideup{from{transform:translateY(30px); opacity:0;} to{transform:translateY(0); opacity:1;}}
+.modal-handle{width:40px; height:4px; background:var(--surface-3); border-radius:99px; margin:0 auto 16px;}
+.modal-title{font-size:20px;}
+.modal-close{position:absolute; top:18px; right:18px; color:var(--text-faint); cursor:pointer;}
+.modal-tag-row{display:flex; gap:6px; margin:10px 0 16px; flex-wrap:wrap;}
+.modal-section{margin-top:16px;}
+.modal-section h4{font-size:11.5px; color:var(--accent); letter-spacing:.08em; margin-bottom:6px;}
+.modal-section p{margin:0; font-size:13.5px; color:var(--text-muted); line-height:1.55;}
+.modal-section ul{margin:0; padding-left:18px; font-size:13.5px; color:var(--text-muted); line-height:1.6;}
+.video-link{
+  display:flex; align-items:center; gap:8px; background:var(--surface-2); border:1px solid var(--border); border-radius:12px;
+  padding:12px 14px; color:var(--accent); text-decoration:none; font-size:13px; font-weight:600; margin-top:4px;
+}
+
+/* Library grid */
+.lib-card{
+  background:var(--surface); border:1px solid var(--border); border-radius:14px; padding:14px; cursor:pointer; margin-bottom:10px;
+  display:flex; align-items:center; gap:12px;
+}
+.lib-icon{
+  width:42px; height:42px; border-radius:11px; background:var(--surface-2); display:flex; align-items:center; justify-content:center;
+  color:var(--accent); flex:none;
+}
+.lib-name{font-size:14px; font-weight:600;}
+.lib-cat{font-size:11px; color:var(--text-faint); margin-top:2px;}
+
+/* Tracker */
+.chart-wrap{background:var(--surface); border:1px solid var(--border); border-radius:16px; padding:16px; margin-top:10px;}
+.chart-head{display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;}
+.chart-head h4{font-size:13px; letter-spacing:.03em;}
+svg.chart{width:100%; height:150px; overflow:visible;}
+
+/* PR list */
+.pr-row{display:flex; justify-content:space-between; align-items:center; padding:10px 0; border-top:1px solid var(--border);}
+.pr-row:first-child{border-top:none;}
+.pr-name{font-size:13px;}
+.pr-val{font-family:var(--font-mono); font-weight:700; color:var(--accent); font-size:14px;}
+
+/* Toast */
+.toast{
+  position:fixed; bottom:88px; left:50%; transform:translateX(-50%) translateY(20px); background:var(--surface-2);
+  border:1px solid var(--accent); color:var(--text); padding:12px 20px; border-radius:12px; font-size:13px; z-index:200;
+  opacity:0; transition:.25s; pointer-events:none; display:flex; align-items:center; gap:8px;
+}
+.toast.show{opacity:1; transform:translateX(-50%) translateY(0);}
+
+.empty-hint{text-align:center; padding:30px 10px; color:var(--text-faint); font-size:13px;}
+
+@media print{
+  .topbar,.bottomnav,.tabs,.week-rail,.hero-cta,.day-tabs{display:none !important;}
+  body{background:#fff; color:#000; padding-bottom:0;}
+  .view{display:block !important;}
+  .card,.block-card{border:1px solid #ccc; background:#fff; color:#000; break-inside:avoid;}
+}
+@media (min-width:640px){ .view{padding:26px 24px;} }
+</style>
+</head>
+<body>
+
+<div class="topbar">
+  <div class="brand">
+    <div class="brand-mark">
+      <svg viewBox="0 0 100 100"><rect width="100" height="100" rx="22" fill="#151619" stroke="#2A2C30"/><path d="M50 20 L76 38 L66 72 L34 72 L24 38 Z" fill="none" stroke="#00C853" stroke-width="6"/></svg>
+    </div>
+    <div class="brand-name">APEX<span>FC</span></div>
+  </div>
+  <div class="topbar-actions">
+    <button class="icon-btn" onclick="Router.go('progreso')" title="Progreso">
+      <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 17l6-6 4 4 8-8"/><path d="M17 7h4v4"/></svg>
+    </button>
+    <button class="icon-btn" onclick="Router.go('config')" title="Configuración">
+      <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 11-2.83 2.83l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 11-2.83-2.83l.06-.06A1.65 1.65 0 004.6 15a1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 112.83-2.83l.06.06A1.65 1.65 0 009 4.6a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 112.83 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"/></svg>
+    </button>
+  </div>
+</div>
+
+<!-- ================= DASHBOARD ================= -->
+<div class="view active" id="view-dashboard">
+  <div class="hero">
+    <div class="hero-eyebrow" id="hero-phase">Fase 1 · Semana 1</div>
+    <h1 class="hero-title" id="hero-day">Hoy: Lunes — Sesión A</h1>
+    <div class="hero-sub" id="hero-sub">6 bloques · ~75 min · Fuerza + Potencia</div>
+    <div class="hero-meta">
+      <div class="hero-meta-item">Próxima sesión<b id="hero-next">Miércoles</b></div>
+      <div class="hero-meta-item">Carga semanal<b id="hero-load">—</b></div>
+      <div class="hero-meta-item">Recuperación<b id="hero-recovery">—</b></div>
+    </div>
+    <button class="hero-cta" onclick="Router.go('plan')">
+      Ir al entrenamiento
+      <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M5 12h14M13 6l6 6-6 6"/></svg>
+    </button>
+  </div>
+
+  <div class="section-title">ESTADO DE HOY</div>
+  <div class="grid-2">
+    <div class="card stat-card">
+      <div class="stat-label">Peso corporal</div>
+      <div class="stat-value" id="dash-weight">—<small>kg</small></div>
+      <div class="stat-trend" id="dash-weight-trend"></div>
+    </div>
+    <div class="card stat-card">
+      <div class="stat-label">Horas de sueño</div>
+      <div class="stat-value" id="dash-sleep">—<small>h</small></div>
+      <div class="stat-trend" id="dash-sleep-trend"></div>
+    </div>
+    <div class="card stat-card">
+      <div class="stat-label">Dolor muscular (RPE)</div>
+      <div class="stat-value" id="dash-soreness">—<small>/10</small></div>
+    </div>
+    <div class="card stat-card">
+      <div class="stat-label">Estado de recuperación</div>
+      <div class="stat-value" id="dash-recovery-badge">—</div>
+    </div>
+  </div>
+  <button class="btn" style="margin-top:10px" onclick="Wellness.openModal()">+ Registrar check-in diario</button>
+
+  <div class="section-title">ÚLTIMOS PR</div>
+  <div class="card" id="dash-pr-list"><div class="empty-hint">Todavía no registraste marcas. Cargalas en Progreso.</div></div>
+
+  <div class="section-title">RESUMEN DE LA SEMANA</div>
+  <div class="card">
+    <div style="display:flex; justify-content:space-between; font-size:12px; color:var(--text-muted);">
+      <span>Sesiones completadas</span><span class="mono" id="dash-week-sessions">0/3</span>
+    </div>
+    <div class="progress-track"><div class="progress-fill" id="dash-week-progress" style="width:0%"></div></div>
+  </div>
+
+  <div class="card" style="margin-top:10px; display:flex; justify-content:space-between; align-items:center; cursor:pointer;" onclick="Router.go('progreso'); document.querySelector('[data-ptab=historial]').click();">
+    <div>
+      <div class="stat-label">Semana sugerida (según historial)</div>
+      <div class="stat-value" id="dash-suggested-week" style="font-size:20px; margin-top:2px;">—</div>
+    </div>
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--text-faint)" stroke-width="2"><path d="M9 18l6-6-6-6"/></svg>
+  </div>
+</div>
+
+<!-- ================= PERFIL ================= -->
+<div class="view" id="view-perfil">
+  <h2 style="font-size:22px; margin-bottom:16px;">Perfil del atleta</h2>
+  <div class="card" style="display:flex; gap:14px; align-items:center;">
+    <div style="width:58px;height:58px;border-radius:16px;background:var(--surface-2);border:1px solid var(--border);display:flex;align-items:center;justify-content:center;font-family:var(--font-display);font-size:22px;color:var(--accent);flex:none;" id="perfil-initial">S</div>
+    <div style="flex:1;">
+      <div style="font-size:17px; font-weight:600;" id="perfil-name-display">Santi</div>
+      <div style="font-size:12px; color:var(--text-faint);" id="perfil-pos-display">Delantero</div>
+    </div>
+  </div>
+
+  <div class="section-title">DATOS PERSONALES</div>
+  <div class="card">
+    <div class="field"><label>Nombre</label><input id="p-name" type="text" placeholder="Nombre completo"></div>
+    <div class="grid-2">
+      <div class="field"><label>Posición</label>
+        <select id="p-pos"><option>Delantero</option><option>Extremo</option><option>Mediocampista</option><option>Defensor</option><option>Arquero</option></select>
+      </div>
+      <div class="field"><label>Edad</label><input id="p-age" type="number" placeholder="21"></div>
+    </div>
+    <div class="grid-2">
+      <div class="field"><label>Altura (cm)</label><input id="p-height" type="number" placeholder="178"></div>
+      <div class="field"><label>Peso objetivo (kg)</label><input id="p-target-weight" type="number" placeholder="75"></div>
+    </div>
+    <div class="field"><label>Antecedentes / lesiones</label><input id="p-injuries" type="text" placeholder="Ej: microfractura de rótula previa"></div>
+  </div>
+
+  <div class="section-title">1RM ESTIMADOS (kg)</div>
+  <div class="card">
+    <div class="grid-2">
+      <div class="field"><label>Sentadilla</label><input id="rm-squat" type="number" placeholder="0"></div>
+      <div class="field"><label>Peso Muerto Rumano</label><input id="rm-rdl" type="number" placeholder="0"></div>
+      <div class="field"><label>Press Banca</label><input id="rm-bench" type="number" placeholder="0"></div>
+      <div class="field"><label>Remo con Barra</label><input id="rm-row" type="number" placeholder="0"></div>
+    </div>
+  </div>
+  <button class="btn primary" style="margin-top:14px" onclick="Profile.save()">Guardar perfil</button>
+</div>
+
+<!-- ================= PLAN ================= -->
+<div class="view" id="view-plan">
+  <h2 style="font-size:22px; margin-bottom:4px;">Plan de entrenamiento</h2>
+  <div style="font-size:12.5px; color:var(--text-faint); margin-bottom:10px;">Programa de 12 semanas — rendimiento en fútbol</div>
+
+  <div class="week-rail" id="week-rail"></div>
+
+  <div class="card" id="phase-banner" style="padding:12px 16px; display:flex; justify-content:space-between; align-items:center;">
+    <div>
+      <div style="font-size:13px; font-weight:600;" id="phase-banner-title">Fase 1 — Rutina A</div>
+      <div style="font-size:11px; color:var(--text-faint);" id="phase-banner-desc">Base de fuerza y potencia</div>
+    </div>
+    <div class="chip accent" id="phase-banner-tag">SEM 1</div>
+  </div>
+
+  <div class="day-tabs" id="day-tabs"></div>
+
+  <div class="section-title">BLOQUES DE HOY <span id="blocks-count" class="mono" style="margin-left:auto;"></span></div>
+  <div id="blocks-container"></div>
+
+  <div class="card" style="margin-top:16px; display:flex; gap:10px; align-items:center;">
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="2" style="flex:none"><circle cx="12" cy="12" r="10"/><path d="M12 8v4l3 3"/></svg>
+    <div style="font-size:12px; color:var(--text-muted);">La progresión de carga, RPE y volumen se ajusta automáticamente semana a semana.</div>
+  </div>
+
+  <button class="btn primary" style="margin-top:10px" onclick="Plan.finalizeSession(true)">💾 Guardar sesión de hoy</button>
+  <div style="text-align:center; font-size:11px; color:var(--text-faint); margin-top:8px;" id="plan-session-status"></div>
+</div>
+
+<!-- ================= PROGRESO ================= -->
+<div class="view" id="view-progreso">
+  <h2 style="font-size:22px; margin-bottom:14px;">Progreso</h2>
+
+  <div class="tabs" id="progress-tabs">
+    <div class="tab active" data-ptab="registro">Registro rápido</div>
+    <div class="tab" data-ptab="historial">Historial</div>
+    <div class="tab" data-ptab="graficos">Gráficos</div>
+    <div class="tab" data-ptab="calc">Calculadoras</div>
+  </div>
+
+  <div id="ptab-registro" style="margin-top:14px;">
+    <div class="card">
+      <div class="field"><label>Métrica</label>
+        <select id="log-metric">
+          <option value="weight">Peso corporal (kg)</option>
+          <option value="sleep">Horas de sueño (h)</option>
+          <option value="soreness">Dolor muscular RPE (0-10)</option>
+          <option value="sprint10">Sprint 10m (s)</option>
+          <option value="sprint20">Flying Sprint 20m (s)</option>
+          <option value="test505">Test 5-10-5 (s)</option>
+          <option value="cmj">CMJ — Salto Vertical (cm)</option>
+          <option value="broadjump">Broad Jump (cm)</option>
+          <option value="squat1rm">1RM Sentadilla (kg)</option>
+          <option value="bench1rm">1RM Press Banca (kg)</option>
+        </select>
+      </div>
+      <div class="grid-2">
+        <div class="field"><label>Valor</label><input id="log-value" type="number" step="0.01" placeholder="0"></div>
+        <div class="field"><label>Fecha</label><input id="log-date" type="date"></div>
+      </div>
+      <button class="btn primary" onclick="Tracker.addEntry()">Registrar</button>
+    </div>
+
+    <div class="section-title">MEJORES MARCAS (PR)</div>
+    <div class="card" id="pr-full-list"><div class="empty-hint">Sin marcas registradas todavía.</div></div>
+  </div>
+
+  <div id="ptab-historial" style="display:none; margin-top:14px;">
+    <div id="history-summary"></div>
+    <div class="section-title">SESIONES GUARDADAS</div>
+    <div id="history-list"></div>
+  </div>
+
+  <div id="ptab-graficos" style="display:none; margin-top:14px;">
+    <div class="field"><label>Ver evolución de</label>
+      <select id="chart-metric" onchange="Tracker.renderChart()">
+        <option value="weight">Peso corporal</option>
+        <option value="sleep">Horas de sueño</option>
+        <option value="soreness">Dolor muscular (RPE)</option>
+        <option value="sprint10">Sprint 10m</option>
+        <option value="sprint20">Flying Sprint 20m</option>
+        <option value="test505">Test 5-10-5</option>
+        <option value="cmj">CMJ — Salto Vertical</option>
+        <option value="broadjump">Broad Jump</option>
+        <option value="squat1rm">1RM Sentadilla</option>
+        <option value="bench1rm">1RM Press Banca</option>
+      </select>
+    </div>
+    <div class="chart-wrap">
+      <div class="chart-head"><h4 id="chart-title">Peso corporal</h4><span class="mono" id="chart-latest" style="font-size:12px;color:var(--accent)"></span></div>
+      <svg class="chart" id="chart-svg" viewBox="0 0 600 150" preserveAspectRatio="none"></svg>
+    </div>
+  </div>
+
+  <div id="ptab-calc" style="display:none; margin-top:14px;">
+    <div class="card">
+      <h4 style="font-size:13px; margin-bottom:10px; letter-spacing:.03em;">Calculadora de 1RM (Epley)</h4>
+      <div class="grid-2">
+        <div class="field"><label>Peso levantado (kg)</label><input id="calc-1rm-weight" type="number"></div>
+        <div class="field"><label>Repeticiones</label><input id="calc-1rm-reps" type="number"></div>
+      </div>
+      <button class="btn" onclick="Calc.oneRM()">Calcular 1RM</button>
+      <div id="calc-1rm-result" class="mono" style="margin-top:10px; font-size:15px; color:var(--accent);"></div>
+    </div>
+    <div class="card">
+      <h4 style="font-size:13px; margin-bottom:10px; letter-spacing:.03em;">Calculadora de carga por %</h4>
+      <div class="grid-2">
+        <div class="field"><label>1RM (kg)</label><input id="calc-pct-rm" type="number"></div>
+        <div class="field"><label>% de carga</label><input id="calc-pct-val" type="number" placeholder="75"></div>
+      </div>
+      <button class="btn" onclick="Calc.pctLoad()">Calcular carga</button>
+      <div id="calc-pct-result" class="mono" style="margin-top:10px; font-size:15px; color:var(--accent);"></div>
+    </div>
+    <div class="card">
+      <h4 style="font-size:13px; margin-bottom:10px; letter-spacing:.03em;">Calculadora de velocidad objetivo</h4>
+      <div class="grid-2">
+        <div class="field"><label>Distancia (m)</label><input id="calc-vel-dist" type="number" placeholder="20"></div>
+        <div class="field"><label>Tiempo objetivo (s)</label><input id="calc-vel-time" type="number" step="0.01" placeholder="2.9"></div>
+      </div>
+      <button class="btn" onclick="Calc.targetVel()">Calcular velocidad</button>
+      <div id="calc-vel-result" class="mono" style="margin-top:10px; font-size:15px; color:var(--accent);"></div>
+    </div>
+  </div>
+
+  <button class="btn" style="margin-top:16px" onclick="ExportPDF.go()">📄 Exportar planificación a PDF</button>
+</div>
+
+<!-- ================= BIBLIOTECA ================= -->
+<div class="view" id="view-biblioteca">
+  <h2 style="font-size:22px; margin-bottom:10px;">Biblioteca de ejercicios</h2>
+  <input id="lib-search" type="text" placeholder="Buscar ejercicio..." style="width:100%; background:var(--surface); border:1px solid var(--border); color:var(--text); padding:12px 14px; border-radius:12px; font-size:14px; margin-bottom:12px;" oninput="Library.render()">
+  <div class="tabs" id="lib-cat-tabs"></div>
+  <div id="lib-list" style="margin-top:14px;"></div>
+</div>
+
+<!-- ================= CONFIGURACIÓN ================= -->
+<div class="view" id="view-config">
+  <h2 style="font-size:22px; margin-bottom:16px;">Configuración</h2>
+
+  <div class="section-title">DATOS</div>
+  <div class="card">
+    <button class="btn" onclick="DataIO.exportJSON()">⬇ Exportar datos (JSON)</button>
+    <div style="height:10px;"></div>
+    <label class="btn" style="display:block; text-align:center; cursor:pointer;">
+      ⬆ Importar datos (JSON)
+      <input type="file" accept="application/json" style="display:none" onchange="DataIO.importJSON(event)">
+    </label>
+    <div style="height:10px;"></div>
+    <button class="btn" style="color:var(--danger); border-color:var(--danger);" onclick="DataIO.resetAll()">🗑 Borrar todos los datos</button>
+  </div>
+
+  <div class="section-title">APLICACIÓN</div>
+  <div class="card">
+    <div style="display:flex; justify-content:space-between; align-items:center; padding:6px 0;">
+      <div>
+        <div style="font-size:13.5px; font-weight:500;">Instalar como app</div>
+        <div style="font-size:11.5px; color:var(--text-faint);">Funciona offline una vez instalada</div>
+      </div>
+      <button class="btn" style="width:auto; padding:9px 14px;" id="install-btn" onclick="PWAInstall.trigger()">Instalar</button>
+    </div>
+  </div>
+
+  <div class="section-title">ACERCA DE</div>
+  <div class="card" style="font-size:12.5px; color:var(--text-muted); line-height:1.6;">
+    APEX FC — App de rendimiento y fuerza para fútbol.<br>
+    Programa de 12 semanas: Fase 1 (Rutina A, sem. 1-4) · Fase 2 (Rutina B, sem. 5-8) · Fase 3 (Rutina A intensificada, sem. 9-12).<br>
+    Todos los datos se guardan localmente en este dispositivo.
+  </div>
+</div>
+
+<!-- ================= NAV ================= -->
+<div class="bottomnav">
+  <button class="navbtn active" data-view="dashboard" onclick="Router.go('dashboard')">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 11l9-8 9 8"/><path d="M5 10v10h14V10"/></svg>
+    Inicio<span class="navdot"></span>
+  </button>
+  <button class="navbtn" data-view="perfil" onclick="Router.go('perfil')">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="8" r="4"/><path d="M4 21c0-4.4 3.6-7 8-7s8 2.6 8 7"/></svg>
+    Perfil<span class="navdot"></span>
+  </button>
+  <button class="navbtn" data-view="plan" onclick="Router.go('plan')">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="17" rx="2"/><path d="M3 9h18M8 3v4M16 3v4"/></svg>
+    Plan<span class="navdot"></span>
+  </button>
+  <button class="navbtn" data-view="progreso" onclick="Router.go('progreso')">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 17l6-6 4 4 8-8"/><path d="M17 7h4v4"/></svg>
+    Progreso<span class="navdot"></span>
+  </button>
+  <button class="navbtn" data-view="biblioteca" onclick="Router.go('biblioteca')">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 19.5A2.5 2.5 0 016.5 17H20V4H6.5A2.5 2.5 0 004 6.5v13z"/></svg>
+    Librería<span class="navdot"></span>
+  </button>
+</div>
+
+<!-- ================= MODAL: Ejercicio ================= -->
+<div class="modal-backdrop" id="ex-modal">
+  <div class="modal">
+    <div class="modal-handle"></div>
+    <div class="modal-close" onclick="Modal.close('ex-modal')">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6L6 18M6 6l12 12"/></svg>
+    </div>
+    <div class="modal-title" id="ex-modal-name">Ejercicio</div>
+    <div class="modal-tag-row" id="ex-modal-tags"></div>
+    <div class="grid-3" style="margin-top:6px;">
+      <div class="card stat-card" style="padding:10px;"><div class="stat-label">Series</div><div class="mono" style="font-size:16px;" id="ex-modal-sets">—</div></div>
+      <div class="card stat-card" style="padding:10px;"><div class="stat-label">Reps</div><div class="mono" style="font-size:16px;" id="ex-modal-reps">—</div></div>
+      <div class="card stat-card" style="padding:10px;"><div class="stat-label">Descanso</div><div class="mono" style="font-size:16px;" id="ex-modal-rest">—</div></div>
+    </div>
+    <div class="modal-section"><h4>Objetivo</h4><p id="ex-modal-goal"></p></div>
+    <div class="modal-section"><h4>Músculos involucrados</h4><p id="ex-modal-muscles"></p></div>
+    <div class="modal-section"><h4>Ejecución</h4><p id="ex-modal-desc"></p></div>
+    <div class="modal-section"><h4>Errores comunes</h4><ul id="ex-modal-errors"></ul></div>
+    <div class="modal-section"><h4>Progresión / Regresión</h4><p id="ex-modal-progreg"></p></div>
+    <a class="video-link" id="ex-modal-video" href="#" target="_blank" rel="noopener">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+      Ver técnica en video
+    </a>
+  </div>
+</div>
+
+<!-- ================= MODAL: Wellness check-in ================= -->
+<div class="modal-backdrop" id="wellness-modal">
+  <div class="modal">
+    <div class="modal-handle"></div>
+    <div class="modal-close" onclick="Modal.close('wellness-modal')">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6L6 18M6 6l12 12"/></svg>
+    </div>
+    <div class="modal-title">Check-in diario</div>
+    <div class="field" style="margin-top:16px;"><label>Peso corporal (kg)</label><input id="w-weight" type="number" step="0.1"></div>
+    <div class="field"><label>Horas de sueño</label><input id="w-sleep" type="number" step="0.5"></div>
+    <div class="field"><label>Dolor muscular (RPE 0-10)</label><input id="w-soreness" type="number" min="0" max="10"></div>
+    <button class="btn primary" onclick="Wellness.save()">Guardar check-in</button>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+/* =========================================================
+   APEX FC — App de rendimiento
+   Módulos: State, DB (ejercicios), Program (generador 12 sem),
+   Router, Dashboard, Profile, Plan, Tracker, Calc, Library,
+   Wellness, DataIO, Modal, PWAInstall, ExportPDF
+========================================================= */
+
+/* ---------- Persistencia ---------- */
+const STORE_KEY = 'apexfc_state_v1';
+const State = {
+  data:null,
+  load(){
+    const raw = localStorage.getItem(STORE_KEY);
+    const defaults = this.defaults();
+    this.data = raw ? Object.assign(defaults, JSON.parse(raw)) : defaults;
+    // asegurar que claves nuevas existan aunque el JSON guardado sea de una versión anterior
+    if(!this.data.progressionLogs) this.data.progressionLogs = {};
+    if(!this.data.sessionHistory) this.data.sessionHistory = [];
+    return this.data;
+  },
+  save(){ localStorage.setItem(STORE_KEY, JSON.stringify(this.data)); },
+  defaults(){
+    return {
+      profile:{ name:'Santi', pos:'Delantero', age:21, height:'', targetWeight:'', injuries:'',
+        rm:{ squat:'', rdl:'', bench:'', row:'' } },
+      currentWeek:1,
+      currentDay:0, // 0 lunes 1 miercoles 2 viernes
+      completedExercises:{}, // key: `${week}-${day}-${exId}` -> true
+      logs:{}, // metric -> [{date, value}]
+      wellness:{}, // date -> {weight,sleep,soreness}
+      sessionsCompleted:{}, // `${week}` -> count de sesiones completas (derivado de sessionHistory)
+      progressionLogs:{}, // exerciseId -> { w1:{peso,series,reps,rpe,obs}, ... w6:{...} }
+      sessionHistory:[] // [{week, day, dayLabel, dayType, phase, date, exercisesTotal, exercisesDone, complete}]
+    };
+  }
+};
+
+/* ---------- Base de ejercicios ---------- */
+const EX = {
+  // Movilidad + Activación
+  band_walk:{name:'Band Walk Lateral', cat:'Movilidad', muscles:'Glúteo medio, abductores', goal:'Activar estabilizadores de cadera',
+    desc:'Colocar una banda por encima de rodillas, semi-flexionado, dar pasos laterales manteniendo tensión constante.', 
+    errors:['Perder la flexión de rodillas','Rotar el tronco','Pasos demasiado largos'], progreg:'Regresión: sin banda. Progresión: banda de mayor resistencia o mini-band en tobillos.', video:'band walk lateral cadera ejercicio'},
+  hip_openers:{name:'Movilidad de Cadera 90/90', cat:'Movilidad', muscles:'Rotadores de cadera', goal:'Ganar rango de rotación interna/externa',
+    desc:'Sentado con ambas piernas a 90°, rotar de un lado a otro manteniendo el torso erguido.', 
+    errors:['Usar impulso en vez de control','Despegar los talones'], progreg:'Progresión: agregar elevación del torso (lift-off).', video:'90 90 hip mobility drill'},
+  ankle_mobility:{name:'Movilidad de Tobillo en Pared', cat:'Movilidad', muscles:'Tríceps sural, tobillo', goal:'Mejorar dorsiflexión de tobillo',
+    desc:'Rodilla hacia la pared sin despegar el talón, buscar la máxima distancia posible.', 
+    errors:['Despegar el talón','Rotar el pie hacia afuera'], progreg:'Progresión: aumentar la distancia del pie a la pared.', video:'ankle dorsiflexion wall mobility'},
+  glute_activation:{name:'Puente de Glúteo con Banda', cat:'Movilidad', muscles:'Glúteo mayor, isquiotibiales', goal:'Activar cadena posterior antes de entrenar',
+    desc:'Banda sobre rodillas, empujar caderas hacia arriba apretando glúteos en el tope.', 
+    errors:['Hiperextender lumbar','No llegar a extensión completa de cadera'], progreg:'Progresión: unipodal.', video:'glute bridge banded activation'},
+  shoulder_dislocates:{name:'Dislocaciones de Hombro con Bastón', cat:'Movilidad', muscles:'Manguito rotador, deltoides', goal:'Movilidad de hombro para tren superior',
+    desc:'Sostener bastón con agarre amplio, llevar por encima de la cabeza hacia atrás sin doblar codos.', 
+    errors:['Agarre demasiado angosto','Compensar arqueando la espalda'], progreg:'Progresión: achicar el agarre gradualmente.', video:'shoulder dislocates stick mobility'},
+  worlds_greatest:{name:"World's Greatest Stretch", cat:'Movilidad', muscles:'Cadera, isquiotibiales, torácica', goal:'Movilidad global previa al entrenamiento',
+    desc:'Zancada larga, mano dentro del pie adelantado, rotar el torso hacia el techo.', 
+    errors:['Rodilla adelantada colapsando hacia adentro','Rotación insuficiente de torácica'], progreg:'Progresión: agregar reach overhead.', video:'worlds greatest stretch'},
+
+  // Core
+  pallof_press:{name:'Pallof Press', cat:'Core', muscles:'Oblicuos, core profundo (antirrotación)', goal:'Resistir rotación de tronco',
+    desc:'De pie perpendicular a la polea/banda, extender los brazos al frente sin permitir que el tronco rote.', 
+    errors:['Dejar rotar la cadera','Usar solo brazos sin tensión de core'], progreg:'Progresión: aumentar resistencia o hacerlo en media sentadilla.', video:'pallof press anti rotation core'},
+  dead_bug:{name:'Dead Bug', cat:'Core', muscles:'Recto abdominal, transverso (antiextensión)', goal:'Control lumbo-pélvico',
+    desc:'Boca arriba, extender brazo y pierna opuestos manteniendo la zona lumbar pegada al piso.', 
+    errors:['Despegar la lumbar del piso','Ir demasiado rápido'], progreg:'Progresión: agregar peso en manos/tobillos.', video:'dead bug exercise core'},
+  suitcase_carry:{name:'Suitcase Carry', cat:'Core', muscles:'Oblicuos (antiinclinación lateral)', goal:'Resistir la flexión lateral del tronco',
+    desc:'Caminar sosteniendo una carga pesada de un solo lado, manteniendo el tronco perfectamente vertical.', 
+    errors:['Inclinarse hacia el lado cargado','Pasos demasiado cortos'], progreg:'Progresión: aumentar la carga o la distancia.', video:'suitcase carry core anti lateral flexion'},
+  bird_dog:{name:'Bird Dog', cat:'Core', muscles:'Core global, glúteos, erectores', goal:'Estabilidad y control cruzado',
+    desc:'En cuadrupedia, extender brazo y pierna contraria manteniendo la pelvis nivelada.', 
+    errors:['Rotar la cadera','Arquear la lumbar'], progreg:'Progresión: agregar pausa isométrica de 3 seg.', video:'bird dog exercise core stability'},
+  plank_long:{name:'Plancha Larga (Antiextensión)', cat:'Core', muscles:'Recto abdominal, core global', goal:'Resistir la extensión lumbar',
+    desc:'Antebrazos y puntas de pie, cuerpo en línea recta, glúteos y core activados.', 
+    errors:['Cadera elevada o caída','Retener la respiración'], progreg:'Progresión: plancha con reach o inestabilidad (RIP trainer).', video:'front plank anti extension core'},
+  copenhagen_plank:{name:'Copenhagen Plank', cat:'Core', muscles:'Aductores, oblicuos', goal:'Prevención de lesión de aductores',
+    desc:'Apoyo lateral con pierna superior sobre un banco, cadera elevada en línea recta.', 
+    errors:['Cadera caída','Rango incompleto'], progreg:'Regresión: apoyar rodilla inferior en el piso. Progresión: completa con pierna extendida.', video:'copenhagen plank adductor'},
+
+  // Potencia
+  hang_high_pull:{name:'Hang High Pull', cat:'Potencia', muscles:'Cadena posterior, trapecio, hombro', goal:'Producción de potencia vertical',
+    desc:'Desde media caña, extensión triple explosiva llevando la barra hasta la altura del pecho con codos altos.', 
+    errors:['Tirar con los brazos antes de extender caderas','Rango de tirón demasiado alto'], progreg:'Progresión: aumentar carga manteniendo velocidad de barra.', video:'hang high pull technique olympic lift'},
+  mid_thigh_pull:{name:'Mid Thigh Pull', cat:'Potencia', muscles:'Cadena posterior', goal:'Fuerza explosiva isométrica/dinámica',
+    desc:'Desde posición de medio muslo, extensión triple explosiva contra la barra sin flexionar los brazos.', 
+    errors:['Iniciar con los brazos','Perder la postura de espalda neutra'], progreg:'Progresión: variante isométrica con mayor carga.', video:'mid thigh pull technique'},
+  hang_power_clean:{name:'Hang Power Clean', cat:'Potencia', muscles:'Cuerpo completo, tren posterior', goal:'Potencia y coordinación explosiva',
+    desc:'Desde media caña, extensión triple y recepción en cuarto de sentadilla con los codos altos.', 
+    errors:['Recepción con espalda redondeada','Tirar la barra en vez de recibirla'], progreg:'Progresión: aumentar altura de partida a menor (from floor).', video:'hang power clean technique'},
+  push_press:{name:'Push Press', cat:'Potencia', muscles:'Hombro, tríceps, core, piernas', goal:'Potencia de empuje vertical',
+    desc:'Pequeño quiebre de rodillas y extensión explosiva para impulsar la barra por encima de la cabeza.', 
+    errors:['Empujar solo con brazos','No estabilizar el core arriba'], progreg:'Progresión: aumentar carga o usar split jerk.', video:'push press technique olympic'},
+  trap_bar_jump:{name:'Trap Bar Jump', cat:'Potencia', muscles:'Cuádriceps, glúteos, pantorrillas', goal:'Potencia vertical cargada',
+    desc:'Con trap bar cargada liviana, realizar un salto vertical máximo con aterrizaje controlado.', 
+    errors:['Sobrecargar el peso perdiendo velocidad','Aterrizaje rígido'], progreg:'Progresión: aumentar carga levemente sin perder altura de salto.', video:'trap bar jump technique power'},
+  landmine_push_press:{name:'Landmine Push Press', cat:'Potencia', muscles:'Hombro, core, tren inferior', goal:'Potencia de empuje con menor estrés en hombro',
+    desc:'Barra en landmine a la altura del hombro, impulsar con extensión de piernas hacia arriba y al frente.', 
+    errors:['No usar las piernas','Codo demasiado abierto'], progreg:'Progresión: unilateral con rotación de cadera.', video:'landmine push press technique'},
+  broad_jump:{name:'Broad Jump (Salto Horizontal)', cat:'Potencia', muscles:'Cadena extensora completa', goal:'Potencia horizontal / pliometría',
+    desc:'Salto máximo hacia adelante desde parado, con aterrizaje absorbido en cuclillas y estable.', 
+    errors:['Aterrizaje inestable','No usar los brazos para el impulso'], progreg:'Progresión: broad jump repetido (doble o triple).', video:'broad jump standing long jump technique'},
+  box_jump:{name:'Box Jump (Salto Vertical)', cat:'Potencia', muscles:'Cuádriceps, glúteos, pantorrillas', goal:'Potencia vertical / pliometría',
+    desc:'Salto explosivo a un cajón, aterrizando suave con ambos pies y bajando siempre caminando.', 
+    errors:['Bajar saltando del cajón','Altura excesiva sacrificando técnica'], progreg:'Progresión: aumentar altura del cajón manteniendo técnica.', video:'box jump technique plyometric'},
+  lateral_bound:{name:'Lateral Bound (Salto Lateral Unipodal)', cat:'Potencia', muscles:'Aductores/abductores, glúteo medio', goal:'Potencia lateral y estabilidad unipodal',
+    desc:'Salto lateral desde un pie, aterrizando y estabilizando 2-3 segundos antes de repetir.', 
+    errors:['Rodilla colapsando hacia adentro al aterrizar','No estabilizar antes del siguiente salto'], progreg:'Progresión: encadenar saltos continuos sin pausa.', video:'lateral bound single leg plyometric'},
+  depth_jump:{name:'Depth Jump Reactivo', cat:'Potencia', muscles:'Cadena extensora, tendones', goal:'Pliometría reactiva (ciclo estiramiento-acortamiento)',
+    desc:'Bajar de un cajón bajo y, al contacto con el piso, rebotar inmediatamente hacia arriba con mínimo tiempo de contacto.', 
+    errors:['Tiempo de contacto excesivo','Cajón demasiado alto para el nivel'], progreg:'Progresión: aumentar la altura del cajón de caída.', video:'depth jump reactive plyometric'},
+  med_ball_chest_pass:{name:'Lanzamiento de Balón Medicinal (Chest Pass)', cat:'Potencia', muscles:'Pectoral, tríceps, core', goal:'Potencia de tren superior en el plano horizontal, sin impacto en piernas',
+    desc:'Lanzar el balón medicinal con ambas manos desde el pecho hacia una pared o compañero, con la máxima velocidad de brazos posible.', 
+    errors:['No involucrar la extensión de piernas y cadera','Lanzamiento con poca velocidad'], progreg:'Progresión: aumentar el peso del balón o la distancia de lanzamiento.', video:'medicine ball chest pass power throw'},
+  med_ball_rotational_throw:{name:'Lanzamiento Rotacional de Balón Medicinal', cat:'Potencia', muscles:'Oblicuos, core, hombro', goal:'Potencia rotacional específica para el gesto de remate/pase',
+    desc:'Rotar el tronco de forma explosiva y lanzar el balón medicinal lateralmente contra una pared, alternando lados.', 
+    errors:['Rotar solo con los brazos sin involucrar la cadera','Perder el equilibrio en la rotación'], progreg:'Progresión: aumentar el peso del balón o la velocidad de ejecución.', video:'rotational medicine ball throw power'},
+
+  // Velocidad / CoD
+  accel_10:{name:'Aceleración 10m', cat:'Velocidad', muscles:'Tren inferior completo', goal:'Mejorar la fase de aceleración inicial',
+    desc:'Salida desde posición estática o de 3 puntos, máximo esfuerzo durante 10 metros.', 
+    errors:['Levantar el torso demasiado rápido','Zancadas demasiado largas al inicio'], progreg:'Progresión: salida con resistencia (trineo liviano).', video:'10m acceleration sprint drill'},
+  flying_20:{name:'Flying Sprint 20m', cat:'Velocidad', muscles:'Tren inferior completo', goal:'Velocidad máxima',
+    desc:'20m de acercamiento progresivo seguido de 20m a máxima velocidad ya en carrera.', 
+    errors:['No llegar a máxima velocidad antes del tramo cronometrado','Frenar antes de terminar'], progreg:'Progresión: aumentar el tramo de máxima velocidad.', video:'flying sprint 20m max velocity drill'},
+  curved_sprint:{name:'Curved Sprint', cat:'Velocidad', muscles:'Tren inferior, core lateral', goal:'Velocidad en trayectoria curva (específico de fútbol)',
+    desc:'Sprint siguiendo una trayectoria curva marcada con conos, manteniendo la inclinación corporal correcta.', 
+    errors:['Perder la inclinación en la curva','Reducir demasiado la velocidad'], progreg:'Progresión: aumentar el radio de curvatura o la velocidad de entrada.', video:'curved sprint technique football'},
+  test_505:{name:'Test / Drill 505', cat:'Velocidad', muscles:'Tren inferior, core', goal:'Cambio de dirección a 180°',
+    desc:'Sprint de aproximación, cambio de dirección de 180° en la línea marcada y sprint de salida.', 
+    errors:['Zancada de frenado demasiado larga','Centro de gravedad muy alto en el giro'], progreg:'Progresión: reducir el tiempo total manteniendo técnica.', video:'505 agility test change of direction'},
+  deceleration_drill:{name:'Deceleration Drill', cat:'Velocidad', muscles:'Cuádriceps, isquiotibiales (excéntrico)', goal:'Capacidad de frenado y control excéntrico',
+    desc:'Sprint corto seguido de una frenada controlada en 3 pasos hasta detención total.', 
+    errors:['Frenar en muy pocos apoyos generando estrés articular','Torso muy adelantado'], progreg:'Progresión: aumentar la velocidad de aproximación.', video:'deceleration mechanics drill sprint'},
+  reactive_sprint:{name:'Sprint con Reacción', cat:'Velocidad', muscles:'Tren inferior, sistema nervioso', goal:'Velocidad con estímulo reactivo (fútbol real)',
+    desc:'Sprint disparado por un estímulo visual o auditivo del entrenador, en dirección variable.', 
+    errors:['Anticipar el estímulo','Primer paso demasiado largo'], progreg:'Progresión: agregar un segundo estímulo/decisión.', video:'reactive sprint drill agility'},
+
+  // Fuerza (principales)
+  back_squat:{name:'Sentadilla Trasera', cat:'Fuerza', muscles:'Cuádriceps, glúteos, core', goal:'Fuerza máxima de tren inferior',
+    desc:'Barra en la espalda alta, descender controlando la cadera hasta profundidad completa y extender con fuerza.', 
+    errors:['Rodillas colapsando hacia adentro','Perder la curvatura lumbar neutra'], progreg:'Progresión: aumentar carga manteniendo profundidad completa.', video:'back squat technique form'},
+  rdl:{name:'Peso Muerto Rumano (RDL)', cat:'Fuerza', muscles:'Isquiotibiales, glúteos, erectores', goal:'Fuerza de cadena posterior',
+    desc:'Bisagra de cadera con barra pegada a las piernas, espalda neutra, bajar hasta sentir el estiramiento.', 
+    errors:['Redondear la espalda','Flexionar demasiado las rodillas (convertirlo en sentadilla)'], progreg:'Progresión: aumentar carga o hacerlo unilateral.', video:'romanian deadlift rdl technique'},
+  bench_press:{name:'Press Banca', cat:'Fuerza', muscles:'Pectoral, tríceps, deltoides anterior', goal:'Fuerza de empuje horizontal',
+    desc:'Escápulas retraídas y fijas, bajar la barra al pecho de forma controlada y extender con fuerza.', 
+    errors:['Rebotar la barra en el pecho','Levantar la cadera del banco'], progreg:'Progresión: aumentar carga o pausa en el pecho.', video:'bench press technique form'},
+  pull_up:{name:'Dominadas', cat:'Fuerza', muscles:'Dorsal ancho, bíceps, core', goal:'Fuerza de tracción vertical',
+    desc:'Colgado de la barra, traccionar hasta que el mentón supere la barra, controlar la bajada.', 
+    errors:['Usar impulso (kipping) sin buscarlo','Rango incompleto'], progreg:'Regresión: asistidas con banda. Progresión: lastradas.', video:'pull up technique form'},
+  barbell_row:{name:'Remo con Barra', cat:'Fuerza', muscles:'Dorsal, romboides, bíceps', goal:'Fuerza de tracción horizontal',
+    desc:'Torso inclinado ~45°, traccionar la barra hacia el abdomen manteniendo la espalda neutra.', 
+    errors:['Usar impulso lumbar','Torso demasiado erguido'], progreg:'Progresión: aumentar carga o pausa arriba.', video:'barbell row technique form'},
+  bulgarian_split_squat:{name:'Bulgarian Split Squat', cat:'Fuerza', muscles:'Cuádriceps, glúteos (unilateral)', goal:'Fuerza unilateral de tren inferior',
+    desc:'Pie trasero elevado en un banco, descender en la pierna delantera hasta 90° de rodilla.', 
+    errors:['Rodilla delantera muy adelantada','Perder el equilibrio lateral'], progreg:'Progresión: agregar mancuernas o barra.', video:'bulgarian split squat technique'},
+
+  // Accesorios
+  lateral_raise:{name:'Elevación Lateral', cat:'Accesorio', muscles:'Deltoides lateral', goal:'Volumen accesorio de hombro',
+    desc:'Mancuernas a los costados, elevar los brazos hasta la altura de los hombros con leve flexión de codo.', 
+    errors:['Usar impulso del torso','Elevar por encima de la altura del hombro'], progreg:'Progresión: aumentar peso levemente.', video:'lateral raise shoulder technique'},
+  rear_delt_fly:{name:'Vuelo Posterior', cat:'Accesorio', muscles:'Deltoides posterior', goal:'Salud de hombro y postura',
+    desc:'Torso inclinado, abrir los brazos hacia atrás apretando los omóplatos.', 
+    errors:['Usar impulso','Encoger los hombros hacia las orejas'], progreg:'Progresión: aumentar peso o repeticiones.', video:'rear delt fly technique'},
+  biceps_curl:{name:'Curl de Bíceps', cat:'Accesorio', muscles:'Bíceps braquial', goal:'Volumen accesorio de tren superior',
+    desc:'Mancuernas en agarre supino, flexionar el codo sin balancear el torso.', 
+    errors:['Balancear el cuerpo','Rango incompleto'], progreg:'Progresión: aumentar carga.', video:'bicep curl technique'},
+  triceps_pushdown:{name:'Extensión de Tríceps en Polea', cat:'Accesorio', muscles:'Tríceps', goal:'Volumen accesorio de tren superior',
+    desc:'Codos fijos al costado del torso, extender completamente sin abrir los codos.', 
+    errors:['Abrir los codos hacia afuera','Usar el torso para empujar'], progreg:'Progresión: aumentar carga.', video:'triceps pushdown technique'},
+  calf_raise:{name:'Elevación de Talones', cat:'Accesorio', muscles:'Gemelos', goal:'Fuerza y prevención de sóleo/gemelos',
+    desc:'De pie, elevar los talones al máximo y bajar controladamente hasta estiramiento completo.', 
+    errors:['Rango parcial','Rebotar en la parte baja'], progreg:'Progresión: unipodal o con carga añadida.', video:'calf raise technique standing'},
+  tibialis_raise:{name:'Elevación de Tibial Anterior', cat:'Accesorio', muscles:'Tibial anterior', goal:'Prevención de periostitis / esguinces',
+    desc:'Apoyado en los talones contra la pared, elevar la punta de los pies repetidamente.', 
+    errors:['Rango muy corto','Perder el apoyo del talón'], progreg:'Progresión: agregar peso en la punta del pie.', video:'tibialis raise anterior technique'},
+  face_pull:{name:'Face Pull', cat:'Accesorio', muscles:'Deltoides posterior, rotadores externos', goal:'Salud de hombro y equilibrio postural',
+    desc:'En polea a la altura de la cara, tirar la cuerda separando las manos y rotando externamente los hombros.', 
+    errors:['Usar demasiado peso perdiendo la rotación externa','Tirar solo con los brazos sin retraer escápulas'], progreg:'Progresión: aumentar la resistencia o agregar pausa en rotación externa.', video:'face pull technique shoulder health'},
+  hammer_curl:{name:'Curl Martillo', cat:'Accesorio', muscles:'Bíceps braquial, braquiorradial', goal:'Volumen accesorio de tren superior',
+    desc:'Mancuernas en agarre neutro, flexionar el codo sin balancear el torso.', 
+    errors:['Balancear el cuerpo','Abrir los codos hacia afuera'], progreg:'Progresión: aumentar carga o alternar con curl inclinado.', video:'hammer curl technique'},
+  peterson_step_up:{name:'Peterson Step-Up', cat:'Accesorio', muscles:'Cuádriceps (VMO), glúteo medio, estabilidad de rodilla', goal:'Prevención de lesión de rodilla y control excéntrico',
+    desc:'Step-up en banco bajo con énfasis en el descenso lento y controlado, sin usar impulso de la pierna de apoyo.', 
+    errors:['Impulsarse con la pierna de atrás','Bajar rápido sin control excéntrico'], progreg:'Progresión: aumentar la altura del banco o agregar carga.', video:'petersen step up knee control'},
+  seated_calf_raise:{name:'Elevación de Talones Sentado', cat:'Accesorio', muscles:'Sóleo', goal:'Fuerza del sóleo y prevención de sobrecargas',
+    desc:'Sentado con carga sobre las rodillas, elevar los talones al máximo y bajar controladamente.', 
+    errors:['Rango parcial','Rebotar en la parte baja'], progreg:'Progresión: aumentar la carga.', video:'seated calf raise technique'},
+
+  // Resistencia / Condicionamiento (un único ejercicio por sesión)
+  rsa:{name:'Repeated Sprint Ability (RSA)', cat:'Resistencia', muscles:'Sistema anaeróbico, tren inferior', goal:'Capacidad de repetir esfuerzos máximos con recuperación incompleta',
+    desc:'Series de 6-8 sprints de 20-30m con 15-20 segundos de recuperación activa entre repeticiones.', 
+    errors:['Recuperación insuficiente entre series','No llegar a esfuerzo máximo en cada sprint'], progreg:'Progresión: aumentar repeticiones o reducir la recuperación.', video:'repeated sprint ability RSA football'},
+  shuttle_runs:{name:'Shuttle Runs', cat:'Resistencia', muscles:'Sistema anaeróbico, tren inferior', goal:'Capacidad anaeróbica con cambios de dirección',
+    desc:'Recorridos ida y vuelta entre conos a máxima intensidad, incluyendo cambios de dirección.', 
+    errors:['Técnica de frenado deficiente en los giros','Ritmo inconsistente entre repeticiones'], progreg:'Progresión: aumentar distancia o repeticiones.', video:'shuttle run drill football'},
+  sprint_intervals:{name:'Sprint Intervals', cat:'Resistencia', muscles:'Sistema anaeróbico, tren inferior', goal:'Capacidad anaeróbica láctica',
+    desc:'Sprints de 30-40m a máxima intensidad con pausas de 30-40 segundos entre repeticiones.', 
+    errors:['Pausas demasiado cortas generando técnica deficiente','No alcanzar la máxima velocidad'], progreg:'Progresión: aumentar la distancia del sprint.', video:'sprint intervals training football'},
+  fifteen_fifteen:{name:'15"/15"', cat:'Resistencia', muscles:'Sistema mixto anaeróbico-aeróbico', goal:'Capacidad intermitente específica de fútbol',
+    desc:'15 segundos a intensidad alta (carrera continua, no sprint máximo) seguidos de 15 segundos de trote suave, repetidos.', 
+    errors:['Intensidad demasiado alta perdiendo la naturaleza intermitente','No respetar los tiempos exactos'], progreg:'Progresión: aumentar el número de rondas.', video:'15 15 intermittent running protocol football'},
+  tempo_runs:{name:'Tempo Runs', cat:'Resistencia', muscles:'Sistema aeróbico, tren inferior', goal:'Capacidad aeróbica a ritmo controlado',
+    desc:'Carreras continuas a ritmo moderado-alto (70-80% de velocidad máxima) en tramos de 200-300m.', 
+    errors:['Ritmo demasiado alto convirtiéndolo en trabajo anaeróbico','Técnica de carrera descuidada por la fatiga'], progreg:'Progresión: aumentar distancia o ritmo levemente.', video:'tempo runs soccer conditioning'},
+  assault_bike:{name:'Assault Bike', cat:'Resistencia', muscles:'Sistema aeróbico, cuerpo completo', goal:'Capacidad aeróbica de bajo impacto articular',
+    desc:'Pedaleo continuo a ritmo constante moderado-alto, involucrando brazos y piernas.', 
+    errors:['Ritmo irregular','Postura encorvada sobre el manubrio'], progreg:'Progresión: aumentar la potencia sostenida (watts).', video:'assault bike conditioning technique'},
+  air_bike:{name:'Air Bike', cat:'Resistencia', muscles:'Sistema aeróbico, cuerpo completo', goal:'Capacidad aeróbica de bajo impacto articular',
+    desc:'Pedaleo continuo a ritmo constante, alternativa de bajo impacto para las articulaciones.', 
+    errors:['Ritmo irregular','No mantener intensidad constante'], progreg:'Progresión: aumentar la potencia sostenida.', video:'air bike conditioning technique'},
+  row_erg:{name:'Remo Ergómetro', cat:'Resistencia', muscles:'Sistema aeróbico, tren superior y posterior', goal:'Capacidad aeróbica de bajo impacto en piernas',
+    desc:'Remada continua a ritmo constante moderado-alto, con técnica de piernas-espalda-brazos.', 
+    errors:['Tirar solo con los brazos','Ritmo demasiado irregular'], progreg:'Progresión: aumentar el ritmo (splits) manteniendo técnica.', video:'rowing machine technique conditioning'},
+  aerobic_intervals:{name:'Intervalos Aeróbicos', cat:'Resistencia', muscles:'Sistema aeróbico, tren inferior', goal:'Capacidad aeróbica intermitente moderada',
+    desc:'Bloques de 60-90 segundos a intensidad moderada-alta con 30-45 segundos de recuperación activa.', 
+    errors:['Intensidad de recuperación demasiado baja o nula','No sostener el ritmo en cada intervalo'], progreg:'Progresión: aumentar la duración de cada intervalo.', video:'aerobic interval training soccer'},
+
+  // Fuerza Fase 3 (variantes intensificadas)
+  front_squat:{name:'Sentadilla Frontal', cat:'Fuerza', muscles:'Cuádriceps, core, tren superior', goal:'Fuerza y transferencia de potencia (Fase 3)',
+    desc:'Barra en posición frontal sobre los deltoides, descender manteniendo el torso vertical.', 
+    errors:['Codos cayendo','Perder verticalidad del torso'], progreg:'Progresión natural desde sentadilla trasera al aumentar la intensidad.', video:'front squat technique form'},
+  single_leg_rdl:{name:'RDL a Una Pierna', cat:'Fuerza', muscles:'Isquiotibiales, glúteos, estabilidad', goal:'Fuerza unilateral de cadena posterior (Fase 3)',
+    desc:'Apoyo en una pierna, bisagra de cadera llevando el torso paralelo al piso mientras la pierna libre se extiende atrás.', 
+    errors:['Perder el equilibrio','Rotar la cadera'], progreg:'Progresión: aumentar carga en mano contraria.', video:'single leg romanian deadlift technique'}
+};
+
+/* ---------- Generador de programa 12 semanas ---------- */
+const Program = {
+  phaseOf(week){
+    if(week<=4) return {id:1, name:'Fase 1 — Rutina A', desc:'Base de fuerza y potencia', routine:'A'};
+    if(week<=8) return {id:2, name:'Fase 2 — Rutina B', desc:'Variación de estímulo, mismos ejes de fuerza', routine:'B'};
+    return {id:3, name:'Fase 3 — Rutina A Intensificada', desc:'Pico de intensidad, reducción de volumen', routine:'A+'};
+  },
+  isDeload(week){ return week===4 || week===8 || week===12; },
+  // Fuerza principal: 3 series (2 en descarga). Progresión de reps/RPE/carga% por fase y semana.
+  strengthPrincipal(week){
+    const wInPhase = ((week-1)%4)+1;
+    const deload = this.isDeload(week);
+    const phase = this.phaseOf(week).id;
+    let reps=6, rpe=7, load=72;
+    if(phase===2){ reps=5; rpe=7.5; load=76; }
+    if(phase===3){ reps=3; rpe=8.5; load=85; }
+    load = load + (wInPhase-1)*3;
+    if(deload){ load -= 10; rpe = Math.max(5, rpe-1.5); reps = Math.max(3, reps-1); }
+    return { sets: deload?2:3, reps, rpe: Math.round(rpe*10)/10, load: Math.round(load) };
+  },
+  // Fuerza secundaria: 2 series, levemente menos intensa que la principal
+  strengthSecondary(week){
+    const p = this.strengthPrincipal(week);
+    return { sets:2, reps: p.reps+2, rpe: Math.max(5, Math.round((p.rpe-1)*10)/10), load: Math.max(50, p.load-10) };
+  },
+  // Potencia (oly-derivado / salto cargado): 2 series
+  powerScheme(week){
+    const deload = this.isDeload(week);
+    const wInPhase = ((week-1)%4)+1;
+    let reps=3, rpe=7, load=65+(wInPhase-1)*2;
+    if(deload){ load-=8; rpe=6; }
+    return { sets:2, reps, rpe, load:Math.round(load) };
+  },
+  // día 0=Piernas A (Lun), 1=Tren Superior (Mié), 2=Piernas B (Vie)
+  dayLabel(d){ return ['Lunes','Miércoles','Viernes'][d]; },
+  dayType(d){ return ['Piernas A','Tren Superior','Piernas B'][d]; },
+  sessionFocus(d){ return ['Piernas A — Explosividad + único CoD de la semana','Tren Superior — Potencia + único bloque de resistencia','Piernas B — Cadena posterior + pliometría distinta'][d]; },
+
+  buildDay(week, day){
+    const phase = this.phaseOf(week);
+    const principal = this.strengthPrincipal(week);
+    const secondary = this.strengthSecondary(week);
+    const power = this.powerScheme(week);
+    const deload = this.isDeload(week);
+    const mkEx = (id, sets, reps, rest, rpe, load, sup=null) => ({id, sets, reps, rest, rpe, load, sup});
+
+    // Movilidad rotates 3 sets across días
+    const mobilityCycles = [
+      ['band_walk','hip_openers','glute_activation'],
+      ['shoulder_dislocates','worlds_greatest','ankle_mobility'],
+      ['ankle_mobility','worlds_greatest','glute_activation']
+    ];
+    // Core rotates anti-rotación/extensión/inclinación lateral, evita repetir
+    const coreCycles = [
+      ['pallof_press','dead_bug'],
+      ['bird_dog','suitcase_carry'],
+      ['plank_long','pallof_press']
+    ];
+    // Resistencia: un único ejercicio por semana, alterna automáticamente por fase (A/B/A+)
+    const resistanceSelect = (pool)=> pool[(phase.id-1) % pool.length];
+    const aerobicPool = ['tempo_runs','assault_bike','air_bike','row_erg','aerobic_intervals'];
+
+    let blocks = [];
+
+    if(day===0){
+      // ===== PIERNAS A — día más explosivo: único CoD de la semana, pliometría vertical =====
+      const oly = phase.routine==='B' ? 'hang_power_clean' : 'hang_high_pull';
+      const mainLift = phase.id===3 ? 'front_squat' : 'back_squat';
+      blocks = [
+        { n:1, name:'Movilidad + Activación', dur:'8 min', goal:'Preparar articulaciones y activar la cadena de tren inferior',
+          items: mobilityCycles[0].map(id=>mkEx(id,'2','8-10 c/lado','30s','—','—')) },
+        { n:2, name:'Core', dur:'6 min', goal:'Estabilidad de tronco — volumen reducido',
+          items: coreCycles[0].map(id=>mkEx(id,'2','8-12','45s', deload?'6':'7','—')) },
+        { n:3, name:'Potencia', dur:'10 min', goal:'Potencia explosiva de tren inferior + pliometría vertical',
+          items: [
+            mkEx(oly, power.sets, power.reps, '2-3 min', power.rpe, power.load+'%'),
+            mkEx('box_jump','3','4-5','90s', deload?'6':'7', 'peso corporal')
+          ] },
+        { n:4, name:'Fuerza', dur:'20 min', goal:'Fuerza máxima — patrón de sentadilla', trackProgression:true,
+          items: [
+            mkEx(mainLift, principal.sets, principal.reps, '2-3 min', principal.rpe, principal.load+'%'),
+            mkEx('bulgarian_split_squat', secondary.sets, secondary.reps, '90s', secondary.rpe, secondary.load+'%')
+          ] },
+        { n:5, name:'Accesorios + Preventivos', dur:'8 min', goal:'Prevención de rodilla y tobillo — volumen bajo', trackProgression:true,
+          items: [
+            mkEx('peterson_step_up','2','8-10 c/lado','—','6','—','A1'),
+            mkEx('calf_raise','2','12-15','60s','6','—','A2')
+          ] },
+        { n:6, name:'Cambios de Dirección', dur:'8 min', goal:'Único estímulo de CoD de la semana — frenado y reaceleración',
+          items: [ mkEx('test_505','2-3','2-3','3 min','8','—') ] }
+      ];
+    } else if(day===1){
+      // ===== TREN SUPERIOR — potencia de tren superior, sin pliometría de piernas, único bloque de resistencia =====
+      blocks = [
+        { n:1, name:'Movilidad + Activación', dur:'8 min', goal:'Movilidad de hombro y torácica',
+          items: mobilityCycles[1].map(id=>mkEx(id,'2','8-10 c/lado','30s','—','—')) },
+        { n:2, name:'Core', dur:'6 min', goal:'Estabilidad de tronco — volumen reducido',
+          items: coreCycles[1].map(id=>mkEx(id,'2','8-12','45s', deload?'6':'7','—')) },
+        { n:3, name:'Potencia', dur:'10 min', goal:'Potencia de tren superior (balón medicinal) — sin impacto en piernas',
+          items: [
+            mkEx('med_ball_chest_pass','3','5-6','90s', deload?'6':'7','—'),
+            mkEx('med_ball_rotational_throw','3','5-6 c/lado','90s', deload?'6':'7','—')
+          ] },
+        { n:4, name:'Fuerza', dur:'20 min', goal:'Fuerza máxima — empuje y tracción horizontal', trackProgression:true,
+          items: [
+            mkEx('bench_press', principal.sets, principal.reps, '2-3 min', principal.rpe, principal.load+'%'),
+            mkEx('pull_up', secondary.sets, secondary.reps, '90s', secondary.rpe, secondary.load+'%')
+          ] },
+        { n:5, name:'Accesorios + Preventivos', dur:'12 min', goal:'Salud de hombro y codo — superseries de volumen bajo', trackProgression:true,
+          items: phase.routine==='B' ? [
+            mkEx('rear_delt_fly','2','12-15','—','6','—','A1'),
+            mkEx('face_pull','2','12-15','60-90s','6','—','A2'),
+            mkEx('hammer_curl','2','10-12','—','6','—','B1'),
+            mkEx('triceps_pushdown','2','10-12','60-90s','6','—','B2'),
+            mkEx('copenhagen_plank','2','20-30s c/lado','45s','6','—',null)
+          ] : [
+            mkEx('lateral_raise','2','12-15','—','6','—','A1'),
+            mkEx('face_pull','2','12-15','60-90s','6','—','A2'),
+            mkEx('hammer_curl','2','10-12','—','6','—','B1'),
+            mkEx('triceps_pushdown','2','10-12','60-90s','6','—','B2'),
+            mkEx('copenhagen_plank','2','20-30s c/lado','45s','6','—',null)
+          ] },
+        { n:6, name:'Resistencia / Condicionamiento', dur:'7 min', goal:'Único bloque de acondicionamiento metabólico de la semana',
+          items: [ mkEx(resistanceSelect(aerobicPool), '1', 'protocolo completo (6-8 min)', '—', '7', '—') ] }
+      ];
+    } else {
+      // ===== PIERNAS B — cadena posterior, pliometría distinta a la del Día A, sin CoD ni resistencia (llegar fresco al partido) =====
+      const oly2 = phase.routine==='B' ? 'push_press' : 'mid_thigh_pull';
+      const hingeLift = phase.id===3 ? 'single_leg_rdl' : 'rdl';
+      const plyo2 = phase.id===3 ? 'depth_jump' : 'lateral_bound';
+      blocks = [
+        { n:1, name:'Movilidad + Activación', dur:'8 min', goal:'Preparar articulaciones y activar la cadena de tren inferior',
+          items: mobilityCycles[2].map(id=>mkEx(id,'2','8-10 c/lado','30s','—','—')) },
+        { n:2, name:'Core', dur:'6 min', goal:'Estabilidad de tronco — volumen reducido',
+          items: coreCycles[2].map(id=>mkEx(id,'2','8-12','45s', deload?'6':'7','—')) },
+        { n:3, name:'Potencia', dur:'10 min', goal:'Potencia de cadera + pliometría distinta a la del Día de Piernas A',
+          items: [
+            mkEx(oly2, power.sets, power.reps, '2-3 min', power.rpe, power.load+'%'),
+            mkEx(plyo2, '3', '4-5', '90s', deload?'6':'7', 'peso corporal')
+          ] },
+        { n:4, name:'Fuerza', dur:'20 min', goal:'Fuerza máxima — patrón de bisagra de cadera', trackProgression:true,
+          items: [
+            mkEx(hingeLift, principal.sets, principal.reps, '2-3 min', principal.rpe, principal.load+'%'),
+            mkEx('bulgarian_split_squat', secondary.sets, secondary.reps, '90s', secondary.rpe, secondary.load+'%')
+          ] },
+        { n:5, name:'Accesorios + Preventivos', dur:'8 min', goal:'Prevención de tobillo — volumen bajo', trackProgression:true,
+          items: [
+            mkEx('seated_calf_raise','2','12-15','—','6','—','A1'),
+            mkEx('tibialis_raise','2','12-15','60s','6','—','A2')
+          ] }
+        // Sin bloque 6: sin CoD (ya se usó el lunes) ni resistencia (ya se usó el miércoles) — termina en preventivos para llegar fresco al partido del sábado
+      ];
+    }
+
+    return blocks;
+  }
+};
+
+/* ---------- Router ---------- */
+const Router = {
+  go(view){
+    document.querySelectorAll('.view').forEach(v=>v.classList.remove('active'));
+    document.getElementById('view-'+view).classList.add('active');
+    document.querySelectorAll('.navbtn').forEach(b=>b.classList.toggle('active', b.dataset.view===view));
+    if(view==='dashboard') Dashboard.render();
+    if(view==='perfil') Profile.render();
+    if(view==='plan') Plan.render();
+    if(view==='progreso'){ Tracker.renderPRList(); Tracker.renderChart(); History.render(); }
+    if(view==='biblioteca') Library.render();
+    window.scrollTo(0,0);
+  }
+};
+
+/* ---------- Dashboard ---------- */
+const Dashboard = {
+  render(){
+    const s = State.data;
+    const week = s.currentWeek, day = s.currentDay;
+    const phase = Program.phaseOf(week);
+    document.getElementById('hero-phase').textContent = `${phase.name.split('—')[0].trim()} · Semana ${week}`;
+    document.getElementById('hero-day').textContent = `Hoy: ${Program.dayLabel(day)} — ${Program.dayType(day)}`;
+    const todayBlocks = Program.buildDay(week, day);
+    const totalMin = todayBlocks.reduce((a,bl)=>a+(parseInt(bl.dur)||0),0);
+    document.getElementById('hero-sub').textContent = `${todayBlocks.length} bloques · ~${totalMin} min · ${Program.dayType(day)}`;
+    const days=['Lunes','Miércoles','Viernes'];
+    document.getElementById('hero-next').textContent = days[(day+1)%3];
+
+    const strength = Program.strengthPrincipal(week);
+    document.getElementById('hero-load').textContent = strength.load+'% 1RM';
+    const deload = Program.isDeload(week);
+    document.getElementById('hero-recovery').textContent = deload? 'Descarga' : (strength.rpe>=8.3? 'Exigente':'Óptima');
+
+    const todayKey = d=>Object.keys(s.wellness).sort().reverse()[0];
+    const lastDate = Object.keys(s.wellness).sort().reverse()[0];
+    const w = lastDate? s.wellness[lastDate] : null;
+    document.getElementById('dash-weight').innerHTML = (w&&w.weight? w.weight : '—') + '<small>kg</small>';
+    document.getElementById('dash-sleep').innerHTML = (w&&w.sleep? w.sleep : '—') + '<small>h</small>';
+    document.getElementById('dash-soreness').innerHTML = (w&&w.soreness!==undefined? w.soreness : '—') + '<small>/10</small>';
+    let badge='—';
+    if(w){
+      if(w.soreness<=3 && w.sleep>=7) badge='Óptima';
+      else if(w.soreness<=6) badge='Moderada';
+      else badge='Baja';
+    }
+    document.getElementById('dash-recovery-badge').textContent = badge;
+
+    // PRs
+    const prList = document.getElementById('dash-pr-list');
+    const prs = Tracker.computePRs();
+    if(prs.length===0){ prList.innerHTML = '<div class="empty-hint">Todavía no registraste marcas. Cargalas en Progreso.</div>'; }
+    else {
+      prList.innerHTML = prs.slice(0,4).map(p=>`<div class="pr-row"><div class="pr-name">${p.label}</div><div class="pr-val">${p.value}${p.unit}</div></div>`).join('');
+    }
+
+    const sessions = s.sessionsCompleted[week] || 0;
+    document.getElementById('dash-week-sessions').textContent = `${sessions}/3`;
+    document.getElementById('dash-week-progress').style.width = Math.round(sessions/3*100)+'%';
+    const suggestedEl = document.getElementById('dash-suggested-week');
+    if(suggestedEl) suggestedEl.textContent = History.isProgramComplete() ? '¡Programa completo! ✓' : `Semana ${History.suggestedWeek()} de 12`;
+  }
+};
+
+/* ---------- Perfil ---------- */
+const Profile = {
+  render(){
+    const p = State.data.profile;
+    document.getElementById('p-name').value = p.name||'';
+    document.getElementById('p-pos').value = p.pos||'Delantero';
+    document.getElementById('p-age').value = p.age||'';
+    document.getElementById('p-height').value = p.height||'';
+    document.getElementById('p-target-weight').value = p.targetWeight||'';
+    document.getElementById('p-injuries').value = p.injuries||'';
+    document.getElementById('rm-squat').value = p.rm.squat||'';
+    document.getElementById('rm-rdl').value = p.rm.rdl||'';
+    document.getElementById('rm-bench').value = p.rm.bench||'';
+    document.getElementById('rm-row').value = p.rm.row||'';
+    document.getElementById('perfil-name-display').textContent = p.name||'Atleta';
+    document.getElementById('perfil-pos-display').textContent = p.pos||'';
+    document.getElementById('perfil-initial').textContent = (p.name||'A').charAt(0).toUpperCase();
+  },
+  save(){
+    const p = State.data.profile;
+    p.name = document.getElementById('p-name').value || 'Atleta';
+    p.pos = document.getElementById('p-pos').value;
+    p.age = document.getElementById('p-age').value;
+    p.height = document.getElementById('p-height').value;
+    p.targetWeight = document.getElementById('p-target-weight').value;
+    p.injuries = document.getElementById('p-injuries').value;
+    p.rm.squat = document.getElementById('rm-squat').value;
+    p.rm.rdl = document.getElementById('rm-rdl').value;
+    p.rm.bench = document.getElementById('rm-bench').value;
+    p.rm.row = document.getElementById('rm-row').value;
+    State.save();
+    this.render();
+    Toast.show('Perfil guardado ✓');
+  }
+};
+
+/* ---------- Plan ---------- */
+const Plan = {
+  render(){
+    const s = State.data;
+    // week rail
+    const rail = document.getElementById('week-rail');
+    rail.innerHTML='';
+    for(let w=1; w<=12; w++){
+      const el = document.createElement('div');
+      el.className = 'week-pill' + (w===s.currentWeek? ' active':'') + (Program.isDeload(w)? ' deload':'');
+      el.innerHTML = `<div class="wl">SEM</div><div class="wn">${w}</div>`;
+      el.onclick = ()=>{ s.currentWeek=w; State.save(); this.render(); };
+      rail.appendChild(el);
+    }
+    const phase = Program.phaseOf(s.currentWeek);
+    document.getElementById('phase-banner-title').textContent = phase.name;
+    document.getElementById('phase-banner-desc').textContent = phase.desc + (Program.isDeload(s.currentWeek)? ' · Semana de descarga':'');
+    document.getElementById('phase-banner-tag').textContent = 'SEM '+s.currentWeek;
+
+    // day tabs
+    const dayTabs = document.getElementById('day-tabs');
+    dayTabs.innerHTML='';
+    ['Lunes','Miércoles','Viernes'].forEach((label,i)=>{
+      const el = document.createElement('div');
+      el.className='day-tab'+(i===s.currentDay?' active':'');
+      el.innerHTML = `${label}<div style="font-size:10px; font-weight:400; opacity:.7; margin-top:1px;">${Program.dayType(i)}</div>`;
+      el.onclick=()=>{ s.currentDay=i; State.save(); this.render(); };
+      dayTabs.appendChild(el);
+    });
+
+    this.renderBlocks();
+  },
+  renderBlocks(){
+    const s = State.data;
+    const blocks = Program.buildDay(s.currentWeek, s.currentDay);
+    document.getElementById('blocks-count').textContent = `${blocks.length} bloques`;
+    const container = document.getElementById('blocks-container');
+    container.innerHTML='';
+    blocks.forEach((b, idx)=>{
+      const card = document.createElement('div');
+      card.className='block-card'+(idx===0?' open':'');
+      const doneCount = b.items.filter(it=>s.completedExercises[`${s.currentWeek}-${s.currentDay}-${it.id}`]).length;
+      card.innerHTML = `
+        <div class="block-head" onclick="Plan.toggleBlock(this)">
+          <div class="block-num">${b.n}</div>
+          <div class="block-head-text">
+            <div class="block-title">${b.name.toUpperCase()}</div>
+            <div class="block-sub">${b.dur} · ${doneCount}/${b.items.length} completados</div>
+          </div>
+          <svg class="block-chevron" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 9l6 6 6-6"/></svg>
+        </div>
+        <div class="block-body"><div class="block-body-inner">
+          <div style="font-size:12px; color:var(--text-muted); margin-bottom:10px;">${b.goal}</div>
+          ${(()=>{
+            let html='';
+            let prevGroup=null;
+            let isFirst=true;
+            b.items.forEach(it=>{
+              const group = it.sup ? it.sup.charAt(0) : null;
+              let afterHeader=false;
+              if(group && group!==prevGroup){
+                html += `<div class="superset-header">Superserie ${group}</div>`;
+                afterHeader=true;
+              } else if(!group && prevGroup){
+                html += `<div class="superset-header muted">Finalizar con</div>`;
+                afterHeader=true;
+              }
+              prevGroup = group;
+              const ex = EX[it.id];
+              const key = `${s.currentWeek}-${s.currentDay}-${it.id}`;
+              const done = !!s.completedExercises[key];
+              const supLabel = it.sup ? `<span class="mono" style="color:var(--accent); margin-right:4px;">${it.sup}.</span>` : '';
+              const noBorder = isFirst || afterHeader;
+              isFirst = false;
+              const progBtn = b.trackProgression ? `<button class="prog-toggle" onclick="Progression.toggle(event,'${it.id}')" title="Registro de progresión">📊</button>` : '';
+              const progTable = b.trackProgression ? `<div class="progression-wrap" id="progwrap-${it.id}" style="display:none;"></div>` : '';
+              html += `<div class="exercise-row-wrap ${noBorder?'no-border':''}">
+                <div class="exercise-row">
+                  <div class="ex-check ${done?'done':''}" onclick="Plan.toggleDone(event,'${key}')">
+                    ${done? '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M5 13l4 4L19 7"/></svg>':''}
+                  </div>
+                  <div class="ex-info" onclick="Library.openModal('${it.id}', ${JSON.stringify(it).replace(/"/g,'&quot;')})">
+                    <div class="ex-name ${done?'done-text':''}">${supLabel}${ex.name}</div>
+                    <div class="ex-detail">${it.sets}x${it.reps}${it.rest!=='—'?' · desc '+it.rest:''} · RPE ${it.rpe} ${it.load!=='—'? '· '+it.load:''}</div>
+                  </div>
+                  ${progBtn}
+                  <svg class="ex-arrow" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 18l6-6-6-6"/></svg>
+                </div>
+                ${progTable}
+              </div>`;
+            });
+            return html;
+          })()}
+        </div></div>`;
+      container.appendChild(card);
+    });
+    this.renderSessionStatus();
+  },
+  renderSessionStatus(){
+    const s = State.data;
+    const rec = (s.sessionHistory||[]).find(r=>r.week===s.currentWeek && r.day===s.currentDay);
+    const el = document.getElementById('plan-session-status');
+    if(!el) return;
+    if(!rec){ el.textContent = 'Todavía no guardaste esta sesión.'; }
+    else { el.textContent = `Guardado el ${rec.date} · ${rec.exercisesDone}/${rec.exercisesTotal} ejercicios${rec.complete?' · Completa':''}`; }
+  },
+  toggleBlock(headEl){
+    headEl.parentElement.classList.toggle('open');
+  },
+  toggleDone(evt, key){
+    evt.stopPropagation();
+    const s = State.data;
+    s.completedExercises[key] = !s.completedExercises[key];
+    State.save();
+    this.renderBlocks();
+    const record = this.finalizeSession(false);
+    if(record && record.complete) Toast.show('¡Sesión completa y guardada! 💪');
+  },
+  // Guarda (o actualiza) el registro de la sesión actual en el historial.
+  // showToast=true muestra "Sesión guardada" (botón manual); false lo omite (se llama automáticamente al tildar ejercicios)
+  finalizeSession(showToast){
+    const s = State.data;
+    const week = s.currentWeek, day = s.currentDay;
+    const blocks = Program.buildDay(week, day);
+    const allItems = blocks.reduce((a,b)=>a.concat(b.items), []);
+    const total = allItems.length;
+    const done = allItems.filter(it=>s.completedExercises[`${week}-${day}-${it.id}`]).length;
+    const phase = Program.phaseOf(week);
+    const today = new Date().toISOString().slice(0,10);
+    if(!s.sessionHistory) s.sessionHistory = [];
+    const idx = s.sessionHistory.findIndex(r=>r.week===week && r.day===day);
+    const record = {
+      week, day, dayLabel: Program.dayLabel(day), dayType: Program.dayType(day),
+      phase: phase.name, date: today, exercisesTotal: total, exercisesDone: done,
+      complete: done===total && total>0
+    };
+    if(idx>=0) s.sessionHistory[idx] = record; else s.sessionHistory.push(record);
+    s.sessionsCompleted[week] = [0,1,2].filter(d=>s.sessionHistory.some(r=>r.week===week && r.day===d && r.complete)).length;
+    State.save();
+    if(showToast) Toast.show('Sesión guardada ✓');
+    this.renderSessionStatus();
+    if(document.getElementById('view-dashboard').classList.contains('active')) Dashboard.render();
+    return record;
+  }
+};
+
+/* ---------- Library ---------- */
+const Library = {
+  currentCat:'Todos',
+  render(){
+    const tabsEl = document.getElementById('lib-cat-tabs');
+    const cats = ['Todos','Movilidad','Core','Potencia','Velocidad','Fuerza','Accesorio','Resistencia'];
+    tabsEl.innerHTML = cats.map(c=>`<div class="tab ${c===this.currentCat?'active':''}" onclick="Library.setCat('${c}')">${c}</div>`).join('');
+    const q = (document.getElementById('lib-search').value||'').toLowerCase();
+    const list = document.getElementById('lib-list');
+    const entries = Object.entries(EX).filter(([id,ex])=>{
+      const catOk = this.currentCat==='Todos' || ex.cat===this.currentCat;
+      const qOk = !q || ex.name.toLowerCase().includes(q);
+      return catOk && qOk;
+    });
+    if(entries.length===0){ list.innerHTML = '<div class="empty-hint">No se encontraron ejercicios.</div>'; return; }
+    list.innerHTML = entries.map(([id,ex])=>`
+      <div class="lib-card" onclick="Library.openModal('${id}', null)">
+        <div class="lib-icon">${Library.icon(ex.cat)}</div>
+        <div style="flex:1;">
+          <div class="lib-name">${ex.name}</div>
+          <div class="lib-cat">${ex.cat} · ${ex.muscles}</div>
+        </div>
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--text-faint)" stroke-width="2"><path d="M9 18l6-6-6-6"/></svg>
+      </div>
+    `).join('');
+  },
+  setCat(c){ this.currentCat=c; this.render(); },
+  icon(cat){
+    const icons = {
+      'Movilidad':'<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 3"/></svg>',
+      'Core':'<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="4" y="8" width="16" height="8" rx="2"/></svg>',
+      'Potencia':'<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M13 2L4 14h6l-1 8 9-12h-6l1-8z"/></svg>',
+      'Velocidad':'<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 12h14M13 6l6 6-6 6"/></svg>',
+      'Fuerza':'<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6.5 6.5l11 11M4 9V5h4M20 15v4h-4M9 4H5v4M15 20h4v-4"/></svg>',
+      'Accesorio':'<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><circle cx="6" cy="6" r="2"/><circle cx="18" cy="18" r="2"/></svg>',
+      'Resistencia':'<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg>'
+    };
+    return icons[cat]||'';
+  },
+  openModal(id, item){
+    const ex = EX[id];
+    document.getElementById('ex-modal-name').textContent = ex.name;
+    document.getElementById('ex-modal-tags').innerHTML = `<span class="chip accent">${ex.cat}</span>`;
+    document.getElementById('ex-modal-sets').textContent = item? item.sets : '—';
+    document.getElementById('ex-modal-reps').textContent = item? item.reps : '—';
+    document.getElementById('ex-modal-rest').textContent = item? item.rest : '—';
+    document.getElementById('ex-modal-goal').textContent = ex.goal;
+    document.getElementById('ex-modal-muscles').textContent = ex.muscles;
+    document.getElementById('ex-modal-desc').textContent = ex.desc;
+    document.getElementById('ex-modal-errors').innerHTML = ex.errors.map(e=>`<li>${e}</li>`).join('');
+    document.getElementById('ex-modal-progreg').textContent = ex.progreg;
+    document.getElementById('ex-modal-video').href = 'https://www.youtube.com/results?search_query=' + encodeURIComponent(ex.video);
+    Modal.open('ex-modal');
+  }
+};
+
+/* ---------- Wellness ---------- */
+/* ---------- Registro de progresión (tabla semanal bajo fuerza y accesorios) ---------- */
+const Progression = {
+  weeks:[1,2,3,4,5,6],
+  toggle(evt, exId){
+    evt.stopPropagation();
+    const wrap = document.getElementById('progwrap-'+exId);
+    if(!wrap) return;
+    const isOpen = wrap.style.display !== 'none';
+    if(isOpen){ wrap.style.display='none'; return; }
+    wrap.innerHTML = this.buildTable(exId);
+    wrap.style.display='block';
+  },
+  buildTable(exId){
+    const log = (State.data.progressionLogs && State.data.progressionLogs[exId]) || {};
+    const field = (w,f)=>{ const d=log['w'+w]; return d && d[f]!==undefined ? d[f] : ''; };
+    const rows = this.weeks.map(w=>`<tr>
+        <td class="mono">${w}</td>
+        <td><input type="text" value="${field(w,'peso')}" placeholder="kg" onchange="Progression.saveField('${exId}',${w},'peso',this.value)"></td>
+        <td><input type="text" value="${field(w,'series')}" placeholder="—" onchange="Progression.saveField('${exId}',${w},'series',this.value)"></td>
+        <td><input type="text" value="${field(w,'reps')}" placeholder="—" onchange="Progression.saveField('${exId}',${w},'reps',this.value)"></td>
+        <td><input type="text" value="${field(w,'rpe')}" placeholder="—" onchange="Progression.saveField('${exId}',${w},'rpe',this.value)"></td>
+        <td><input type="text" value="${field(w,'obs')}" placeholder="—" onchange="Progression.saveField('${exId}',${w},'obs',this.value)"></td>
+      </tr>`).join('');
+    return `<div class="progression-scroll"><table class="progression-table">
+      <thead><tr><th>Sem</th><th>Peso</th><th>Series</th><th>Reps</th><th>RPE</th><th>Obs.</th></tr></thead>
+      <tbody>${rows}</tbody>
+    </table></div>`;
+  },
+  saveField(exId, week, field, value){
+    const s = State.data;
+    if(!s.progressionLogs) s.progressionLogs = {};
+    if(!s.progressionLogs[exId]) s.progressionLogs[exId] = {};
+    if(!s.progressionLogs[exId]['w'+week]) s.progressionLogs[exId]['w'+week] = {};
+    s.progressionLogs[exId]['w'+week][field] = value;
+    State.save();
+  }
+};
+
+/* ---------- Historial de sesiones (saber por qué semana voy) ---------- */
+const History = {
+  weekComplete(w){
+    const s = State.data;
+    return [0,1,2].every(d=>(s.sessionHistory||[]).some(r=>r.week===w && r.day===d && r.complete));
+  },
+  suggestedWeek(){
+    for(let w=1; w<=12; w++){ if(!this.weekComplete(w)) return w; }
+    return 12;
+  },
+  isProgramComplete(){
+    for(let w=1; w<=12; w++){ if(!this.weekComplete(w)) return false; }
+    return true;
+  },
+  render(){
+    const s = State.data;
+    const hist = (s.sessionHistory||[]).slice().sort((a,b)=> b.date.localeCompare(a.date) || b.week-a.week || b.day-a.day);
+    const suggested = this.suggestedWeek();
+    const complete = this.isProgramComplete();
+    const summaryEl = document.getElementById('history-summary');
+    if(summaryEl){
+      summaryEl.innerHTML = `
+        <div class="grid-2">
+          <div class="card stat-card">
+            <div class="stat-label">Semana sugerida</div>
+            <div class="stat-value">${complete? '✓' : suggested}<small>${complete? 'programa completo':'/ 12'}</small></div>
+          </div>
+          <div class="card stat-card">
+            <div class="stat-label">Sesiones guardadas</div>
+            <div class="stat-value">${hist.length}<small>total</small></div>
+          </div>
+        </div>
+        <div style="font-size:11.5px; color:var(--text-faint); margin-top:8px; padding:0 2px;">
+          La semana sugerida es la primera con alguna sesión pendiente o sin guardar. Podés seguir navegando libremente con el selector de semanas en Plan.
+        </div>`;
+    }
+    const listEl = document.getElementById('history-list');
+    if(!listEl) return;
+    if(hist.length===0){
+      listEl.innerHTML = '<div class="empty-hint">Todavía no guardaste ninguna sesión. Completá los ejercicios de un entrenamiento (se guarda solo) o tocá "Guardar sesión de hoy" en la pantalla de Plan.</div>';
+      return;
+    }
+    listEl.innerHTML = hist.map(r=>`
+      <div class="card" style="padding:12px 14px; display:flex; justify-content:space-between; align-items:center; gap:10px; margin-bottom:8px;">
+        <div style="min-width:0;">
+          <div style="font-size:13px; font-weight:600;">Semana ${r.week} · ${r.dayLabel} — ${r.dayType}</div>
+          <div style="font-size:11px; color:var(--text-faint); margin-top:2px;">${r.date} · ${r.phase.split('—')[0].trim()}</div>
+        </div>
+        <div class="chip ${r.complete?'accent':''}" style="flex:none;">${r.exercisesDone}/${r.exercisesTotal}</div>
+      </div>
+    `).join('');
+  }
+};
+
+const Wellness = {
+  openModal(){
+    const today = new Date().toISOString().slice(0,10);
+    const w = State.data.wellness[today] || {};
+    document.getElementById('w-weight').value = w.weight||'';
+    document.getElementById('w-sleep').value = w.sleep||'';
+    document.getElementById('w-soreness').value = w.soreness!==undefined? w.soreness : '';
+    Modal.open('wellness-modal');
+  },
+  save(){
+    const today = new Date().toISOString().slice(0,10);
+    const weight = parseFloat(document.getElementById('w-weight').value);
+    const sleep = parseFloat(document.getElementById('w-sleep').value);
+    const soreness = parseFloat(document.getElementById('w-soreness').value);
+    State.data.wellness[today] = { weight: isNaN(weight)?undefined:weight, sleep:isNaN(sleep)?undefined:sleep, soreness:isNaN(soreness)?undefined:soreness };
+    if(!isNaN(weight)) Tracker.pushLog('weight', today, weight);
+    if(!isNaN(sleep)) Tracker.pushLog('sleep', today, sleep);
+    if(!isNaN(soreness)) Tracker.pushLog('soreness', today, soreness);
+    State.save();
+    Modal.close('wellness-modal');
+    Dashboard.render();
+    Toast.show('Check-in guardado ✓');
+  }
+};
+
+/* ---------- Tracker / Progreso ---------- */
+const METRIC_META = {
+  weight:{label:'Peso corporal', unit:'kg', lowerBetter:false, isPR:false},
+  sleep:{label:'Horas de sueño', unit:'h', lowerBetter:false, isPR:false},
+  soreness:{label:'Dolor muscular', unit:'/10', lowerBetter:true, isPR:false},
+  sprint10:{label:'Sprint 10m', unit:'s', lowerBetter:true, isPR:true},
+  sprint20:{label:'Flying Sprint 20m', unit:'s', lowerBetter:true, isPR:true},
+  test505:{label:'Test 5-10-5', unit:'s', lowerBetter:true, isPR:true},
+  cmj:{label:'CMJ Salto Vertical', unit:'cm', lowerBetter:false, isPR:true},
+  broadjump:{label:'Broad Jump', unit:'cm', lowerBetter:false, isPR:true},
+  squat1rm:{label:'1RM Sentadilla', unit:'kg', lowerBetter:false, isPR:true},
+  bench1rm:{label:'1RM Press Banca', unit:'kg', lowerBetter:false, isPR:true}
+};
+const Tracker = {
+  pushLog(metric, date, value){
+    const s = State.data;
+    if(!s.logs[metric]) s.logs[metric]=[];
+    const existingIdx = s.logs[metric].findIndex(e=>e.date===date);
+    if(existingIdx>=0) s.logs[metric][existingIdx].value = value;
+    else s.logs[metric].push({date, value});
+    s.logs[metric].sort((a,b)=>a.date.localeCompare(b.date));
+  },
+  addEntry(){
+    const metric = document.getElementById('log-metric').value;
+    const value = parseFloat(document.getElementById('log-value').value);
+    let date = document.getElementById('log-date').value || new Date().toISOString().slice(0,10);
+    if(isNaN(value)){ Toast.show('Ingresá un valor válido'); return; }
+    this.pushLog(metric, date, value);
+    State.save();
+    document.getElementById('log-value').value='';
+    Toast.show('Registro guardado ✓');
+    this.renderPRList();
+  },
+  computePRs(){
+    const s = State.data;
+    const prs=[];
+    Object.keys(METRIC_META).forEach(m=>{
+      if(!METRIC_META[m].isPR) return;
+      const entries = s.logs[m];
+      if(!entries || entries.length===0) return;
+      const meta = METRIC_META[m];
+      const best = entries.reduce((acc,e)=> meta.lowerBetter ? (e.value<acc.value?e:acc) : (e.value>acc.value?e:acc));
+      prs.push({label:meta.label, value:best.value, unit:meta.unit, date:best.date});
+    });
+    return prs;
+  },
+  renderPRList(){
+    const el = document.getElementById('pr-full-list');
+    const prs = this.computePRs();
+    if(prs.length===0){ el.innerHTML='<div class="empty-hint">Sin marcas registradas todavía.</div>'; return; }
+    el.innerHTML = prs.map(p=>`<div class="pr-row"><div class="pr-name">${p.label}</div><div class="pr-val">${p.value}${p.unit} <span style="color:var(--text-faint); font-weight:400; font-size:11px;">· ${p.date}</span></div></div>`).join('');
+    const today = new Date().toISOString().slice(0,10);
+    if(!document.getElementById('log-date').value) document.getElementById('log-date').value = today;
+  },
+  renderChart(){
+    const metric = document.getElementById('chart-metric').value;
+    const meta = METRIC_META[metric];
+    document.getElementById('chart-title').textContent = meta.label;
+    const entries = (State.data.logs[metric]||[]).slice(-14);
+    const svg = document.getElementById('chart-svg');
+    if(entries.length===0){
+      svg.innerHTML = `<text x="300" y="80" fill="#5B5F66" font-size="12" text-anchor="middle" font-family="Inter">Sin datos todavía</text>`;
+      document.getElementById('chart-latest').textContent='';
+      return;
+    }
+    const w=600, h=150, pad=14;
+    const vals = entries.map(e=>e.value);
+    const min = Math.min(...vals), max = Math.max(...vals);
+    const range = (max-min)||1;
+    const stepX = entries.length>1? (w-2*pad)/(entries.length-1) : 0;
+    const pts = entries.map((e,i)=>{
+      const x = pad + i*stepX;
+      const y = h-pad - ((e.value-min)/range)*(h-2*pad);
+      return [x,y];
+    });
+    const path = pts.map((p,i)=> (i===0?'M':'L')+p[0].toFixed(1)+' '+p[1].toFixed(1)).join(' ');
+    const area = path + ` L ${pts[pts.length-1][0].toFixed(1)} ${h-pad} L ${pts[0][0].toFixed(1)} ${h-pad} Z`;
+    const dots = pts.map(p=>`<circle cx="${p[0].toFixed(1)}" cy="${p[1].toFixed(1)}" r="3.5" fill="#00C853"/>`).join('');
+    svg.innerHTML = `
+      <defs><linearGradient id="chGrad" x1="0" y1="0" x2="0" y2="1">
+        <stop offset="0%" stop-color="#00C853" stop-opacity="0.35"/>
+        <stop offset="100%" stop-color="#00C853" stop-opacity="0"/>
+      </linearGradient></defs>
+      <path d="${area}" fill="url(#chGrad)"/>
+      <path d="${path}" fill="none" stroke="#00C853" stroke-width="2.5" stroke-linejoin="round" stroke-linecap="round"/>
+      ${dots}
+    `;
+    document.getElementById('chart-latest').textContent = `Último: ${entries[entries.length-1].value}${meta.unit}`;
+  }
+};
+
+/* ---------- Calculadoras ---------- */
+const Calc = {
+  oneRM(){
+    const w = parseFloat(document.getElementById('calc-1rm-weight').value);
+    const r = parseFloat(document.getElementById('calc-1rm-reps').value);
+    if(isNaN(w)||isNaN(r)||r<1){ document.getElementById('calc-1rm-result').textContent='Completá ambos campos.'; return; }
+    const rm = r===1? w : w*(1+r/30);
+    document.getElementById('calc-1rm-result').textContent = `1RM estimado: ${rm.toFixed(1)} kg`;
+  },
+  pctLoad(){
+    const rm = parseFloat(document.getElementById('calc-pct-rm').value);
+    const pct = parseFloat(document.getElementById('calc-pct-val').value);
+    if(isNaN(rm)||isNaN(pct)){ document.getElementById('calc-pct-result').textContent='Completá ambos campos.'; return; }
+    document.getElementById('calc-pct-result').textContent = `Carga: ${(rm*pct/100).toFixed(1)} kg (${pct}% de ${rm}kg)`;
+  },
+  targetVel(){
+    const d = parseFloat(document.getElementById('calc-vel-dist').value);
+    const t = parseFloat(document.getElementById('calc-vel-time').value);
+    if(isNaN(d)||isNaN(t)||t<=0){ document.getElementById('calc-vel-result').textContent='Completá ambos campos.'; return; }
+    const vel = d/t;
+    document.getElementById('calc-vel-result').textContent = `Velocidad objetivo: ${vel.toFixed(2)} m/s (${(vel*3.6).toFixed(1)} km/h)`;
+  }
+};
+
+/* ---------- Modal / Toast ---------- */
+const Modal = {
+  open(id){ document.getElementById(id).classList.add('open'); },
+  close(id){ document.getElementById(id).classList.remove('open'); }
+};
+document.querySelectorAll('.modal-backdrop').forEach(m=>{
+  m.addEventListener('click', e=>{ if(e.target===m) m.classList.remove('open'); });
+});
+const Toast = {
+  show(msg){
+    const t = document.getElementById('toast');
+    t.textContent = msg;
+    t.classList.add('show');
+    clearTimeout(this._t);
+    this._t = setTimeout(()=>t.classList.remove('show'), 2200);
+  }
+};
+
+/* ---------- Import / Export / Reset ---------- */
+const DataIO = {
+  exportJSON(){
+    const blob = new Blob([JSON.stringify(State.data,null,2)], {type:'application/json'});
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href=url; a.download='apexfc_datos.json'; a.click();
+    URL.revokeObjectURL(url);
+    Toast.show('Datos exportados ✓');
+  },
+  importJSON(evt){
+    const file = evt.target.files[0];
+    if(!file) return;
+    const reader = new FileReader();
+    reader.onload = e=>{
+      try{
+        const parsed = JSON.parse(e.target.result);
+        State.data = parsed;
+        State.save();
+        Toast.show('Datos importados ✓');
+        Router.go('dashboard');
+      }catch(err){ Toast.show('Archivo inválido'); }
+    };
+    reader.readAsText(file);
+  },
+  resetAll(){
+    if(!confirm('¿Seguro que querés borrar todos los datos? Esta acción no se puede deshacer.')) return;
+    localStorage.removeItem(STORE_KEY);
+    State.load();
+    Toast.show('Datos borrados');
+    Router.go('dashboard');
+  }
+};
+
+/* ---------- Exportar PDF (via impresión) ---------- */
+const ExportPDF = {
+  go(){
+    Router.go('plan');
+    setTimeout(()=>window.print(), 250);
+  }
+};
+
+/* ---------- Progress tabs ---------- */
+document.querySelectorAll('#progress-tabs .tab').forEach(tab=>{
+  tab.addEventListener('click', ()=>{
+    document.querySelectorAll('#progress-tabs .tab').forEach(t=>t.classList.remove('active'));
+    tab.classList.add('active');
+    ['registro','historial','graficos','calc'].forEach(k=>{
+      document.getElementById('ptab-'+k).style.display = (k===tab.dataset.ptab)?'block':'none';
+    });
+    if(tab.dataset.ptab==='graficos') Tracker.renderChart();
+    if(tab.dataset.ptab==='historial') History.render();
+  });
+});
+
+/* ---------- PWA install ---------- */
+let deferredPrompt=null;
+window.addEventListener('beforeinstallprompt', e=>{
+  e.preventDefault(); deferredPrompt=e;
+});
+const PWAInstall = {
+  trigger(){
+    if(deferredPrompt){ deferredPrompt.prompt(); deferredPrompt=null; }
+    else Toast.show('Ya instalada o no disponible en este navegador');
+  }
+};
+if('serviceWorker' in navigator){
+  window.addEventListener('load', ()=>{
+    navigator.serviceWorker.register('sw.js').catch(()=>{});
+  });
+}
+
+/* ---------- Init ---------- */
+State.load();
+document.getElementById('log-date').value = new Date().toISOString().slice(0,10);
+Router.go('dashboard');
+</script>
+</body>
+</html>
