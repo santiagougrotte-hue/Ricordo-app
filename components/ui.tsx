@@ -1,6 +1,7 @@
 "use client";
 
 import React from "react";
+import { Inbox, Search, type LucideIcon } from "lucide-react";
 
 type Color = "gold" | "green" | "red" | "blue" | "orange" | "purple" | "none";
 
@@ -39,7 +40,7 @@ export function Card({
 }) {
   return (
     <div
-      className={`rounded-[10px] border border-border ${colorBorder[color]} border-t-2 bg-surface p-[18px] ${className}`}
+      className={`rounded-xl border border-border ${colorBorder[color]} border-t-2 bg-surface p-[18px] shadow-[var(--shadow-card)] ${className}`}
     >
       {title && (
         <div className="mb-3.5 flex items-center justify-between">
@@ -65,7 +66,7 @@ export function KpiCard({
 }) {
   return (
     <div
-      className={`rounded-[10px] border border-border ${colorBorder[color]} border-t-2 bg-surface p-4`}
+      className={`rounded-xl border border-border ${colorBorder[color]} border-t-2 bg-surface p-4 shadow-[var(--shadow-card)]`}
     >
       <div className="text-[10px] uppercase tracking-[1.2px] text-text3">{label}</div>
       <div className={`my-1.5 text-2xl leading-none font-semibold ${colorValue[color]}`}>{value}</div>
@@ -259,11 +260,20 @@ export function FilterTabs({
   );
 }
 
-export function EmptyState({ icon = "🗂️", text }: { icon?: string; text: string }) {
+export function EmptyState({ icon: Icon = Inbox, text }: { icon?: LucideIcon; text: string }) {
   return (
     <div className="py-10 text-center text-text3">
-      <div className="mb-2.5 text-4xl">{icon}</div>
+      <Icon className="mx-auto mb-2.5 h-9 w-9 stroke-[1.5] opacity-60" />
       <div>{text}</div>
+    </div>
+  );
+}
+
+export function SearchInput(props: React.InputHTMLAttributes<HTMLInputElement>) {
+  return (
+    <div className="relative">
+      <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-text3" />
+      <Input {...props} className={`pl-9 ${props.className ?? ""}`} />
     </div>
   );
 }
@@ -341,4 +351,16 @@ export function Alert({
 
 export function Sep() {
   return <div className="my-3.5 h-px bg-border" />;
+}
+
+export function Semaforo({ nivel, size = "md" }: { nivel: "green" | "orange" | "red"; size?: "sm" | "md" }) {
+  const dotColor = { green: "bg-green", orange: "bg-orange", red: "bg-red" }[nivel];
+  const ringColor = { green: "bg-green-dim", orange: "bg-orange-dim", red: "bg-red-dim" }[nivel];
+  const px = size === "sm" ? "h-2.5 w-2.5" : "h-3.5 w-3.5";
+  const wrap = size === "sm" ? "p-1" : "p-1.5";
+  return (
+    <span className={`inline-flex items-center justify-center rounded-full ${ringColor} ${wrap}`}>
+      <span className={`rounded-full ${dotColor} ${px}`} />
+    </span>
+  );
 }

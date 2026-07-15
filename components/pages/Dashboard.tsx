@@ -1,10 +1,14 @@
 "use client";
 
 import React, { useMemo } from "react";
+import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts";
 import { useStore } from "@/lib/store";
 import { usePeriod } from "@/lib/period";
 import { PageHeader, StatGrid, KpiCard, Card, BarRow, TableWrap, Th, Td, TrHover, EmptyState, Badge } from "@/components/ui";
 import { calcCosto, calcStockIngrediente, fARS, fNum, inPeriod } from "@/lib/calc";
+import { CHART_COLORS } from "@/lib/chart-colors";
+
+const MESES_CORTOS = ["Ene", "Feb", "Mar", "Abr", "May", "Jun", "Jul", "Ago", "Sep", "Oct", "Nov", "Dic"];
 
 export function Dashboard() {
   const { data } = useStore();
@@ -63,6 +67,21 @@ export function Dashboard() {
     .filter((p) => new Date(p.fecha) >= semanaAtras)
     .reduce((acc, p) => acc + p.cantidad, 0);
 
+  const ventasPorMes = useMemo(() => {
+    const now = new Date();
+    const meses = [];
+    for (let i = 11; i >= 0; i--) {
+      const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+      const m = d.getMonth() + 1;
+      const a = d.getFullYear();
+      const ventas = data.pedidos
+        .filter((p) => inPeriod(p.fecha, m, a) && p.estado !== "Cancelado")
+        .reduce((acc, p) => acc + p.precio_neto, 0);
+      meses.push({ label: `${MESES_CORTOS[d.getMonth()]} '${String(a).slice(2)}`, ventas });
+    }
+    return meses;
+  }, [data.pedidos]);
+
   const stockCritico = useMemo(() => {
     return data.ingredientes
       .filter((i) => i.seguimiento_stock)
@@ -82,6 +101,40 @@ export function Dashboard() {
         <KpiCard label="Ganancia estimada" value={fARS(gananciaEstimada)} color="green" sub="pedidos entregados" />
         <KpiCard label="Pedidos pendientes" value={pedidosPendientes} color="orange" />
       </StatGrid>
+
+      <Card title="Ventas — Últimos 12 meses" className="mb-4">
+        <ResponsiveContainer width="100%" height={260}>
+          <LineChart data={ventasPorMes} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
+            <CartesianGrid stroke={CHART_COLORS.grid} vertical={false} />
+            <XAxis
+              dataKey="label"
+              tick={{ fontSize: 11, fill: CHART_COLORS.text3 }}
+              axisLine={{ stroke: CHART_COLORS.border }}
+              tickLine={false}
+            />
+            <YAxis
+              tick={{ fontSize: 11, fill: CHART_COLORS.text3 }}
+              axisLine={false}
+              tickLine={false}
+              width={72}
+              tickFormatter={(v: number) => fARS(v)}
+            />
+            <Tooltip
+              formatter={(v) => fARS(Number(v))}
+              contentStyle={{ borderRadius: 8, border: `1px solid ${CHART_COLORS.border}`, fontSize: 12 }}
+            />
+            <Line
+              type="monotone"
+              dataKey="ventas"
+              name="Ventas"
+              stroke={CHART_COLORS.accent}
+              strokeWidth={2.5}
+              dot={{ r: 3, fill: CHART_COLORS.accent }}
+              activeDot={{ r: 5 }}
+            />
+          </LineChart>
+        </ResponsiveContainer>
+      </Card>
 
       <div className="mb-4 grid grid-cols-1 gap-4 lg:grid-cols-2">
         <Card title="Ventas por Canal">

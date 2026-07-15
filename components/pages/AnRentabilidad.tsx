@@ -1,10 +1,12 @@
 "use client";
 
 import React, { useMemo } from "react";
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell } from "recharts";
 import { useStore } from "@/lib/store";
 import { usePeriod } from "@/lib/period";
 import { calcCosto, fARS, fNum, fPct, inPeriod } from "@/lib/calc";
 import { Card, PageHeader, TableWrap, Th, Td, TrHover, EmptyState } from "@/components/ui";
+import { CHART_COLORS } from "@/lib/chart-colors";
 
 export function AnRentabilidad() {
   const { data } = useStore();
@@ -44,6 +46,41 @@ export function AnRentabilidad() {
   return (
     <div>
       <PageHeader title="Rentabilidad" sub="Análisis de ganancia por producto en el período" />
+
+      {filas.length > 0 && (
+        <Card title="Margen de contribución por producto" className="mb-4">
+          <ResponsiveContainer width="100%" height={Math.max(180, filas.length * 34)}>
+            <BarChart data={filas} layout="vertical" margin={{ top: 4, right: 24, left: 8, bottom: 4 }}>
+              <CartesianGrid stroke={CHART_COLORS.grid} horizontal={false} />
+              <XAxis
+                type="number"
+                tick={{ fontSize: 11, fill: CHART_COLORS.text3 }}
+                axisLine={{ stroke: CHART_COLORS.border }}
+                tickLine={false}
+                tickFormatter={(v: number) => fARS(v)}
+              />
+              <YAxis
+                type="category"
+                dataKey="nombre"
+                width={150}
+                tick={{ fontSize: 11, fill: CHART_COLORS.text2 }}
+                axisLine={false}
+                tickLine={false}
+              />
+              <Tooltip
+                formatter={(v) => fARS(Number(v))}
+                contentStyle={{ borderRadius: 8, border: `1px solid ${CHART_COLORS.border}`, fontSize: 12 }}
+              />
+              <Bar dataKey="ganancia" name="Ganancia" radius={[0, 4, 4, 0]}>
+                {filas.map((f) => (
+                  <Cell key={f.id} fill={f.ganancia >= 0 ? CHART_COLORS.green : CHART_COLORS.red} />
+                ))}
+              </Bar>
+            </BarChart>
+          </ResponsiveContainer>
+        </Card>
+      )}
+
       <Card>
         {filas.length === 0 ? (
           <EmptyState text="Sin ventas en el período." />

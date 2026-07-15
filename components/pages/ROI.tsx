@@ -1,10 +1,12 @@
 "use client";
 
 import React, { useMemo } from "react";
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell } from "recharts";
 import { useStore } from "@/lib/store";
 import { usePeriod } from "@/lib/period";
-import { calcCosto, fARS, fPct, inPeriod } from "@/lib/calc";
+import { calcCosto, fPct, fARS, inPeriod } from "@/lib/calc";
 import { Card, PageHeader, TableWrap, Th, Td, TrHover, EmptyState, Badge } from "@/components/ui";
+import { CHART_COLORS } from "@/lib/chart-colors";
 
 export function ROI() {
   const { data } = useStore();
@@ -31,6 +33,44 @@ export function ROI() {
   return (
     <div>
       <PageHeader title="ROI" sub="ROI = Margen de Contribución / Costo Variable × 100" />
+
+      {filas.length > 0 && (
+        <Card title="Ranking de ROI por producto" className="mb-4">
+          <ResponsiveContainer width="100%" height={Math.max(180, filas.length * 34)}>
+            <BarChart data={filas} layout="vertical" margin={{ top: 4, right: 24, left: 8, bottom: 4 }}>
+              <CartesianGrid stroke={CHART_COLORS.grid} horizontal={false} />
+              <XAxis
+                type="number"
+                tick={{ fontSize: 11, fill: CHART_COLORS.text3 }}
+                axisLine={{ stroke: CHART_COLORS.border }}
+                tickLine={false}
+                tickFormatter={(v: number) => `${v}%`}
+              />
+              <YAxis
+                type="category"
+                dataKey={(f: (typeof filas)[number]) => f.p.nombre}
+                width={150}
+                tick={{ fontSize: 11, fill: CHART_COLORS.text2 }}
+                axisLine={false}
+                tickLine={false}
+              />
+              <Tooltip
+                formatter={(v) => fPct(Number(v))}
+                contentStyle={{ borderRadius: 8, border: `1px solid ${CHART_COLORS.border}`, fontSize: 12 }}
+              />
+              <Bar dataKey="roi" name="ROI" radius={[0, 4, 4, 0]}>
+                {filas.map((f) => (
+                  <Cell
+                    key={f.p.id}
+                    fill={f.roi >= 100 ? CHART_COLORS.green : f.roi >= 50 ? CHART_COLORS.orange : CHART_COLORS.red}
+                  />
+                ))}
+              </Bar>
+            </BarChart>
+          </ResponsiveContainer>
+        </Card>
+      )}
+
       <Card>
         {filas.length === 0 ? (
           <EmptyState text="Sin ventas en el período." />

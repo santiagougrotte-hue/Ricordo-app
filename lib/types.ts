@@ -13,6 +13,7 @@ export interface Ingrediente {
   precio_ref: number;
   precio_vigente: number | null;
   seguimiento_stock: boolean;
+  stock_minimo?: number;
 }
 
 export interface Producto {

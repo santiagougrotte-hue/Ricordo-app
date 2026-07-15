@@ -1,6 +1,7 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useMemo, useState } from "react";
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, Cell } from "recharts";
 import { useStore } from "@/lib/store";
 import { useToast } from "@/lib/toast";
 import { uid } from "@/lib/id";
@@ -31,6 +32,7 @@ import {
   Badge,
 } from "@/components/ui";
 import { Modal } from "@/components/Modal";
+import { CHART_COLORS } from "@/lib/chart-colors";
 
 function ProductosTab() {
   const { data, setData } = useStore();
@@ -134,6 +136,16 @@ function MateriasPrimasTab() {
   const seguidos = data.ingredientes.filter((i) => i.seguimiento_stock);
   const noSeguidos = data.ingredientes.filter((i) => !i.seguimiento_stock);
 
+  const stockChartData = useMemo(
+    () =>
+      seguidos.map((i) => ({
+        nombre: i.nombre,
+        actual: calcStockIngrediente(data, i.id),
+        minimo: i.stock_minimo ?? 0,
+      })),
+    [data, seguidos]
+  );
+
   const cmvAcum = cmvAcumulado(data);
   const comprasAcum = comprasAcumuladas(data);
   const diferencia = comprasAcum - cmvAcum;
@@ -208,6 +220,41 @@ function MateriasPrimasTab() {
         </div>
       </Card>
 
+      {seguidos.length > 0 && (
+        <Card title="Stock actual vs. mínimo" className="mb-4">
+          <ResponsiveContainer width="100%" height={Math.max(180, stockChartData.length * 34)}>
+            <BarChart data={stockChartData} layout="vertical" margin={{ top: 4, right: 24, left: 8, bottom: 4 }}>
+              <CartesianGrid stroke={CHART_COLORS.grid} horizontal={false} />
+              <XAxis
+                type="number"
+                tick={{ fontSize: 11, fill: CHART_COLORS.text3 }}
+                axisLine={{ stroke: CHART_COLORS.border }}
+                tickLine={false}
+              />
+              <YAxis
+                type="category"
+                dataKey="nombre"
+                width={150}
+                tick={{ fontSize: 11, fill: CHART_COLORS.text2 }}
+                axisLine={false}
+                tickLine={false}
+              />
+              <Tooltip
+                formatter={(v) => fNum(Number(v))}
+                contentStyle={{ borderRadius: 8, border: `1px solid ${CHART_COLORS.border}`, fontSize: 12 }}
+              />
+              <Legend wrapperStyle={{ fontSize: 12 }} />
+              <Bar dataKey="actual" name="Stock actual" radius={[0, 4, 4, 0]}>
+                {stockChartData.map((s) => (
+                  <Cell key={s.nombre} fill={s.actual <= 0 ? CHART_COLORS.red : s.actual < s.minimo ? CHART_COLORS.orange : CHART_COLORS.green} />
+                ))}
+              </Bar>
+              <Bar dataKey="minimo" name="Stock mínimo" fill={CHART_COLORS.border} radius={[0, 4, 4, 0]} />
+            </BarChart>
+          </ResponsiveContainer>
+        </Card>
+      )}
+
       <Card title="Ingredientes con seguimiento de stock" className="mb-4">
         {seguidos.length === 0 ? (
           <EmptyState text="Ningún ingrediente tiene seguimiento de stock activo." />
@@ -226,6 +273,7 @@ function MateriasPrimasTab() {
               <tbody>
                 {seguidos.map((i) => {
                   const stock = calcStockIngrediente(data, i.id);
+                  const minimo = i.stock_minimo ?? 10;
                   return (
                     <TrHover key={i.id}>
                       <Td main>{i.nombre}</Td>
@@ -235,7 +283,7 @@ function MateriasPrimasTab() {
                       <Td>
                         {stock <= 0 ? (
                           <Badge color="red">Crítico</Badge>
-                        ) : stock < 10 ? (
+                        ) : stock < minimo ? (
                           <Badge color="orange">Bajo</Badge>
                         ) : (
                           <Badge color="green">OK</Badge>

@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useMemo, useState } from "react";
+import { X } from "lucide-react";
 import { useStore } from "@/lib/store";
 import { usePeriod } from "@/lib/period";
 import { useToast } from "@/lib/toast";
@@ -19,10 +20,12 @@ import {
   FormGrid,
   Field,
   Input,
+  SearchInput,
   Select,
   Textarea,
 } from "@/components/ui";
 import { Modal } from "@/components/Modal";
+import { Wizard } from "@/components/Wizard";
 import { fARS, inPeriod } from "@/lib/calc";
 import type { Canal, EstadoPedido, Pedido } from "@/lib/types";
 
@@ -249,8 +252,8 @@ export function Pedidos() {
       />
 
       <div className="mb-4 flex flex-wrap gap-2.5">
-        <div className="relative min-w-[180px] max-w-[300px] flex-1">
-          <Input placeholder="Buscar cliente o producto…" value={search} onChange={(e) => setSearch(e.target.value)} />
+        <div className="min-w-[180px] max-w-[300px] flex-1">
+          <SearchInput placeholder="Buscar cliente o producto…" value={search} onChange={(e) => setSearch(e.target.value)} />
         </div>
         <Select value={canalFiltro} onChange={(e) => setCanalFiltro(e.target.value)} style={{ width: 160 }}>
           <option value="">Todos los canales</option>
@@ -325,147 +328,187 @@ export function Pedidos() {
         )}
       </Card>
 
-      {/* Nuevo pedido: cliente + datos compartidos + N productos */}
-      <Modal
+      {/* Nuevo pedido: wizard de 3 pasos */}
+      <Wizard
         open={orderModalOpen}
         onClose={() => setOrderModalOpen(false)}
         title="Nuevo Pedido"
         wide
-        footer={
-          <>
-            <Button variant="ghost" onClick={() => setOrderModalOpen(false)}>
-              Cancelar
-            </Button>
-            <Button onClick={guardarOrden}>Guardar</Button>
-          </>
-        }
-      >
-        <div className="grid grid-cols-1 gap-3.5 sm:grid-cols-3">
-          <Field label="Cliente">
-            <Select value={orderForm.id_cliente} onChange={(e) => setOrderForm({ ...orderForm, id_cliente: e.target.value })}>
-              <option value="">Seleccionar…</option>
-              {data.clientes.map((c) => (
-                <option key={c.id} value={c.id}>
-                  {c.nombre}
-                </option>
-              ))}
-            </Select>
-          </Field>
-          <Field label="Fecha">
-            <Input type="date" value={orderForm.fecha} onChange={(e) => setOrderForm({ ...orderForm, fecha: e.target.value })} />
-          </Field>
-          <Field label="Canal">
-            <Select value={orderForm.canal} onChange={(e) => setOrderForm({ ...orderForm, canal: e.target.value as Canal })}>
-              <option value="Minorista">Minorista</option>
-              <option value="Mayorista">Mayorista</option>
-            </Select>
-          </Field>
-          <Field label="Estado">
-            <Select value={orderForm.estado} onChange={(e) => setOrderForm({ ...orderForm, estado: e.target.value as EstadoPedido })}>
-              {ESTADOS.map((e) => (
-                <option key={e} value={e}>
-                  {e}
-                </option>
-              ))}
-            </Select>
-          </Field>
-          <Field label="Km de envío">
-            <Input
-              type="number"
-              value={orderForm.km_envio}
-              onChange={(e) => setOrderForm({ ...orderForm, km_envio: Number(e.target.value) })}
-            />
-          </Field>
-          <Field label="Costo de envío">
-            <Input
-              type="number"
-              value={orderForm.costo_envio}
-              onChange={(e) => setOrderForm({ ...orderForm, costo_envio: Number(e.target.value) })}
-            />
-          </Field>
-          <Field label="Método de pago">
-            <Input value={orderForm.metodo_pago} onChange={(e) => setOrderForm({ ...orderForm, metodo_pago: e.target.value })} />
-          </Field>
-          <Field label="Notas" full>
-            <Textarea rows={2} value={orderForm.notas} onChange={(e) => setOrderForm({ ...orderForm, notas: e.target.value })} />
-          </Field>
-        </div>
-
-        <div className="mt-5 border-t border-border pt-4">
-          <div className="mb-2 flex items-center justify-between">
-            <span className="text-[11px] font-semibold uppercase tracking-wide text-text3">Productos del pedido</span>
-            <Button size="sm" variant="ghost" onClick={addLinea}>
-              + Agregar producto
-            </Button>
-          </div>
-
-          {orderForm.lineas.map((l, idx) => {
-            const neto = l.precio_unitario * l.cantidad - l.descuento_monto;
-            return (
-              <div key={idx} className="mb-2 flex flex-wrap items-end gap-2 rounded-md border border-border bg-surface2/40 p-2.5 sm:flex-nowrap">
-                <div className="w-full sm:w-auto sm:flex-[2]">
-                  <Select
-                    value={l.id_producto}
-                    onChange={(e) => {
-                      const prod = data.productos.find((pr) => pr.id === e.target.value);
-                      actualizarLinea(idx, { id_producto: e.target.value, precio_unitario: prod?.precio_venta ?? 0 });
-                    }}
-                  >
-                    <option value="">Producto…</option>
-                    {data.productos.map((p) => (
-                      <option key={p.id} value={p.id}>
-                        {p.nombre}
+        finishLabel="Crear pedido"
+        onFinish={guardarOrden}
+        steps={[
+          {
+            title: "Cliente",
+            validate: () => (!orderForm.id_cliente ? "Elegí un cliente para continuar" : null),
+            content: (
+              <div className="grid grid-cols-1 gap-3.5 sm:grid-cols-2">
+                <Field label="Cliente" full>
+                  <Select value={orderForm.id_cliente} onChange={(e) => setOrderForm({ ...orderForm, id_cliente: e.target.value })}>
+                    <option value="">Seleccionar…</option>
+                    {data.clientes.map((c) => (
+                      <option key={c.id} value={c.id}>
+                        {c.nombre}
                       </option>
                     ))}
                   </Select>
-                </div>
-                <Input
-                  placeholder="Gusto"
-                  className="w-full sm:w-28"
-                  value={l.gusto}
-                  onChange={(e) => actualizarLinea(idx, { gusto: e.target.value })}
-                />
-                <Input
-                  type="number"
-                  placeholder="Cant."
-                  className="w-[calc(50%-4px)] sm:w-20"
-                  value={l.cantidad}
-                  onChange={(e) => actualizarLinea(idx, { cantidad: Number(e.target.value) })}
-                />
-                <Input
-                  type="number"
-                  placeholder="Precio unit."
-                  className="w-[calc(50%-4px)] sm:w-28"
-                  value={l.precio_unitario}
-                  onChange={(e) => actualizarLinea(idx, { precio_unitario: Number(e.target.value) })}
-                />
-                <Input
-                  type="number"
-                  placeholder="Desc. $"
-                  className="w-[calc(50%-4px)] sm:w-24"
-                  value={l.descuento_monto}
-                  onChange={(e) => actualizarLinea(idx, { descuento_monto: Number(e.target.value) })}
-                />
-                <div className="w-[calc(50%-4px)] shrink-0 text-right text-[12.5px] font-medium text-accent sm:w-28">
-                  {fARS(neto)}
-                </div>
-                <button
-                  onClick={() => quitarLinea(idx)}
-                  disabled={orderForm.lineas.length === 1}
-                  className="text-red hover:text-red/70 disabled:opacity-30"
-                >
-                  ✕
-                </button>
+                </Field>
+                <Field label="Fecha">
+                  <Input type="date" value={orderForm.fecha} onChange={(e) => setOrderForm({ ...orderForm, fecha: e.target.value })} />
+                </Field>
+                <Field label="Canal">
+                  <Select value={orderForm.canal} onChange={(e) => setOrderForm({ ...orderForm, canal: e.target.value as Canal })}>
+                    <option value="Minorista">Minorista</option>
+                    <option value="Mayorista">Mayorista</option>
+                  </Select>
+                </Field>
+                <Field label="Estado">
+                  <Select value={orderForm.estado} onChange={(e) => setOrderForm({ ...orderForm, estado: e.target.value as EstadoPedido })}>
+                    {ESTADOS.map((e) => (
+                      <option key={e} value={e}>
+                        {e}
+                      </option>
+                    ))}
+                  </Select>
+                </Field>
               </div>
-            );
-          })}
+            ),
+          },
+          {
+            title: "Productos",
+            validate: () =>
+              orderForm.lineas.filter((l) => l.id_producto && l.cantidad > 0).length === 0
+                ? "Agregá al menos un producto"
+                : null,
+            content: (
+              <div>
+                <div className="mb-2 flex items-center justify-between">
+                  <span className="text-[11px] font-semibold uppercase tracking-wide text-text3">Productos del pedido</span>
+                  <Button size="sm" variant="ghost" onClick={addLinea}>
+                    + Agregar producto
+                  </Button>
+                </div>
 
-          <div className="mt-3 flex justify-end text-sm">
-            <span className="text-text3">Total del pedido:&nbsp;</span>
-            <span className="font-semibold text-accent">{fARS(totalOrden)}</span>
-          </div>
-        </div>
-      </Modal>
+                {orderForm.lineas.map((l, idx) => {
+                  const neto = l.precio_unitario * l.cantidad - l.descuento_monto;
+                  return (
+                    <div key={idx} className="mb-2 flex flex-wrap items-end gap-2 rounded-md border border-border bg-surface2/40 p-2.5 sm:flex-nowrap">
+                      <div className="w-full sm:w-auto sm:flex-[2]">
+                        <Select
+                          value={l.id_producto}
+                          onChange={(e) => {
+                            const prod = data.productos.find((pr) => pr.id === e.target.value);
+                            actualizarLinea(idx, { id_producto: e.target.value, precio_unitario: prod?.precio_venta ?? 0 });
+                          }}
+                        >
+                          <option value="">Producto…</option>
+                          {data.productos.map((p) => (
+                            <option key={p.id} value={p.id}>
+                              {p.nombre}
+                            </option>
+                          ))}
+                        </Select>
+                      </div>
+                      <Input
+                        placeholder="Gusto"
+                        className="w-full sm:w-28"
+                        value={l.gusto}
+                        onChange={(e) => actualizarLinea(idx, { gusto: e.target.value })}
+                      />
+                      <Input
+                        type="number"
+                        placeholder="Cant."
+                        className="w-[calc(50%-4px)] sm:w-20"
+                        value={l.cantidad}
+                        onChange={(e) => actualizarLinea(idx, { cantidad: Number(e.target.value) })}
+                      />
+                      <Input
+                        type="number"
+                        placeholder="Precio unit."
+                        className="w-[calc(50%-4px)] sm:w-28"
+                        value={l.precio_unitario}
+                        onChange={(e) => actualizarLinea(idx, { precio_unitario: Number(e.target.value) })}
+                      />
+                      <Input
+                        type="number"
+                        placeholder="Desc. $"
+                        className="w-[calc(50%-4px)] sm:w-24"
+                        value={l.descuento_monto}
+                        onChange={(e) => actualizarLinea(idx, { descuento_monto: Number(e.target.value) })}
+                      />
+                      <div className="w-[calc(50%-4px)] shrink-0 text-right text-[12.5px] font-medium text-accent sm:w-28">
+                        {fARS(neto)}
+                      </div>
+                      <button
+                        onClick={() => quitarLinea(idx)}
+                        disabled={orderForm.lineas.length === 1}
+                        className="text-red hover:text-red/70 disabled:opacity-30"
+                      >
+                        <X className="h-4 w-4" />
+                      </button>
+                    </div>
+                  );
+                })}
+
+                <div className="mt-3 flex justify-end text-sm">
+                  <span className="text-text3">Total del pedido:&nbsp;</span>
+                  <span className="font-semibold text-accent">{fARS(totalOrden)}</span>
+                </div>
+              </div>
+            ),
+          },
+          {
+            title: "Envío y confirmación",
+            content: (
+              <div>
+                <div className="grid grid-cols-1 gap-3.5 sm:grid-cols-2">
+                  <Field label="Km de envío">
+                    <Input
+                      type="number"
+                      value={orderForm.km_envio}
+                      onChange={(e) => setOrderForm({ ...orderForm, km_envio: Number(e.target.value) })}
+                    />
+                  </Field>
+                  <Field label="Costo de envío">
+                    <Input
+                      type="number"
+                      value={orderForm.costo_envio}
+                      onChange={(e) => setOrderForm({ ...orderForm, costo_envio: Number(e.target.value) })}
+                    />
+                  </Field>
+                  <Field label="Método de pago">
+                    <Input value={orderForm.metodo_pago} onChange={(e) => setOrderForm({ ...orderForm, metodo_pago: e.target.value })} />
+                  </Field>
+                  <Field label="Notas" full>
+                    <Textarea rows={2} value={orderForm.notas} onChange={(e) => setOrderForm({ ...orderForm, notas: e.target.value })} />
+                  </Field>
+                </div>
+
+                <div className="mt-5 rounded-lg border border-border bg-surface2/40 p-4">
+                  <div className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-text3">Resumen del pedido</div>
+                  <div className="flex justify-between py-1 text-[13px]">
+                    <span className="text-text2">Cliente</span>
+                    <span className="font-medium">{clienteNombre(orderForm.id_cliente)}</span>
+                  </div>
+                  <div className="flex justify-between py-1 text-[13px]">
+                    <span className="text-text2">Productos</span>
+                    <span className="font-medium">
+                      {orderForm.lineas.filter((l) => l.id_producto && l.cantidad > 0).length}
+                    </span>
+                  </div>
+                  <div className="flex justify-between py-1 text-[13px]">
+                    <span className="text-text2">Fecha</span>
+                    <span className="font-medium">{orderForm.fecha}</span>
+                  </div>
+                  <div className="mt-1 flex justify-between border-t border-border pt-2 text-sm">
+                    <span className="text-text3">Total</span>
+                    <span className="font-semibold text-accent">{fARS(totalOrden)}</span>
+                  </div>
+                </div>
+              </div>
+            ),
+          },
+        ]}
+      />
 
       {/* Editar una línea existente */}
       <Modal

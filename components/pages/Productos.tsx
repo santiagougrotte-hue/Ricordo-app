@@ -4,7 +4,7 @@ import React, { useState } from "react";
 import { useStore } from "@/lib/store";
 import { useToast } from "@/lib/toast";
 import { uid } from "@/lib/id";
-import { calcCosto, fARS, fPct } from "@/lib/calc";
+import { calcCosto, fARS, fPct, pvr } from "@/lib/calc";
 import {
   PageHeader,
   Button,
@@ -22,10 +22,21 @@ import {
   InfoRow,
 } from "@/components/ui";
 import { Modal } from "@/components/Modal";
-import type { Producto } from "@/lib/types";
+import { Wizard } from "@/components/Wizard";
+import type { Ingrediente, Packaging, CostoFijo, Producto, RecetaLinea, TipoRecetaLinea } from "@/lib/types";
 
 function emptyForm() {
   return { nombre: "", categoria: "", id_base: "", precio_venta: 0, activo: true };
+}
+
+interface DraftLinea {
+  tipo: TipoRecetaLinea;
+  concepto: string;
+  cantidad: number;
+}
+
+function emptyDraftLinea(): DraftLinea {
+  return { tipo: "Ingrediente", concepto: "", cantidad: 0 };
 }
 
 export function Productos() {
@@ -36,10 +47,16 @@ export function Productos() {
   const [form, setForm] = useState(emptyForm());
   const [verReceta, setVerReceta] = useState<string | null>(null);
 
+  const [wizardOpen, setWizardOpen] = useState(false);
+  const [draftForm, setDraftForm] = useState(emptyForm());
+  const [draftLineas, setDraftLineas] = useState<DraftLinea[]>([]);
+  const [draftLinea, setDraftLinea] = useState(emptyDraftLinea());
+
   function openNew() {
-    setEditing(null);
-    setForm(emptyForm());
-    setModalOpen(true);
+    setDraftForm(emptyForm());
+    setDraftLineas([]);
+    setDraftLinea(emptyDraftLinea());
+    setWizardOpen(true);
   }
   function openEdit(p: Producto) {
     setEditing(p.id);
@@ -51,24 +68,55 @@ export function Productos() {
       toast("Ingresá un nombre", "error");
       return;
     }
-    if (editing) {
-      setData((d) => ({
-        ...d,
-        productos: d.productos.map((p) =>
-          p.id === editing ? { ...p, ...form, id_base: form.id_base || p.id } : p
-        ),
-      }));
-      toast("Producto actualizado");
-    } else {
-      const id = uid("PROD");
-      setData((d) => ({ ...d, productos: [...d.productos, { id, ...form, id_base: form.id_base || id }] }));
-      toast("Producto creado");
-    }
+    setData((d) => ({
+      ...d,
+      productos: d.productos.map((p) => (p.id === editing ? { ...p, ...form, id_base: form.id_base || p.id } : p)),
+    }));
+    toast("Producto actualizado");
     setModalOpen(false);
   }
   function eliminar(id: string) {
     setData((d) => ({ ...d, productos: d.productos.filter((p) => p.id !== id) }));
     toast("Producto eliminado", "info");
+  }
+
+  function nombreConceptoDraft(l: DraftLinea) {
+    if (l.tipo === "Ingrediente") return data.ingredientes.find((i) => i.id === l.concepto)?.nombre ?? l.concepto;
+    if (l.tipo === "Packaging") return data.packaging.find((p) => p.id === l.concepto)?.nombre ?? l.concepto;
+    return data.costos_fijos.find((c) => c.id === l.concepto)?.descripcion ?? l.concepto;
+  }
+  function costoLineaDraft(l: DraftLinea) {
+    if (l.tipo === "Ingrediente") return l.cantidad * pvr(data.ingredientes.find((i) => i.id === l.concepto));
+    if (l.tipo === "Packaging") return l.cantidad * (data.packaging.find((p) => p.id === l.concepto)?.precio ?? 0);
+    return l.cantidad * (data.costos_fijos.find((c) => c.id === l.concepto)?.monto ?? 0);
+  }
+  function agregarDraftLinea() {
+    if (!draftLinea.concepto || draftLinea.cantidad <= 0) {
+      toast("Completá concepto y cantidad", "error");
+      return;
+    }
+    setDraftLineas((ls) => [...ls, draftLinea]);
+    setDraftLinea(emptyDraftLinea());
+  }
+  function quitarDraftLinea(idx: number) {
+    setDraftLineas((ls) => ls.filter((_, i) => i !== idx));
+  }
+  const costoDraft = draftLineas.reduce((acc, l) => acc + costoLineaDraft(l), 0);
+  const margenDraft = draftForm.precio_venta > 0 ? ((draftForm.precio_venta - costoDraft) / draftForm.precio_venta) * 100 : 0;
+
+  function crearProductoConReceta() {
+    const id = uid("PROD");
+    const producto: Producto = { id, ...draftForm, id_base: draftForm.id_base || id };
+    const recetas: RecetaLinea[] = draftLineas.map((l) => ({
+      id: uid("REC"),
+      id_producto: id,
+      tipo: l.tipo,
+      concepto: l.concepto,
+      cantidad: l.cantidad,
+    }));
+    setData((d) => ({ ...d, productos: [...d.productos, producto], recetas: [...d.recetas, ...recetas] }));
+    toast(recetas.length > 0 ? `Producto creado con receta de ${recetas.length} ${recetas.length === 1 ? "línea" : "líneas"}` : "Producto creado");
+    setWizardOpen(false);
   }
 
   const prodReceta = verReceta ? data.productos.find((p) => p.id === verReceta) : null;
@@ -140,7 +188,7 @@ export function Productos() {
       <Modal
         open={modalOpen}
         onClose={() => setModalOpen(false)}
-        title={editing ? "Editar Producto" : "Nuevo Producto"}
+        title="Editar Producto"
         footer={
           <>
             <Button variant="ghost" onClick={() => setModalOpen(false)}>
@@ -184,6 +232,149 @@ export function Productos() {
           </Field>
         </FormGrid>
       </Modal>
+
+      <Wizard
+        open={wizardOpen}
+        onClose={() => setWizardOpen(false)}
+        title="Nuevo Producto"
+        wide
+        finishLabel="Crear producto"
+        onFinish={crearProductoConReceta}
+        steps={[
+          {
+            title: "Datos del producto",
+            validate: () => (!draftForm.nombre ? "Ingresá un nombre" : null),
+            content: (
+              <FormGrid>
+                <Field label="Nombre" full>
+                  <Input value={draftForm.nombre} onChange={(e) => setDraftForm({ ...draftForm, nombre: e.target.value })} />
+                </Field>
+                <Field label="Categoría">
+                  <Input value={draftForm.categoria} onChange={(e) => setDraftForm({ ...draftForm, categoria: e.target.value })} />
+                </Field>
+                <Field label="Producto base (variante de)">
+                  <Select value={draftForm.id_base} onChange={(e) => setDraftForm({ ...draftForm, id_base: e.target.value })}>
+                    <option value="">— Es un producto base —</option>
+                    {data.productos.map((p) => (
+                      <option key={p.id} value={p.id}>
+                        {p.nombre}
+                      </option>
+                    ))}
+                  </Select>
+                </Field>
+                <Field label="Precio de venta">
+                  <Input
+                    type="number"
+                    value={draftForm.precio_venta}
+                    onChange={(e) => setDraftForm({ ...draftForm, precio_venta: Number(e.target.value) })}
+                  />
+                </Field>
+                <Field label="Activo">
+                  <Select
+                    value={draftForm.activo ? "1" : "0"}
+                    onChange={(e) => setDraftForm({ ...draftForm, activo: e.target.value === "1" })}
+                  >
+                    <option value="1">Sí</option>
+                    <option value="0">No</option>
+                  </Select>
+                </Field>
+              </FormGrid>
+            ),
+          },
+          {
+            title: "Receta",
+            content: (
+              <div>
+                <div className="mb-3 grid grid-cols-1 gap-3 sm:grid-cols-[140px_1fr_100px_100px]">
+                  <Field label="Tipo">
+                    <Select
+                      value={draftLinea.tipo}
+                      onChange={(e) => setDraftLinea({ ...draftLinea, tipo: e.target.value as TipoRecetaLinea, concepto: "" })}
+                    >
+                      <option value="Ingrediente">Ingrediente</option>
+                      <option value="Packaging">Packaging</option>
+                      <option value="CostoFijo">Costo Fijo</option>
+                    </Select>
+                  </Field>
+                  <Field label="Concepto">
+                    <Select value={draftLinea.concepto} onChange={(e) => setDraftLinea({ ...draftLinea, concepto: e.target.value })}>
+                      <option value="">Seleccionar…</option>
+                      {(draftLinea.tipo === "Ingrediente"
+                        ? data.ingredientes
+                        : draftLinea.tipo === "Packaging"
+                        ? data.packaging
+                        : data.costos_fijos
+                      ).map((o: Ingrediente | Packaging | CostoFijo) => (
+                        <option key={o.id} value={o.id}>
+                          {"nombre" in o ? o.nombre : o.descripcion}
+                        </option>
+                      ))}
+                    </Select>
+                  </Field>
+                  <Field label="Cantidad">
+                    <Input
+                      type="number"
+                      value={draftLinea.cantidad}
+                      onChange={(e) => setDraftLinea({ ...draftLinea, cantidad: Number(e.target.value) })}
+                    />
+                  </Field>
+                  <div className="flex items-end">
+                    <Button onClick={agregarDraftLinea} className="w-full justify-center">
+                      + Agregar
+                    </Button>
+                  </div>
+                </div>
+
+                {draftLineas.length === 0 ? (
+                  <EmptyState text="Sin líneas de receta todavía. Podés dejarlo vacío y cargarlo después." />
+                ) : (
+                  <TableWrap>
+                    <table className="w-full">
+                      <thead>
+                        <tr>
+                          <Th>Tipo</Th>
+                          <Th>Concepto</Th>
+                          <Th>Cantidad</Th>
+                          <Th>Costo</Th>
+                          <Th>Acciones</Th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {draftLineas.map((l, idx) => (
+                          <TrHover key={idx}>
+                            <Td>{l.tipo}</Td>
+                            <Td main>{nombreConceptoDraft(l)}</Td>
+                            <Td>{l.cantidad}</Td>
+                            <Td>{fARS(costoLineaDraft(l))}</Td>
+                            <Td>
+                              <Button size="sm" variant="danger" onClick={() => quitarDraftLinea(idx)}>
+                                Quitar
+                              </Button>
+                            </Td>
+                          </TrHover>
+                        ))}
+                      </tbody>
+                    </table>
+                  </TableWrap>
+                )}
+              </div>
+            ),
+          },
+          {
+            title: "Revisión",
+            content: (
+              <div className="rounded-lg border border-border bg-surface2/40 p-4">
+                <div className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-text3">Resumen</div>
+                <InfoRow label="Producto" value={draftForm.nombre || "—"} />
+                <InfoRow label="Líneas de receta" value={String(draftLineas.length)} />
+                <InfoRow label="Costo total de receta" value={fARS(costoDraft)} color="gold" />
+                <InfoRow label="Precio de venta" value={fARS(draftForm.precio_venta)} />
+                <InfoRow label="Margen" value={fPct(margenDraft)} color={margenDraft >= 30 ? "green" : "red"} />
+              </div>
+            ),
+          },
+        ]}
+      />
 
       <Modal open={!!verReceta} onClose={() => setVerReceta(null)} title={`Receta — ${prodReceta?.nombre ?? ""}`}>
         {lineasReceta.length === 0 ? (

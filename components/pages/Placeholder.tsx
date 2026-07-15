@@ -1,5 +1,6 @@
 "use client";
 
+import { Construction } from "lucide-react";
 import { PageHeader, EmptyState } from "@/components/ui";
 import { NAV_LABELS } from "@/lib/nav";
 import { useRouter } from "@/lib/nav-context";
@@ -9,7 +10,7 @@ export function Placeholder() {
   return (
     <div>
       <PageHeader title={NAV_LABELS[page] ?? page} />
-      <EmptyState icon="🚧" text="Módulo en construcción." />
+      <EmptyState icon={Construction} text="Módulo en construcción." />
     </div>
   );
 }

@@ -228,7 +228,14 @@ export function margenContribucionUnitario(data: RicordoData, idProducto: string
 export function puntoEquilibrio(
   data: RicordoData,
   pedidosPeriodo: Pedido[]
-): { pe: number; margenPromedioPonderado: number; cfTotal: number } {
+): {
+  pe: number;
+  margenPromedioPonderado: number;
+  cfTotal: number;
+  precioPromedioPonderado: number;
+  costoVariableUnitarioPromedio: number;
+  unidadesTotales: number;
+} {
   const cfTotal = totalCostosFijos(data);
   const unidadesPorProducto = new Map<string, number>();
   for (const p of pedidosPeriodo) {
@@ -248,7 +255,9 @@ export function puntoEquilibrio(
   const margenPromedioPonderado = sumaPxQ > 0 ? sumaMcxQ / sumaQ : 0;
   const ratioContribucion = sumaPxQ > 0 ? sumaMcxQ / sumaPxQ : 0;
   const pe = ratioContribucion > 0 ? cfTotal / ratioContribucion : 0;
-  return { pe, margenPromedioPonderado, cfTotal };
+  const precioPromedioPonderado = sumaQ > 0 ? sumaPxQ / sumaQ : 0;
+  const costoVariableUnitarioPromedio = precioPromedioPonderado - margenPromedioPonderado;
+  return { pe, margenPromedioPonderado, cfTotal, precioPromedioPonderado, costoVariableUnitarioPromedio, unidadesTotales: sumaQ };
 }
 
 export function saldoCaja(data: RicordoData): number {

@@ -17,14 +17,16 @@ import {
   FormGrid,
   Field,
   Input,
+  SearchInput,
   Badge,
   FilterTabs,
 } from "@/components/ui";
 import { Modal } from "@/components/Modal";
+import { Wizard } from "@/components/Wizard";
 import type { Ingrediente, Packaging } from "@/lib/types";
 
 function emptyForm() {
-  return { nombre: "", unidad: "", categoria: "", precio_ref: 0 };
+  return { nombre: "", unidad: "", categoria: "", precio_ref: 0, stock_minimo: 0 };
 }
 
 function IngredientesTab() {
@@ -47,7 +49,13 @@ function IngredientesTab() {
   }
   function openEdit(i: Ingrediente) {
     setEditing(i.id);
-    setForm({ nombre: i.nombre, unidad: i.unidad, categoria: i.categoria ?? "", precio_ref: i.precio_ref });
+    setForm({
+      nombre: i.nombre,
+      unidad: i.unidad,
+      categoria: i.categoria ?? "",
+      precio_ref: i.precio_ref,
+      stock_minimo: i.stock_minimo ?? 0,
+    });
     setModalOpen(true);
   }
 
@@ -103,7 +111,7 @@ function IngredientesTab() {
     <>
       <div className="mb-4 flex flex-wrap items-center justify-between gap-2.5">
         <div className="max-w-xs flex-1">
-          <Input placeholder="Buscar…" value={search} onChange={(e) => setSearch(e.target.value)} />
+          <SearchInput placeholder="Buscar…" value={search} onChange={(e) => setSearch(e.target.value)} />
         </div>
         <Button onClick={openNew}>+ Nuevo Insumo</Button>
       </div>
@@ -174,38 +182,99 @@ function IngredientesTab() {
         )}
       </Card>
 
-      <Modal
-        open={modalOpen}
-        onClose={() => setModalOpen(false)}
-        title={editing ? "Editar Insumo" : "Nuevo Insumo"}
-        footer={
-          <>
-            <Button variant="ghost" onClick={() => setModalOpen(false)}>
-              Cancelar
-            </Button>
-            <Button onClick={save}>Guardar</Button>
-          </>
-        }
-      >
-        <FormGrid>
-          <Field label="Nombre" full>
-            <Input value={form.nombre} onChange={(e) => setForm({ ...form, nombre: e.target.value })} />
-          </Field>
-          <Field label="Unidad">
-            <Input value={form.unidad} onChange={(e) => setForm({ ...form, unidad: e.target.value })} placeholder="kg, litro, unidad…" />
-          </Field>
-          <Field label="Categoría">
-            <Input value={form.categoria} onChange={(e) => setForm({ ...form, categoria: e.target.value })} />
-          </Field>
-          <Field label="Precio de referencia">
-            <Input
-              type="number"
-              value={form.precio_ref}
-              onChange={(e) => setForm({ ...form, precio_ref: Number(e.target.value) })}
-            />
-          </Field>
-        </FormGrid>
-      </Modal>
+      {editing ? (
+        <Modal
+          open={modalOpen}
+          onClose={() => setModalOpen(false)}
+          title="Editar Insumo"
+          footer={
+            <>
+              <Button variant="ghost" onClick={() => setModalOpen(false)}>
+                Cancelar
+              </Button>
+              <Button onClick={save}>Guardar</Button>
+            </>
+          }
+        >
+          <FormGrid>
+            <Field label="Nombre" full>
+              <Input value={form.nombre} onChange={(e) => setForm({ ...form, nombre: e.target.value })} />
+            </Field>
+            <Field label="Unidad">
+              <Input value={form.unidad} onChange={(e) => setForm({ ...form, unidad: e.target.value })} placeholder="kg, litro, unidad…" />
+            </Field>
+            <Field label="Categoría">
+              <Input value={form.categoria} onChange={(e) => setForm({ ...form, categoria: e.target.value })} />
+            </Field>
+            <Field label="Precio de referencia">
+              <Input
+                type="number"
+                value={form.precio_ref}
+                onChange={(e) => setForm({ ...form, precio_ref: Number(e.target.value) })}
+              />
+            </Field>
+            <Field label="Stock mínimo">
+              <Input
+                type="number"
+                value={form.stock_minimo}
+                onChange={(e) => setForm({ ...form, stock_minimo: Number(e.target.value) })}
+              />
+            </Field>
+          </FormGrid>
+        </Modal>
+      ) : (
+        <Wizard
+          open={modalOpen}
+          onClose={() => setModalOpen(false)}
+          title="Nuevo Insumo"
+          finishLabel="Crear insumo"
+          onFinish={save}
+          steps={[
+            {
+              title: "Datos básicos",
+              validate: () => (!form.nombre || !form.unidad ? "Completá nombre y unidad" : null),
+              content: (
+                <FormGrid>
+                  <Field label="Nombre" full>
+                    <Input value={form.nombre} onChange={(e) => setForm({ ...form, nombre: e.target.value })} />
+                  </Field>
+                  <Field label="Unidad">
+                    <Input
+                      value={form.unidad}
+                      onChange={(e) => setForm({ ...form, unidad: e.target.value })}
+                      placeholder="kg, litro, unidad…"
+                    />
+                  </Field>
+                  <Field label="Categoría">
+                    <Input value={form.categoria} onChange={(e) => setForm({ ...form, categoria: e.target.value })} />
+                  </Field>
+                </FormGrid>
+              ),
+            },
+            {
+              title: "Precio y stock",
+              content: (
+                <FormGrid>
+                  <Field label="Precio de referencia">
+                    <Input
+                      type="number"
+                      value={form.precio_ref}
+                      onChange={(e) => setForm({ ...form, precio_ref: Number(e.target.value) })}
+                    />
+                  </Field>
+                  <Field label="Stock mínimo">
+                    <Input
+                      type="number"
+                      value={form.stock_minimo}
+                      onChange={(e) => setForm({ ...form, stock_minimo: Number(e.target.value) })}
+                    />
+                  </Field>
+                </FormGrid>
+              ),
+            },
+          ]}
+        />
+      )}
     </>
   );
 }

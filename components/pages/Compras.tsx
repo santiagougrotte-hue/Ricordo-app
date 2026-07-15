@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useMemo, useState } from "react";
+import { X } from "lucide-react";
 import { useStore } from "@/lib/store";
 import { useToast } from "@/lib/toast";
 import { uid } from "@/lib/id";
@@ -306,7 +307,7 @@ export function Compras() {
                 onClick={() => setForm({ ...form, lineas: form.lineas.filter((_, i) => i !== idx) })}
                 className="text-red hover:text-red/70"
               >
-                ✕
+                <X className="h-4 w-4" />
               </button>
             </div>
           ))}
@@ -363,7 +364,7 @@ export function Compras() {
                 onClick={() => setForm({ ...form, lineasPkg: form.lineasPkg.filter((_, i) => i !== idx) })}
                 className="text-red hover:text-red/70"
               >
-                ✕
+                <X className="h-4 w-4" />
               </button>
             </div>
           ))}
