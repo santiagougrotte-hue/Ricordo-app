@@ -1,0 +1,100 @@
+@import "tailwindcss";
+
+:root {
+  --bg: #0d0d1a;
+  --surface: #13131f;
+  --surface2: #1a1a2e;
+  --surface3: #22223a;
+  --border: #2a2a45;
+  --border2: #363660;
+  --accent: #e8c97a;
+  --accent2: #f0d99a;
+  --accent-dim: rgba(232, 201, 122, 0.12);
+  --green: #4ec994;
+  --green-dim: rgba(78, 201, 148, 0.12);
+  --red: #e05c5c;
+  --red-dim: rgba(224, 92, 92, 0.12);
+  --blue: #5c9ae0;
+  --blue-dim: rgba(92, 154, 224, 0.12);
+  --orange: #e08c5c;
+  --orange-dim: rgba(224, 140, 92, 0.12);
+  --purple: #9c6fe0;
+  --purple-dim: rgba(156, 111, 224, 0.12);
+  --text: #f0ead6;
+  --text2: #9a9080;
+  --text3: #5a5560;
+}
+
+@theme inline {
+  --color-bg: var(--bg);
+  --color-surface: var(--surface);
+  --color-surface2: var(--surface2);
+  --color-surface3: var(--surface3);
+  --color-border: var(--border);
+  --color-border2: var(--border2);
+  --color-accent: var(--accent);
+  --color-accent2: var(--accent2);
+  --color-green: var(--green);
+  --color-red: var(--red);
+  --color-blue: var(--blue);
+  --color-orange: var(--orange);
+  --color-purple: var(--purple);
+  --color-text: var(--text);
+  --color-text2: var(--text2);
+  --color-text3: var(--text3);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: "Segoe UI", system-ui, -apple-system, sans-serif;
+  font-size: 13px;
+}
+
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: var(--bg);
+}
+::-webkit-scrollbar-thumb {
+  background: var(--border2);
+  border-radius: 3px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: var(--text3);
+}
+
+table {
+  border-collapse: collapse;
+}
+
+@keyframes toast-in {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+.animate-in {
+  animation: toast-in 0.18s ease;
+}
+
+input,
+select,
+textarea {
+  font-family: inherit;
+}
+
+::placeholder {
+  color: var(--text3);
+}

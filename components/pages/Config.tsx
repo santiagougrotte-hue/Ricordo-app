@@ -1,0 +1,108 @@
+"use client";
+
+import React, { useRef, useState } from "react";
+import { useStore } from "@/lib/store";
+import { useToast } from "@/lib/toast";
+import { STORAGE_KEY } from "@/lib/types";
+import { Card, PageHeader, Field, Input, Button, InfoRow } from "@/components/ui";
+
+export function Config() {
+  const { data, setData, resetToEmpty, reloadSeed } = useStore();
+  const { toast } = useToast();
+  const [valor, setValor] = useState(data.tipo_cambio.valor);
+  const [fuente, setFuente] = useState(data.tipo_cambio.fuente);
+  const fileRef = useRef<HTMLInputElement>(null);
+
+  function guardarTipoCambio() {
+    setData((d) => ({ ...d, tipo_cambio: { valor, fuente } }));
+    toast("Tipo de cambio actualizado");
+  }
+
+  function exportar() {
+    const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `ricordo_backup_${new Date().toISOString().slice(0, 10)}.json`;
+    a.click();
+    URL.revokeObjectURL(url);
+    toast("Backup exportado");
+  }
+
+  function importar(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = () => {
+      try {
+        const parsed = JSON.parse(reader.result as string);
+        setData(parsed);
+        toast("Datos importados");
+      } catch {
+        toast("Archivo inválido", "error");
+      }
+    };
+    reader.readAsText(file);
+    e.target.value = "";
+  }
+
+  return (
+    <div>
+      <PageHeader title="Config" sub="Configuración general del sistema" />
+
+      <Card title="Tipo de cambio" className="mb-4">
+        <div className="grid grid-cols-1 gap-3.5 sm:grid-cols-2">
+          <Field label="Valor ARS/USD">
+            <Input type="number" value={valor} onChange={(e) => setValor(Number(e.target.value))} />
+          </Field>
+          <Field label="Fuente">
+            <Input value={fuente} onChange={(e) => setFuente(e.target.value)} placeholder="oficial, blue, MEP…" />
+          </Field>
+        </div>
+        <div className="mt-4 flex justify-end">
+          <Button onClick={guardarTipoCambio}>Guardar</Button>
+        </div>
+      </Card>
+
+      <Card title="Datos generales" className="mb-4">
+        <InfoRow label="Clave de almacenamiento" value={STORAGE_KEY} />
+        <InfoRow label="Productos" value={data.productos.length} />
+        <InfoRow label="Clientes" value={data.clientes.length} />
+        <InfoRow label="Pedidos" value={data.pedidos.length} />
+        <InfoRow label="Ingredientes" value={data.ingredientes.length} />
+      </Card>
+
+      <Card title="Copia de seguridad">
+        <div className="flex flex-wrap gap-3">
+          <Button onClick={exportar}>💾 Exportar datos</Button>
+          <Button variant="ghost" onClick={() => fileRef.current?.click()}>
+            📂 Importar datos
+          </Button>
+          <input ref={fileRef} type="file" accept=".json" className="hidden" onChange={importar} />
+          <Button
+            variant="danger"
+            onClick={() => {
+              if (confirm("¿Vaciar todos los datos? Esta acción no se puede deshacer.")) {
+                resetToEmpty();
+                toast("Datos vaciados", "info");
+              }
+            }}
+          >
+            Vaciar datos
+          </Button>
+          <Button
+            variant="ghost"
+            onClick={() => {
+              if (confirm("¿Restaurar los datos de ejemplo originales?")) {
+                reloadSeed();
+                toast("Datos de ejemplo restaurados");
+              }
+            }}
+          >
+            Restaurar datos de ejemplo
+          </Button>
+        </div>
+      </Card>
+    </div>
+  );
+}
