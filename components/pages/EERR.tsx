@@ -4,12 +4,11 @@ import React, { useMemo } from "react";
 import { useStore } from "@/lib/store";
 import { usePeriod } from "@/lib/period";
 import {
-  cmvPeriodo,
+  costosFijosTotales,
+  costosVariablesTotales,
   fARS,
   fPct,
   inPeriod,
-  totalCostosFijos,
-  totalCostosIndirectos,
   totalGastosOperativos,
   ventasNetas,
 } from "@/lib/calc";
@@ -25,11 +24,10 @@ export function EERR() {
   );
 
   const ventas = ventasNetas(pedidosPeriodo);
-  const cmv = cmvPeriodo(data, pedidosPeriodo);
-  const gananciaBruta = ventas - cmv;
-  const ci = totalCostosIndirectos(data, mes, anio);
-  const cf = totalCostosFijos(data);
-  const utilidadOperativa = gananciaBruta - ci - cf;
+  const cv = costosVariablesTotales(data, pedidosPeriodo, mes, anio);
+  const contribucionMarginal = ventas - cv;
+  const cf = costosFijosTotales(data, mes, anio);
+  const utilidadOperativa = contribucionMarginal - cf;
   const gastosOp = totalGastosOperativos(data, mes, anio);
   const utilidadNeta = utilidadOperativa - gastosOp;
 
@@ -37,13 +35,16 @@ export function EERR() {
 
   return (
     <div>
-      <PageHeader title="EERR" sub="Estado de Resultados del período" />
+      <PageHeader title="EERR" sub="Estado de Resultados del período — formato de contribución marginal" />
       <Card>
         <InfoRow label="Ventas netas" value={<><span className="mr-3 text-text3">{fPct(100)}</span>{fARS(ventas)}</>} color="gold" />
-        <InfoRow label="(-) CMV" value={<><span className="mr-3 text-text3">{fPct(pct(cmv))}</span>{fARS(cmv)}</>} color="red" />
-        <InfoRow label="= Ganancia bruta" value={<><span className="mr-3 text-text3">{fPct(pct(gananciaBruta))}</span>{fARS(gananciaBruta)}</>} color="green" />
-        <InfoRow label="(-) Costos indirectos" value={<><span className="mr-3 text-text3">{fPct(pct(ci))}</span>{fARS(ci)}</>} color="orange" />
-        <InfoRow label="(-) Costos fijos" value={<><span className="mr-3 text-text3">{fPct(pct(cf))}</span>{fARS(cf)}</>} color="orange" />
+        <InfoRow label="(-) Costos variables totales" value={<><span className="mr-3 text-text3">{fPct(pct(cv))}</span>{fARS(cv)}</>} color="red" />
+        <InfoRow
+          label="= Contribución marginal"
+          value={<><span className="mr-3 text-text3">{fPct(pct(contribucionMarginal))}</span>{fARS(contribucionMarginal)}</>}
+          color="green"
+        />
+        <InfoRow label="(-) Costos fijos totales" value={<><span className="mr-3 text-text3">{fPct(pct(cf))}</span>{fARS(cf)}</>} color="orange" />
         <InfoRow
           label="= Utilidad operativa"
           value={<><span className="mr-3 text-text3">{fPct(pct(utilidadOperativa))}</span>{fARS(utilidadOperativa)}</>}

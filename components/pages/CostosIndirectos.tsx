@@ -18,14 +18,16 @@ import {
   FormGrid,
   Field,
   Input,
+  Select,
+  Badge,
   StatGrid,
   KpiCard,
 } from "@/components/ui";
 import { Modal } from "@/components/Modal";
-import type { CostoIndirecto } from "@/lib/types";
+import type { CostoIndirecto, TipoCosto } from "@/lib/types";
 
 function emptyForm(mes: number, anio: number) {
-  return { descripcion: "", monto: 0, categoria: "General", mes, anio };
+  return { descripcion: "", monto: 0, categoria: "General", mes, anio, tipo_costo: "Fijo" as TipoCosto };
 }
 
 export function CostosIndirectos() {
@@ -41,6 +43,8 @@ export function CostosIndirectos() {
     [data.costos_indirectos, mes, anio]
   );
   const total = delPeriodo.reduce((a, c) => a + c.monto, 0);
+  const totalFijo = delPeriodo.filter((c) => (c.tipo_costo ?? "Fijo") === "Fijo").reduce((a, c) => a + c.monto, 0);
+  const totalVariable = delPeriodo.filter((c) => c.tipo_costo === "Variable").reduce((a, c) => a + c.monto, 0);
 
   function openNew() {
     setEditing(null);
@@ -49,7 +53,7 @@ export function CostosIndirectos() {
   }
   function openEdit(c: CostoIndirecto) {
     setEditing(c.id);
-    setForm({ descripcion: c.descripcion, monto: c.monto, categoria: c.categoria, mes: c.mes, anio: c.anio });
+    setForm({ descripcion: c.descripcion, monto: c.monto, categoria: c.categoria, mes: c.mes, anio: c.anio, tipo_costo: c.tipo_costo ?? "Fijo" });
     setModalOpen(true);
   }
   function save() {
@@ -73,11 +77,17 @@ export function CostosIndirectos() {
 
   return (
     <div>
-      <PageHeader title="Costos Indirectos" sub="Costos del período (usados en EERR y punto de equilibrio)" right={<Button onClick={openNew}>+ Nuevo</Button>} />
+      <PageHeader
+        title="Costos Indirectos"
+        sub="Costos del período — se clasifican como Fijo o Variable para el EERR y el punto de equilibrio"
+        right={<Button onClick={openNew}>+ Nuevo</Button>}
+      />
 
       <StatGrid>
         <KpiCard label="Total del período" value={fARS(total)} color="orange" />
-        <KpiCard label="Conceptos" value={delPeriodo.length} color="blue" />
+        <KpiCard label="Fijos" value={fARS(totalFijo)} color="blue" />
+        <KpiCard label="Variables" value={fARS(totalVariable)} color="red" />
+        <KpiCard label="Conceptos" value={delPeriodo.length} color="purple" />
       </StatGrid>
 
       <Card>
@@ -90,6 +100,7 @@ export function CostosIndirectos() {
                 <tr>
                   <Th>Descripción</Th>
                   <Th>Categoría</Th>
+                  <Th>Tipo</Th>
                   <Th>Monto</Th>
                   <Th>Acciones</Th>
                 </tr>
@@ -99,6 +110,9 @@ export function CostosIndirectos() {
                   <TrHover key={c.id}>
                     <Td main>{c.descripcion}</Td>
                     <Td>{c.categoria}</Td>
+                    <Td>
+                      <Badge color={(c.tipo_costo ?? "Fijo") === "Variable" ? "red" : "blue"}>{c.tipo_costo ?? "Fijo"}</Badge>
+                    </Td>
                     <Td>{fARS(c.monto)}</Td>
                     <Td>
                       <div className="flex gap-1.5">
@@ -137,6 +151,12 @@ export function CostosIndirectos() {
           </Field>
           <Field label="Categoría">
             <Input value={form.categoria} onChange={(e) => setForm({ ...form, categoria: e.target.value })} />
+          </Field>
+          <Field label="Tipo de costo">
+            <Select value={form.tipo_costo} onChange={(e) => setForm({ ...form, tipo_costo: e.target.value as TipoCosto })}>
+              <option value="Fijo">Fijo</option>
+              <option value="Variable">Variable (ej. comisiones, envíos)</option>
+            </Select>
           </Field>
           <Field label="Monto">
             <Input type="number" value={form.monto} onChange={(e) => setForm({ ...form, monto: Number(e.target.value) })} />

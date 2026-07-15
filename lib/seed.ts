@@ -201,6 +201,7 @@ export function mapBackupToRicordoData(backup: any): RicordoData {
       mes: c.mes ?? (fecha ? fecha.getMonth() + 1 : new Date().getMonth() + 1),
       anio: c.anio ?? (fecha ? fecha.getFullYear() : new Date().getFullYear()),
       categoria: c.categoria ?? c.sub ?? "General",
+      tipo_costo: c.tipo_costo === "Variable" ? "Variable" : "Fijo",
     };
   });
 

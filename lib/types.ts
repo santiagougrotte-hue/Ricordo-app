@@ -111,6 +111,8 @@ export interface CostoFijo {
   activo: boolean;
 }
 
+export type TipoCosto = "Fijo" | "Variable";
+
 export interface CostoIndirecto {
   id: string;
   descripcion: string;
@@ -118,6 +120,7 @@ export interface CostoIndirecto {
   mes: number;
   anio: number;
   categoria: string;
+  tipo_costo: TipoCosto;
 }
 
 export interface GastoOperativo {
