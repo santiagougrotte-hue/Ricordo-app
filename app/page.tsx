@@ -8,7 +8,7 @@ import { useStore } from "@/lib/store";
 import { PAGES } from "@/components/pages/registry";
 
 export default function Home() {
-  const { page, collapsed } = useRouter();
+  const { page, collapsed, setMobileOpen } = useRouter();
   const { ready } = useStore();
 
   const PageComponent = PAGES[page];
@@ -16,9 +16,11 @@ export default function Home() {
   return (
     <div className="flex min-h-screen">
       <Sidebar />
-      <main className={`flex-1 transition-[margin] duration-200 ${collapsed ? "ml-[52px]" : "ml-[230px]"}`}>
-        <Header />
-        <div className="px-7 py-6">
+      <main
+        className={`min-w-0 flex-1 transition-[margin] duration-200 ${collapsed ? "md:ml-[52px]" : "md:ml-[230px]"}`}
+      >
+        <Header onMenuClick={() => setMobileOpen(true)} />
+        <div className="px-4 py-5 sm:px-7 sm:py-6">
           {!ready ? (
             <div className="py-20 text-center text-text3">Cargando…</div>
           ) : PageComponent ? (

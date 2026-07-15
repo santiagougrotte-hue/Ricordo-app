@@ -8,6 +8,8 @@ interface RouterCtx {
   go: (key: string) => void;
   collapsed: boolean;
   setCollapsed: (c: boolean) => void;
+  mobileOpen: boolean;
+  setMobileOpen: (o: boolean) => void;
 }
 
 const Ctx = createContext<RouterCtx | null>(null);
@@ -21,6 +23,7 @@ function pageFromHash(): string {
 export function RouterProvider({ children }: { children: React.ReactNode }) {
   const [page, setPage] = useState(DEFAULT_PAGE);
   const [collapsed, setCollapsed] = useState(false);
+  const [mobileOpen, setMobileOpen] = useState(false);
 
   useEffect(() => {
     // Sync from the URL hash post-mount (SSR has no window) — must stay in an effect.
@@ -34,9 +37,14 @@ export function RouterProvider({ children }: { children: React.ReactNode }) {
   const go = (key: string) => {
     setPage(key);
     if (typeof window !== "undefined") window.location.hash = key;
+    setMobileOpen(false);
   };
 
-  return <Ctx.Provider value={{ page, go, collapsed, setCollapsed }}>{children}</Ctx.Provider>;
+  return (
+    <Ctx.Provider value={{ page, go, collapsed, setCollapsed, mobileOpen, setMobileOpen }}>
+      {children}
+    </Ctx.Provider>
+  );
 }
 
 export function useRouter(): RouterCtx {

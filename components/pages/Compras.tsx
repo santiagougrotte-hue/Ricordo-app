@@ -263,8 +263,9 @@ export function Compras() {
             </Button>
           </div>
           {form.lineas.map((l, idx) => (
-            <div key={idx} className="mb-2 grid grid-cols-[1fr_100px_120px_40px] gap-2">
+            <div key={idx} className="mb-2 flex flex-wrap items-center gap-2 sm:grid sm:grid-cols-[1fr_100px_120px_40px]">
               <Select
+                className="w-full sm:w-auto"
                 value={l.id_ingrediente}
                 onChange={(e) => {
                   const lineas = [...form.lineas];
@@ -282,6 +283,7 @@ export function Compras() {
               <Input
                 type="number"
                 placeholder="Cant."
+                className="flex-1 sm:flex-none"
                 value={l.cantidad}
                 onChange={(e) => {
                   const lineas = [...form.lineas];
@@ -292,6 +294,7 @@ export function Compras() {
               <Input
                 type="number"
                 placeholder="Precio unit."
+                className="flex-1 sm:flex-none"
                 value={l.precio_unitario}
                 onChange={(e) => {
                   const lineas = [...form.lineas];
@@ -317,8 +320,9 @@ export function Compras() {
             </Button>
           </div>
           {form.lineasPkg.map((l, idx) => (
-            <div key={idx} className="mb-2 grid grid-cols-[1fr_100px_120px_40px] gap-2">
+            <div key={idx} className="mb-2 flex flex-wrap items-center gap-2 sm:grid sm:grid-cols-[1fr_100px_120px_40px]">
               <Select
+                className="w-full sm:w-auto"
                 value={l.id_packaging}
                 onChange={(e) => {
                   const lineasPkg = [...form.lineasPkg];
@@ -336,6 +340,7 @@ export function Compras() {
               <Input
                 type="number"
                 placeholder="Cant."
+                className="flex-1 sm:flex-none"
                 value={l.cantidad}
                 onChange={(e) => {
                   const lineasPkg = [...form.lineasPkg];
@@ -346,6 +351,7 @@ export function Compras() {
               <Input
                 type="number"
                 placeholder="Precio unit."
+                className="flex-1 sm:flex-none"
                 value={l.precio_unitario}
                 onChange={(e) => {
                   const lineasPkg = [...form.lineasPkg];
