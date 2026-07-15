@@ -1,0 +1,333 @@
+// Canonical data model for ricordo_data (localStorage)
+
+export type Canal = "Minorista" | "Mayorista";
+export type EstadoPedido = "Confirmado" | "Produccion" | "Entregado" | "Cancelado";
+export type TipoRecetaLinea = "Ingrediente" | "Packaging" | "CostoFijo";
+export type TipoMovCaja = "ingreso" | "egreso";
+
+export interface Ingrediente {
+  id: string;
+  nombre: string;
+  unidad: string;
+  categoria?: string;
+  precio_ref: number;
+  precio_vigente: number | null;
+  seguimiento_stock: boolean;
+}
+
+export interface Producto {
+  id: string;
+  id_base: string;
+  nombre: string;
+  categoria?: string;
+  precio_venta: number;
+  activo: boolean;
+}
+
+export interface Cliente {
+  id: string;
+  nombre: string;
+  canal: Canal;
+  direccion?: string;
+  telefono?: string;
+  email?: string;
+}
+
+export interface RecetaLinea {
+  id: string;
+  id_producto: string;
+  tipo: TipoRecetaLinea;
+  concepto: string; // id_ingrediente | id_packaging | id_costo_fijo
+  cantidad: number;
+}
+
+export interface Packaging {
+  id: string;
+  nombre: string;
+  unidad: string;
+  precio: number;
+}
+
+export interface Pedido {
+  id_pedido: string;
+  id_detalle: string;
+  id_cliente: string;
+  id_producto: string;
+  nombre_producto: string;
+  gusto?: string;
+  cantidad: number;
+  precio_unitario: number;
+  precio_total: number;
+  descuento_monto: number;
+  precio_neto: number;
+  fecha: string;
+  estado: EstadoPedido;
+  canal: Canal;
+  km_envio: number;
+  costo_envio: number;
+  metodo_pago?: string;
+  notas?: string;
+}
+
+export interface Produccion {
+  id: string;
+  id_producto: string;
+  nombre_producto: string;
+  cantidad: number;
+  fecha: string;
+  notas?: string;
+}
+
+export interface CompraLineaIngrediente {
+  id_ingrediente: string;
+  cantidad: number;
+  precio_unitario: number;
+}
+export interface CompraLineaPackaging {
+  id_packaging: string;
+  cantidad: number;
+  precio_unitario: number;
+}
+
+export interface Compra {
+  id: string;
+  fecha: string;
+  id_proveedor: string;
+  descripcion?: string;
+  total: number;
+  total_manual: boolean;
+  metodo_pago?: string;
+  notas?: string;
+  lineas: CompraLineaIngrediente[];
+  lineasPkg: CompraLineaPackaging[];
+  registrar_caja: boolean;
+}
+
+export interface CostoFijo {
+  id: string;
+  descripcion: string;
+  monto: number;
+  categoria: string;
+  activo: boolean;
+}
+
+export interface CostoIndirecto {
+  id: string;
+  descripcion: string;
+  monto: number;
+  mes: number;
+  anio: number;
+  categoria: string;
+}
+
+export interface GastoOperativo {
+  id: string;
+  fecha: string;
+  descripcion: string;
+  monto: number;
+  categoria: string;
+}
+
+export interface GastoInversion {
+  id: string;
+  fecha: string;
+  descripcion: string;
+  monto: number;
+  categoria: string;
+}
+
+export interface CajaMovimiento {
+  id: string;
+  fecha: string;
+  tipo: TipoMovCaja;
+  concepto: string;
+  monto: number;
+  metodo: string;
+  ref?: string;
+}
+
+export interface TransferenciaInterna {
+  id: string;
+  fecha: string;
+  origen: string;
+  destino: string;
+  monto: number;
+  descripcion?: string;
+}
+
+export interface Proveedor {
+  id: string;
+  nombre: string;
+  contacto?: string;
+  telefono?: string;
+  email?: string;
+  notas?: string;
+}
+
+export interface HistorialPrecio {
+  id: string;
+  id_insumo: string;
+  insumo: string;
+  precio_anterior: number;
+  precio_nuevo: number;
+  fecha: string;
+}
+
+export interface ConteoIngrediente {
+  id: string;
+  id_ingrediente: string;
+  cantidad: number;
+  fecha: string;
+  notas?: string;
+}
+
+export interface ConteoStock {
+  id: string;
+  id_producto: string;
+  cantidad: number;
+  fecha: string;
+}
+
+export interface TipoCambio {
+  valor: number;
+  fuente: string;
+}
+
+export interface AfElasticidad {
+  p1: number;
+  q1: number;
+  p2: number;
+  q2: number;
+  e: number;
+  fecha: string;
+}
+
+export interface AfCapTrabajoItem {
+  nombre: string;
+  monto: number;
+}
+
+export interface AfCapTrabajo {
+  ac_extra: AfCapTrabajoItem[];
+  pc_items: AfCapTrabajoItem[];
+}
+
+export interface AfPaybackItem {
+  id: string;
+  nombre: string;
+  inversion: number;
+  flujo: number;
+  tasa: number;
+  fecha: string;
+}
+
+export interface CajaInteligenteUso {
+  id: string;
+  fecha: string;
+  concepto: string;
+  monto: number;
+}
+
+export interface CajaInteligente {
+  porcentaje_reinversion: number;
+  porcentaje_seguridad: number;
+  asignaciones: { id: string; fecha: string; monto: number }[];
+  usos_reinversion: CajaInteligenteUso[];
+  usos_seguridad: CajaInteligenteUso[];
+}
+
+export interface ConfigEnvios {
+  litro_nafta: number;
+  consumo_100km: number;
+  margen_gratis: number;
+  margen_fijo: number;
+  margen_exacto: number;
+  precio_envio_fijo: number;
+}
+
+export interface RicordoData {
+  ingredientes: Ingrediente[];
+  productos: Producto[];
+  clientes: Cliente[];
+  recetas: RecetaLinea[];
+  packaging: Packaging[];
+  pedidos: Pedido[];
+  produccion: Produccion[];
+  compras: Compra[];
+  costos_fijos: CostoFijo[];
+  costos_indirectos: CostoIndirecto[];
+  gastos_operativos: GastoOperativo[];
+  gastos_inversion: GastoInversion[];
+  caja_movimientos: CajaMovimiento[];
+  transferencias_internas: TransferenciaInterna[];
+  proveedores: Proveedor[];
+  historial_precios: HistorialPrecio[];
+  conteos_ingredientes: ConteoIngrediente[];
+  conteos_stock: ConteoStock[];
+  stock_manual: Record<string, number>;
+  gustos: Record<string, string[]>;
+  saldo_anterior_caja: { valor: number };
+  tipo_cambio: TipoCambio;
+  efectivo_en_mano: number;
+  saldo_cmv_anterior: number;
+  saldo_compras_anterior: number;
+  fecha_corte_cmv: string | null;
+  fecha_corte_compras: string | null;
+  af_elasticidades: Record<string, AfElasticidad>;
+  af_cap_trabajo: AfCapTrabajo;
+  af_payback_items: AfPaybackItem[];
+  caja_inteligente: CajaInteligente;
+  config_envios: ConfigEnvios;
+}
+
+export const STORAGE_KEY = "ricordo_data";
+
+export function emptyData(): RicordoData {
+  return {
+    ingredientes: [],
+    productos: [],
+    clientes: [],
+    recetas: [],
+    packaging: [],
+    pedidos: [],
+    produccion: [],
+    compras: [],
+    costos_fijos: [],
+    costos_indirectos: [],
+    gastos_operativos: [],
+    gastos_inversion: [],
+    caja_movimientos: [],
+    transferencias_internas: [],
+    proveedores: [],
+    historial_precios: [],
+    conteos_ingredientes: [],
+    conteos_stock: [],
+    stock_manual: {},
+    gustos: {},
+    saldo_anterior_caja: { valor: 0 },
+    tipo_cambio: { valor: 1000, fuente: "manual" },
+    efectivo_en_mano: 0,
+    saldo_cmv_anterior: 0,
+    saldo_compras_anterior: 0,
+    fecha_corte_cmv: null,
+    fecha_corte_compras: null,
+    af_elasticidades: {},
+    af_cap_trabajo: { ac_extra: [], pc_items: [] },
+    af_payback_items: [],
+    caja_inteligente: {
+      porcentaje_reinversion: 70,
+      porcentaje_seguridad: 30,
+      asignaciones: [],
+      usos_reinversion: [],
+      usos_seguridad: [],
+    },
+    config_envios: {
+      litro_nafta: 1200,
+      consumo_100km: 7,
+      margen_gratis: 65,
+      margen_fijo: 60,
+      margen_exacto: 55,
+      precio_envio_fijo: 2000,
+    },
+  };
+}
