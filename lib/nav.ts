@@ -9,7 +9,7 @@ export interface NavGroup {
   items: NavItem[];
 }
 
-export const NAV: NavGroup[] = [
+const NAV_RAW: NavGroup[] = [
   {
     group: "",
     items: [{ key: "dashboard", label: "Dashboard", icon: "📊" }],
@@ -87,6 +87,14 @@ export const NAV: NavGroup[] = [
     items: [{ key: "config", label: "Config", icon: "⚙️" }],
   },
 ];
+
+// Items within each named group are sorted alphanumerically (es locale) for
+// easier scanning; the two ungrouped single-item sections (Dashboard, Config)
+// and the group order itself follow the business workflow and stay as authored.
+export const NAV: NavGroup[] = NAV_RAW.map((g) => ({
+  ...g,
+  items: g.group ? [...g.items].sort((a, b) => a.label.localeCompare(b.label, "es", { numeric: true })) : g.items,
+}));
 
 export const NAV_LABELS: Record<string, string> = Object.fromEntries(
   NAV.flatMap((g) => g.items.map((i) => [i.key, i.label]))

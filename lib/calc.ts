@@ -1,4 +1,4 @@
-import type { RicordoData, Ingrediente, Pedido } from "./types";
+import type { RicordoData, Ingrediente, Pedido, TipoCosto } from "./types";
 
 export function fARS(n: number | null | undefined): string {
   const v = n ?? 0;
@@ -123,6 +123,31 @@ export function totalCostosIndirectos(data: RicordoData, mes: number, anio: numb
   return data.costos_indirectos
     .filter((c) => c.mes === mes && c.anio === anio)
     .reduce((acc, c) => acc + c.monto, 0);
+}
+
+export function totalCostosIndirectosPorTipo(
+  data: RicordoData,
+  mes: number,
+  anio: number,
+  tipo: TipoCosto
+): number {
+  return data.costos_indirectos
+    .filter((c) => c.mes === mes && c.anio === anio && (c.tipo_costo ?? "Fijo") === tipo)
+    .reduce((acc, c) => acc + c.monto, 0);
+}
+
+export function totalCostoEnvio(pedidos: Pedido[]): number {
+  return pedidos.reduce((acc, p) => acc + (p.costo_envio || 0), 0);
+}
+
+/** CMV + envío + costos indirectos clasificados como Variable en el período */
+export function costosVariablesTotales(data: RicordoData, pedidos: Pedido[], mes: number, anio: number): number {
+  return cmvPeriodo(data, pedidos) + totalCostoEnvio(pedidos) + totalCostosIndirectosPorTipo(data, mes, anio, "Variable");
+}
+
+/** Costos fijos + costos indirectos clasificados como Fijo en el período */
+export function costosFijosTotales(data: RicordoData, mes: number, anio: number): number {
+  return totalCostosFijos(data) + totalCostosIndirectosPorTipo(data, mes, anio, "Fijo");
 }
 
 export function totalGastosOperativos(data: RicordoData, mes: number, anio: number): number {
