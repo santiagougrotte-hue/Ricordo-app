@@ -33,8 +33,35 @@ const ESTADO_COLOR: Record<EstadoPedido, "blue" | "orange" | "green" | "red"> = 
   Entregado: "green",
   Cancelado: "red",
 };
+const LETRAS = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
 
-function emptyForm() {
+interface LineaPedido {
+  id_producto: string;
+  gusto: string;
+  cantidad: number;
+  precio_unitario: number;
+  descuento_monto: number;
+}
+
+function emptyLinea(): LineaPedido {
+  return { id_producto: "", gusto: "", cantidad: 1, precio_unitario: 0, descuento_monto: 0 };
+}
+
+function emptyOrderForm() {
+  return {
+    id_cliente: "",
+    fecha: new Date().toISOString().slice(0, 10),
+    estado: "Confirmado" as EstadoPedido,
+    canal: "Minorista" as Canal,
+    km_envio: 0,
+    costo_envio: 0,
+    metodo_pago: "",
+    notas: "",
+    lineas: [emptyLinea()],
+  };
+}
+
+function emptyEditForm() {
   return {
     id_cliente: "",
     id_producto: "",
@@ -60,9 +87,13 @@ export function Pedidos() {
   const [estadoFiltro, setEstadoFiltro] = useState("todos");
   const [canalFiltro, setCanalFiltro] = useState("");
   const [search, setSearch] = useState("");
-  const [modalOpen, setModalOpen] = useState(false);
+
+  const [orderModalOpen, setOrderModalOpen] = useState(false);
+  const [orderForm, setOrderForm] = useState(emptyOrderForm());
+
+  const [editModalOpen, setEditModalOpen] = useState(false);
   const [editing, setEditing] = useState<string | null>(null);
-  const [form, setForm] = useState(emptyForm());
+  const [editForm, setEditForm] = useState(emptyEditForm());
 
   const clienteNombre = (id: string) => data.clientes.find((c) => c.id === id)?.nombre ?? "—";
 
@@ -81,14 +112,13 @@ export function Pedidos() {
   }, [data.pedidos, data.clientes, mes, anio, estadoFiltro, canalFiltro, search]);
 
   function openNew() {
-    setEditing(null);
-    setForm(emptyForm());
-    setModalOpen(true);
+    setOrderForm(emptyOrderForm());
+    setOrderModalOpen(true);
   }
 
   function openEdit(p: Pedido) {
     setEditing(p.id_detalle);
-    setForm({
+    setEditForm({
       id_cliente: p.id_cliente,
       id_producto: p.id_producto,
       gusto: p.gusto ?? "",
@@ -103,48 +133,86 @@ export function Pedidos() {
       metodo_pago: p.metodo_pago ?? "",
       notas: p.notas ?? "",
     });
-    setModalOpen(true);
+    setEditModalOpen(true);
   }
 
-  function save() {
-    if (!form.id_cliente || !form.id_producto) {
+  function addLinea() {
+    setOrderForm((f) => ({ ...f, lineas: [...f.lineas, emptyLinea()] }));
+  }
+  function quitarLinea(idx: number) {
+    setOrderForm((f) => ({ ...f, lineas: f.lineas.filter((_, i) => i !== idx) }));
+  }
+  function actualizarLinea(idx: number, patch: Partial<LineaPedido>) {
+    setOrderForm((f) => ({ ...f, lineas: f.lineas.map((l, i) => (i === idx ? { ...l, ...patch } : l)) }));
+  }
+
+  const totalOrden = orderForm.lineas.reduce(
+    (acc, l) => acc + (l.precio_unitario * l.cantidad - l.descuento_monto),
+    0
+  );
+
+  function guardarOrden() {
+    if (!orderForm.id_cliente) {
+      toast("Elegí un cliente", "error");
+      return;
+    }
+    const lineasValidas = orderForm.lineas.filter((l) => l.id_producto && l.cantidad > 0);
+    if (lineasValidas.length === 0) {
+      toast("Agregá al menos un producto", "error");
+      return;
+    }
+
+    const idPedido = uid("PED");
+    const nuevos: Pedido[] = lineasValidas.map((l, idx) => {
+      const producto = data.productos.find((pr) => pr.id === l.id_producto);
+      const total = l.precio_unitario * l.cantidad;
+      const neto = total - l.descuento_monto;
+      return {
+        id_pedido: idPedido,
+        id_detalle: `${idPedido}-${LETRAS[idx] ?? idx}`,
+        id_cliente: orderForm.id_cliente,
+        id_producto: l.id_producto,
+        nombre_producto: producto?.nombre ?? "",
+        gusto: l.gusto,
+        cantidad: l.cantidad,
+        precio_unitario: l.precio_unitario,
+        precio_total: total,
+        descuento_monto: l.descuento_monto,
+        precio_neto: neto,
+        fecha: orderForm.fecha,
+        estado: orderForm.estado,
+        canal: orderForm.canal,
+        km_envio: orderForm.km_envio,
+        costo_envio: orderForm.costo_envio,
+        metodo_pago: orderForm.metodo_pago,
+        notas: orderForm.notas,
+      };
+    });
+
+    setData((d) => ({ ...d, pedidos: [...d.pedidos, ...nuevos] }));
+    toast(lineasValidas.length > 1 ? `Pedido creado con ${lineasValidas.length} productos` : "Pedido creado");
+    setOrderModalOpen(false);
+  }
+
+  function guardarEdicion() {
+    if (!editing) return;
+    if (!editForm.id_cliente || !editForm.id_producto) {
       toast("Completá cliente y producto", "error");
       return;
     }
-    const producto = data.productos.find((pr) => pr.id === form.id_producto);
-    const total = form.precio_unitario * form.cantidad;
-    const neto = total - form.descuento_monto;
-
-    if (editing) {
-      setData((d) => ({
-        ...d,
-        pedidos: d.pedidos.map((p) =>
-          p.id_detalle === editing
-            ? {
-                ...p,
-                ...form,
-                nombre_producto: producto?.nombre ?? p.nombre_producto,
-                precio_total: total,
-                precio_neto: neto,
-              }
-            : p
-        ),
-      }));
-      toast("Pedido actualizado");
-    } else {
-      const idPedido = uid("PED");
-      const nuevo: Pedido = {
-        id_pedido: idPedido,
-        id_detalle: idPedido,
-        ...form,
-        nombre_producto: producto?.nombre ?? "",
-        precio_total: total,
-        precio_neto: neto,
-      };
-      setData((d) => ({ ...d, pedidos: [...d.pedidos, nuevo] }));
-      toast("Pedido creado");
-    }
-    setModalOpen(false);
+    const producto = data.productos.find((pr) => pr.id === editForm.id_producto);
+    const total = editForm.precio_unitario * editForm.cantidad;
+    const neto = total - editForm.descuento_monto;
+    setData((d) => ({
+      ...d,
+      pedidos: d.pedidos.map((p) =>
+        p.id_detalle === editing
+          ? { ...p, ...editForm, nombre_producto: producto?.nombre ?? p.nombre_producto, precio_total: total, precio_neto: neto }
+          : p
+      ),
+    }));
+    toast("Pedido actualizado");
+    setEditModalOpen(false);
   }
 
   function cambiarEstado(idDetalle: string, estado: EstadoPedido) {
@@ -257,23 +325,166 @@ export function Pedidos() {
         )}
       </Card>
 
+      {/* Nuevo pedido: cliente + datos compartidos + N productos */}
       <Modal
-        open={modalOpen}
-        onClose={() => setModalOpen(false)}
-        title={editing ? "Editar Pedido" : "Nuevo Pedido"}
+        open={orderModalOpen}
+        onClose={() => setOrderModalOpen(false)}
+        title="Nuevo Pedido"
         wide
         footer={
           <>
-            <Button variant="ghost" onClick={() => setModalOpen(false)}>
+            <Button variant="ghost" onClick={() => setOrderModalOpen(false)}>
               Cancelar
             </Button>
-            <Button onClick={save}>Guardar</Button>
+            <Button onClick={guardarOrden}>Guardar</Button>
+          </>
+        }
+      >
+        <div className="grid grid-cols-1 gap-3.5 sm:grid-cols-3">
+          <Field label="Cliente">
+            <Select value={orderForm.id_cliente} onChange={(e) => setOrderForm({ ...orderForm, id_cliente: e.target.value })}>
+              <option value="">Seleccionar…</option>
+              {data.clientes.map((c) => (
+                <option key={c.id} value={c.id}>
+                  {c.nombre}
+                </option>
+              ))}
+            </Select>
+          </Field>
+          <Field label="Fecha">
+            <Input type="date" value={orderForm.fecha} onChange={(e) => setOrderForm({ ...orderForm, fecha: e.target.value })} />
+          </Field>
+          <Field label="Canal">
+            <Select value={orderForm.canal} onChange={(e) => setOrderForm({ ...orderForm, canal: e.target.value as Canal })}>
+              <option value="Minorista">Minorista</option>
+              <option value="Mayorista">Mayorista</option>
+            </Select>
+          </Field>
+          <Field label="Estado">
+            <Select value={orderForm.estado} onChange={(e) => setOrderForm({ ...orderForm, estado: e.target.value as EstadoPedido })}>
+              {ESTADOS.map((e) => (
+                <option key={e} value={e}>
+                  {e}
+                </option>
+              ))}
+            </Select>
+          </Field>
+          <Field label="Km de envío">
+            <Input
+              type="number"
+              value={orderForm.km_envio}
+              onChange={(e) => setOrderForm({ ...orderForm, km_envio: Number(e.target.value) })}
+            />
+          </Field>
+          <Field label="Costo de envío">
+            <Input
+              type="number"
+              value={orderForm.costo_envio}
+              onChange={(e) => setOrderForm({ ...orderForm, costo_envio: Number(e.target.value) })}
+            />
+          </Field>
+          <Field label="Método de pago">
+            <Input value={orderForm.metodo_pago} onChange={(e) => setOrderForm({ ...orderForm, metodo_pago: e.target.value })} />
+          </Field>
+          <Field label="Notas" full>
+            <Textarea rows={2} value={orderForm.notas} onChange={(e) => setOrderForm({ ...orderForm, notas: e.target.value })} />
+          </Field>
+        </div>
+
+        <div className="mt-5 border-t border-border pt-4">
+          <div className="mb-2 flex items-center justify-between">
+            <span className="text-[11px] font-semibold uppercase tracking-wide text-text3">Productos del pedido</span>
+            <Button size="sm" variant="ghost" onClick={addLinea}>
+              + Agregar producto
+            </Button>
+          </div>
+
+          {orderForm.lineas.map((l, idx) => {
+            const neto = l.precio_unitario * l.cantidad - l.descuento_monto;
+            return (
+              <div key={idx} className="mb-2 flex flex-wrap items-end gap-2 rounded-md border border-border bg-surface2/40 p-2.5 sm:flex-nowrap">
+                <div className="w-full sm:w-auto sm:flex-[2]">
+                  <Select
+                    value={l.id_producto}
+                    onChange={(e) => {
+                      const prod = data.productos.find((pr) => pr.id === e.target.value);
+                      actualizarLinea(idx, { id_producto: e.target.value, precio_unitario: prod?.precio_venta ?? 0 });
+                    }}
+                  >
+                    <option value="">Producto…</option>
+                    {data.productos.map((p) => (
+                      <option key={p.id} value={p.id}>
+                        {p.nombre}
+                      </option>
+                    ))}
+                  </Select>
+                </div>
+                <Input
+                  placeholder="Gusto"
+                  className="w-full sm:w-28"
+                  value={l.gusto}
+                  onChange={(e) => actualizarLinea(idx, { gusto: e.target.value })}
+                />
+                <Input
+                  type="number"
+                  placeholder="Cant."
+                  className="w-[calc(50%-4px)] sm:w-20"
+                  value={l.cantidad}
+                  onChange={(e) => actualizarLinea(idx, { cantidad: Number(e.target.value) })}
+                />
+                <Input
+                  type="number"
+                  placeholder="Precio unit."
+                  className="w-[calc(50%-4px)] sm:w-28"
+                  value={l.precio_unitario}
+                  onChange={(e) => actualizarLinea(idx, { precio_unitario: Number(e.target.value) })}
+                />
+                <Input
+                  type="number"
+                  placeholder="Desc. $"
+                  className="w-[calc(50%-4px)] sm:w-24"
+                  value={l.descuento_monto}
+                  onChange={(e) => actualizarLinea(idx, { descuento_monto: Number(e.target.value) })}
+                />
+                <div className="w-[calc(50%-4px)] shrink-0 text-right text-[12.5px] font-medium text-accent sm:w-28">
+                  {fARS(neto)}
+                </div>
+                <button
+                  onClick={() => quitarLinea(idx)}
+                  disabled={orderForm.lineas.length === 1}
+                  className="text-red hover:text-red/70 disabled:opacity-30"
+                >
+                  ✕
+                </button>
+              </div>
+            );
+          })}
+
+          <div className="mt-3 flex justify-end text-sm">
+            <span className="text-text3">Total del pedido:&nbsp;</span>
+            <span className="font-semibold text-accent">{fARS(totalOrden)}</span>
+          </div>
+        </div>
+      </Modal>
+
+      {/* Editar una línea existente */}
+      <Modal
+        open={editModalOpen}
+        onClose={() => setEditModalOpen(false)}
+        title="Editar Pedido"
+        wide
+        footer={
+          <>
+            <Button variant="ghost" onClick={() => setEditModalOpen(false)}>
+              Cancelar
+            </Button>
+            <Button onClick={guardarEdicion}>Guardar</Button>
           </>
         }
       >
         <FormGrid>
           <Field label="Cliente">
-            <Select value={form.id_cliente} onChange={(e) => setForm({ ...form, id_cliente: e.target.value })}>
+            <Select value={editForm.id_cliente} onChange={(e) => setEditForm({ ...editForm, id_cliente: e.target.value })}>
               <option value="">Seleccionar…</option>
               {data.clientes.map((c) => (
                 <option key={c.id} value={c.id}>
@@ -284,10 +495,10 @@ export function Pedidos() {
           </Field>
           <Field label="Producto">
             <Select
-              value={form.id_producto}
+              value={editForm.id_producto}
               onChange={(e) => {
                 const prod = data.productos.find((pr) => pr.id === e.target.value);
-                setForm({ ...form, id_producto: e.target.value, precio_unitario: prod?.precio_venta ?? 0 });
+                setEditForm({ ...editForm, id_producto: e.target.value, precio_unitario: prod?.precio_venta ?? 0 });
               }}
             >
               <option value="">Seleccionar…</option>
@@ -299,37 +510,37 @@ export function Pedidos() {
             </Select>
           </Field>
           <Field label="Gusto / Variante">
-            <Input value={form.gusto} onChange={(e) => setForm({ ...form, gusto: e.target.value })} />
+            <Input value={editForm.gusto} onChange={(e) => setEditForm({ ...editForm, gusto: e.target.value })} />
           </Field>
           <Field label="Cantidad">
             <Input
               type="number"
-              value={form.cantidad}
-              onChange={(e) => setForm({ ...form, cantidad: Number(e.target.value) })}
+              value={editForm.cantidad}
+              onChange={(e) => setEditForm({ ...editForm, cantidad: Number(e.target.value) })}
             />
           </Field>
           <Field label="Precio unitario">
             <Input
               type="number"
-              value={form.precio_unitario}
-              onChange={(e) => setForm({ ...form, precio_unitario: Number(e.target.value) })}
+              value={editForm.precio_unitario}
+              onChange={(e) => setEditForm({ ...editForm, precio_unitario: Number(e.target.value) })}
             />
           </Field>
           <Field label="Descuento $">
             <Input
               type="number"
-              value={form.descuento_monto}
-              onChange={(e) => setForm({ ...form, descuento_monto: Number(e.target.value) })}
+              value={editForm.descuento_monto}
+              onChange={(e) => setEditForm({ ...editForm, descuento_monto: Number(e.target.value) })}
             />
           </Field>
           <Field label="Precio neto (calculado)">
-            <Input readOnly value={fARS(form.precio_unitario * form.cantidad - form.descuento_monto)} />
+            <Input readOnly value={fARS(editForm.precio_unitario * editForm.cantidad - editForm.descuento_monto)} />
           </Field>
           <Field label="Fecha">
-            <Input type="date" value={form.fecha} onChange={(e) => setForm({ ...form, fecha: e.target.value })} />
+            <Input type="date" value={editForm.fecha} onChange={(e) => setEditForm({ ...editForm, fecha: e.target.value })} />
           </Field>
           <Field label="Estado">
-            <Select value={form.estado} onChange={(e) => setForm({ ...form, estado: e.target.value as EstadoPedido })}>
+            <Select value={editForm.estado} onChange={(e) => setEditForm({ ...editForm, estado: e.target.value as EstadoPedido })}>
               {ESTADOS.map((e) => (
                 <option key={e} value={e}>
                   {e}
@@ -338,7 +549,7 @@ export function Pedidos() {
             </Select>
           </Field>
           <Field label="Canal">
-            <Select value={form.canal} onChange={(e) => setForm({ ...form, canal: e.target.value as Canal })}>
+            <Select value={editForm.canal} onChange={(e) => setEditForm({ ...editForm, canal: e.target.value as Canal })}>
               <option value="Minorista">Minorista</option>
               <option value="Mayorista">Mayorista</option>
             </Select>
@@ -346,22 +557,22 @@ export function Pedidos() {
           <Field label="Km de envío">
             <Input
               type="number"
-              value={form.km_envio}
-              onChange={(e) => setForm({ ...form, km_envio: Number(e.target.value) })}
+              value={editForm.km_envio}
+              onChange={(e) => setEditForm({ ...editForm, km_envio: Number(e.target.value) })}
             />
           </Field>
           <Field label="Costo de envío">
             <Input
               type="number"
-              value={form.costo_envio}
-              onChange={(e) => setForm({ ...form, costo_envio: Number(e.target.value) })}
+              value={editForm.costo_envio}
+              onChange={(e) => setEditForm({ ...editForm, costo_envio: Number(e.target.value) })}
             />
           </Field>
           <Field label="Método de pago">
-            <Input value={form.metodo_pago} onChange={(e) => setForm({ ...form, metodo_pago: e.target.value })} />
+            <Input value={editForm.metodo_pago} onChange={(e) => setEditForm({ ...editForm, metodo_pago: e.target.value })} />
           </Field>
           <Field label="Notas" full>
-            <Textarea rows={2} value={form.notas} onChange={(e) => setForm({ ...form, notas: e.target.value })} />
+            <Textarea rows={2} value={editForm.notas} onChange={(e) => setEditForm({ ...editForm, notas: e.target.value })} />
           </Field>
         </FormGrid>
       </Modal>
