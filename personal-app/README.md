@@ -62,6 +62,18 @@ Abrí [http://localhost:3000](http://localhost:3000).
 Copiá `.env.example` a `.env.local` y completá las mismas dos variables para
 probar el modo compartido en tu máquina antes de deployar.
 
+### 3. Instalarla como app en el celu y la compu
+
+Ya deployada en Vercel, es una PWA instalable (ícono propio, pantalla completa
+sin barra del navegador, funciona con conexión intermitente):
+
+- **Android (Chrome)**: abrí la URL → menú (⋮) → **Instalar app** (o el banner
+  que aparece solo).
+- **iPhone/iPad (Safari)**: abrí la URL → botón compartir (□↑) → **Agregar a
+  pantalla de inicio**.
+- **Computadora (Chrome/Edge)**: abrí la URL → ícono de instalar (⊕) en la
+  barra de direcciones, a la derecha.
+
 ## Estructura
 
 - `lib/types.ts` — esquema canónico de `personal_app_data`.
@@ -75,6 +87,8 @@ probar el modo compartido en tu máquina antes de deployar.
 - `components/pages/*` — un módulo por página: Dashboard, Calendario,
   Finanzas (resumen), Ingresos, Egresos, Historial.
 - `supabase/schema.sql` — migración a correr una sola vez en el SQL Editor de Supabase.
+- `app/manifest.ts`, `public/sw.js`, `components/PwaRegister.tsx` — soporte PWA
+  (instalable en celu/compu, ícono propio, shell disponible offline).
 
 ## Build
 
