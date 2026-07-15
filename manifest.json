@@ -1,0 +1,19 @@
+{
+  "name": "APEX FC — Rendimiento",
+  "short_name": "APEX FC",
+  "description": "App de entrenamiento de fútbol de alto rendimiento",
+  "start_url": "./index.html",
+  "display": "standalone",
+  "background_color": "#0A0A0B",
+  "theme_color": "#0A0A0B",
+  "orientation": "portrait-primary",
+  "lang": "es",
+  "icons": [
+    {
+      "src": "icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}
