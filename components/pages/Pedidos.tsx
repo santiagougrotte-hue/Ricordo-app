@@ -74,10 +74,8 @@ export function Pedidos() {
       .filter((p) => {
         if (!search) return true;
         const s = search.toLowerCase();
-        return (
-          p.nombre_producto.toLowerCase().includes(s) ||
-          clienteNombre(p.id_cliente).toLowerCase().includes(s)
-        );
+        const nombreCliente = data.clientes.find((c) => c.id === p.id_cliente)?.nombre ?? "";
+        return p.nombre_producto.toLowerCase().includes(s) || nombreCliente.toLowerCase().includes(s);
       })
       .sort((a, b) => new Date(b.fecha).getTime() - new Date(a.fecha).getTime());
   }, [data.pedidos, data.clientes, mes, anio, estadoFiltro, canalFiltro, search]);
@@ -226,10 +224,13 @@ export function Pedidos() {
                     <Td>{p.costo_envio ? fARS(p.costo_envio) : "—"}</Td>
                     <Td>{p.canal}</Td>
                     <Td>
+                      <div className="flex items-center gap-2">
+                        <Badge color={ESTADO_COLOR[p.estado]}>{p.estado}</Badge>
+                      </div>
                       <Select
                         value={p.estado}
                         onChange={(e) => cambiarEstado(p.id_detalle, e.target.value as EstadoPedido)}
-                        style={{ width: 120, padding: "4px 8px" }}
+                        style={{ width: 120, padding: "4px 8px", marginTop: 4 }}
                       >
                         {ESTADOS.map((e) => (
                           <option key={e} value={e}>

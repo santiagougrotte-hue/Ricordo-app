@@ -31,7 +31,7 @@ export function Proyeccion() {
         .reduce((a, m) => a + m.monto, 0);
       return { mes, anio, ventas, egresos };
     });
-  }, [data.pedidos, data.caja_movimientos]);
+  }, [data]);
 
   const promVentas = ultimos3.reduce((a, m) => a + m.ventas, 0) / 3;
   const promEgresos = ultimos3.reduce((a, m) => a + m.egresos, 0) / 3;

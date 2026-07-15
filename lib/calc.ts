@@ -1,10 +1,4 @@
-import type {
-  RicordoData,
-  Ingrediente,
-  Pedido,
-  Compra,
-  Produccion,
-} from "./types";
+import type { RicordoData, Ingrediente, Pedido } from "./types";
 
 export function fARS(n: number | null | undefined): string {
   const v = n ?? 0;

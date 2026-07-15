@@ -41,6 +41,8 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
+    // Load from localStorage post-mount (SSR has no window) — must stay in an effect.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setDataState(loadInitial());
     setReady(true);
   }, []);

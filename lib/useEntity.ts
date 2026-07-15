@@ -2,10 +2,10 @@ import { useStore } from "./store";
 import type { RicordoData } from "./types";
 
 type ArrayKeys = {
-  [K in keyof RicordoData]: RicordoData[K] extends any[] ? K : never;
+  [K in keyof RicordoData]: RicordoData[K] extends unknown[] ? K : never;
 }[keyof RicordoData];
 
-export function useEntityCrud<T extends Record<string, any>>(
+export function useEntityCrud<T>(
   key: ArrayKeys,
   idField: keyof T & string = "id" as keyof T & string
 ) {
@@ -15,13 +15,13 @@ export function useEntityCrud<T extends Record<string, any>>(
   const add = (item: T) =>
     setData((d) => ({ ...d, [key]: [...(d[key] as unknown as T[]), item] }));
 
-  const update = (id: any, patch: Partial<T>) =>
+  const update = (id: T[keyof T], patch: Partial<T>) =>
     setData((d) => ({
       ...d,
       [key]: (d[key] as unknown as T[]).map((x) => (x[idField] === id ? { ...x, ...patch } : x)),
     }));
 
-  const remove = (id: any) =>
+  const remove = (id: T[keyof T]) =>
     setData((d) => ({
       ...d,
       [key]: (d[key] as unknown as T[]).filter((x) => x[idField] !== id),

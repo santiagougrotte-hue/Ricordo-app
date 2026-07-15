@@ -19,7 +19,7 @@ import {
   Input,
   InfoRow,
 } from "@/components/ui";
-import type { RecetaLinea, TipoRecetaLinea } from "@/lib/types";
+import type { RecetaLinea, TipoRecetaLinea, Ingrediente, Packaging, CostoFijo } from "@/lib/types";
 
 export function Recetas() {
   const { data, setData } = useStore();
@@ -107,9 +107,9 @@ export function Recetas() {
               <Field label="Concepto">
                 <Select value={concepto} onChange={(e) => setConcepto(e.target.value)}>
                   <option value="">Seleccionar…</option>
-                  {opcionesConcepto.map((o: any) => (
+                  {opcionesConcepto.map((o: Ingrediente | Packaging | CostoFijo) => (
                     <option key={o.id} value={o.id}>
-                      {o.nombre ?? o.descripcion}
+                      {"nombre" in o ? o.nombre : o.descripcion}
                     </option>
                   ))}
                 </Select>

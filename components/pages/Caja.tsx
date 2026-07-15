@@ -58,7 +58,13 @@ export function Caja() {
   const egresosPeriodo = movsPeriodo.filter((m) => m.tipo === "egreso").reduce((a, m) => a + m.monto, 0);
   const saldoActual = saldoCaja(data);
 
-  let acumulado = data.saldo_anterior_caja.valor;
+  const movsConSaldo = useMemo(() => {
+    return movsPeriodo.reduce<Array<CajaMovimiento & { saldoAcumulado: number }>>((acc, m) => {
+      const previo = acc.length > 0 ? acc[acc.length - 1].saldoAcumulado : data.saldo_anterior_caja.valor;
+      const saldoAcumulado = previo + (m.tipo === "ingreso" ? m.monto : -m.monto);
+      return [...acc, { ...m, saldoAcumulado }];
+    }, []);
+  }, [movsPeriodo, data.saldo_anterior_caja]);
 
   function openNew() {
     setEditing(null);
@@ -130,34 +136,31 @@ export function Caja() {
                 </tr>
               </thead>
               <tbody>
-                {movsPeriodo.map((m) => {
-                  acumulado += m.tipo === "ingreso" ? m.monto : -m.monto;
-                  return (
-                    <TrHover key={m.id}>
-                      <Td>{m.fecha}</Td>
-                      <Td main>{m.concepto}</Td>
-                      <Td>
-                        <Badge color={m.tipo === "ingreso" ? "green" : "red"}>{m.tipo}</Badge>
-                      </Td>
-                      <Td className={m.tipo === "ingreso" ? "text-green" : "text-red"}>
-                        {m.tipo === "ingreso" ? "+" : "-"}
-                        {fARS(m.monto)}
-                      </Td>
-                      <Td>{m.metodo}</Td>
-                      <Td>{fARS(acumulado)}</Td>
-                      <Td>
-                        <div className="flex gap-1.5">
-                          <Button size="sm" variant="ghost" onClick={() => openEdit(m)}>
-                            Editar
-                          </Button>
-                          <Button size="sm" variant="danger" onClick={() => eliminar(m.id)}>
-                            Eliminar
-                          </Button>
-                        </div>
-                      </Td>
-                    </TrHover>
-                  );
-                })}
+                {movsConSaldo.map((m) => (
+                  <TrHover key={m.id}>
+                    <Td>{m.fecha}</Td>
+                    <Td main>{m.concepto}</Td>
+                    <Td>
+                      <Badge color={m.tipo === "ingreso" ? "green" : "red"}>{m.tipo}</Badge>
+                    </Td>
+                    <Td className={m.tipo === "ingreso" ? "text-green" : "text-red"}>
+                      {m.tipo === "ingreso" ? "+" : "-"}
+                      {fARS(m.monto)}
+                    </Td>
+                    <Td>{m.metodo}</Td>
+                    <Td>{fARS(m.saldoAcumulado)}</Td>
+                    <Td>
+                      <div className="flex gap-1.5">
+                        <Button size="sm" variant="ghost" onClick={() => openEdit(m)}>
+                          Editar
+                        </Button>
+                        <Button size="sm" variant="danger" onClick={() => eliminar(m.id)}>
+                          Eliminar
+                        </Button>
+                      </div>
+                    </Td>
+                  </TrHover>
+                ))}
               </tbody>
             </table>
           </TableWrap>

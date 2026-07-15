@@ -200,9 +200,12 @@ export function TableWrap({ children }: { children: React.ReactNode }) {
   return <div className="overflow-x-auto">{children}</div>;
 }
 
-export function Th({ children }: { children: React.ReactNode }) {
+export function Th({ children, title }: { children?: React.ReactNode; title?: string }) {
   return (
-    <th className="whitespace-nowrap border-b border-border px-3 py-2.5 text-left text-[10px] font-semibold uppercase tracking-[1.5px] text-text3">
+    <th
+      title={title}
+      className={`whitespace-nowrap border-b border-border px-3 py-2.5 text-left text-[10px] font-semibold uppercase tracking-[1.5px] text-text3 ${title ? "cursor-help decoration-dotted underline-offset-2 hover:underline" : ""}`}
+    >
       {children}
     </th>
   );
@@ -213,7 +216,7 @@ export function Td({
   main,
   className = "",
 }: {
-  children: React.ReactNode;
+  children?: React.ReactNode;
   main?: boolean;
   className?: string;
 }) {

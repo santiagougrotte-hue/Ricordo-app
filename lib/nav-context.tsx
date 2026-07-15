@@ -23,6 +23,8 @@ export function RouterProvider({ children }: { children: React.ReactNode }) {
   const [collapsed, setCollapsed] = useState(false);
 
   useEffect(() => {
+    // Sync from the URL hash post-mount (SSR has no window) — must stay in an effect.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setPage(pageFromHash());
     const onHash = () => setPage(pageFromHash());
     window.addEventListener("hashchange", onHash);

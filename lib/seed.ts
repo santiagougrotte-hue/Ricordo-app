@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any -- adapter for loosely-typed legacy export data */
 import { emptyData } from "./types";
 import type { RicordoData } from "./types";
 import { uid } from "./id";

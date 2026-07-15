@@ -24,6 +24,18 @@ import { CostosIndirectos } from "./CostosIndirectos";
 import { PuntoEquilibrio } from "./PuntoEquilibrio";
 import { CMV } from "./CMV";
 import { HistorialPrecios } from "./HistorialPrecios";
+import { AnRentabilidad } from "./AnRentabilidad";
+import { AnProductos } from "./AnProductos";
+import { AnClientes } from "./AnClientes";
+import { AnAnual } from "./AnAnual";
+import { Simulador } from "./Simulador";
+import { PEVivo } from "./PEVivo";
+import { Costeo } from "./Costeo";
+import { ROI } from "./ROI";
+import { Elasticidad } from "./Elasticidad";
+import { CapTrabajo } from "./CapTrabajo";
+import { Payback } from "./Payback";
+import { Config } from "./Config";
 
 export const PAGES: Record<string, React.ComponentType> = Object.fromEntries(
   NAV.flatMap((g) => g.items.map((i) => [i.key, Placeholder]))
@@ -52,3 +64,15 @@ PAGES["costos-indirectos"] = CostosIndirectos;
 PAGES["punto-equilibrio"] = PuntoEquilibrio;
 PAGES.cmv = CMV;
 PAGES["historial-precios"] = HistorialPrecios;
+PAGES["an-rentabilidad"] = AnRentabilidad;
+PAGES["an-productos"] = AnProductos;
+PAGES["an-clientes"] = AnClientes;
+PAGES["an-anual"] = AnAnual;
+PAGES.simulador = Simulador;
+PAGES["pe-vivo"] = PEVivo;
+PAGES.costeo = Costeo;
+PAGES.roi = ROI;
+PAGES.elasticidad = Elasticidad;
+PAGES["cap-trabajo"] = CapTrabajo;
+PAGES.payback = Payback;
+PAGES.config = Config;

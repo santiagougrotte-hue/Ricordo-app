@@ -14,7 +14,7 @@ export function Dashboard() {
     () => data.pedidos.filter((p) => inPeriod(p.fecha, mes, anio)),
     [data.pedidos, mes, anio]
   );
-  const activos = pedidosPeriodo.filter((p) => p.estado !== "Cancelado");
+  const activos = useMemo(() => pedidosPeriodo.filter((p) => p.estado !== "Cancelado"), [pedidosPeriodo]);
 
   const ventasMes = activos.reduce((acc, p) => acc + p.precio_neto, 0);
   const pedidosUnicos = new Set(activos.map((p) => p.id_pedido)).size;
