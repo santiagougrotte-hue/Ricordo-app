@@ -1,4 +1,4 @@
-import type { RicordoData, Ingrediente, Pedido, TipoCosto } from "./types";
+import type { RicordoData, Ingrediente, Pedido, TipoCosto, Amortizacion } from "./types";
 
 export function fARS(n: number | null | undefined): string {
   const v = n ?? 0;
@@ -145,9 +145,73 @@ export function costosVariablesTotales(data: RicordoData, pedidos: Pedido[], mes
   return cmvPeriodo(data, pedidos) + totalCostoEnvio(pedidos) + totalCostosIndirectosPorTipo(data, mes, anio, "Variable");
 }
 
-/** Costos fijos + costos indirectos clasificados como Fijo en el período */
+function addMonths(date: Date, months: number): Date {
+  const d = new Date(date);
+  d.setMonth(d.getMonth() + months);
+  return d;
+}
+
+export function cuotaMensualAmortizacion(a: Amortizacion): number {
+  return a.meses_totales > 0 ? a.precio_total / a.meses_totales : 0;
+}
+
+/** Fecha en la que termina de amortizarse (primer día en que ya no corre cuota) */
+export function fechaFinAmortizacion(a: Amortizacion): Date {
+  return addMonths(new Date(a.fecha_inicio), a.meses_totales);
+}
+
+/** Meses ya transcurridos (cuotas "pagadas"), calculado a partir de la fecha — nunca manual */
+export function mesesTranscurridosAmortizacion(a: Amortizacion, hoy: Date = new Date()): number {
+  const inicio = new Date(a.fecha_inicio);
+  let diff = (hoy.getFullYear() - inicio.getFullYear()) * 12 + (hoy.getMonth() - inicio.getMonth());
+  if (hoy.getDate() < inicio.getDate()) diff -= 1;
+  return Math.max(0, Math.min(a.meses_totales, diff));
+}
+
+export function amortizacionActiva(a: Amortizacion, hoy: Date = new Date()): boolean {
+  return mesesTranscurridosAmortizacion(a, hoy) < a.meses_totales;
+}
+
+export function montoAmortizado(a: Amortizacion, hoy: Date = new Date()): number {
+  return cuotaMensualAmortizacion(a) * mesesTranscurridosAmortizacion(a, hoy);
+}
+
+export function montoRestanteAmortizacion(a: Amortizacion, hoy: Date = new Date()): number {
+  return a.precio_total - montoAmortizado(a, hoy);
+}
+
+export function mesesRestantesAmortizacion(a: Amortizacion, hoy: Date = new Date()): number {
+  return a.meses_totales - mesesTranscurridosAmortizacion(a, hoy);
+}
+
+/** Cuota que corresponde a un (mes, año) puntual — 0 si todavía no arrancó o ya terminó */
+export function cuotaAmortizacionEnPeriodo(a: Amortizacion, mes: number, anio: number): number {
+  const inicio = new Date(a.fecha_inicio);
+  const inicioMes = new Date(inicio.getFullYear(), inicio.getMonth(), 1);
+  const fin = fechaFinAmortizacion(a);
+  const targetStart = new Date(anio, mes - 1, 1);
+  if (targetStart < inicioMes) return 0;
+  if (targetStart >= new Date(fin.getFullYear(), fin.getMonth(), 1)) return 0;
+  return cuotaMensualAmortizacion(a);
+}
+
+export function totalAmortizacionesPeriodo(data: RicordoData, mes: number, anio: number): number {
+  return data.amortizaciones.reduce((acc, a) => acc + cuotaAmortizacionEnPeriodo(a, mes, anio), 0);
+}
+
+export function totalAmortizacionMensualActiva(data: RicordoData, hoy: Date = new Date()): number {
+  return data.amortizaciones
+    .filter((a) => amortizacionActiva(a, hoy))
+    .reduce((acc, a) => acc + cuotaMensualAmortizacion(a), 0);
+}
+
+/** Costos fijos + costos indirectos clasificados como Fijo + cuota de amortizaciones activas en el período */
 export function costosFijosTotales(data: RicordoData, mes: number, anio: number): number {
-  return totalCostosFijos(data) + totalCostosIndirectosPorTipo(data, mes, anio, "Fijo");
+  return (
+    totalCostosFijos(data) +
+    totalCostosIndirectosPorTipo(data, mes, anio, "Fijo") +
+    totalAmortizacionesPeriodo(data, mes, anio)
+  );
 }
 
 export function totalGastosOperativos(data: RicordoData, mes: number, anio: number): number {

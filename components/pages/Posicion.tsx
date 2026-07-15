@@ -3,7 +3,7 @@
 import React, { useState } from "react";
 import { useStore } from "@/lib/store";
 import { useToast } from "@/lib/toast";
-import { fARS, saldoCaja, totalCostosFijos, totalCostosIndirectos } from "@/lib/calc";
+import { fARS, saldoCaja, totalCostosFijos, totalCostosIndirectos, totalAmortizacionesPeriodo } from "@/lib/calc";
 import { usePeriod } from "@/lib/period";
 import { PageHeader, Card, StatGrid, KpiCard, Field, Input, Button, InfoRow } from "@/components/ui";
 
@@ -16,7 +16,8 @@ export function Posicion() {
   const saldoSistema = saldoCaja(data);
   const cf = totalCostosFijos(data);
   const ci = totalCostosIndirectos(data, mes, anio);
-  const compromisos = cf + ci;
+  const amort = totalAmortizacionesPeriodo(data, mes, anio);
+  const compromisos = cf + ci + amort;
   const posicionNeta = efectivo - compromisos;
 
   function guardar() {
@@ -51,6 +52,7 @@ export function Posicion() {
         <Card title="Compromisos del mes">
           <InfoRow label="Costos fijos" value={fARS(cf)} />
           <InfoRow label="Costos indirectos" value={fARS(ci)} />
+          <InfoRow label="Amortizaciones" value={fARS(amort)} />
           <InfoRow label="Total compromisos" value={fARS(compromisos)} color="orange" />
         </Card>
       </div>

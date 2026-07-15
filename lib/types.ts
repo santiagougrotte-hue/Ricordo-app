@@ -123,6 +123,14 @@ export interface CostoIndirecto {
   tipo_costo: TipoCosto;
 }
 
+export interface Amortizacion {
+  id: string;
+  nombre: string;
+  precio_total: number;
+  fecha_inicio: string;
+  meses_totales: number;
+}
+
 export interface GastoOperativo {
   id: string;
   fecha: string;
@@ -259,6 +267,7 @@ export interface RicordoData {
   compras: Compra[];
   costos_fijos: CostoFijo[];
   costos_indirectos: CostoIndirecto[];
+  amortizaciones: Amortizacion[];
   gastos_operativos: GastoOperativo[];
   gastos_inversion: GastoInversion[];
   caja_movimientos: CajaMovimiento[];
@@ -297,6 +306,7 @@ export function emptyData(): RicordoData {
     compras: [],
     costos_fijos: [],
     costos_indirectos: [],
+    amortizaciones: [],
     gastos_operativos: [],
     gastos_inversion: [],
     caja_movimientos: [],

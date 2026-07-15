@@ -56,6 +56,7 @@ const NAV_RAW: NavGroup[] = [
       { key: "eerr", label: "EERR", icon: "📋" },
       { key: "costos-fijos", label: "Costos Fijos", icon: "🏠" },
       { key: "costos-indirectos", label: "Costos Indirectos", icon: "🧾" },
+      { key: "amortizaciones", label: "Amortizaciones", icon: "🏗️" },
       { key: "punto-equilibrio", label: "Punto de Equilibrio", icon: "⚙️" },
       { key: "cmv", label: "CMV", icon: "🥩" },
       { key: "historial-precios", label: "Historial Precios", icon: "📉" },
