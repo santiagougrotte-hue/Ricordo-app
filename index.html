@@ -601,6 +601,20 @@ svg.chart{width:100%; height:150px; overflow:visible;}
   </div>
 </div>
 
+<!-- ================= NUTRICIÓN ================= -->
+<div class="view" id="view-nutricion">
+  <h2 style="font-size:22px; margin-bottom:4px;">Nutrición</h2>
+  <div style="font-size:12.5px; color:var(--text-faint); margin-bottom:18px;">Plan de alimentación personalizado</div>
+
+  <div id="nutricion-content">
+    <div class="card" style="text-align:center; padding:40px 20px;">
+      <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="var(--text-faint)" stroke-width="1.5" style="margin:0 auto 16px; display:block;"><path d="M12 2a9 9 0 00-9 9c0 4.17 2.84 7.67 6.69 8.69L12 22l2.31-2.31C18.16 18.67 21 15.17 21 11a9 9 0 00-9-9z"/><path d="M12 8v4M10 10h4"/></svg>
+      <div style="font-size:15px; font-weight:600; margin-bottom:8px;">Plan próximamente</div>
+      <div style="font-size:13px; color:var(--text-faint); line-height:1.6;">Tu plan de nutrición va a aparecer acá una vez que lo carguemos.</div>
+    </div>
+  </div>
+</div>
+
 <!-- ================= NAV ================= -->
 <div class="bottomnav">
   <button class="navbtn active" data-view="dashboard" onclick="Router.go('dashboard')">
@@ -622,6 +636,10 @@ svg.chart{width:100%; height:150px; overflow:visible;}
   <button class="navbtn" data-view="biblioteca" onclick="Router.go('biblioteca')">
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 19.5A2.5 2.5 0 016.5 17H20V4H6.5A2.5 2.5 0 004 6.5v13z"/></svg>
     Librería<span class="navdot"></span>
+  </button>
+  <button class="navbtn" data-view="nutricion" onclick="Router.go('nutricion')">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2a9 9 0 00-9 9c0 4.17 2.84 7.67 6.69 8.69L12 22l2.31-2.31C18.16 18.67 21 15.17 21 11a9 9 0 00-9-9z"/><path d="M12 8v4M10 10h4"/></svg>
+    Nutrición<span class="navdot"></span>
   </button>
 </div>
 
@@ -1080,6 +1098,7 @@ const Router = {
     if(view==='plan') Plan.render();
     if(view==='progreso'){ Tracker.renderPRList(); Tracker.renderChart(); History.render(); }
     if(view==='biblioteca') Library.render();
+    if(view==='nutricion') Nutricion.render();
     window.scrollTo(0,0);
   }
 };
@@ -1697,6 +1716,13 @@ if('serviceWorker' in navigator){
     navigator.serviceWorker.register('sw.js').catch(()=>{});
   });
 }
+
+/* ---------- Nutrición ---------- */
+const Nutricion = {
+  render(){
+    // La dieta se carga aquí — por ahora muestra el placeholder
+  }
+};
 
 /* ---------- ExerciseSwap ---------- */
 const ExerciseSwap = {
