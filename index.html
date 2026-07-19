@@ -604,15 +604,16 @@ svg.chart{width:100%; height:150px; overflow:visible;}
 <!-- ================= NUTRICIÓN ================= -->
 <div class="view" id="view-nutricion">
   <h2 style="font-size:22px; margin-bottom:4px;">Nutrición</h2>
-  <div style="font-size:12.5px; color:var(--text-faint); margin-bottom:18px;">Plan de alimentación personalizado</div>
+  <div style="font-size:12.5px; color:var(--text-faint); margin-bottom:14px;">Recomposición corporal · Proteína fija: <span class="mono" style="color:var(--accent);">185 g/día</span></div>
 
-  <div id="nutricion-content">
-    <div class="card" style="text-align:center; padding:40px 20px;">
-      <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="var(--text-faint)" stroke-width="1.5" style="margin:0 auto 16px; display:block;"><path d="M12 2a9 9 0 00-9 9c0 4.17 2.84 7.67 6.69 8.69L12 22l2.31-2.31C18.16 18.67 21 15.17 21 11a9 9 0 00-9-9z"/><path d="M12 8v4M10 10h4"/></svg>
-      <div style="font-size:15px; font-weight:600; margin-bottom:8px;">Plan próximamente</div>
-      <div style="font-size:13px; color:var(--text-faint); line-height:1.6;">Tu plan de nutrición va a aparecer acá una vez que lo carguemos.</div>
-    </div>
+  <div class="tabs" id="nutri-day-tabs">
+    <div class="tab active" data-nday="futbol" onclick="Nutricion.setDay('futbol')">Fútbol mañana</div>
+    <div class="tab" data-nday="gymMediodia" onclick="Nutricion.setDay('gymMediodia')">Gym mediodía</div>
+    <div class="tab" data-nday="gymNoche" onclick="Nutricion.setDay('gymNoche')">Gym noche</div>
+    <div class="tab" data-nday="descanso" onclick="Nutricion.setDay('descanso')">Descanso</div>
   </div>
+
+  <div id="nutricion-day-content" style="margin-top:14px;"></div>
 </div>
 
 <!-- ================= NAV ================= -->
@@ -1718,9 +1719,111 @@ if('serviceWorker' in navigator){
 }
 
 /* ---------- Nutrición ---------- */
+const NUTRI = {
+  plateMethods:[
+    {quad:'½ Verduras / frutas', detail:'Color y volumen en cada comida, sin restricción.'},
+    {quad:'¼ Proteína', detail:'Carne magra, pollo, pescado, huevo, legumbres.'},
+    {quad:'¼ Hidratos', detail:'Arroz, papa, batata, pasta, pan, legumbres.'},
+    {quad:'+ Grasa de calidad', detail:'Aceite de oliva, palta, frutos secos — una porción por comida.'}
+  ],
+  plateRule:'El cuadrante de hidratos se llena entero si la comida está cerca del entreno, y se achica (más verdura/grasa) si está lejos.',
+  days:{
+    futbol:{label:'Fútbol mañana + producción', kcal:'~2750–2800 kcal', meals:[
+      {name:'Desayuno', sub:'Pre-fútbol · liviano', opts:['2 tostadas + banana + café','Avena (40g) con leche + miel','2 huevos revueltos + 1 rodaja de pan']},
+      {name:'Almuerzo', sub:'Post-fútbol · comida fuerte del día', opts:['Pollo grillado + arroz + ensalada + aceite de oliva','Carne magra + puré de batata + verduras salteadas','Sorrentinos Ricordo con salsa liviana + ensalada + proteína extra (pollo o atún)']},
+      {name:'Merienda', sub:'Hidrato bajo', opts:['Yogur (200g) + frutos secos (25g) + 1 fruta chica','2 huevos duros + palta (¼ unidad)']},
+      {name:'Cena', sub:'Reducida en hidratos', opts:['Pescado + verduras al horno + palta','Milanesa de pollo al horno + ensalada grande + aceite de oliva','Revuelto de verduras + huevo + queso']},
+      {name:'Colación nocturna', sub:'Opcional — antes de dormir', opts:['1 yogur o 30g de queso + puñado (20-25g) de frutos secos']}
+    ]},
+    gymMediodia:{label:'Gym al mediodía + producción', kcal:'~2550–2600 kcal', meals:[
+      {name:'Desayuno', sub:'Liviano', opts:['Café + 2 huevos','Yogur + frutos secos']},
+      {name:'Pre-gym', sub:'60-90 min antes (si hay tiempo)', opts:['1 banana o 1 fruta chica']},
+      {name:'Almuerzo / Post-gym', sub:'Comida fuerte del día', opts:['Carne + arroz + ensalada + aceite','Pollo + fideos/ravioles Ricordo + salsa liviana','Pescado + puré de papa + verduras']},
+      {name:'Merienda', sub:'Hidrato bajo', opts:['Yogur + nueces (25g)','Queso port salut (2 fetas) + tomate']},
+      {name:'Cena', sub:'Reducida en hidratos', opts:['Pollo + ensalada grande + palta','Pescado + verduras salteadas + aceite de oliva','Tortilla de verduras + ensalada']},
+      {name:'Colación nocturna', sub:'Opcional', opts:['Yogur + fruta chica']}
+    ]},
+    gymNoche:{label:'Gym a la noche + producción', kcal:'~2550–2600 kcal', meals:[
+      {name:'Desayuno', sub:'Liviano', opts:['Café + huevos o yogur — sin hidrato cargado']},
+      {name:'Almuerzo', sub:'Hidratos bajos — lejos del entreno', opts:['Pollo + ensalada grande + aceite de oliva','Pescado + verduras salteadas + palta','Carne + verduras al horno']},
+      {name:'Merienda / Pre-gym', sub:'Acá entra el hidrato', opts:['Banana + whey (o 2 fetas de pan + mermelada)','Tostadas + miel + café']},
+      {name:'Cena / Post-gym', sub:'Comida fuerte del día', opts:['Carne + arroz o papa + ensalada','Pollo + ravioles/sorrentinos Ricordo + salsa','Pescado + puré + verduras']},
+      {name:'Colación nocturna', sub:'Opcional', opts:['Yogur + frutos secos']}
+    ]},
+    descanso:{label:'Sin entreno', kcal:'~2100 kcal', meals:[
+      {name:'Desayuno', sub:'', opts:['Café + huevos o yogur con frutos secos']},
+      {name:'Almuerzo', sub:'', opts:['Proteína + verduras + grasa (aceite/palta) — hidrato chico opcional (1 papa o 2 cdas de arroz)']},
+      {name:'Merienda', sub:'', opts:['Yogur + fruta chica','Queso + frutos secos (20g)']},
+      {name:'Cena', sub:'', opts:['Proteína + verduras + grasa — hidrato mínimo o nulo']}
+    ]}
+  },
+  rules:[
+    'El cuadrante de hidratos "viaja" con el entreno: se llena en la comida más cercana, se achica en las alejadas.',
+    'Verduras libres, sin límite, en todas las comidas.',
+    'Grasa de calidad: una porción por comida, no acumular en varias.',
+    'Proteína: 185 g repartidos en todas las comidas, no solo almuerzo/cena.'
+  ]
+};
+
 const Nutricion = {
+  _day: 'futbol',
+  setDay(d){
+    this._day = d;
+    document.querySelectorAll('#nutri-day-tabs .tab').forEach(t => t.classList.toggle('active', t.dataset.nday === d));
+    this.renderDay();
+  },
+  renderDay(){
+    const day = NUTRI.days[this._day];
+    const el = document.getElementById('nutricion-day-content');
+    if(!el || !day) return;
+
+    const mealsHtml = day.meals.map(m => `
+      <div style="background:var(--surface-1);border:1px solid var(--border);border-radius:12px;padding:14px 14px 10px;margin-bottom:10px;">
+        <div style="display:flex;align-items:baseline;gap:8px;margin-bottom:6px;">
+          <span style="font-size:14px;font-weight:600;">${m.name}</span>
+          ${m.sub ? `<span style="font-size:11px;color:var(--text-faint);">${m.sub}</span>` : ''}
+        </div>
+        ${m.opts.length === 1
+          ? `<div style="font-size:13px;color:var(--text-secondary);line-height:1.5;">${m.opts[0]}</div>`
+          : m.opts.map((o,i) => `<div style="font-size:13px;color:var(--text-secondary);line-height:1.5;display:flex;gap:6px;margin-bottom:2px;"><span style="color:var(--accent);font-weight:600;flex:none;">${String.fromCharCode(65+i)}.</span><span>${o}</span></div>`).join('')
+        }
+      </div>
+    `).join('');
+
+    const plateHtml = `
+      <div style="background:var(--surface-1);border:1px solid var(--border);border-radius:12px;padding:14px;margin-bottom:10px;">
+        <div style="font-size:13px;font-weight:600;margin-bottom:8px;color:var(--text-secondary);">Método del plato</div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-bottom:8px;">
+          ${NUTRI.plateMethods.map(p => `
+            <div style="background:var(--surface-2);border-radius:8px;padding:8px 10px;">
+              <div style="font-size:11.5px;font-weight:600;color:var(--accent);margin-bottom:2px;">${p.quad}</div>
+              <div style="font-size:11px;color:var(--text-faint);line-height:1.4;">${p.detail}</div>
+            </div>
+          `).join('')}
+        </div>
+        <div style="font-size:11.5px;color:var(--text-faint);line-height:1.5;border-top:1px solid var(--border);padding-top:8px;">${NUTRI.plateRule}</div>
+      </div>
+    `;
+
+    const rulesHtml = `
+      <div style="background:var(--surface-1);border:1px solid var(--border);border-radius:12px;padding:14px;margin-bottom:10px;">
+        <div style="font-size:13px;font-weight:600;margin-bottom:8px;color:var(--text-secondary);">Reglas generales</div>
+        ${NUTRI.rules.map(r => `<div style="font-size:12.5px;color:var(--text-faint);line-height:1.5;display:flex;gap:8px;margin-bottom:6px;"><span style="color:var(--accent);flex:none;">—</span><span>${r}</span></div>`).join('')}
+      </div>
+    `;
+
+    el.innerHTML = `
+      <div style="display:flex;align-items:baseline;gap:8px;margin-bottom:12px;">
+        <span style="font-size:15px;font-weight:600;">${day.label}</span>
+        <span class="mono" style="font-size:12px;color:var(--accent);">${day.kcal}</span>
+      </div>
+      ${mealsHtml}
+      ${plateHtml}
+      ${rulesHtml}
+    `;
+  },
   render(){
-    // La dieta se carga aquí — por ahora muestra el placeholder
+    this.renderDay();
   }
 };
 
