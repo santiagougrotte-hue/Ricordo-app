@@ -12,6 +12,8 @@ const eslintConfig = defineConfig([
     "out/**",
     "build/**",
     "next-env.d.ts",
+    // personal-app is an independent Next.js project with its own config.
+    "personal-app/**",
   ]),
 ]);
 
