@@ -666,6 +666,19 @@ svg.chart{width:100%; height:150px; overflow:visible;}
   </div>
 </div>
 
+<!-- ================= MODAL: Cambiar ejercicio ================= -->
+<div class="modal-backdrop" id="swap-modal">
+  <div class="modal">
+    <div class="modal-handle"></div>
+    <div class="modal-close" onclick="Modal.close('swap-modal')">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 6L6 18M6 6l12 12"/></svg>
+    </div>
+    <h3 class="modal-title" id="swap-modal-title">Cambiar ejercicio</h3>
+    <p style="font-size:12px; color:var(--text-faint); margin:6px 0 14px;">Ejercicios del mismo tipo. Tocá uno para reemplazarlo en esta sesión.</p>
+    <div id="swap-modal-list"></div>
+  </div>
+</div>
+
 <div class="toast" id="toast"></div>
 
 <script>
@@ -687,6 +700,7 @@ const State = {
     // asegurar que claves nuevas existan aunque el JSON guardado sea de una versión anterior
     if(!this.data.progressionLogs) this.data.progressionLogs = {};
     if(!this.data.sessionHistory) this.data.sessionHistory = [];
+    if(!this.data.exerciseSwaps) this.data.exerciseSwaps = {};
     return this.data;
   },
   save(){ localStorage.setItem(STORE_KEY, JSON.stringify(this.data)); },
@@ -701,7 +715,8 @@ const State = {
       wellness:{}, // date -> {weight,sleep,soreness}
       sessionsCompleted:{}, // `${week}` -> count de sesiones completas (derivado de sessionHistory)
       progressionLogs:{}, // exerciseId -> { w1:{peso,series,reps,rpe,obs}, ... w6:{...} }
-      sessionHistory:[] // [{week, day, dayLabel, dayType, phase, date, exercisesTotal, exercisesDone, complete}]
+      sessionHistory:[], // [{week, day, dayLabel, dayType, phase, date, exercisesTotal, exercisesDone, complete}]
+      exerciseSwaps:{} // key: `${week}-${day}-${origExId}` -> newExId
     };
   }
 };
@@ -1222,24 +1237,28 @@ const Plan = {
                 afterHeader=true;
               }
               prevGroup = group;
-              const ex = EX[it.id];
+              const swapKey = `${s.currentWeek}-${s.currentDay}-${it.id}`;
+              const actualId = (s.exerciseSwaps && s.exerciseSwaps[swapKey]) || it.id;
+              const isSwapped = actualId !== it.id;
+              const ex = EX[actualId];
               const key = `${s.currentWeek}-${s.currentDay}-${it.id}`;
               const done = !!s.completedExercises[key];
               const supLabel = it.sup ? `<span class="mono" style="color:var(--accent); margin-right:4px;">${it.sup}.</span>` : '';
               const noBorder = isFirst || afterHeader;
               isFirst = false;
-              const progBtn = b.trackProgression ? `<button class="prog-toggle" onclick="Progression.toggle(event,'${it.id}')" title="Registro de progresión">📊</button>` : '';
-              const progTable = b.trackProgression ? `<div class="progression-wrap" id="progwrap-${it.id}" style="display:none;"></div>` : '';
+              const progBtn = b.trackProgression ? `<button class="prog-toggle" onclick="Progression.toggle(event,'${actualId}')" title="Registro de progresión">📊</button>` : '';
+              const progTable = b.trackProgression ? `<div class="progression-wrap" id="progwrap-${actualId}" style="display:none;"></div>` : '';
+              const swapBtn = `<button class="prog-toggle" onclick="ExerciseSwap.open('${swapKey}','${it.id}')" title="Cambiar ejercicio" style="${isSwapped?'color:var(--accent);border-color:var(--accent);':''}"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 7h16m0 0-4-4m4 4-4 4M20 17H4m0 0 4 4m-4-4 4-4"/></svg></button>`;
               html += `<div class="exercise-row-wrap ${noBorder?'no-border':''}">
                 <div class="exercise-row">
                   <div class="ex-check ${done?'done':''}" onclick="Plan.toggleDone(event,'${key}')">
                     ${done? '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M5 13l4 4L19 7"/></svg>':''}
                   </div>
-                  <div class="ex-info" onclick="Library.openModal('${it.id}', ${JSON.stringify(it).replace(/"/g,'&quot;')})">
+                  <div class="ex-info" onclick="Library.openModal('${actualId}', ${JSON.stringify(it).replace(/"/g,'&quot;')})">
                     <div class="ex-name ${done?'done-text':''}">${supLabel}${ex.name}</div>
                     <div class="ex-detail">${it.sets}x${it.reps}${it.rest!=='—'?' · desc '+it.rest:''} · RPE ${it.rpe} ${it.load!=='—'? '· '+it.load:''}</div>
                   </div>
-                  ${progBtn}
+                  ${swapBtn}${progBtn}
                   <svg class="ex-arrow" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 18l6-6-6-6"/></svg>
                 </div>
                 ${progTable}
@@ -1678,6 +1697,44 @@ if('serviceWorker' in navigator){
     navigator.serviceWorker.register('sw.js').catch(()=>{});
   });
 }
+
+/* ---------- ExerciseSwap ---------- */
+const ExerciseSwap = {
+  _swapKey: null,
+  _origId: null,
+  open(swapKey, origId){
+    this._swapKey = swapKey;
+    this._origId = origId;
+    const cat = EX[origId].cat;
+    const currentId = (State.data.exerciseSwaps && State.data.exerciseSwaps[swapKey]) || origId;
+    document.getElementById('swap-modal-title').textContent = `Reemplazar: ${EX[origId].name}`;
+    const list = document.getElementById('swap-modal-list');
+    const options = Object.entries(EX).filter(([id]) => EX[id].cat === cat);
+    list.innerHTML = options.map(([id, ex]) => `
+      <div class="lib-card" onclick="ExerciseSwap.select('${id}')" style="${id===currentId?'border-color:var(--accent);background:var(--surface-2);':''}">
+        <div class="lib-icon">${Library.icon(ex.cat)}</div>
+        <div style="flex:1; min-width:0;">
+          <div class="lib-name">${ex.name}</div>
+          <div class="lib-cat">${ex.muscles}</div>
+        </div>
+        ${id===currentId?'<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="2.5" style="flex:none"><path d="M5 13l4 4L19 7"/></svg>':''}
+      </div>
+    `).join('');
+    Modal.open('swap-modal');
+  },
+  select(newId){
+    const s = State.data;
+    if(newId === this._origId){
+      delete s.exerciseSwaps[this._swapKey];
+    } else {
+      s.exerciseSwaps[this._swapKey] = newId;
+    }
+    State.save();
+    Modal.close('swap-modal');
+    Plan.renderBlocks();
+    Toast.show('Ejercicio actualizado ✓');
+  }
+};
 
 /* ---------- Init ---------- */
 State.load();
