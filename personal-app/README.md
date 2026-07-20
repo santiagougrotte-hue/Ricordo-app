@@ -2,8 +2,9 @@
 
 App personal con dos módulos: un calendario de eventos (vista mensual y
 semanal, categorías con color) y finanzas personales (sueldo fijo, ingresos
-adicionales, gastos únicos y en cuotas, dashboard con balance y proyección).
-Next.js (App Router) + Tailwind CSS, client-side routing por hash.
+adicionales, gastos únicos y en cuotas, inversión como contador aparte del
+balance, dashboard con balance y proyección). Next.js (App Router) +
+Tailwind CSS, client-side routing por hash.
 
 Es un proyecto **independiente** dentro de este repositorio: su propio
 `package.json`, sin compartir código con la app de Ricordo Pasta que vive en
@@ -80,12 +81,12 @@ sin barra del navegador, funciona con conexión intermitente):
 - `lib/store.tsx` — estado global: local-first (`localStorage`) con
   sincronización a Supabase (una fila JSONB + realtime) cuando está configurado.
 - `lib/calc.ts` — cálculos: cuotas mensuales, balance, proyección del mes
-  siguiente, gastos por categoría, próximos eventos.
+  siguiente, gastos por categoría, evolución mensual de inversión, próximos eventos.
 - `lib/date.ts` — helpers de fechas para las grillas del calendario.
 - `lib/nav.ts` / `lib/nav-context.tsx` — navegación y ruteo client-side.
 - `components/ui.tsx` — sistema de diseño (cards, tablas, badges, formularios).
 - `components/pages/*` — un módulo por página: Dashboard, Calendario,
-  Finanzas (resumen), Ingresos, Egresos, Historial.
+  Finanzas (resumen), Ingresos, Egresos, Inversión, Historial.
 - `supabase/schema.sql` — migración a correr una sola vez en el SQL Editor de Supabase.
 - `app/manifest.ts`, `public/sw.js`, `components/PwaRegister.tsx` — soporte PWA
   (instalable en celu/compu, ícono propio, shell disponible offline).

@@ -3,6 +3,7 @@
 import React from "react";
 import { useStore } from "@/lib/store";
 import { usePeriod } from "@/lib/period";
+import { useRouter } from "@/lib/nav-context";
 import {
   balanceMes,
   fARS,
@@ -10,13 +11,16 @@ import {
   proyeccionCuotasMesSiguiente,
   totalEgresosMes,
   totalIngresosMes,
+  totalInversionAnio,
+  totalInversionMes,
 } from "@/lib/calc";
 import { MESES } from "@/lib/date";
-import { BarRow, Card, EmptyState, KpiCard, PageHeader, StatGrid } from "@/components/ui";
+import { BarRow, Button, Card, EmptyState, KpiCard, PageHeader, StatGrid } from "@/components/ui";
 
 export function Finanzas() {
   const { data } = useStore();
   const { mes, anio } = usePeriod();
+  const { go } = useRouter();
 
   const ingresos = totalIngresosMes(data, mes, anio);
   const egresos = totalEgresosMes(data, mes, anio);
@@ -26,6 +30,10 @@ export function Finanzas() {
 
   const porCategoria = gastosPorCategoria(data, mes, anio);
   const maxCategoria = Math.max(1, ...porCategoria.map((c) => c.monto));
+
+  const hoy = new Date();
+  const inversionMesActual = totalInversionMes(data, hoy.getMonth() + 1, hoy.getFullYear());
+  const inversionAnioActual = totalInversionAnio(data, hoy.getFullYear());
 
   return (
     <div>
@@ -42,6 +50,17 @@ export function Finanzas() {
           sub="cuotas activas el mes que viene"
         />
       </StatGrid>
+
+      <Card
+        title="Inversión"
+        className="mb-4"
+        right={<Button size="sm" variant="ghost" onClick={() => go("inversion")}>Ver detalle</Button>}
+      >
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+          <KpiCard label="Invertido este mes" value={fARS(inversionMesActual)} color="purple" />
+          <KpiCard label={`Invertido en ${hoy.getFullYear()}`} value={fARS(inversionAnioActual)} color="purple" />
+        </div>
+      </Card>
 
       <Card title="Gastos por categoría">
         {porCategoria.length === 0 ? (

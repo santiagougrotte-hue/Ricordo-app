@@ -28,6 +28,10 @@ export function inPeriod(fecha: string, mes: number, anio: number): boolean {
   return d.mes === mes && d.anio === anio;
 }
 
+export function inYear(fecha: string, anio: number): boolean {
+  return ym(fecha).anio === anio;
+}
+
 /** Cuánto vale cada cuota mensual de un gasto en cuotas. */
 export function cuotaMensual(g: GastoCuota): number {
   if (!g.cantidadCuotas || g.cantidadCuotas <= 0) return 0;
@@ -93,6 +97,31 @@ export function gastosPorCategoria(
   return Array.from(map.entries())
     .map(([categoria, monto]) => ({ categoria, monto }))
     .sort((a, b) => b.monto - a.monto);
+}
+
+/** Plata destinada a invertir en un mes/año dado — no es un gasto, es un contador aparte. */
+export function totalInversionMes(data: AppData, mes: number, anio: number): number {
+  return data.inversiones.filter((i) => inPeriod(i.fecha, mes, anio)).reduce((acc, i) => acc + i.monto, 0);
+}
+
+/** Total invertido acumulado en un año dado. */
+export function totalInversionAnio(data: AppData, anio: number): number {
+  return data.inversiones.filter((i) => inYear(i.fecha, anio)).reduce((acc, i) => acc + i.monto, 0);
+}
+
+/** Evolución mensual de inversión a lo largo de un año, para ver la tendencia. */
+export function inversionPorMes(data: AppData, anio: number): { mes: number; monto: number }[] {
+  return Array.from({ length: 12 }, (_, i) => {
+    const mes = i + 1;
+    return { mes, monto: totalInversionMes(data, mes, anio) };
+  });
+}
+
+/** Años con al menos un movimiento de inversión, más el año actual, para el filtro. */
+export function aniosConInversion(data: AppData): number[] {
+  const anios = new Set(data.inversiones.map((i) => ym(i.fecha).anio));
+  anios.add(new Date().getFullYear());
+  return Array.from(anios).sort((a, b) => b - a);
 }
 
 function pad2(n: number): string {
