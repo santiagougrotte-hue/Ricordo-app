@@ -36,11 +36,21 @@ export interface GastoCuota {
   categoria: string;
 }
 
+// Plata destinada a invertir: es un movimiento aparte, no un gasto — no se
+// resta del balance de ingresos/egresos, se acumula en su propio contador.
+export interface Inversion {
+  id: string;
+  fecha: string; // YYYY-MM-DD
+  monto: number;
+  descripcion: string;
+}
+
 export interface AppData {
   sueldoFijo: number;
   ingresosAdicionales: IngresoAdicional[];
   gastosUnicos: GastoUnico[];
   gastosCuotas: GastoCuota[];
+  inversiones: Inversion[];
   eventos: Evento[];
 }
 
@@ -52,6 +62,7 @@ export function emptyData(): AppData {
     ingresosAdicionales: [],
     gastosUnicos: [],
     gastosCuotas: [],
+    inversiones: [],
     eventos: [],
   };
 }

@@ -24,6 +24,7 @@ export const NAV: NavGroup[] = [
       { key: "finanzas", label: "Resumen", icon: "📊" },
       { key: "ingresos", label: "Ingresos", icon: "💰" },
       { key: "egresos", label: "Egresos", icon: "💸" },
+      { key: "inversion", label: "Inversión", icon: "📈" },
       { key: "historial", label: "Historial", icon: "🧾" },
     ],
   },
