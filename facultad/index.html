@@ -505,6 +505,17 @@ a{color:inherit;}
         <input type="number" id="f-materia-cuatrimestre" min="0" placeholder="Dejalo vacío si no está asignado">
       </div>
       <div class="field">
+        <label>Estado</label>
+        <select id="f-materia-estado">
+          <option value="no_cursada">No cursada</option>
+          <option value="cursando">Cursando</option>
+          <option value="regular">Regular (final pendiente)</option>
+          <option value="libre">Libre</option>
+          <option value="aprobada">Aprobada</option>
+        </select>
+        <p class="faint small" style="margin-top:4px;">Elegí "Regular (final pendiente)" si ya la cursaste y solo te falta el final.</p>
+      </div>
+      <div class="field">
         <label>Correlativas necesarias para cursar</label>
         <div class="check-list" id="f-materia-cursar"></div>
       </div>
@@ -1160,6 +1171,7 @@ const Materias = {
     document.getElementById('f-materia-id').value = id||'';
     document.getElementById('f-materia-nombre').value = m.nombre;
     document.getElementById('f-materia-cuatrimestre').value = m.planCuatrimestre || '';
+    document.getElementById('f-materia-estado').value = m.estado || 'no_cursada';
     document.getElementById('f-materia-cursar').innerHTML = Materias.checkboxes(m.correlativasCursar||[], id);
     document.getElementById('f-materia-final').innerHTML = Materias.checkboxes(m.correlativasFinal||[], id);
     document.getElementById('btn-eliminar-materia').style.display = editing ? 'inline-flex' : 'none';
@@ -1176,15 +1188,29 @@ const Materias = {
     const nombre=document.getElementById('f-materia-nombre').value.trim();
     if(!nombre){ Toast.show('Ingresá un nombre'); return; }
     const planCuatrimestre=parseInt(document.getElementById('f-materia-cuatrimestre').value)||0;
+    const estadoSel=document.getElementById('f-materia-estado').value;
     const cursar=[...document.querySelectorAll('#f-materia-cursar input:checked')].map(i=>i.value);
     const final=[...document.querySelectorAll('#f-materia-final input:checked')].map(i=>i.value);
     const existing=byId(id);
+    let target;
     if(existing){
       existing.nombre=nombre; existing.planCuatrimestre=planCuatrimestre;
       existing.correlativasCursar=cursar; existing.correlativasFinal=final; existing.lastTouched=Date.now();
+      target=existing;
     } else {
-      State.data.materias.push({id, nombre, planCuatrimestre, correlativasCursar:cursar, correlativasFinal:final, estado:'no_cursada', nota:null, fechaAprobacion:null, lastTouched:Date.now()});
+      target={id, nombre, planCuatrimestre, correlativasCursar:cursar, correlativasFinal:final, estado:'no_cursada', nota:null, fechaAprobacion:null, lastTouched:Date.now()};
+      State.data.materias.push(target);
     }
+    if(estadoSel==='aprobada' && target.estado!=='aprobada'){
+      // requiere nota y fecha: se guarda el resto y se abre el flujo de aprobación
+      State.save();
+      Modal.close('modal-materia');
+      Toast.show('Materia guardada — ingresá la nota final');
+      Materias.render();
+      Materias.openAprobar(id);
+      return;
+    }
+    if(estadoSel!=='aprobada'){ target.estado=estadoSel; target.nota=null; target.fechaAprobacion=null; }
     State.save();
     Modal.close('modal-materia');
     Toast.show('Materia guardada ✓');
