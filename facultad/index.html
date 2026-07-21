@@ -440,6 +440,7 @@ a{color:inherit;}
             <div class="seg">
               <button id="seg-lista" class="active" onclick="Materias.setMode('lista')">Plan de estudios</button>
               <button id="seg-mapa" onclick="Materias.setMode('mapa')">Mapa de correlativas</button>
+              <button id="seg-planificacion" onclick="Materias.setMode('planificacion')">Planificación</button>
             </div>
             <input class="search-input" type="text" placeholder="Buscar materia…" oninput="Materias.setFilter(this.value)">
           </div>
@@ -766,6 +767,15 @@ function isoLocal(d){ const y=d.getFullYear(), m=String(d.getMonth()+1).padStart
 function addDays(d,n){ const r=new Date(d); r.setDate(r.getDate()+n); return r; }
 function startOfWeekMonday(d){ const r=new Date(d); const day=(r.getDay()+6)%7; r.setDate(r.getDate()-day); r.setHours(0,0,0,0); return r; }
 function formatBytes(n){ if(n<1024) return n+' B'; if(n<1024*1024) return (n/1024).toFixed(1)+' KB'; return (n/1024/1024).toFixed(1)+' MB'; }
+function upcomingTerms(n){
+  let {year,term} = Term.guess();
+  const arr=[];
+  for(let i=0;i<n;i++){
+    arr.push({ year, term, key:`${year}-${term}`, label:`${term}° Cuatrimestre ${year}` });
+    if(term===1) term=2; else { term=1; year+=1; }
+  }
+  return arr;
+}
 function eventHoursLeft(e){ return (new Date(e.fecha+'T'+(e.hora||'23:59')) - new Date())/36e5; }
 function isEventUrgent(e){ if(e.estado==='hecho') return false; const h=eventHoursLeft(e); return h>=0 && h<48; }
 function mdToHtml(text){
@@ -998,7 +1008,9 @@ const Materias = {
     const root=document.getElementById('materias-root');
     if(!root) return;
     Materias.renderSummary(summary);
-    root.innerHTML = Materias.mode==='mapa' ? Materias.buildMapaHTML() : Materias.buildListaHTML();
+    root.innerHTML = Materias.mode==='mapa' ? Materias.buildMapaHTML()
+      : Materias.mode==='planificacion' ? Materias.buildPlanificacionHTML()
+      : Materias.buildListaHTML();
     if(Materias.mode==='mapa') Materias.bindMapaEvents(root);
   },
 
@@ -1022,6 +1034,7 @@ const Materias = {
     Materias.mode=mode;
     document.getElementById('seg-lista').classList.toggle('active', mode==='lista');
     document.getElementById('seg-mapa').classList.toggle('active', mode==='mapa');
+    document.getElementById('seg-planificacion').classList.toggle('active', mode==='planificacion');
     Materias.render();
   },
   setFilter(v){ Materias.filterText=v; Materias.render(); },
@@ -1164,6 +1177,47 @@ const Materias = {
     });
   },
 
+  buildPlanificacionHTML(){
+    const all=State.data.materias;
+    if(!all.length) return `<div class="empty-state"><p>Todavía no cargaste materias de tu plan de estudios.</p><button class="btn btn-primary" onclick="Materias.openForm()">+ Agregar tu primera materia</button></div>`;
+    const q=(Materias.filterText||'').toLowerCase();
+    const pending = all.filter(m=>(m.estado==='no_cursada'||m.estado==='libre') && m.nombre.toLowerCase().includes(q));
+    if(!all.some(m=>m.estado==='no_cursada'||m.estado==='libre')){
+      return '<p class="empty">No tenés materias pendientes de cursar — están todas cursando, con final pendiente o aprobadas. 🎉</p>';
+    }
+    const terms=upcomingTerms(6);
+    const byKey={}; terms.forEach(t=>byKey[t.key]=[]);
+    const sinPlanificar=[];
+    pending.forEach(m=>{ if(m.planTerm && byKey[m.planTerm]) byKey[m.planTerm].push(m); else sinPlanificar.push(m); });
+    const col=(title,items)=>`<div class="plan-col"><h3>${esc(title)}${items.length? ' · '+items.length : ''}</h3><div class="plan-col-items">${items.length ? items.map(m=>Materias.planCardHTML(m, terms)).join('') : '<p class="faint small">Sin materias</p>'}</div></div>`;
+    let html = '<p class="muted small" style="margin-bottom:14px;">Asigná cada materia pendiente a un cuatrimestre futuro para organizar tu cursada.</p><div class="plan-grid">';
+    html += col('Sin planificar', sinPlanificar);
+    terms.forEach(t=> html += col(t.label, byKey[t.key]));
+    html += '</div>';
+    return html;
+  },
+  planCardHTML(m, terms){
+    const blocked=Materias.isBlockedCursar(m);
+    return `<div class="materia-card estado-${m.estado} ${blocked?'blocked':''}">
+      <div class="materia-card-top">
+        <h4>${esc(m.nombre)}</h4>
+        <span class="badge badge-${m.estado}">${ESTADO_SHORT[m.estado]}</span>
+      </div>
+      ${blocked?'<div class="lock-note">🔒 Correlativas de cursada incompletas</div>':''}
+      <select onchange="Materias.setPlanTerm('${m.id}', this.value)">
+        <option value="">Sin planificar</option>
+        ${terms.map(t=>`<option value="${t.key}" ${m.planTerm===t.key?'selected':''}>${t.label}</option>`).join('')}
+      </select>
+    </div>`;
+  },
+  setPlanTerm(id, key){
+    const m=byId(id); if(!m) return;
+    m.planTerm = key || null;
+    m.lastTouched=Date.now();
+    State.save();
+    Materias.render();
+  },
+
   openForm(id){
     const editing=!!id;
     const m = editing ? byId(id) : {nombre:'', planCuatrimestre:'', correlativasCursar:[], correlativasFinal:[]};
@@ -1198,7 +1252,7 @@ const Materias = {
       existing.correlativasCursar=cursar; existing.correlativasFinal=final; existing.lastTouched=Date.now();
       target=existing;
     } else {
-      target={id, nombre, planCuatrimestre, correlativasCursar:cursar, correlativasFinal:final, estado:'no_cursada', nota:null, fechaAprobacion:null, lastTouched:Date.now()};
+      target={id, nombre, planCuatrimestre, correlativasCursar:cursar, correlativasFinal:final, estado:'no_cursada', nota:null, fechaAprobacion:null, planTerm:null, lastTouched:Date.now()};
       State.data.materias.push(target);
     }
     if(estadoSel==='aprobada' && target.estado!=='aprobada'){
