@@ -615,6 +615,10 @@ a{color:inherit;}
         <select id="f-clase-materia"></select>
       </div>
       <div class="field">
+        <label>Cuatrimestre</label>
+        <select id="f-clase-term"></select>
+      </div>
+      <div class="field">
         <label>Día</label>
         <select id="f-clase-dia">
           <option value="0">Lunes</option><option value="1">Martes</option><option value="2">Miércoles</option>
@@ -776,6 +780,8 @@ function upcomingTerms(n){
   }
   return arr;
 }
+function termKeyFromObj(t){ return `${t.year}-${t.term}`; }
+function parseTermKey(key){ const [year,term]=key.split('-').map(Number); return {year,term}; }
 function eventHoursLeft(e){ return (new Date(e.fecha+'T'+(e.hora||'23:59')) - new Date())/36e5; }
 function isEventUrgent(e){ if(e.estado==='hecho') return false; const h=eventHoursLeft(e); return h>=0 && h<48; }
 function mdToHtml(text){
@@ -823,6 +829,7 @@ const State = {
     if(!Array.isArray(this.data.notas)) this.data.notas=[];
     if(!this.data.settings) this.data.settings={activeCuatrimestre:Term.guess(), notifDays:[2,1]};
     if(!this.data.settings.activeCuatrimestre) this.data.settings.activeCuatrimestre=Term.guess();
+    this.data.horario.forEach(c=>{ if(!c.term) c.term=termKeyFromObj(Term.guess()); });
     return this.data;
   },
   save(){ localStorage.setItem(STORE_KEY, JSON.stringify(this.data)); }
@@ -863,11 +870,13 @@ const Term = {
     const t=State.data.settings.activeCuatrimestre;
     if(t.term===1){ t.term=2; t.year-=1; } else { t.term=1; }
     State.save(); Term.render();
+    if(Router.current==='horario') Horario.render();
   },
   next(){
     const t=State.data.settings.activeCuatrimestre;
     if(t.term===1){ t.term=2; } else { t.term=1; t.year+=1; }
     State.save(); Term.render();
+    if(Router.current==='horario') Horario.render();
   }
 };
 
@@ -1208,6 +1217,7 @@ const Materias = {
         <option value="">Sin planificar</option>
         ${terms.map(t=>`<option value="${t.key}" ${m.planTerm===t.key?'selected':''}>${t.label}</option>`).join('')}
       </select>
+      ${m.planTerm ? `<button type="button" class="btn btn-sm" style="width:100%;margin-top:6px;" onclick="Materias.planToHorario('${m.id}')">🕒 Agregar horario</button>` : ''}
     </div>`;
   },
   setPlanTerm(id, key){
@@ -1216,6 +1226,10 @@ const Materias = {
     m.lastTouched=Date.now();
     State.save();
     Materias.render();
+  },
+  planToHorario(id){
+    const m=byId(id); if(!m || !m.planTerm){ Toast.show('Asigná primero un cuatrimestre'); return; }
+    Horario.openForm(null, id, m.planTerm);
   },
 
   openForm(id){
@@ -1485,9 +1499,12 @@ const NotificationsMgr = {
 const Horario = {
   render(){
     const root=document.getElementById('horario-root');
-    const items=State.data.horario||[];
+    const activeTerm=State.data.settings.activeCuatrimestre;
+    const activeKey=termKeyFromObj(activeTerm);
+    const items=(State.data.horario||[]).filter(c=>c.term===activeKey);
+    const note=`<p class="muted small" style="margin-bottom:12px;">Mostrando el horario de <strong>${Term.label(activeTerm)}</strong> — usá las flechas ‹ › del header para ver otro cuatrimestre.</p>`;
     if(!items.length){
-      root.innerHTML = `<div class="empty-state"><p>Todavía no cargaste clases fijas.</p><button class="btn btn-primary" onclick="Horario.openForm()">+ Agregar tu primera clase</button></div>`;
+      root.innerHTML = note + `<div class="empty-state"><p>Todavía no cargaste clases para este cuatrimestre.</p><button class="btn btn-primary" onclick="Horario.openForm()">+ Agregar tu primera clase</button></div>`;
       return;
     }
     const rangeStart=7, rangeEnd=22, pxPerHour=56;
@@ -1511,15 +1528,18 @@ const Horario = {
       }).join('');
       dayCols += `<div class="horario-daycol" style="height:${totalPx}px;">${hourlinesHtml}${blocksHtml}</div>`;
     }
-    root.innerHTML = `<div class="horario-grid">${headHTML}${timeColHTML}${dayCols}</div>`;
+    root.innerHTML = note + `<div class="horario-grid">${headHTML}${timeColHTML}${dayCols}</div>`;
   },
-  openForm(id){
+  openForm(id, presetMateriaId, presetTerm){
     const editing=!!id;
-    const c = editing ? State.data.horario.find(x=>x.id===id) : {materiaId:'',dia:0,horaInicio:'08:00',horaFin:'10:00',lugar:'',modalidad:'Presencial'};
+    const c = editing ? State.data.horario.find(x=>x.id===id) : {materiaId:presetMateriaId||'', dia:0, horaInicio:'08:00', horaFin:'10:00', lugar:'', modalidad:'Presencial', term:presetTerm||termKeyFromObj(State.data.settings.activeCuatrimestre)};
     document.getElementById('modal-clase-title').textContent = editing?'Editar clase':'Nueva clase';
     document.getElementById('f-clase-id').value=id||'';
     const sel=document.getElementById('f-clase-materia');
     sel.innerHTML = State.data.materias.map(m=>`<option value="${m.id}" ${m.id===c.materiaId?'selected':''}>${esc(m.nombre)}</option>`).join('') || '<option value="">Cargá materias primero</option>';
+    const terms=upcomingTerms(8);
+    const termSel=document.getElementById('f-clase-term');
+    termSel.innerHTML = terms.map(t=>`<option value="${t.key}" ${t.key===c.term?'selected':''}>${t.label}</option>`).join('');
     document.getElementById('f-clase-dia').value=c.dia;
     document.getElementById('f-clase-inicio').value=c.horaInicio;
     document.getElementById('f-clase-fin').value=c.horaFin;
@@ -1533,6 +1553,7 @@ const Horario = {
     const id=document.getElementById('f-clase-id').value || uid();
     const materiaId=document.getElementById('f-clase-materia').value;
     if(!materiaId){ Toast.show('Seleccioná una materia (cargala primero en el módulo Materias)'); return; }
+    const term=document.getElementById('f-clase-term').value;
     const dia=parseInt(document.getElementById('f-clase-dia').value);
     const horaInicio=document.getElementById('f-clase-inicio').value;
     const horaFin=document.getElementById('f-clase-fin').value;
@@ -1540,12 +1561,14 @@ const Horario = {
     const lugar=document.getElementById('f-clase-lugar').value.trim();
     const modalidad=document.getElementById('f-clase-modalidad').value;
     const existing=State.data.horario.find(x=>x.id===id);
-    if(existing){ Object.assign(existing,{materiaId,dia,horaInicio,horaFin,lugar,modalidad}); }
-    else{ State.data.horario.push({id,materiaId,dia,horaInicio,horaFin,lugar,modalidad}); }
+    if(existing){ Object.assign(existing,{materiaId,term,dia,horaInicio,horaFin,lugar,modalidad}); }
+    else{ State.data.horario.push({id,materiaId,term,dia,horaInicio,horaFin,lugar,modalidad}); }
+    State.data.settings.activeCuatrimestre=parseTermKey(term);
     State.save();
     Modal.close('modal-clase');
     Toast.show('Clase guardada ✓');
-    Horario.render();
+    Term.render();
+    Router.go('horario');
   },
   deleteCurrent(){
     const id=document.getElementById('f-clase-id').value;
