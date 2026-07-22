@@ -1,0 +1,116 @@
+@import "tailwindcss";
+
+:root {
+  --bg: #f7f4ee;
+  --surface: #fffdfa;
+  --surface2: #f1ece2;
+  --surface3: #e8e0d2;
+  --border: #e3dbcb;
+  --border2: #d2c6ac;
+  --accent: #a3603d;
+  --accent2: #bd7a54;
+  --accent-dim: rgba(163, 96, 61, 0.1);
+  --green: #5c8267;
+  --green-dim: rgba(92, 130, 103, 0.1);
+  --red: #ac5449;
+  --red-dim: rgba(172, 84, 73, 0.1);
+  --blue: #5c7791;
+  --blue-dim: rgba(92, 119, 145, 0.1);
+  --orange: #b8863f;
+  --orange-dim: rgba(184, 134, 63, 0.1);
+  --purple: #8a7396;
+  --purple-dim: rgba(138, 115, 150, 0.1);
+  --text: #211d17;
+  --text2: #6b6155;
+  --text3: #a2977f;
+}
+
+@theme inline {
+  --color-bg: var(--bg);
+  --color-surface: var(--surface);
+  --color-surface2: var(--surface2);
+  --color-surface3: var(--surface3);
+  --color-border: var(--border);
+  --color-border2: var(--border2);
+  --color-accent: var(--accent);
+  --color-accent2: var(--accent2);
+  --color-green: var(--green);
+  --color-red: var(--red);
+  --color-blue: var(--blue);
+  --color-orange: var(--orange);
+  --color-purple: var(--purple);
+  --color-text: var(--text);
+  --color-text2: var(--text2);
+  --color-text3: var(--text3);
+  --font-sans: var(--font-inter);
+  --font-display: var(--font-grotesk);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font-sans), "Segoe UI", system-ui, -apple-system, sans-serif;
+  font-size: 13px;
+}
+
+.font-display {
+  font-family: var(--font-display), var(--font-sans), sans-serif;
+}
+
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: var(--bg);
+}
+::-webkit-scrollbar-thumb {
+  background: var(--border2);
+  border-radius: 3px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: var(--text3);
+}
+
+table {
+  border-collapse: collapse;
+}
+
+@keyframes toast-in {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+.animate-in {
+  animation: toast-in 0.18s ease;
+}
+
+input,
+select,
+textarea {
+  font-family: inherit;
+}
+
+::placeholder {
+  color: var(--text3);
+}
+
+@media print {
+  .no-print {
+    display: none !important;
+  }
+  html,
+  body {
+    background: #fff;
+  }
+}
