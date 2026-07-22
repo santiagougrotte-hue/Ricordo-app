@@ -35,11 +35,11 @@ export function Sidebar() {
         </button>
 
         <div className="border-b border-border px-[18px] pb-4 pt-6">
-          <h1 className={`font-display font-semibold tracking-[0.5px] text-text ${collapsed ? "md:text-sm" : "text-lg"}`}>
-            <span className="md:hidden">TRAMA Studio</span>
-            <span className="hidden md:inline">{collapsed ? "T" : "TRAMA Studio"}</span>
-          </h1>
-          <span className={`mt-0.5 block text-[10.5px] tracking-wide text-text3 ${collapsed ? "md:hidden" : ""}`}>
+          <div className={`inline-flex items-center rounded-md bg-[#0d0c0a] px-3 py-2 ${collapsed ? "md:hidden" : ""}`}>
+            <img src="/logo-trama.png" alt="TRAMA Studio" className="h-5 w-auto" />
+          </div>
+          <div className={`hidden font-display text-sm font-semibold text-text ${collapsed ? "md:block" : ""}`}>T</div>
+          <span className={`mt-1.5 block text-[10.5px] tracking-wide text-text3 ${collapsed ? "md:hidden" : ""}`}>
             Gestión financiera
           </span>
         </div>

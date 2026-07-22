@@ -24,17 +24,16 @@ import {
   fARS,
   fPct,
   gastosMes,
-  pctDe,
   rentabilidadPorCliente,
   resumenMes,
 } from "@/lib/calc";
 import type { AppData, Servicio } from "@/lib/types";
 
-function serviciosPorMargen(servicios: Servicio[]) {
+function serviciosPorParticipacion(servicios: Servicio[]) {
   return servicios
-    .filter((s) => s.precioBase > 0)
-    .map((s) => ({ servicio: s, margenPct: pctDe(s.precioBase - s.costoInterno, s.precioBase) }))
-    .sort((a, b) => b.margenPct - a.margenPct);
+    .filter((s) => s.participacionPct > 0)
+    .map((s) => ({ servicio: s, participacionPct: s.participacionPct }))
+    .sort((a, b) => b.participacionPct - a.participacionPct);
 }
 
 function horasPorServicio(data: AppData) {
@@ -62,8 +61,8 @@ export function Reportes() {
   const masRentable = rentabilidad[0];
   const menosRentable = rentabilidad[rentabilidad.length - 1];
 
-  const porMargen = useMemo(() => serviciosPorMargen(data.servicios), [data.servicios]);
-  const servicioMasRentable = porMargen[0];
+  const porParticipacion = useMemo(() => serviciosPorParticipacion(data.servicios), [data.servicios]);
+  const servicioMasRentable = porParticipacion[0];
   const porHoras = useMemo(() => horasPorServicio(data), [data]);
 
   const ingresoPromedio =
@@ -94,7 +93,7 @@ export function Reportes() {
       <StatGrid>
         <KpiCard label="Cliente más rentable" value={masRentable ? masRentable.cliente.marca : "—"} color="green" sub={masRentable ? fARS(masRentable.ganancia) : undefined} />
         <KpiCard label="Cliente menos rentable" value={menosRentable ? menosRentable.cliente.marca : "—"} color={menosRentable && menosRentable.ganancia < 0 ? "red" : "orange"} sub={menosRentable ? fARS(menosRentable.ganancia) : undefined} />
-        <KpiCard label="Servicio más rentable" value={servicioMasRentable ? servicioMasRentable.servicio.nombre : "—"} color="accent" sub={servicioMasRentable ? fPct(servicioMasRentable.margenPct, 0) : undefined} />
+        <KpiCard label="Servicio con mayor participación" value={servicioMasRentable ? servicioMasRentable.servicio.nombre : "—"} color="accent" sub={servicioMasRentable ? fPct(servicioMasRentable.participacionPct, 0) : undefined} />
         <KpiCard label="Servicio que más horas consume" value={porHoras[0] ? porHoras[0].servicio.nombre : "—"} sub={porHoras[0] ? `${porHoras[0].horas.toFixed(0)} hs` : undefined} />
         <KpiCard label="Margen bruto" value={fPct(resumen.cobrado > 0 ? (resumen.gananciaBruta / resumen.cobrado) * 100 : 0, 1)} />
         <KpiCard label="Margen neto" value={fPct(resumen.margenGanancia, 1)} color={resumen.margenGanancia >= 0 ? "green" : "red"} />

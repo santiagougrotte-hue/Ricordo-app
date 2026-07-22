@@ -64,7 +64,7 @@ export interface Servicio {
   id: string;
   nombre: string;
   categoria: string;
-  precioBase: number;
+  participacionPct: number; // % del valor total de un proyecto que representa este servicio
   unidad: UnidadCobro;
   horasEstimadas: number;
   costoInterno: number;
@@ -113,6 +113,7 @@ export interface PresupuestoItem {
   unidad: UnidadCobro;
   precioUnitario: number; // precio al cliente
   costoUnitario: number; // costo interno
+  participacionPct: number; // % del precio final del presupuesto que representa este servicio (sugerido desde el catálogo)
 }
 
 export interface CostoAdicional {

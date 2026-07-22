@@ -23,7 +23,7 @@ import {
   TrHover,
 } from "@/components/ui";
 import { NIVELES_COMPLEJIDAD, UNIDADES_COBRO, type Complejidad, type Servicio, type UnidadCobro } from "@/lib/types";
-import { fMoney, fPct, pctDe } from "@/lib/calc";
+import { fMoney, fPct } from "@/lib/calc";
 
 const COMPLEJIDAD_BADGE: Record<Complejidad, "green" | "orange" | "red"> = {
   baja: "green",
@@ -36,7 +36,7 @@ function emptyForm(): Servicio {
     id: "",
     nombre: "",
     categoria: "",
-    precioBase: 0,
+    participacionPct: 0,
     unidad: "pieza",
     horasEstimadas: 0,
     costoInterno: 0,
@@ -124,9 +124,8 @@ export function Servicios() {
                 <tr>
                   <Th>Servicio</Th>
                   <Th>Unidad</Th>
-                  <Th title="Precio que se cobra al cliente por unidad">Precio base</Th>
+                  <Th title="% del valor total de un proyecto que representa este servicio">Participación (%)</Th>
                   <Th title="Costo interno estimado por unidad">Costo interno</Th>
-                  <Th title="Margen sobre el precio base">Margen</Th>
                   <Th>Responsable</Th>
                   <Th>Complejidad</Th>
                   <Th></Th>
@@ -134,14 +133,12 @@ export function Servicios() {
               </thead>
               <tbody>
                 {lista.map((s) => {
-                  const margen = pctDe(s.precioBase - s.costoInterno, s.precioBase);
                   return (
                     <TrHover key={s.id}>
                       <Td main>{s.nombre}</Td>
                       <Td>{UNIDADES_COBRO.find((u) => u.value === s.unidad)?.label}</Td>
-                      <Td>{fMoney(s.precioBase)}</Td>
+                      <Td>{fPct(s.participacionPct, 0)}</Td>
                       <Td>{fMoney(s.costoInterno)}</Td>
-                      <Td className={margen < s.margenMinimo ? "text-red" : "text-green"}>{fPct(margen, 0)}</Td>
                       <Td>{s.profesionalResponsable || "—"}</Td>
                       <Td>
                         <Badge color={COMPLEJIDAD_BADGE[s.complejidad]}>{NIVELES_COMPLEJIDAD.find((c) => c.value === s.complejidad)?.label}</Badge>
@@ -193,8 +190,18 @@ export function Servicios() {
                   ))}
                 </Select>
               </Field>
-              <Field label="Precio base (al cliente)">
-                <Input type="number" min={0} value={form.precioBase || ""} onChange={(e) => setForm({ ...form, precioBase: Number(e.target.value) })} />
+              <Field label="Participación del Servicio (%)">
+                <div className="flex items-center gap-2">
+                  <Input
+                    type="number"
+                    min={0}
+                    max={100}
+                    step={0.1}
+                    value={form.participacionPct || ""}
+                    onChange={(e) => setForm({ ...form, participacionPct: Number(e.target.value) })}
+                  />
+                  <span className="text-text3">%</span>
+                </div>
               </Field>
               <Field label="Costo interno">
                 <Input type="number" min={0} value={form.costoInterno || ""} onChange={(e) => setForm({ ...form, costoInterno: Number(e.target.value) })} />

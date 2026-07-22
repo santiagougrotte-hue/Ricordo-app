@@ -37,6 +37,7 @@ import {
   pctDe,
   resumenDistribucion,
   siguienteNumeroPresupuesto,
+  sumaParticipacion,
   todayISO,
 } from "@/lib/calc";
 import {
@@ -116,8 +117,9 @@ function itemDeServicio(s: Servicio, cantidad: number): PresupuestoItem {
     nombre: s.nombre,
     cantidad,
     unidad: s.unidad,
-    precioUnitario: s.precioBase,
+    precioUnitario: s.costoInterno,
     costoUnitario: s.costoInterno,
+    participacionPct: s.participacionPct,
   };
 }
 
@@ -192,7 +194,7 @@ function ItemsEditor({
   function addManual() {
     onChange([
       ...p.items,
-      { id: uid("item"), servicioId: null, nombre: "Servicio a medida", cantidad: 1, unidad: "proyecto", precioUnitario: 0, costoUnitario: 0 },
+      { id: uid("item"), servicioId: null, nombre: "Servicio a medida", cantidad: 1, unidad: "proyecto", precioUnitario: 0, costoUnitario: 0, participacionPct: 0 },
     ]);
   }
 
@@ -460,6 +462,27 @@ function ResultadoView({
           )}
         </Card>
       </div>
+
+      {p.items.length > 0 && (
+        <Card title="Participación de servicios sobre el total" className="mt-4">
+          {Math.abs(sumaParticipacion(p) - 100) > 0.5 && (
+            <Alert kind="warning">
+              La suma de las participaciones de los servicios es {fPct(sumaParticipacion(p), 1)}, no 100%.
+            </Alert>
+          )}
+          <div className="flex flex-col gap-2">
+            {p.items.map((it) => (
+              <div key={it.id} className="flex items-center justify-between border-b border-border/50 py-1.5 last:border-none">
+                <span className="text-[12px] text-text2">{it.nombre}</span>
+                <div className="flex items-center gap-3">
+                  <span className="text-[12px] text-text3">{fPct(it.participacionPct, 1)}</span>
+                  <span className="text-[12px] font-medium text-text">{fMoney(t.precioFinal * (it.participacionPct / 100), p.moneda)}</span>
+                </div>
+              </div>
+            ))}
+          </div>
+        </Card>
+      )}
     </div>
   );
 }

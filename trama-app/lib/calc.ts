@@ -152,6 +152,11 @@ export function pctDe(monto: number, total: number): number {
   return total > 0 ? (monto / total) * 100 : 0;
 }
 
+/** Suma de las participaciones (%) de los servicios de un presupuesto. */
+export function sumaParticipacion(p: Presupuesto): number {
+  return p.items.reduce((acc, it) => acc + (it.participacionPct || 0), 0);
+}
+
 export interface DistribucionResumen {
   totalDistribuido: number;
   totalPresupuesto: number;
@@ -441,16 +446,6 @@ export function calcularAlertas(data: AppData, config: Config): Alerta[] {
       kind: "danger",
       texto: "Los sueldos y gastos fijos superan lo cobrado este mes.",
     });
-  }
-
-  for (const s of data.servicios) {
-    if (s.precioBase > 0 && s.costoInterno > 0 && s.precioBase < s.costoInterno) {
-      alertas.push({
-        id: `servicio-bajo-costo-${s.id}`,
-        kind: "warning",
-        texto: `El servicio "${s.nombre}" se está cobrando por debajo de su costo interno.`,
-      });
-    }
   }
 
   return alertas;
