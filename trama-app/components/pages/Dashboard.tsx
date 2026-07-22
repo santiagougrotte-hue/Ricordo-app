@@ -25,6 +25,7 @@ import {
   movimientoEnARS,
   rentabilidadPorCliente,
   resumenMes,
+  serviciosMasVendidos,
 } from "@/lib/calc";
 import { ESTADOS_PRESUPUESTO } from "@/lib/types";
 
@@ -94,8 +95,13 @@ export function Dashboard() {
   const trend = evolucionFacturacion(data, 6);
   const porCategoria = gastosPorCategoria(data, mes, anio).slice(0, 6);
   const maxCategoria = Math.max(1, ...porCategoria.map((c) => c.monto));
-  const rentabilidad = rentabilidadPorCliente(data, mes, anio).slice(0, 5);
+  const rentabilidadTodas = rentabilidadPorCliente(data, mes, anio);
+  const rentabilidad = rentabilidadTodas.slice(0, 5);
   const maxRentabilidad = Math.max(1, ...rentabilidad.map((r) => Math.abs(r.ganancia)));
+  const clienteMasRentable = rentabilidadTodas[0];
+  const clienteMenosRentable = rentabilidadTodas[rentabilidadTodas.length - 1];
+  const servicioMasVendido = serviciosMasVendidos(data)[0];
+  const servicioMasParticipacion = [...data.servicios].sort((a, b) => b.participacionPct - a.participacionPct)[0];
 
   const vencimientos = data.movimientos
     .filter((m) => m.estado === "pendiente")
@@ -131,6 +137,29 @@ export function Dashboard() {
         <KpiCard label="Presupuestos enviados" value={presEnviados} color="blue" />
         <KpiCard label="Presupuestos aprobados" value={presAprobados} color="green" />
         <KpiCard label="Presupuestos pendientes" value={presPendientes} color="orange" />
+        <KpiCard
+          label="Cliente más rentable"
+          value={clienteMasRentable ? clienteMasRentable.cliente.marca : "—"}
+          color="green"
+          sub={clienteMasRentable ? fARS(clienteMasRentable.ganancia) : undefined}
+        />
+        <KpiCard
+          label="Cliente menos rentable"
+          value={clienteMenosRentable ? clienteMenosRentable.cliente.marca : "—"}
+          color={clienteMenosRentable && clienteMenosRentable.ganancia < 0 ? "red" : "orange"}
+          sub={clienteMenosRentable ? fARS(clienteMenosRentable.ganancia) : undefined}
+        />
+        <KpiCard
+          label="Servicio más vendido"
+          value={servicioMasVendido ? servicioMasVendido.nombre : "—"}
+          sub={servicioMasVendido ? `${servicioMasVendido.vecesVendido} veces` : undefined}
+        />
+        <KpiCard
+          label="Servicio más rentable"
+          value={servicioMasParticipacion && servicioMasParticipacion.participacionPct > 0 ? servicioMasParticipacion.nombre : "—"}
+          color="accent"
+          sub={servicioMasParticipacion && servicioMasParticipacion.participacionPct > 0 ? fPct(servicioMasParticipacion.participacionPct, 0) : undefined}
+        />
       </StatGrid>
 
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">

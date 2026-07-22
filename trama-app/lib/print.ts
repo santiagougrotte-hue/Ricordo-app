@@ -17,8 +17,8 @@ function nl2p(s: string): string {
  * el diálogo de impresión (el usuario puede "Guardar como PDF"). No incluye
  * costos internos, pagos del equipo ni márgenes de ganancia — solo lo que
  * corresponde mostrarle al cliente. */
-export function imprimirPresupuesto(p: Presupuesto, config: Config) {
-  const t = calcularPresupuesto(p);
+export function imprimirPresupuesto(p: Presupuesto, config: Config, costoFijoPorHoraValue = 0) {
+  const t = calcularPresupuesto(p, costoFijoPorHoraValue);
   const fecha = new Date(`${p.fecha}T00:00:00`).toLocaleDateString("es-AR", {
     day: "numeric",
     month: "long",

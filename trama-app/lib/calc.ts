@@ -89,6 +89,8 @@ export function precioParaMargen(
 export interface PresupuestoTotales {
   costoItems: number;
   costoAdicionales: number;
+  totalHoras: number;
+  costosFijosProrrateados: number;
   baseCostos: number;
   fondoImprevistosMonto: number;
   costoInterno: number;
@@ -103,11 +105,16 @@ export interface PresupuestoTotales {
   subtotalCliente: number;
 }
 
-export function calcularPresupuesto(p: Presupuesto): PresupuestoTotales {
+/** `costoFijoPorHoraValue` es opcional (default 0, sin efecto) para no alterar
+ * ningún cálculo existente que todavía no pasa ese valor — solo el módulo de
+ * Presupuestos lo pasa, para prorratear los Costos Fijos del estudio. */
+export function calcularPresupuesto(p: Presupuesto, costoFijoPorHoraValue = 0): PresupuestoTotales {
   const costoItems = p.items.reduce((acc, it) => acc + it.costoUnitario * it.cantidad, 0);
   const subtotalCliente = p.items.reduce((acc, it) => acc + it.precioUnitario * it.cantidad, 0);
   const costoAdicionales = p.costosAdicionales.reduce((acc, c) => acc + c.monto, 0);
-  const baseCostos = costoItems + costoAdicionales;
+  const totalHoras = p.items.reduce((acc, it) => acc + (it.horasEstimadas || 0) * it.cantidad, 0);
+  const costosFijosProrrateados = totalHoras * costoFijoPorHoraValue;
+  const baseCostos = costoItems + costoAdicionales + costosFijosProrrateados;
   const fondoImprevistosMonto = baseCostos * (p.fondoImprevistosPct / 100);
   const costoInterno = baseCostos + fondoImprevistosMonto;
 
@@ -132,6 +139,8 @@ export function calcularPresupuesto(p: Presupuesto): PresupuestoTotales {
   return {
     costoItems,
     costoAdicionales,
+    totalHoras,
+    costosFijosProrrateados,
     baseCostos,
     fondoImprevistosMonto,
     costoInterno,
@@ -145,6 +154,40 @@ export function calcularPresupuesto(p: Presupuesto): PresupuestoTotales {
     margenReal,
     subtotalCliente,
   };
+}
+
+/** Costo total del estudio en Costos Fijos, dividido las horas facturables
+ * mensuales estimadas — el "costo indirecto por hora" que se prorratea en
+ * cada presupuesto según las horas que consume. */
+export function costoFijoPorHora(data: AppData): number {
+  const total = data.costosFijos.reduce((acc, c) => acc + c.montoMensual, 0);
+  const horas = data.config.horasMensualesEstudio || 0;
+  return horas > 0 ? total / horas : 0;
+}
+
+/** Costo de mano de obra automático: horas × valor hora del profesional asignado.
+ * Si no hay profesional asignado, devuelve null (costo manual, como antes). */
+export function costoManoDeObra(horas: number, personaId: string | null, equipo: Persona[]): number | null {
+  if (!personaId) return null;
+  const persona = equipo.find((p) => p.id === personaId);
+  if (!persona) return null;
+  return horas * persona.valorHora;
+}
+
+export type NivelRentabilidad = "excelente" | "aceptable" | "bajo";
+
+export interface IndicadorRentabilidad {
+  nivel: NivelRentabilidad;
+  icono: string;
+  texto: string;
+}
+
+/** Semáforo de rentabilidad de un presupuesto, según el margen real vs. los
+ * umbrales configurados (mínimo y sugerido) en Configuración. */
+export function indicadorRentabilidad(margenReal: number, config: Config): IndicadorRentabilidad {
+  if (margenReal < config.margenGananciaMinimo) return { nivel: "bajo", icono: "🔴", texto: "Margen demasiado bajo" };
+  if (margenReal < config.margenGananciaSugerido) return { nivel: "aceptable", icono: "🟡", texto: "Rentabilidad aceptable" };
+  return { nivel: "excelente", icono: "🟢", texto: "Excelente rentabilidad" };
 }
 
 /** Porcentaje que representa `monto` dentro de un total (0 si el total es 0). */
@@ -449,4 +492,70 @@ export function calcularAlertas(data: AppData, config: Config): Alerta[] {
   }
 
   return alertas;
+}
+
+// ---------- Servicio más vendido ----------
+
+export interface ServicioVentas {
+  servicioId: string;
+  nombre: string;
+  vecesVendido: number;
+  cantidadTotal: number;
+}
+
+/** Servicios más vendidos, contando cuántas veces aparecen (y con qué cantidad
+ * total) en los ítems de presupuestos aprobados. */
+export function serviciosMasVendidos(data: AppData): ServicioVentas[] {
+  const map = new Map<string, ServicioVentas>();
+  for (const p of data.presupuestos) {
+    if (p.estado !== "aprobado") continue;
+    for (const it of p.items) {
+      if (!it.servicioId) continue;
+      const prev = map.get(it.servicioId) ?? { servicioId: it.servicioId, nombre: it.nombre, vecesVendido: 0, cantidadTotal: 0 };
+      prev.vecesVendido += 1;
+      prev.cantidadTotal += it.cantidad;
+      map.set(it.servicioId, prev);
+    }
+  }
+  return Array.from(map.values()).sort((a, b) => b.vecesVendido - a.vecesVendido);
+}
+
+// ---------- Revisión de clientes (alertas de aumento) ----------
+
+export interface RevisionCliente {
+  cliente: Cliente;
+  mesesSinAumento: number;
+  inflacionAcumulada: number;
+  aumentoSugerido: number;
+  nuevoAbonoRecomendado: number;
+  convieneActualizar: boolean;
+}
+
+function mesesEntre(desde: string, hasta: Date): number {
+  const [y, m] = desde.split("-").map(Number);
+  if (!y || !m) return 0;
+  return Math.max(0, (hasta.getFullYear() - y) * 12 + (hasta.getMonth() + 1 - m));
+}
+
+/** Sugerencia de aumento para un cliente con abono mensual, según hace cuánto
+ * no se actualiza (fechaUltimoAumento, o fechaInicio si nunca se registró uno)
+ * y la inflación anual estimada configurada. */
+export function calcularRevisionCliente(cliente: Cliente, config: Config): RevisionCliente | null {
+  if (cliente.abonoMensual <= 0) return null;
+  const referencia = cliente.fechaUltimoAumento || cliente.fechaInicio;
+  if (!referencia) return null;
+  const mesesSinAumento = mesesEntre(referencia, new Date());
+  const inflacionAcumulada = mesesSinAumento * (config.inflacionAnualEstimada / 12);
+  const aumentoSugerido = inflacionAcumulada;
+  const nuevoAbonoRecomendado = cliente.abonoMensual * (1 + aumentoSugerido / 100);
+  const convieneActualizar = mesesSinAumento >= config.mesesEntreAumentos;
+  return { cliente, mesesSinAumento, inflacionAcumulada, aumentoSugerido, nuevoAbonoRecomendado, convieneActualizar };
+}
+
+export function revisionClientes(data: AppData): RevisionCliente[] {
+  return data.clientes
+    .filter((c) => c.estado === "activo")
+    .map((c) => calcularRevisionCliente(c, data.config))
+    .filter((r): r is RevisionCliente => r !== null)
+    .sort((a, b) => b.mesesSinAumento - a.mesesSinAumento);
 }

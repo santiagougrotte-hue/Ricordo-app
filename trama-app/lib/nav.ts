@@ -19,6 +19,7 @@ export const NAV: NavGroup[] = [
     items: [
       { key: "clientes", label: "Clientes", icon: "◐" },
       { key: "presupuestos", label: "Presupuestos", icon: "▤" },
+      { key: "revision-clientes", label: "Revisión de clientes", icon: "↻" },
     ],
   },
   {
@@ -26,6 +27,7 @@ export const NAV: NavGroup[] = [
     items: [
       { key: "servicios", label: "Servicios", icon: "✦" },
       { key: "equipo", label: "Equipo", icon: "◎" },
+      { key: "costos-fijos", label: "Costos fijos", icon: "▥" },
     ],
   },
   {

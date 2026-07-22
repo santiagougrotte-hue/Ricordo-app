@@ -31,8 +31,11 @@ import {
 } from "@/components/ui";
 import {
   calcularPresupuesto,
+  costoFijoPorHora,
+  costoManoDeObra,
   fMoney,
   fPct,
+  indicadorRentabilidad,
   montoDistribucion,
   pctDe,
   resumenDistribucion,
@@ -51,6 +54,7 @@ import {
   type DistribucionItem,
   type EstadoPresupuesto,
   type Moneda,
+  type Persona,
   type Presupuesto,
   type PresupuestoItem,
   type PrecioElegido,
@@ -120,6 +124,8 @@ function itemDeServicio(s: Servicio, cantidad: number): PresupuestoItem {
     precioUnitario: s.costoInterno,
     costoUnitario: s.costoInterno,
     participacionPct: s.participacionPct,
+    personaId: s.personaId,
+    horasEstimadas: s.horasEstimadas,
   };
 }
 
@@ -176,10 +182,12 @@ function desgloseCostosPorResponsable(p: Presupuesto, servicios: Servicio[]): { 
 function ItemsEditor({
   p,
   servicios,
+  equipo,
   onChange,
 }: {
   p: Presupuesto;
   servicios: Servicio[];
+  equipo: Persona[];
   onChange: (items: PresupuestoItem[]) => void;
 }) {
   const [pickId, setPickId] = useState("");
@@ -194,12 +202,23 @@ function ItemsEditor({
   function addManual() {
     onChange([
       ...p.items,
-      { id: uid("item"), servicioId: null, nombre: "Servicio a medida", cantidad: 1, unidad: "proyecto", precioUnitario: 0, costoUnitario: 0, participacionPct: 0 },
+      { id: uid("item"), servicioId: null, nombre: "Servicio a medida", cantidad: 1, unidad: "proyecto", precioUnitario: 0, costoUnitario: 0, participacionPct: 0, personaId: null, horasEstimadas: 0 },
     ]);
   }
 
   function update(id: string, patch: Partial<PresupuestoItem>) {
     onChange(p.items.map((it) => (it.id === id ? { ...it, ...patch } : it)));
+  }
+  // Al cambiar horas o profesional, recalcula el costo automáticamente si hay un profesional vinculado.
+  function updateConCostoAuto(id: string, patch: Partial<PresupuestoItem>) {
+    onChange(
+      p.items.map((it) => {
+        if (it.id !== id) return it;
+        const next = { ...it, ...patch };
+        const costo = costoManoDeObra(next.horasEstimadas, next.personaId, equipo);
+        return costo != null ? { ...next, costoUnitario: costo } : next;
+      })
+    );
   }
   function remove(id: string) {
     onChange(p.items.filter((it) => it.id !== id));
@@ -232,6 +251,8 @@ function ItemsEditor({
               <tr>
                 <Th>Servicio</Th>
                 <Th>Cant.</Th>
+                <Th title="Horas por unidad — se usan para calcular el costo automático y prorratear costos fijos">Horas</Th>
+                <Th title="Si elegís un profesional, el costo se calcula solo (horas × valor hora)">Profesional</Th>
                 <Th title="Precio que se le cobra al cliente por unidad">Precio unit.</Th>
                 <Th title="Costo interno por unidad">Costo unit.</Th>
                 <Th>Subtotal</Th>
@@ -245,13 +266,43 @@ function ItemsEditor({
                     <Input value={it.nombre} onChange={(e) => update(it.id, { nombre: e.target.value })} />
                   </Td>
                   <Td>
-                    <Input type="number" min={0} step={0.5} value={it.cantidad} onChange={(e) => update(it.id, { cantidad: Number(e.target.value) })} style={{ width: 70 }} />
+                    <Input type="number" min={0} step={0.5} value={it.cantidad} onChange={(e) => update(it.id, { cantidad: Number(e.target.value) })} style={{ width: 65 }} />
+                  </Td>
+                  <Td>
+                    <Input
+                      type="number"
+                      min={0}
+                      step={0.5}
+                      value={it.horasEstimadas || ""}
+                      onChange={(e) => updateConCostoAuto(it.id, { horasEstimadas: Number(e.target.value) })}
+                      style={{ width: 65 }}
+                    />
+                  </Td>
+                  <Td>
+                    <Select
+                      value={it.personaId ?? ""}
+                      onChange={(e) => updateConCostoAuto(it.id, { personaId: e.target.value || null })}
+                      style={{ minWidth: 140 }}
+                    >
+                      <option value="">— Manual —</option>
+                      {equipo.map((per) => (
+                        <option key={per.id} value={per.id}>{per.nombre}</option>
+                      ))}
+                    </Select>
                   </Td>
                   <Td>
                     <Input type="number" min={0} value={it.precioUnitario} onChange={(e) => update(it.id, { precioUnitario: Number(e.target.value) })} style={{ width: 100 }} />
                   </Td>
                   <Td>
-                    <Input type="number" min={0} value={it.costoUnitario} onChange={(e) => update(it.id, { costoUnitario: Number(e.target.value) })} style={{ width: 100 }} />
+                    <Input
+                      type="number"
+                      min={0}
+                      value={it.costoUnitario}
+                      disabled={Boolean(it.personaId)}
+                      className={it.personaId ? "opacity-70" : ""}
+                      onChange={(e) => update(it.id, { costoUnitario: Number(e.target.value) })}
+                      style={{ width: 100 }}
+                    />
                   </Td>
                   <Td>{fMoney(it.precioUnitario * it.cantidad, p.moneda)}</Td>
                   <Td>
@@ -375,14 +426,19 @@ function ParametrosEditor({ p, onChange }: { p: Presupuesto; onChange: (patch: P
 function ResultadoView({
   p,
   servicios,
+  config,
+  costoFijoPorHoraValue,
   onChange,
 }: {
   p: Presupuesto;
   servicios: Servicio[];
+  config: Config;
+  costoFijoPorHoraValue: number;
   onChange: (patch: Partial<Presupuesto>) => void;
 }) {
-  const t = calcularPresupuesto(p);
+  const t = calcularPresupuesto(p, costoFijoPorHoraValue);
   const desglose = desgloseCostosPorResponsable(p, servicios);
+  const indicador = indicadorRentabilidad(t.margenReal, config);
 
   const tiers: { key: PrecioElegido; label: string; precio: number; margenPct: number }[] = [
     { key: "minimo", label: "Precio mínimo", precio: t.precioMinimo, margenPct: p.margenMinimoPct },
@@ -393,6 +449,7 @@ function ResultadoView({
   const breakdown = [
     { label: "Costo de servicios", monto: t.costoItems },
     { label: "Costos adicionales", monto: t.costoAdicionales },
+    { label: "Costos fijos prorrateados", monto: t.costosFijosProrrateados },
     { label: "Fondo para imprevistos", monto: t.fondoImprevistosMonto },
     { label: "Impuestos", monto: t.impuestosMonto },
     { label: "Comisiones", monto: t.comisionesMonto },
@@ -402,6 +459,18 @@ function ResultadoView({
 
   return (
     <div>
+      <div
+        className={`mb-4 flex items-center gap-2 rounded-lg border px-4 py-3 text-[13px] font-medium ${
+          indicador.nivel === "excelente"
+            ? "border-green/20 bg-green-dim text-green"
+            : indicador.nivel === "aceptable"
+            ? "border-orange/20 bg-orange-dim text-orange"
+            : "border-red/20 bg-red-dim text-red"
+        }`}
+      >
+        <span className="text-lg leading-none">{indicador.icono}</span> {indicador.texto} — margen real {fPct(t.margenReal, 1)}
+      </div>
+
       <StatGrid>
         <KpiCard label="Costo interno del proyecto" value={fMoney(t.costoInterno, p.moneda)} />
         <KpiCard label="Precio final elegido" value={fMoney(t.precioFinal, p.moneda)} color="accent" />
@@ -409,6 +478,7 @@ function ResultadoView({
         <KpiCard label="Margen real" value={fPct(t.margenReal, 1)} color={t.margenReal >= 0 ? "green" : "red"} />
       </StatGrid>
 
+      <div className="mb-2 text-[11px] uppercase tracking-wide text-text3">Opción 2 — precio calculado automáticamente</div>
       <div className="mb-4 grid grid-cols-1 gap-3 sm:grid-cols-3">
         {tiers.map((tier) => (
           <div
@@ -425,7 +495,8 @@ function ResultadoView({
         ))}
       </div>
 
-      <Field label="Usar un precio manual (opcional)">
+      <div className="mb-2 text-[11px] uppercase tracking-wide text-text3">Opción 1 — ingresar el precio total del proyecto</div>
+      <Field label="Precio total del proyecto">
         <div className="flex items-center gap-2">
           <Input
             type="number"
@@ -438,6 +509,10 @@ function ResultadoView({
           {p.precioElegido === "manual" && <Badge color="accent">En uso</Badge>}
         </div>
       </Field>
+      <p className="mt-1.5 text-[11px] text-text3">
+        Al usar esta opción, el total se distribuye automáticamente entre los servicios según su participación (ver
+        abajo).
+      </p>
 
       <div className="mt-5 grid grid-cols-1 gap-4 lg:grid-cols-2">
         <Card title="Composición del presupuesto (% del precio final)">
@@ -490,13 +565,15 @@ function ResultadoView({
 function DistribucionEditor({
   p,
   equipo,
+  costoFijoPorHoraValue,
   onChange,
 }: {
   p: Presupuesto;
   equipo: { id: string; nombre: string }[];
+  costoFijoPorHoraValue: number;
   onChange: (d: DistribucionItem[]) => void;
 }) {
-  const t = calcularPresupuesto(p);
+  const t = calcularPresupuesto(p, costoFijoPorHoraValue);
   const resumen = resumenDistribucion(p, t.precioFinal);
 
   function add() {
@@ -629,6 +706,7 @@ export function Presupuestos() {
   const [detalleId, setDetalleId] = useState<string | null>(null);
   const [tab, setTab] = useState("resumen");
 
+  const cfph = costoFijoPorHora(data);
   const detalle = data.presupuestos.find((pp) => pp.id === detalleId) ?? null;
 
   const lista = useMemo(
@@ -660,6 +738,11 @@ export function Presupuestos() {
       setDraft((d) => (d ? { ...d, costosAdicionales: sugerirCostos(d.respuestas) } : d));
     }
     setStep((s) => Math.min(WIZARD_STEPS.length - 1, s + 1));
+  }
+  /** Modo rápido: salta el cuestionario de necesidades y va directo a elegir
+   * servicios del catálogo a mano (cliente + servicios + cantidad/horas). */
+  function saltarNecesidades() {
+    setStep(2);
   }
   function retroceder() {
     setStep((s) => Math.max(0, s - 1));
@@ -708,7 +791,7 @@ export function Presupuestos() {
 
   function convertirEnCliente() {
     if (!detalle) return;
-    const t = calcularPresupuesto(detalle);
+    const t = calcularPresupuesto(detalle, cfph);
     if (detalle.clienteId) {
       setData((d) => ({
         ...d,
@@ -741,6 +824,7 @@ export function Presupuestos() {
             modalidadPago: "",
             observaciones: `Convertido automáticamente desde el presupuesto #${detalle.numero}.`,
             equipoAsignado: [],
+            fechaUltimoAumento: "",
           },
         ],
         presupuestos: d.presupuestos.map((p) => (p.id === detalle.id ? { ...p, clienteId: nuevoId } : p)),
@@ -784,7 +868,7 @@ export function Presupuestos() {
                 </thead>
                 <tbody>
                   {lista.map((p) => {
-                    const t = calcularPresupuesto(p);
+                    const t = calcularPresupuesto(p, cfph);
                     return (
                       <TrHover key={p.id}>
                         <Td main onClick={() => abrirDetalle(p.id)}>#{p.numero}</Td>
@@ -855,6 +939,14 @@ export function Presupuestos() {
 
           {step === 1 && (
             <div className="flex flex-col gap-5">
+              <Alert kind="info">
+                <span>
+                  ¿Ya sabés qué servicios necesitás? Podés saltar este cuestionario y elegirlos directamente.
+                </span>
+                <Button size="sm" variant="ghost" className="ml-auto" onClick={saltarNecesidades}>
+                  Saltar → elegir servicios directamente
+                </Button>
+              </Alert>
               <FormGrid>
                 <Field label="¿Cuántas redes sociales se gestionan?">
                   <Input type="number" min={0} value={r.redesCantidad} onChange={(e) => setR({ redesCantidad: Number(e.target.value) })} />
@@ -981,7 +1073,7 @@ export function Presupuestos() {
               <p className="mb-3 text-[11.5px] text-text3">
                 Generamos ítems sugeridos a partir de las respuestas anteriores. Podés editar cantidades y precios, o agregar/quitar servicios.
               </p>
-              <ItemsEditor p={draft} servicios={data.servicios} onChange={(items) => setDraft({ ...draft, items })} />
+              <ItemsEditor p={draft} servicios={data.servicios} equipo={data.equipo} onChange={(items) => setDraft({ ...draft, items })} />
             </div>
           )}
 
@@ -994,7 +1086,15 @@ export function Presupuestos() {
 
           {step === 4 && <ParametrosEditor p={draft} onChange={(patch) => setDraft({ ...draft, ...patch })} />}
 
-          {step === 5 && <ResultadoView p={draft} servicios={data.servicios} onChange={(patch) => setDraft({ ...draft, ...patch })} />}
+          {step === 5 && (
+            <ResultadoView
+              p={draft}
+              servicios={data.servicios}
+              config={data.config}
+              costoFijoPorHoraValue={cfph}
+              onChange={(patch) => setDraft({ ...draft, ...patch })}
+            />
+          )}
         </Card>
 
         <div className="mt-4 flex justify-between">
@@ -1011,7 +1111,7 @@ export function Presupuestos() {
 
   // ---------- Vista: detalle ----------
   if (view === "detail" && detalle) {
-    const t = calcularPresupuesto(detalle);
+    const t = calcularPresupuesto(detalle, cfph);
     return (
       <div>
         <PageHeader
@@ -1024,7 +1124,7 @@ export function Presupuestos() {
                   <option key={e.value} value={e.value}>{e.label}</option>
                 ))}
               </Select>
-              <Button variant="ghost" onClick={() => imprimirPresupuesto(detalle, data.config)}>Exportar PDF</Button>
+              <Button variant="ghost" onClick={() => imprimirPresupuesto(detalle, data.config, cfph)}>Exportar PDF</Button>
               <Button variant="ghost" onClick={() => setView("list")}>Volver</Button>
             </>
           }
@@ -1052,14 +1152,17 @@ export function Presupuestos() {
           ]}
         />
 
-        {tab === "resumen" && <ResultadoView p={detalle} servicios={data.servicios} onChange={updatePresupuesto} />}
-        {tab === "items" && <ItemsEditor p={detalle} servicios={data.servicios} onChange={(items) => updatePresupuesto({ items })} />}
+        {tab === "resumen" && (
+          <ResultadoView p={detalle} servicios={data.servicios} config={data.config} costoFijoPorHoraValue={cfph} onChange={updatePresupuesto} />
+        )}
+        {tab === "items" && <ItemsEditor p={detalle} servicios={data.servicios} equipo={data.equipo} onChange={(items) => updatePresupuesto({ items })} />}
         {tab === "costos" && <CostosEditor p={detalle} onChange={(costosAdicionales) => updatePresupuesto({ costosAdicionales })} />}
         {tab === "parametros" && <ParametrosEditor p={detalle} onChange={updatePresupuesto} />}
         {tab === "distribucion" && (
           <DistribucionEditor
             p={detalle}
             equipo={data.equipo.map((per) => ({ id: per.id, nombre: per.nombre }))}
+            costoFijoPorHoraValue={cfph}
             onChange={(distribucion) => updatePresupuesto({ distribucion })}
           />
         )}

@@ -54,6 +54,7 @@ function emptyForm(): Cliente {
     modalidadPago: "",
     observaciones: "",
     equipoAsignado: [],
+    fechaUltimoAumento: "",
   };
 }
 
@@ -242,6 +243,9 @@ export function Clientes() {
               </Field>
               <Field label="Fecha de inicio">
                 <Input type="date" value={form.fechaInicio} onChange={(e) => setForm({ ...form, fechaInicio: e.target.value })} />
+              </Field>
+              <Field label="Fecha del último aumento">
+                <Input type="date" value={form.fechaUltimoAumento} onChange={(e) => setForm({ ...form, fechaUltimoAumento: e.target.value })} />
               </Field>
               <Field label="Abono mensual">
                 <Input type="number" min={0} value={form.abonoMensual || ""} onChange={(e) => setForm({ ...form, abonoMensual: Number(e.target.value) })} />

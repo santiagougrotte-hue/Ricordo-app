@@ -23,7 +23,7 @@ import {
   TrHover,
 } from "@/components/ui";
 import { NIVELES_COMPLEJIDAD, UNIDADES_COBRO, type Complejidad, type Servicio, type UnidadCobro } from "@/lib/types";
-import { fMoney, fPct } from "@/lib/calc";
+import { costoManoDeObra, fMoney, fPct } from "@/lib/calc";
 
 const COMPLEJIDAD_BADGE: Record<Complejidad, "green" | "orange" | "red"> = {
   baja: "green",
@@ -40,6 +40,7 @@ function emptyForm(): Servicio {
     unidad: "pieza",
     horasEstimadas: 0,
     costoInterno: 0,
+    personaId: null,
     profesionalResponsable: "",
     margenMinimo: 30,
     complejidad: "media",
@@ -125,7 +126,7 @@ export function Servicios() {
                   <Th>Servicio</Th>
                   <Th>Unidad</Th>
                   <Th title="% del valor total de un proyecto que representa este servicio">Participación (%)</Th>
-                  <Th title="Costo interno estimado por unidad">Costo interno</Th>
+                  <Th title="Costo interno estimado por unidad. 'Auto' = calculado desde horas × valor hora del profesional.">Costo interno</Th>
                   <Th>Responsable</Th>
                   <Th>Complejidad</Th>
                   <Th></Th>
@@ -138,7 +139,10 @@ export function Servicios() {
                       <Td main>{s.nombre}</Td>
                       <Td>{UNIDADES_COBRO.find((u) => u.value === s.unidad)?.label}</Td>
                       <Td>{fPct(s.participacionPct, 0)}</Td>
-                      <Td>{fMoney(s.costoInterno)}</Td>
+                      <Td>
+                        {fMoney(s.costoInterno)}
+                        {s.personaId && <span className="ml-1.5 text-[10px] text-text3">auto</span>}
+                      </Td>
                       <Td>{s.profesionalResponsable || "—"}</Td>
                       <Td>
                         <Badge color={COMPLEJIDAD_BADGE[s.complejidad]}>{NIVELES_COMPLEJIDAD.find((c) => c.value === s.complejidad)?.label}</Badge>
@@ -203,14 +207,58 @@ export function Servicios() {
                   <span className="text-text3">%</span>
                 </div>
               </Field>
-              <Field label="Costo interno">
-                <Input type="number" min={0} value={form.costoInterno || ""} onChange={(e) => setForm({ ...form, costoInterno: Number(e.target.value) })} />
-              </Field>
               <Field label="Horas estimadas">
-                <Input type="number" min={0} step={0.5} value={form.horasEstimadas || ""} onChange={(e) => setForm({ ...form, horasEstimadas: Number(e.target.value) })} />
+                <Input
+                  type="number"
+                  min={0}
+                  step={0.5}
+                  value={form.horasEstimadas || ""}
+                  onChange={(e) => {
+                    const horasEstimadas = Number(e.target.value);
+                    const costo = costoManoDeObra(horasEstimadas, form.personaId, data.equipo);
+                    setForm({ ...form, horasEstimadas, costoInterno: costo ?? form.costoInterno });
+                  }}
+                />
               </Field>
-              <Field label="Profesional responsable">
-                <Input value={form.profesionalResponsable} onChange={(e) => setForm({ ...form, profesionalResponsable: e.target.value })} placeholder="Rol o nombre" />
+              <Field label="Profesional (Equipo)">
+                <Select
+                  value={form.personaId ?? ""}
+                  onChange={(e) => {
+                    const personaId = e.target.value || null;
+                    const persona = data.equipo.find((p) => p.id === personaId);
+                    const costo = costoManoDeObra(form.horasEstimadas, personaId, data.equipo);
+                    setForm({
+                      ...form,
+                      personaId,
+                      profesionalResponsable: persona ? persona.nombre : form.profesionalResponsable,
+                      costoInterno: costo ?? form.costoInterno,
+                    });
+                  }}
+                >
+                  <option value="">— Sin vincular (costo manual) —</option>
+                  {data.equipo.map((p) => (
+                    <option key={p.id} value={p.id}>{p.nombre} — {p.rol}</option>
+                  ))}
+                </Select>
+              </Field>
+              <Field label="Costo interno">
+                {form.personaId ? (
+                  <div className="flex items-center gap-2">
+                    <Input type="number" value={Math.round(form.costoInterno) || ""} disabled className="opacity-70" />
+                    <span className="whitespace-nowrap text-[10.5px] text-text3">= horas × valor hora</span>
+                  </div>
+                ) : (
+                  <Input type="number" min={0} value={form.costoInterno || ""} onChange={(e) => setForm({ ...form, costoInterno: Number(e.target.value) })} />
+                )}
+              </Field>
+              <Field label="Profesional responsable (texto libre)">
+                <Input
+                  value={form.profesionalResponsable}
+                  onChange={(e) => setForm({ ...form, profesionalResponsable: e.target.value })}
+                  placeholder="Rol o nombre"
+                  disabled={Boolean(form.personaId)}
+                  className={form.personaId ? "opacity-70" : ""}
+                />
               </Field>
               <Field label="Margen mínimo deseado (%)">
                 <Input type="number" min={0} max={100} value={form.margenMinimo || ""} onChange={(e) => setForm({ ...form, margenMinimo: Number(e.target.value) })} />

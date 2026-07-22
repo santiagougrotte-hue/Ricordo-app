@@ -19,6 +19,15 @@ export function seedData(): AppData {
   const m = now.getMonth() + 1;
   const prevM = m === 1 ? 12 : m - 1;
   const prevY = m === 1 ? y - 1 : y;
+  function haceMeses(n: number, d: number): string {
+    let yy = y;
+    let mm = m - n;
+    while (mm <= 0) {
+      mm += 12;
+      yy -= 1;
+    }
+    return iso(yy, mm, d);
+  }
 
   // ---------- Equipo ----------
   const directora: Persona = {
@@ -98,6 +107,18 @@ export function seedData(): AppData {
   };
   const equipo = [directora, disenadora, productora, creadora, communityManager];
 
+  // Servicios cuyo "profesionalResponsable" coincide con alguien de Equipo quedan
+  // vinculados (personaId) para el cálculo automático de costo; el resto queda con
+  // costo manual, como hasta ahora (roles como Fotógrafa, Editora de video, etc.
+  // todavía no tienen una persona cargada en Equipo).
+  const personaPorRol: Record<string, string> = {
+    "Directora y fundadora": directora.id,
+    "Community manager": communityManager.id,
+    Productora: productora.id,
+    "Diseñadora gráfica": disenadora.id,
+    "Creadora de contenido": creadora.id,
+  };
+
   // ---------- Clientes ----------
   const clientes: Cliente[] = [
     {
@@ -108,7 +129,7 @@ export function seedData(): AppData {
       email: "valen@brumacosmetica.com",
       instagram: "@bruma.cosmetica",
       rubro: "Belleza",
-      fechaInicio: iso(y, m > 4 ? m - 4 : 12 + m - 4, 1),
+      fechaInicio: haceMeses(4, 1),
       estado: "activo",
       serviciosContratados: [],
       abonoMensual: 620000,
@@ -117,6 +138,7 @@ export function seedData(): AppData {
       modalidadPago: "Transferencia, primeros 5 días del mes",
       observaciones: "Cliente ancla. Prioriza reels y fotografía de producto.",
       equipoAsignado: [disenadora.id, creadora.id, communityManager.id],
+      fechaUltimoAumento: haceMeses(7, 5),
     },
     {
       id: uid("cli"),
@@ -126,7 +148,7 @@ export function seedData(): AppData {
       email: "julian@terrena.cafe",
       instagram: "@terrena.cafe",
       rubro: "Gastronomía",
-      fechaInicio: iso(y, m > 8 ? m - 8 : 12 + m - 8, 15),
+      fechaInicio: haceMeses(8, 15),
       estado: "activo",
       serviciosContratados: [],
       abonoMensual: 480000,
@@ -135,6 +157,7 @@ export function seedData(): AppData {
       modalidadPago: "Transferencia mensual",
       observaciones: "Foco en contenido gastronómico y cobertura de eventos.",
       equipoAsignado: [creadora.id, communityManager.id],
+      fechaUltimoAumento: haceMeses(2, 15),
     },
     {
       id: uid("cli"),
@@ -153,6 +176,7 @@ export function seedData(): AppData {
       modalidadPago: "Transferencia, adelantado",
       observaciones: "Producción de moda mensual + dirección creativa.",
       equipoAsignado: [directora.id, disenadora.id, productora.id],
+      fechaUltimoAumento: iso(y - 1, m, 1),
     },
     {
       id: uid("cli"),
@@ -162,7 +186,7 @@ export function seedData(): AppData {
       email: "nico@estudiocielo.com.ar",
       instagram: "@estudiocielo.arq",
       rubro: "Arquitectura",
-      fechaInicio: iso(y, m > 2 ? m - 2 : 12 + m - 2, 20),
+      fechaInicio: haceMeses(2, 20),
       estado: "activo",
       serviciosContratados: [],
       abonoMensual: 390000,
@@ -171,6 +195,7 @@ export function seedData(): AppData {
       modalidadPago: "Transferencia mensual",
       observaciones: "Gestión de redes + fotografía de obra una vez al mes.",
       equipoAsignado: [communityManager.id],
+      fechaUltimoAumento: haceMeses(3, 20),
     },
     {
       id: uid("cli"),
@@ -180,7 +205,7 @@ export function seedData(): AppData {
       email: "cami@florsalvaje.com.ar",
       instagram: "@florsalvaje",
       rubro: "Retail",
-      fechaInicio: iso(y, m > 6 ? m - 6 : 12 + m - 6, 3),
+      fechaInicio: haceMeses(6, 3),
       estado: "activo",
       serviciosContratados: [],
       abonoMensual: 340000,
@@ -189,6 +214,7 @@ export function seedData(): AppData {
       modalidadPago: "Transferencia mensual",
       observaciones: "",
       equipoAsignado: [creadora.id],
+      fechaUltimoAumento: haceMeses(4, 3),
     },
     {
       id: uid("cli"),
@@ -207,6 +233,7 @@ export function seedData(): AppData {
       modalidadPago: "",
       observaciones: "Primera reunión hecha, esperando aprobación de presupuesto.",
       equipoAsignado: [],
+      fechaUltimoAumento: "",
     },
     {
       id: uid("cli"),
@@ -225,6 +252,7 @@ export function seedData(): AppData {
       modalidadPago: "",
       observaciones: "",
       equipoAsignado: [],
+      fechaUltimoAumento: "",
     },
   ];
 
@@ -249,6 +277,7 @@ export function seedData(): AppData {
     unidad,
     horasEstimadas,
     costoInterno,
+    personaId: personaPorRol[profesionalResponsable] ?? null,
     profesionalResponsable,
     margenMinimo,
     complejidad,
@@ -301,6 +330,8 @@ export function seedData(): AppData {
         precioUnitario: s.costoInterno,
         costoUnitario: s.costoInterno,
         participacionPct: s.participacionPct,
+        personaId: s.personaId,
+        horasEstimadas: s.horasEstimadas,
       };
     });
 
@@ -566,12 +597,25 @@ export function seedData(): AppData {
     });
   }
 
+  const costosFijos = [
+    { id: uid("cf"), nombre: "Adobe Creative Cloud", montoMensual: 25000, observaciones: "" },
+    { id: uid("cf"), nombre: "CapCut Pro", montoMensual: 8000, observaciones: "" },
+    { id: uid("cf"), nombre: "Google Drive", montoMensual: 6000, observaciones: "Almacenamiento compartido del equipo." },
+    { id: uid("cf"), nombre: "Internet", montoMensual: 30000, observaciones: "" },
+    { id: uid("cf"), nombre: "Monotributo", montoMensual: 45000, observaciones: "" },
+    { id: uid("cf"), nombre: "Contadora", montoMensual: 60000, observaciones: "" },
+    { id: uid("cf"), nombre: "Combustible", montoMensual: 40000, observaciones: "Traslados a producciones." },
+    { id: uid("cf"), nombre: "Alquiler", montoMensual: 220000, observaciones: "Estudio/oficina." },
+    { id: uid("cf"), nombre: "Otros", montoMensual: 20000, observaciones: "" },
+  ];
+
   return {
     clientes,
     servicios,
     equipo,
     presupuestos,
     movimientos,
+    costosFijos,
     config: {
       nombreEstudio: "TRAMA Studio",
       nombreDirectora: "Julia Fontán",
@@ -604,6 +648,9 @@ export function seedData(): AppData {
       ],
       datosBancarios: "CBU 0000003100000000000000 — Banco ejemplo — TRAMA Studio SRL",
       datosFiscales: "TRAMA Studio SRL — CUIT 30-00000000-0",
+      horasMensualesEstudio: 160,
+      inflacionAnualEstimada: 60,
+      mesesEntreAumentos: 6,
     },
   };
 }

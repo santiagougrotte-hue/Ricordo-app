@@ -8,7 +8,7 @@ import React, {
   useRef,
   useState,
 } from "react";
-import { emptyData, STORAGE_KEY, type AppData } from "./types";
+import { emptyData, mergeAppData, STORAGE_KEY, type AppData } from "./types";
 import { supabase, supabaseConfigured } from "./supabase";
 
 type SetData = (updater: AppData | ((d: AppData) => AppData)) => void;
@@ -29,7 +29,7 @@ function loadFromLocalStorage(): AppData | null {
   if (typeof window === "undefined") return null;
   try {
     const raw = window.localStorage.getItem(STORAGE_KEY);
-    if (raw) return { ...emptyData(), ...JSON.parse(raw) };
+    if (raw) return mergeAppData(emptyData(), JSON.parse(raw));
   } catch {
     /* ignore corrupt storage */
   }
@@ -77,7 +77,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
           return;
         }
         if (row?.data) {
-          const remote = { ...emptyData(), ...(row.data as Partial<AppData>) };
+          const remote = mergeAppData(emptyData(), row.data as Partial<AppData>);
           setDataState(remote);
           lastPushed.current = JSON.stringify(remote);
         } else {
@@ -102,7 +102,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
           const serialized = JSON.stringify(incoming);
           if (serialized === lastPushed.current) return; // echo of our own write
           lastPushed.current = serialized;
-          setDataState({ ...emptyData(), ...incoming });
+          setDataState(mergeAppData(emptyData(), incoming));
           saveToLocalStorage(incoming);
         }
       )

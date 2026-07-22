@@ -38,6 +38,7 @@ export interface Cliente {
   modalidadPago: string;
   observaciones: string;
   equipoAsignado: string[]; // Persona ids
+  fechaUltimoAumento: string; // YYYY-MM-DD, vacío si nunca se registró uno
 }
 
 // ---------- Servicios ----------
@@ -67,7 +68,8 @@ export interface Servicio {
   participacionPct: number; // % del valor total de un proyecto que representa este servicio
   unidad: UnidadCobro;
   horasEstimadas: number;
-  costoInterno: number;
+  costoInterno: number; // manual si personaId es null; si no, se calcula automáticamente (horas × valor hora)
+  personaId: string | null; // profesional del Equipo asignado, para el cálculo automático de costo
   profesionalResponsable: string;
   margenMinimo: number; // %
   complejidad: Complejidad;
@@ -112,8 +114,18 @@ export interface PresupuestoItem {
   cantidad: number;
   unidad: UnidadCobro;
   precioUnitario: number; // precio al cliente
-  costoUnitario: number; // costo interno
+  costoUnitario: number; // costo interno (manual, o calculado si personaId está definido)
   participacionPct: number; // % del precio final del presupuesto que representa este servicio (sugerido desde el catálogo)
+  personaId: string | null; // profesional del Equipo asignado, para el cálculo automático de costo
+  horasEstimadas: number; // horas por unidad, usadas para el cálculo automático de costo y el prorrateo de costos fijos
+}
+
+/** Costo recurrente del estudio (suscripciones, alquiler, etc.) que se prorratea entre los proyectos. */
+export interface CostoFijo {
+  id: string;
+  nombre: string;
+  montoMensual: number;
+  observaciones: string;
 }
 
 export interface CostoAdicional {
@@ -389,6 +401,9 @@ export interface Config {
   categoriasGastos: string[];
   datosBancarios: string;
   datosFiscales: string;
+  horasMensualesEstudio: number; // horas facturables estimadas del estudio por mes, usadas para prorratear costos fijos
+  inflacionAnualEstimada: number; // %, usada para sugerir aumentos en Revisión de clientes
+  mesesEntreAumentos: number; // umbral: a partir de cuántos meses sin aumento se sugiere actualizar
 }
 
 export function defaultConfig(): Config {
@@ -424,6 +439,9 @@ export function defaultConfig(): Config {
     ],
     datosBancarios: "",
     datosFiscales: "",
+    horasMensualesEstudio: 160,
+    inflacionAnualEstimada: 60,
+    mesesEntreAumentos: 6,
   };
 }
 
@@ -435,6 +453,7 @@ export interface AppData {
   equipo: Persona[];
   presupuestos: Presupuesto[];
   movimientos: Movimiento[];
+  costosFijos: CostoFijo[];
   config: Config;
 }
 
@@ -447,6 +466,19 @@ export function emptyData(): AppData {
     equipo: [],
     presupuestos: [],
     movimientos: [],
+    costosFijos: [],
     config: defaultConfig(),
+  };
+}
+
+/** Combina datos guardados (localStorage/Supabase, potencialmente de una versión
+ * anterior del esquema) sobre una base completa, sin perder campos nuevos de
+ * `config` que el guardado viejo no tenga (evita el problema de un merge superficial
+ * pisando el objeto `config` entero). */
+export function mergeAppData(base: AppData, incoming: Partial<AppData>): AppData {
+  return {
+    ...base,
+    ...incoming,
+    config: { ...base.config, ...(incoming.config || {}) },
   };
 }

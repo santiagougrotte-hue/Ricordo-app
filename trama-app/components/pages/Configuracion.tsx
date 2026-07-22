@@ -134,6 +134,24 @@ export function Configuracion() {
         </p>
       </Card>
 
+      <Card title="Costos fijos y revisión de clientes" className="mb-4">
+        <FormGrid>
+          <Field label="Horas facturables del estudio por mes">
+            <Input type="number" min={0} value={config.horasMensualesEstudio} onChange={(e) => update({ horasMensualesEstudio: Number(e.target.value) })} />
+          </Field>
+          <Field label="Inflación anual estimada (%)">
+            <Input type="number" min={0} value={config.inflacionAnualEstimada} onChange={(e) => update({ inflacionAnualEstimada: Number(e.target.value) })} />
+          </Field>
+          <Field label="Meses sin aumento para avisar">
+            <Input type="number" min={1} value={config.mesesEntreAumentos} onChange={(e) => update({ mesesEntreAumentos: Number(e.target.value) })} />
+          </Field>
+        </FormGrid>
+        <p className="mt-2 text-[11px] text-text3">
+          Las horas mensuales se usan para prorratear los Costos Fijos entre los presupuestos según las horas de cada uno.
+          La inflación y el umbral de meses alimentan las sugerencias de aumento en Revisión de clientes.
+        </p>
+      </Card>
+
       <Card title="Categorías de gastos" className="mb-4">
         <div className="mb-3 flex flex-wrap gap-1.5">
           {config.categoriasGastos.map((c) => (
