@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState } from "react";
+import { Paperclip } from "lucide-react";
 import { useEntityCrud } from "@/lib/useEntity";
 import { useToast } from "@/lib/toast";
 import { uid } from "@/lib/id";
@@ -21,10 +22,11 @@ import {
   Textarea,
 } from "@/components/ui";
 import { Modal } from "@/components/Modal";
-import type { Proveedor } from "@/lib/types";
+import { FileAttach } from "@/components/FileAttach";
+import type { Adjunto, Proveedor } from "@/lib/types";
 
 function emptyForm() {
-  return { nombre: "", contacto: "", telefono: "", email: "", notas: "" };
+  return { nombre: "", contacto: "", telefono: "", email: "", notas: "", documento: undefined as Adjunto | undefined };
 }
 
 export function Proveedores() {
@@ -51,6 +53,7 @@ export function Proveedores() {
       telefono: p.telefono ?? "",
       email: p.email ?? "",
       notas: p.notas ?? "",
+      documento: p.documento,
     });
     setModalOpen(true);
   }
@@ -86,7 +89,21 @@ export function Proveedores() {
               <tbody>
                 {items.map((p) => (
                   <TrHover key={p.id}>
-                    <Td main>{p.nombre}</Td>
+                    <Td main>
+                      <div className="flex items-center gap-1.5">
+                        {p.nombre}
+                        {p.documento && (
+                          <a
+                            href={p.documento.data}
+                            download={p.documento.nombre}
+                            title={p.documento.nombre}
+                            className="text-text3 hover:text-accent"
+                          >
+                            <Paperclip className="h-3.5 w-3.5" />
+                          </a>
+                        )}
+                      </div>
+                    </Td>
                     <Td>{p.contacto || "—"}</Td>
                     <Td>{p.telefono || "—"}</Td>
                     <Td>{fARS(totalCompras(p.id))}</Td>
@@ -136,6 +153,9 @@ export function Proveedores() {
           </Field>
           <Field label="Notas" full>
             <Textarea rows={2} value={form.notas} onChange={(e) => setForm({ ...form, notas: e.target.value })} />
+          </Field>
+          <Field label="Documento" full>
+            <FileAttach value={form.documento} onChange={(documento) => setForm({ ...form, documento })} />
           </Field>
         </FormGrid>
       </Modal>

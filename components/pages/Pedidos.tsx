@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useMemo, useState } from "react";
-import { X } from "lucide-react";
+import { Paperclip, X } from "lucide-react";
 import { useStore } from "@/lib/store";
 import { usePeriod } from "@/lib/period";
 import { useToast } from "@/lib/toast";
@@ -26,8 +26,9 @@ import {
 } from "@/components/ui";
 import { Modal } from "@/components/Modal";
 import { Wizard } from "@/components/Wizard";
+import { FileAttach } from "@/components/FileAttach";
 import { fARS, inPeriod } from "@/lib/calc";
-import type { Canal, EstadoPedido, Pedido } from "@/lib/types";
+import type { Adjunto, Canal, EstadoPedido, Pedido } from "@/lib/types";
 
 const ESTADOS: EstadoPedido[] = ["Confirmado", "Produccion", "Entregado", "Cancelado"];
 const ESTADO_COLOR: Record<EstadoPedido, "blue" | "orange" | "green" | "red"> = {
@@ -61,6 +62,7 @@ function emptyOrderForm() {
     metodo_pago: "",
     notas: "",
     lineas: [emptyLinea()],
+    adjunto: undefined as Adjunto | undefined,
   };
 }
 
@@ -79,6 +81,7 @@ function emptyEditForm() {
     costo_envio: 0,
     metodo_pago: "",
     notas: "",
+    adjunto: undefined as Adjunto | undefined,
   };
 }
 
@@ -149,6 +152,7 @@ export function Pedidos() {
       costo_envio: p.costo_envio,
       metodo_pago: p.metodo_pago ?? "",
       notas: p.notas ?? "",
+      adjunto: p.adjunto,
     });
     setEditModalOpen(true);
   }
@@ -203,6 +207,7 @@ export function Pedidos() {
         costo_envio: orderForm.costo_envio,
         metodo_pago: orderForm.metodo_pago,
         notas: orderForm.notas,
+        adjunto: orderForm.adjunto,
       };
     });
 
@@ -311,6 +316,16 @@ export function Pedidos() {
                                   <span className="text-text3">·</span>
                                   <span className="text-text2">Envío {fARS(primero.costo_envio)}</span>
                                 </>
+                              )}
+                              {primero.adjunto && (
+                                <a
+                                  href={primero.adjunto.data}
+                                  download={primero.adjunto.nombre}
+                                  title={primero.adjunto.nombre}
+                                  className="text-text3 hover:text-accent"
+                                >
+                                  <Paperclip className="h-3.5 w-3.5" />
+                                </a>
                               )}
                             </div>
                             <div className="text-[12.5px]">
@@ -518,6 +533,9 @@ export function Pedidos() {
                   <Field label="Notas" full>
                     <Textarea rows={2} value={orderForm.notas} onChange={(e) => setOrderForm({ ...orderForm, notas: e.target.value })} />
                   </Field>
+                  <Field label="Comprobante de pago" full>
+                    <FileAttach value={orderForm.adjunto} onChange={(adjunto) => setOrderForm({ ...orderForm, adjunto })} />
+                  </Field>
                 </div>
 
                 <div className="mt-5 rounded-lg border border-border bg-surface2/40 p-4">
@@ -653,6 +671,9 @@ export function Pedidos() {
           </Field>
           <Field label="Notas" full>
             <Textarea rows={2} value={editForm.notas} onChange={(e) => setEditForm({ ...editForm, notas: e.target.value })} />
+          </Field>
+          <Field label="Comprobante de pago" full>
+            <FileAttach value={editForm.adjunto} onChange={(adjunto) => setEditForm({ ...editForm, adjunto })} />
           </Field>
         </FormGrid>
       </Modal>

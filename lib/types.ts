@@ -16,6 +16,13 @@ export interface Ingrediente {
   stock_minimo?: number;
 }
 
+export interface Adjunto {
+  nombre: string;
+  tipo: string;
+  tamano: number;
+  data: string; // data URL (base64)
+}
+
 export interface Producto {
   id: string;
   id_base: string;
@@ -23,6 +30,7 @@ export interface Producto {
   categoria?: string;
   precio_venta: number;
   activo: boolean;
+  foto?: Adjunto;
 }
 
 export interface Cliente {
@@ -68,6 +76,7 @@ export interface Pedido {
   costo_envio: number;
   metodo_pago?: string;
   notas?: string;
+  adjunto?: Adjunto;
 }
 
 export interface Produccion {
@@ -102,6 +111,7 @@ export interface Compra {
   lineas: CompraLineaIngrediente[];
   lineasPkg: CompraLineaPackaging[];
   registrar_caja: boolean;
+  adjunto?: Adjunto;
 }
 
 export interface CostoFijo {
@@ -174,6 +184,7 @@ export interface Proveedor {
   telefono?: string;
   email?: string;
   notas?: string;
+  documento?: Adjunto;
 }
 
 export interface HistorialPrecio {

@@ -23,10 +23,11 @@ import {
 } from "@/components/ui";
 import { Modal } from "@/components/Modal";
 import { Wizard } from "@/components/Wizard";
-import type { Ingrediente, Packaging, CostoFijo, Producto, RecetaLinea, TipoRecetaLinea } from "@/lib/types";
+import { FileAttach } from "@/components/FileAttach";
+import type { Adjunto, Ingrediente, Packaging, CostoFijo, Producto, RecetaLinea, TipoRecetaLinea } from "@/lib/types";
 
 function emptyForm() {
-  return { nombre: "", categoria: "", id_base: "", precio_venta: 0, activo: true };
+  return { nombre: "", categoria: "", id_base: "", precio_venta: 0, activo: true, foto: undefined as Adjunto | undefined };
 }
 
 interface DraftLinea {
@@ -60,7 +61,14 @@ export function Productos() {
   }
   function openEdit(p: Producto) {
     setEditing(p.id);
-    setForm({ nombre: p.nombre, categoria: p.categoria ?? "", id_base: p.id_base, precio_venta: p.precio_venta, activo: p.activo });
+    setForm({
+      nombre: p.nombre,
+      categoria: p.categoria ?? "",
+      id_base: p.id_base,
+      precio_venta: p.precio_venta,
+      activo: p.activo,
+      foto: p.foto,
+    });
     setModalOpen(true);
   }
   function save() {
@@ -153,7 +161,15 @@ export function Productos() {
                   const base = data.productos.find((b) => b.id === p.id_base);
                   return (
                     <TrHover key={p.id}>
-                      <Td main>{p.nombre}</Td>
+                      <Td main>
+                        <div className="flex items-center gap-2.5">
+                          {p.foto && (
+                            // eslint-disable-next-line @next/next/no-img-element -- base64 data URL, not an optimizable remote asset
+                            <img src={p.foto.data} alt={p.nombre} className="h-8 w-8 shrink-0 rounded object-cover" />
+                          )}
+                          {p.nombre}
+                        </div>
+                      </Td>
                       <Td>{p.id_base !== p.id && base ? base.nombre : "—"}</Td>
                       <Td>{fARS(p.precio_venta)}</Td>
                       <Td>{fARS(costo)}</Td>
@@ -230,6 +246,9 @@ export function Productos() {
               <option value="0">No</option>
             </Select>
           </Field>
+          <Field label="Foto" full>
+            <FileAttach value={form.foto} onChange={(foto) => setForm({ ...form, foto })} accept="image/*" />
+          </Field>
         </FormGrid>
       </Modal>
 
@@ -277,6 +296,9 @@ export function Productos() {
                     <option value="1">Sí</option>
                     <option value="0">No</option>
                   </Select>
+                </Field>
+                <Field label="Foto" full>
+                  <FileAttach value={draftForm.foto} onChange={(foto) => setDraftForm({ ...draftForm, foto })} accept="image/*" />
                 </Field>
               </FormGrid>
             ),

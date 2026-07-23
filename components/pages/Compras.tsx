@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useMemo, useState } from "react";
-import { X } from "lucide-react";
+import { Paperclip, X } from "lucide-react";
 import { useStore } from "@/lib/store";
 import { useToast } from "@/lib/toast";
 import { uid } from "@/lib/id";
@@ -23,7 +23,8 @@ import {
   KpiCard,
 } from "@/components/ui";
 import { Modal } from "@/components/Modal";
-import type { Compra, CompraLineaIngrediente, CompraLineaPackaging } from "@/lib/types";
+import { FileAttach } from "@/components/FileAttach";
+import type { Adjunto, Compra, CompraLineaIngrediente, CompraLineaPackaging } from "@/lib/types";
 
 function emptyForm() {
   return {
@@ -37,6 +38,7 @@ function emptyForm() {
     registrar_caja: true,
     lineas: [] as CompraLineaIngrediente[],
     lineasPkg: [] as CompraLineaPackaging[],
+    adjunto: undefined as Adjunto | undefined,
   };
 }
 
@@ -80,6 +82,7 @@ export function Compras() {
       registrar_caja: false,
       lineas: c.lineas,
       lineasPkg: c.lineasPkg,
+      adjunto: c.adjunto,
     });
     setModalOpen(true);
   }
@@ -106,6 +109,7 @@ export function Compras() {
       lineas: form.lineas.filter((l) => l.id_ingrediente),
       lineasPkg: form.lineasPkg.filter((l) => l.id_packaging),
       registrar_caja: false,
+      adjunto: form.adjunto,
     };
 
     setData((d) => {
@@ -199,7 +203,16 @@ export function Compras() {
                     <TrHover key={c.id}>
                       <Td>{c.fecha}</Td>
                       <Td>{data.proveedores.find((p) => p.id === c.id_proveedor)?.nombre ?? "—"}</Td>
-                      <Td main>{c.descripcion || "—"}</Td>
+                      <Td main>
+                        <div className="flex items-center gap-1.5">
+                          {c.descripcion || "—"}
+                          {c.adjunto && (
+                            <a href={c.adjunto.data} download={c.adjunto.nombre} title={c.adjunto.nombre} className="text-text3 hover:text-accent">
+                              <Paperclip className="h-3.5 w-3.5" />
+                            </a>
+                          )}
+                        </div>
+                      </Td>
                       <Td>{c.lineas.length + c.lineasPkg.length}</Td>
                       <Td main>{fARS(c.total)}</Td>
                       <Td>
@@ -401,9 +414,12 @@ export function Compras() {
           )}
         </div>
 
-        <div className="mt-3">
+        <div className="mt-3 grid grid-cols-1 gap-3.5 sm:grid-cols-2">
           <Field label="Notas" full>
             <Textarea rows={2} value={form.notas} onChange={(e) => setForm({ ...form, notas: e.target.value })} />
+          </Field>
+          <Field label="Comprobante / factura" full>
+            <FileAttach value={form.adjunto} onChange={(adjunto) => setForm({ ...form, adjunto })} />
           </Field>
         </div>
       </Modal>
