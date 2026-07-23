@@ -114,6 +114,20 @@ export function Pedidos() {
       .sort((a, b) => new Date(b.fecha).getTime() - new Date(a.fecha).getTime());
   }, [data.pedidos, data.clientes, mes, anio, estadoFiltro, canalFiltro, search]);
 
+  // Agrupa las líneas por pedido para mostrar cada orden junta, aunque tenga varios productos.
+  const agrupados = useMemo(() => {
+    const orden: string[] = [];
+    const grupos = new Map<string, Pedido[]>();
+    for (const p of filtrados) {
+      if (!grupos.has(p.id_pedido)) {
+        orden.push(p.id_pedido);
+        grupos.set(p.id_pedido, []);
+      }
+      grupos.get(p.id_pedido)!.push(p);
+    }
+    return orden.map((id) => grupos.get(id)!);
+  }, [filtrados]);
+
   function openNew() {
     setOrderForm(emptyOrderForm());
     setOrderModalOpen(true);
@@ -270,58 +284,81 @@ export function Pedidos() {
             <table className="w-full">
               <thead>
                 <tr>
-                  <Th>Fecha</Th>
-                  <Th>Cliente</Th>
                   <Th>Producto</Th>
                   <Th>Cant.</Th>
                   <Th>Precio neto</Th>
-                  <Th>Envío</Th>
-                  <Th>Canal</Th>
                   <Th>Estado</Th>
                   <Th>Acciones</Th>
                 </tr>
               </thead>
               <tbody>
-                {filtrados.map((p) => (
-                  <TrHover key={p.id_detalle}>
-                    <Td>{p.fecha}</Td>
-                    <Td main>{clienteNombre(p.id_cliente)}</Td>
-                    <Td>
-                      {p.nombre_producto}
-                      {p.gusto ? ` (${p.gusto})` : ""}
-                    </Td>
-                    <Td>{p.cantidad}</Td>
-                    <Td main>{fARS(p.precio_neto)}</Td>
-                    <Td>{p.costo_envio ? fARS(p.costo_envio) : "—"}</Td>
-                    <Td>{p.canal}</Td>
-                    <Td>
-                      <div className="flex items-center gap-2">
-                        <Badge color={ESTADO_COLOR[p.estado]}>{p.estado}</Badge>
-                      </div>
-                      <Select
-                        value={p.estado}
-                        onChange={(e) => cambiarEstado(p.id_detalle, e.target.value as EstadoPedido)}
-                        style={{ width: 120, padding: "4px 8px", marginTop: 4 }}
-                      >
-                        {ESTADOS.map((e) => (
-                          <option key={e} value={e}>
-                            {e}
-                          </option>
-                        ))}
-                      </Select>
-                    </Td>
-                    <Td>
-                      <div className="flex gap-1.5">
-                        <Button size="sm" variant="ghost" onClick={() => openEdit(p)}>
-                          Editar
-                        </Button>
-                        <Button size="sm" variant="danger" onClick={() => eliminar(p.id_detalle)}>
-                          Eliminar
-                        </Button>
-                      </div>
-                    </Td>
-                  </TrHover>
-                ))}
+                {agrupados.map((grupo) => {
+                  const primero = grupo[0];
+                  const totalOrden = grupo.reduce((acc, p) => acc + p.precio_neto, 0);
+                  return (
+                    <React.Fragment key={primero.id_pedido}>
+                      <tr className="bg-surface2/60">
+                        <Td colSpan={5} className="py-2">
+                          <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-1">
+                            <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[12.5px]">
+                              <span className="font-semibold text-text">{primero.fecha}</span>
+                              <span className="text-text3">·</span>
+                              <span className="font-medium text-text">{clienteNombre(primero.id_cliente)}</span>
+                              <span className="text-text3">·</span>
+                              <span className="text-text2">{primero.canal}</span>
+                              {primero.costo_envio > 0 && (
+                                <>
+                                  <span className="text-text3">·</span>
+                                  <span className="text-text2">Envío {fARS(primero.costo_envio)}</span>
+                                </>
+                              )}
+                            </div>
+                            <div className="text-[12.5px]">
+                              <span className="text-text3">Total pedido:&nbsp;</span>
+                              <span className="font-semibold text-accent">{fARS(totalOrden)}</span>
+                            </div>
+                          </div>
+                        </Td>
+                      </tr>
+                      {grupo.map((p) => (
+                        <TrHover key={p.id_detalle}>
+                          <Td main>
+                            {p.nombre_producto}
+                            {p.gusto ? ` (${p.gusto})` : ""}
+                          </Td>
+                          <Td>{p.cantidad}</Td>
+                          <Td main>{fARS(p.precio_neto)}</Td>
+                          <Td>
+                            <div className="flex items-center gap-2">
+                              <Badge color={ESTADO_COLOR[p.estado]}>{p.estado}</Badge>
+                            </div>
+                            <Select
+                              value={p.estado}
+                              onChange={(e) => cambiarEstado(p.id_detalle, e.target.value as EstadoPedido)}
+                              style={{ width: 120, padding: "4px 8px", marginTop: 4 }}
+                            >
+                              {ESTADOS.map((e) => (
+                                <option key={e} value={e}>
+                                  {e}
+                                </option>
+                              ))}
+                            </Select>
+                          </Td>
+                          <Td>
+                            <div className="flex gap-1.5">
+                              <Button size="sm" variant="ghost" onClick={() => openEdit(p)}>
+                                Editar
+                              </Button>
+                              <Button size="sm" variant="danger" onClick={() => eliminar(p.id_detalle)}>
+                                Eliminar
+                              </Button>
+                            </div>
+                          </Td>
+                        </TrHover>
+                      ))}
+                    </React.Fragment>
+                  );
+                })}
               </tbody>
             </table>
           </TableWrap>

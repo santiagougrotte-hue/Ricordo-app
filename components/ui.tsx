@@ -216,13 +216,18 @@ export function Td({
   children,
   main,
   className = "",
+  colSpan,
 }: {
   children?: React.ReactNode;
   main?: boolean;
   className?: string;
+  colSpan?: number;
 }) {
   return (
-    <td className={`border-b border-border/50 px-3 py-2.5 align-middle ${main ? "font-medium text-text" : "text-text2"} ${className}`}>
+    <td
+      colSpan={colSpan}
+      className={`border-b border-border/50 px-3 py-2.5 align-middle ${main ? "font-medium text-text" : "text-text2"} ${className}`}
+    >
       {children}
     </td>
   );
