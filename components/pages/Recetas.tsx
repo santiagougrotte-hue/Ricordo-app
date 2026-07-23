@@ -28,6 +28,7 @@ export function Recetas() {
   const [tipo, setTipo] = useState<TipoRecetaLinea>("Ingrediente");
   const [concepto, setConcepto] = useState("");
   const [cantidad, setCantidad] = useState(0);
+  const [editingId, setEditingId] = useState<string | null>(null);
 
   const lineas = useMemo(
     () => data.recetas.filter((r) => r.id_producto === idProducto),
@@ -52,20 +53,42 @@ export function Recetas() {
     return r.cantidad * (data.costos_fijos.find((c) => c.id === r.concepto)?.monto ?? 0);
   }
 
-  function agregar() {
+  function limpiarForm() {
+    setEditingId(null);
+    setTipo("Ingrediente");
+    setConcepto("");
+    setCantidad(0);
+  }
+
+  function editar(r: RecetaLinea) {
+    setEditingId(r.id);
+    setTipo(r.tipo);
+    setConcepto(r.concepto);
+    setCantidad(r.cantidad);
+  }
+
+  function guardar() {
     if (!idProducto || !concepto || cantidad <= 0) {
       toast("Completá concepto y cantidad", "error");
       return;
     }
-    const nueva: RecetaLinea = { id: uid("REC"), id_producto: idProducto, tipo, concepto, cantidad };
-    setData((d) => ({ ...d, recetas: [...d.recetas, nueva] }));
-    setConcepto("");
-    setCantidad(0);
-    toast("Línea agregada");
+    if (editingId) {
+      setData((d) => ({
+        ...d,
+        recetas: d.recetas.map((r) => (r.id === editingId ? { ...r, tipo, concepto, cantidad } : r)),
+      }));
+      toast("Línea actualizada");
+    } else {
+      const nueva: RecetaLinea = { id: uid("REC"), id_producto: idProducto, tipo, concepto, cantidad };
+      setData((d) => ({ ...d, recetas: [...d.recetas, nueva] }));
+      toast("Línea agregada");
+    }
+    limpiarForm();
   }
 
   function quitar(id: string) {
     setData((d) => ({ ...d, recetas: d.recetas.filter((r) => r.id !== id) }));
+    if (editingId === id) limpiarForm();
   }
 
   return (
@@ -74,7 +97,14 @@ export function Recetas() {
 
       <Card className="mb-4">
         <Field label="Producto">
-          <Select value={idProducto} onChange={(e) => setIdProducto(e.target.value)} style={{ maxWidth: 340 }}>
+          <Select
+            value={idProducto}
+            onChange={(e) => {
+              setIdProducto(e.target.value);
+              limpiarForm();
+            }}
+            style={{ maxWidth: 340 }}
+          >
             <option value="">Seleccionar…</option>
             {data.productos.map((p) => (
               <option key={p.id} value={p.id}>
@@ -89,8 +119,8 @@ export function Recetas() {
         <EmptyState text="Elegí un producto para ver y editar su receta." />
       ) : (
         <>
-          <Card title="Agregar línea" className="mb-4">
-            <div className="grid grid-cols-1 gap-3 sm:grid-cols-[140px_1fr_120px_100px]">
+          <Card title={editingId ? "Editar línea" : "Agregar línea"} className="mb-4">
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-[140px_1fr_120px_auto]">
               <Field label="Tipo">
                 <Select
                   value={tipo}
@@ -117,9 +147,14 @@ export function Recetas() {
               <Field label="Cantidad">
                 <Input type="number" value={cantidad} onChange={(e) => setCantidad(Number(e.target.value))} />
               </Field>
-              <div className="flex items-end">
-                <Button onClick={agregar} className="w-full justify-center">
-                  + Agregar
+              <div className="flex items-end gap-2">
+                {editingId && (
+                  <Button variant="ghost" onClick={limpiarForm}>
+                    Cancelar
+                  </Button>
+                )}
+                <Button onClick={guardar} className="flex-1 justify-center">
+                  {editingId ? "Guardar cambios" : "+ Agregar"}
                 </Button>
               </div>
             </div>
@@ -142,15 +177,20 @@ export function Recetas() {
                   </thead>
                   <tbody>
                     {lineas.map((r) => (
-                      <TrHover key={r.id}>
+                      <TrHover key={r.id} className={editingId === r.id ? "bg-accent/10" : ""}>
                         <Td>{r.tipo}</Td>
                         <Td main>{nombreConcepto(r)}</Td>
                         <Td>{r.cantidad}</Td>
                         <Td>{fARS(costoLinea(r))}</Td>
                         <Td>
-                          <Button size="sm" variant="danger" onClick={() => quitar(r.id)}>
-                            Quitar
-                          </Button>
+                          <div className="flex gap-1.5">
+                            <Button size="sm" variant="ghost" onClick={() => editar(r)}>
+                              Editar
+                            </Button>
+                            <Button size="sm" variant="danger" onClick={() => quitar(r.id)}>
+                              Quitar
+                            </Button>
+                          </div>
                         </Td>
                       </TrHover>
                     ))}
