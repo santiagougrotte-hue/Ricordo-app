@@ -1,0 +1,168 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>TRAMA — Gestión financiera y presupuestaria</title>
+<meta name="description" content="Administración financiera, contable y presupuestaria de TRAMA Studio.">
+<link rel="icon" href="logos/trama-logo.svg" type="image/svg+xml">
+<!-- Tipografías auto-alojadas: la app no depende de Google Fonts para funcionar -->
+<link rel="stylesheet" href="assets/fonts/fonts.css">
+<link rel="stylesheet" href="styles.css">
+<!-- Chart.js: gráficos del dashboard y reportes (incluido localmente para que
+     la app funcione sin conexión a internet, una vez abierta la primera vez) -->
+<script src="assets/vendor/chart.umd.js"></script>
+<!-- jsPDF: generación de presupuestos y reportes en PDF (incluido localmente) -->
+<script src="assets/vendor/jspdf.umd.min.js"></script>
+</head>
+<body>
+
+<!-- ============================== LOGIN ============================== -->
+<div id="login-screen">
+  <div class="login-card">
+    <img src="logos/trama-logo.svg" alt="TRAMA Studio" class="login-logo" id="login-logo-img">
+    <h1>TRAMA</h1>
+    <p class="subtitle">Gestión financiera y presupuestaria</p>
+    <form id="login-form">
+      <div class="form-field">
+        <label for="login-password">Contraseña local</label>
+        <input type="password" id="login-password" autocomplete="current-password" placeholder="Ingresá tu contraseña">
+      </div>
+      <button type="submit" class="btn btn-primary btn-block" id="login-submit">Ingresar</button>
+      <button type="button" class="btn btn-ghost btn-block hidden" id="login-skip">Continuar sin contraseña</button>
+    </form>
+    <p class="login-note" id="login-note">
+      Los datos se guardan únicamente en este dispositivo (localStorage del navegador),
+      mientras no exista una base de datos externa configurada.
+    </p>
+  </div>
+</div>
+
+<!-- ============================== APP SHELL ============================== -->
+<div id="app-shell" class="hidden">
+  <div class="sidebar-backdrop" id="sidebar-backdrop"></div>
+  <aside class="sidebar" id="sidebar">
+    <div class="sidebar-brand">
+      <img src="logos/trama-logo.svg" alt="TRAMA" id="sidebar-logo-img">
+      <div>
+        <div class="name">TRAMA</div>
+        <div class="tag">Studio</div>
+      </div>
+    </div>
+    <ul class="nav-list" id="nav-list">
+      <!-- generado por app.js -->
+    </ul>
+    <div class="sidebar-footer">
+      <button class="btn btn-ghost btn-sm btn-block" id="theme-toggle">Modo oscuro</button>
+      <button class="btn btn-ghost btn-sm btn-block" id="logout-btn">Cerrar sesión</button>
+    </div>
+  </aside>
+
+  <div class="main-col">
+    <header class="topbar">
+      <div style="display:flex; align-items:center; gap:10px;">
+        <button class="btn btn-ghost menu-toggle" id="menu-toggle" aria-label="Abrir menú">☰</button>
+        <h1 id="topbar-title">Inicio</h1>
+      </div>
+      <div class="topbar-actions">
+        <button class="btn btn-sm" id="backup-btn" title="Descargar copia de seguridad">Backup</button>
+      </div>
+    </header>
+
+    <main id="view-root">
+
+      <!-- ===================== DASHBOARD ===================== -->
+      <section class="view" id="view-dashboard">
+        <div class="view-header">
+          <div>
+            <div class="eyebrow">Resumen</div>
+            <h2>Inicio / Dashboard</h2>
+          </div>
+          <div class="view-actions">
+            <select class="filter-select" id="dash-month-filter"></select>
+          </div>
+        </div>
+
+        <div class="grid grid-kpi" id="dash-kpis"></div>
+
+        <div class="section-block">
+          <div class="section-block-title">Evolución</div>
+          <div class="grid grid-2">
+            <div class="card chart-card">
+              <div class="card-title">Ingresos, gastos y ganancia (últimos 6 meses)</div>
+              <div class="chart-wrap"><canvas id="chart-monthly-flow"></canvas></div>
+            </div>
+            <div class="card chart-card">
+              <div class="card-title">Evolución de la facturación anual</div>
+              <div class="chart-wrap"><canvas id="chart-yearly"></canvas></div>
+            </div>
+          </div>
+        </div>
+
+        <div class="section-block">
+          <div class="section-block-title">Distribución</div>
+          <div class="grid grid-3">
+            <div class="card chart-card small">
+              <div class="card-title">Ingresos por cliente</div>
+              <div class="chart-wrap"><canvas id="chart-by-client"></canvas></div>
+            </div>
+            <div class="card chart-card small">
+              <div class="card-title">Ingresos por servicio</div>
+              <div class="chart-wrap"><canvas id="chart-by-service"></canvas></div>
+            </div>
+            <div class="card chart-card small">
+              <div class="card-title">TRAMA / colaboradores / gastos</div>
+              <div class="chart-wrap"><canvas id="chart-distribution"></canvas></div>
+            </div>
+          </div>
+        </div>
+
+        <div class="section-block">
+          <div class="section-block-title">Comparación entre meses</div>
+          <div class="card chart-card">
+            <div class="chart-wrap"><canvas id="chart-comparison"></canvas></div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ===================== CLIENTES ===================== -->
+      <section class="view" id="view-clients"><div id="clients-root"></div></section>
+
+      <!-- ===================== INGRESOS ===================== -->
+      <section class="view" id="view-incomes"><div id="incomes-root"></div></section>
+
+      <!-- ===================== GASTOS ===================== -->
+      <section class="view" id="view-expenses"><div id="expenses-root"></div></section>
+
+      <!-- ===================== PRESUPUESTOS ===================== -->
+      <section class="view" id="view-budgets"><div id="budgets-root"></div></section>
+
+      <!-- ===================== SERVICIOS ===================== -->
+      <section class="view" id="view-services"><div id="services-root"></div></section>
+
+      <!-- ===================== DISTRIBUCIÓN INTERNA ===================== -->
+      <section class="view" id="view-distribution"><div id="distribution-root"></div></section>
+
+      <!-- ===================== RENTABILIDAD ===================== -->
+      <section class="view" id="view-profitability"><div id="profitability-root"></div></section>
+
+      <!-- ===================== REPORTES ===================== -->
+      <section class="view" id="view-reports"><div id="reports-root"></div></section>
+
+      <!-- ===================== CONFIGURACIÓN ===================== -->
+      <section class="view" id="view-settings"><div id="settings-root"></div></section>
+
+    </main>
+  </div>
+</div>
+
+<!-- ============================== MODAL HOST ============================== -->
+<div id="modal-host"></div>
+<div id="toast-stack"></div>
+
+<script src="storage.js"></script>
+<script src="charts.js"></script>
+<script src="pdf-generator.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
