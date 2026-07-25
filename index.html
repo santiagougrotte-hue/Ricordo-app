@@ -423,7 +423,7 @@ svg.chart{width:100%; height:150px; overflow:visible;}
   <div class="card">
     <div class="grid-2">
       <div class="field"><label>Sentadilla</label><input id="rm-squat" type="number" placeholder="0"></div>
-      <div class="field"><label>Peso Muerto Rumano</label><input id="rm-rdl" type="number" placeholder="0"></div>
+      <div class="field"><label>Curl Nórdico</label><input id="rm-rdl" type="number" placeholder="reps"></div>
       <div class="field"><label>Press Banca</label><input id="rm-bench" type="number" placeholder="0"></div>
       <div class="field"><label>Remo con Barra</label><input id="rm-row" type="number" placeholder="0"></div>
     </div>
@@ -862,9 +862,9 @@ const EX = {
   leg_extension:{name:'Sillón de Cuádricep', cat:'Fuerza', muscles:'Cuádriceps (VMO)', goal:'Fortalecer el cuádricep y proteger la rodilla',
     desc:'Sentado en la máquina, extender las piernas hasta bloqueo completo y bajar de forma controlada. Foco en el VMO (músculo interno del muslo).',
     errors:['Subir con impulso y bajar sin control','No llegar a extensión completa'], progreg:'Progresión: aumentar carga gradualmente. Variante: unilateral para detectar asimetrías.', video:'leg extension machine technique quad'},
-  leg_curl_lying:{name:'Curl de Isquiotibiales (máquina)', cat:'Fuerza', muscles:'Isquiotibiales', goal:'Equilibrio muscular anterior/posterior de rodilla',
-    desc:'Boca abajo en la máquina, flexionar las rodillas llevando los talones hacia los glúteos de forma controlada.',
-    errors:['Levantar las caderas del banco','Bajar sin control'], progreg:'Progresión: aumentar carga. Variante: unilateral para detectar asimetrías.', video:'lying leg curl machine technique'},
+  nordic_curl:{name:'Curl Nórdico', cat:'Fuerza', muscles:'Isquiotibiales (excéntrico)', goal:'Fuerza excéntrica de isquiotibiales, prevención de lesiones',
+    desc:'Rodillas en el suelo y pies anclados, bajar el cuerpo controlando la caída lo más lento posible con los isquiotibiales. Empujar el suelo para volver.',
+    errors:['Caer sin control (perder la tensión excéntrica)','Flexionar demasiado la cadera'], progreg:'Regresión: asistirse con las manos al bajar. Progresión: lastre (chaleco o disco).', video:'nordic curl hamstring eccentric technique'},
   step_up:{name:'Subida al Cajón (Step-up)', cat:'Fuerza', muscles:'Cuádriceps, glúteos (unilateral)', goal:'Estabilidad de rodilla y fuerza funcional',
     desc:'Subir al cajón con un pie, extender la rodilla y cadera completamente, bajar de forma controlada sin apoyarse en la pierna libre.',
     errors:['Empujar con la pierna que queda abajo','Bajar de golpe'], progreg:'Regresión: cajón más bajo. Progresión: mancuernas o cajón más alto.', video:'step up exercise knee stability'},
@@ -1075,7 +1075,7 @@ const Program = {
     } else {
       // ===== PIERNAS B — cadena posterior, pliometría distinta a la del Día A, sin CoD ni resistencia (llegar fresco al partido) =====
       const oly2 = phase.routine==='B' ? 'push_press' : 'mid_thigh_pull';
-      const hingeLift = phase.id===3 ? 'single_leg_rdl' : 'rdl';
+      const hingeLift = 'nordic_curl';
       const plyo2 = phase.id===3 ? 'depth_jump' : 'lateral_bound';
       blocks = [
         { n:1, name:'Movilidad + Activación', dur:'8 min', goal:'Preparar articulaciones y activar la cadena de tren inferior',
