@@ -857,8 +857,25 @@ const EX = {
     desc:'Torso inclinado ~45°, traccionar la barra hacia el abdomen manteniendo la espalda neutra.', 
     errors:['Usar impulso lumbar','Torso demasiado erguido'], progreg:'Progresión: aumentar carga o pausa arriba.', video:'barbell row technique form'},
   bulgarian_split_squat:{name:'Bulgarian Split Squat', cat:'Fuerza', muscles:'Cuádriceps, glúteos (unilateral)', goal:'Fuerza unilateral de tren inferior',
-    desc:'Pie trasero elevado en un banco, descender en la pierna delantera hasta 90° de rodilla.', 
+    desc:'Pie trasero elevado en un banco, descender en la pierna delantera hasta 90° de rodilla.',
     errors:['Rodilla delantera muy adelantada','Perder el equilibrio lateral'], progreg:'Progresión: agregar mancuernas o barra.', video:'bulgarian split squat technique'},
+  leg_extension:{name:'Sillón de Cuádricep', cat:'Fuerza', muscles:'Cuádriceps (VMO)', goal:'Fortalecer el cuádricep y proteger la rodilla',
+    desc:'Sentado en la máquina, extender las piernas hasta bloqueo completo y bajar de forma controlada. Foco en el VMO (músculo interno del muslo).',
+    errors:['Subir con impulso y bajar sin control','No llegar a extensión completa'], progreg:'Progresión: aumentar carga gradualmente. Variante: unilateral para detectar asimetrías.', video:'leg extension machine technique quad'},
+  leg_curl_lying:{name:'Curl de Isquiotibiales (máquina)', cat:'Fuerza', muscles:'Isquiotibiales', goal:'Equilibrio muscular anterior/posterior de rodilla',
+    desc:'Boca abajo en la máquina, flexionar las rodillas llevando los talones hacia los glúteos de forma controlada.',
+    errors:['Levantar las caderas del banco','Bajar sin control'], progreg:'Progresión: aumentar carga. Variante: unilateral para detectar asimetrías.', video:'lying leg curl machine technique'},
+  step_up:{name:'Subida al Cajón (Step-up)', cat:'Fuerza', muscles:'Cuádriceps, glúteos (unilateral)', goal:'Estabilidad de rodilla y fuerza funcional',
+    desc:'Subir al cajón con un pie, extender la rodilla y cadera completamente, bajar de forma controlada sin apoyarse en la pierna libre.',
+    errors:['Empujar con la pierna que queda abajo','Bajar de golpe'], progreg:'Regresión: cajón más bajo. Progresión: mancuernas o cajón más alto.', video:'step up exercise knee stability'},
+
+  // Prevención de rodilla (accesorios)
+  tke_band:{name:'Extensión Terminal de Rodilla (TKE)', cat:'Accesorio', muscles:'VMO, cuádriceps', goal:'Activar el VMO y prevenir lesiones de rodilla',
+    desc:'Con una banda anclada a la altura de la rodilla, tirar del pie hacia atrás y extender la rodilla completamente en el último arco de movimiento.',
+    errors:['Usar todo el rango de movimiento (solo la parte terminal)','Perder el control en la vuelta'], progreg:'Progresión: banda de mayor resistencia o más series.', video:'terminal knee extension TKE band VMO'},
+  wall_sit:{name:'Silla en Pared', cat:'Accesorio', muscles:'Cuádriceps, glúteos', goal:'Resistencia isométrica de cuádricep para rodilla',
+    desc:'Espalda apoyada en la pared, rodillas a 90°, mantener la posición. Asegurarse de que las rodillas no pasen la punta de los pies.',
+    errors:['Rodillas por debajo de 90° (demasiada carga)','Separar la espalda de la pared'], progreg:'Progresión: aumentar el tiempo de cada serie.', video:'wall sit exercise quad isometric'},
 
   // Accesorios
   lateral_raise:{name:'Elevación Lateral', cat:'Accesorio', muscles:'Deltoides lateral', goal:'Volumen accesorio de hombro',
