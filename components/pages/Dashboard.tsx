@@ -33,11 +33,16 @@ export function Dashboard() {
   ).length;
 
   const porCanal = useMemo(() => {
-    const map = new Map<string, number>();
-    for (const p of activos) map.set(p.canal, (map.get(p.canal) ?? 0) + p.precio_neto);
-    return Array.from(map.entries()).sort((a, b) => b[1] - a[1]);
+    const map = new Map<string, { monto: number; cajas: number }>();
+    for (const p of activos) {
+      const cur = map.get(p.canal) ?? { monto: 0, cajas: 0 };
+      cur.monto += p.precio_neto;
+      cur.cajas += p.cantidad;
+      map.set(p.canal, cur);
+    }
+    return Array.from(map.entries()).sort((a, b) => b[1].monto - a[1].monto);
   }, [activos]);
-  const maxCanal = Math.max(1, ...porCanal.map(([, v]) => v));
+  const maxCanal = Math.max(1, ...porCanal.map(([, v]) => v.monto));
 
   const porGusto = useMemo(() => {
     const map = new Map<string, number>();
@@ -142,8 +147,19 @@ export function Dashboard() {
             <EmptyState text="Sin ventas en el período." />
           ) : (
             <div className="flex flex-col gap-2">
-              {porCanal.map(([canal, monto]) => (
-                <BarRow key={canal} label={canal} value={fARS(monto)} pct={(monto / maxCanal) * 100} color="gold" />
+              {porCanal.map(([canal, { monto, cajas }]) => (
+                <BarRow
+                  key={canal}
+                  label={canal}
+                  value={
+                    <div className="flex flex-col leading-tight">
+                      <span>{fARS(monto)}</span>
+                      <span className="text-[10px] text-text3">{fNum(cajas, 0)} cajas</span>
+                    </div>
+                  }
+                  pct={(monto / maxCanal) * 100}
+                  color="gold"
+                />
               ))}
             </div>
           )}

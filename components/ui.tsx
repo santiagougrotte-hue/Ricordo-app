@@ -336,7 +336,7 @@ export function BarRow({
           style={{ width: `${Math.max(0, Math.min(100, pct))}%` }}
         />
       </div>
-      <div className="w-20 shrink-0 text-right text-[11.5px] text-text2">{value}</div>
+      <div className="w-24 shrink-0 text-right text-[11.5px] text-text2">{value}</div>
     </div>
   );
 }
