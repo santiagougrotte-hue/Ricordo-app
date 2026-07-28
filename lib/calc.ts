@@ -224,10 +224,13 @@ export function margenContribucionUnitario(data: RicordoData, idProducto: string
   return precioVenta - calcCosto(data, idProducto);
 }
 
-/** Punto de equilibrio $ = CF total / margen contribución promedio ponderado (ponderado por unidades vendidas en el período) */
+/** Punto de equilibrio $ = CF total / margen contribución promedio ponderado (ponderado por unidades vendidas en el período)
+ * CF total usa la misma fórmula que el EERR (costosFijosTotales): costos fijos + indirectos "Fijo" + amortizaciones activas del período. */
 export function puntoEquilibrio(
   data: RicordoData,
-  pedidosPeriodo: Pedido[]
+  pedidosPeriodo: Pedido[],
+  mes: number,
+  anio: number
 ): {
   pe: number;
   margenPromedioPonderado: number;
@@ -236,7 +239,7 @@ export function puntoEquilibrio(
   costoVariableUnitarioPromedio: number;
   unidadesTotales: number;
 } {
-  const cfTotal = totalCostosFijos(data);
+  const cfTotal = costosFijosTotales(data, mes, anio);
   const unidadesPorProducto = new Map<string, number>();
   for (const p of pedidosPeriodo) {
     unidadesPorProducto.set(p.id_producto, (unidadesPorProducto.get(p.id_producto) ?? 0) + p.cantidad);

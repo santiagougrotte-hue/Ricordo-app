@@ -3,7 +3,7 @@
 import React, { useState } from "react";
 import { useStore } from "@/lib/store";
 import { useToast } from "@/lib/toast";
-import { fARS, saldoCaja, totalCostosFijos, totalCostosIndirectos, totalAmortizacionesPeriodo } from "@/lib/calc";
+import { costosFijosTotales, fARS, saldoCaja, totalCostosFijos, totalCostosIndirectosPorTipo, totalAmortizacionesPeriodo } from "@/lib/calc";
 import { usePeriod } from "@/lib/period";
 import { PageHeader, Card, StatGrid, KpiCard, Field, Input, Button, InfoRow } from "@/components/ui";
 
@@ -15,9 +15,11 @@ export function Posicion() {
 
   const saldoSistema = saldoCaja(data);
   const cf = totalCostosFijos(data);
-  const ci = totalCostosIndirectos(data, mes, anio);
+  const ci = totalCostosIndirectosPorTipo(data, mes, anio, "Fijo");
   const amort = totalAmortizacionesPeriodo(data, mes, anio);
-  const compromisos = cf + ci + amort;
+  // Misma fórmula que el EERR (costosFijosTotales) — evita contar acá los indirectos Variables,
+  // que ya están incluidos en Costos Variables del EERR.
+  const compromisos = costosFijosTotales(data, mes, anio);
   const posicionNeta = efectivo - compromisos;
 
   function guardar() {

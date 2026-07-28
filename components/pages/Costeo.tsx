@@ -3,14 +3,14 @@
 import React, { useMemo } from "react";
 import { useStore } from "@/lib/store";
 import { usePeriod } from "@/lib/period";
-import { calcCosto, fARS, fPct, inPeriod, totalCostosFijos, unidadesEntregadas } from "@/lib/calc";
+import { calcCosto, costosFijosTotales, fARS, fPct, inPeriod, unidadesEntregadas } from "@/lib/calc";
 import { Card, PageHeader, TableWrap, Th, Td, TrHover, EmptyState } from "@/components/ui";
 
 export function Costeo() {
   const { data } = useStore();
   const { mes, anio } = usePeriod();
 
-  const cfTotal = totalCostosFijos(data);
+  const cfTotal = costosFijosTotales(data, mes, anio);
   const unidadesPeriodo = useMemo(
     () => unidadesEntregadas(data.pedidos.filter((p) => inPeriod(p.fecha, mes, anio))),
     [data.pedidos, mes, anio]

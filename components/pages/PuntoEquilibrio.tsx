@@ -28,7 +28,7 @@ export function PuntoEquilibrio() {
   );
 
   const { pe, margenPromedioPonderado, cfTotal, precioPromedioPonderado, costoVariableUnitarioPromedio, unidadesTotales } =
-    useMemo(() => puntoEquilibrio(data, pedidosPeriodo), [data, pedidosPeriodo]);
+    useMemo(() => puntoEquilibrio(data, pedidosPeriodo, mes, anio), [data, pedidosPeriodo, mes, anio]);
   const ventaActual = ventasNetas(pedidosPeriodo);
   const cumplido = pe > 0 ? (ventaActual / pe) * 100 : 0;
   const peUnidades = margenPromedioPonderado > 0 ? cfTotal / margenPromedioPonderado : 0;
