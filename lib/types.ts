@@ -268,6 +268,13 @@ export interface ConfigEnvios {
   precio_envio_fijo: number;
 }
 
+export interface IaLogEntry {
+  fecha: string;
+  funcion: string;
+  tokens_entrada: number;
+  tokens_salida: number;
+}
+
 export interface RicordoData {
   ingredientes: Ingrediente[];
   productos: Producto[];
@@ -309,6 +316,7 @@ export interface RicordoData {
   af_payback_items: AfPaybackItem[];
   caja_inteligente: CajaInteligente;
   config_envios: ConfigEnvios;
+  ia_log: IaLogEntry[];
 }
 
 export const STORAGE_KEY = "ricordo_data";
@@ -366,5 +374,6 @@ export function emptyData(): RicordoData {
       margen_exacto: 55,
       precio_envio_fijo: 2000,
     },
+    ia_log: [],
   };
 }

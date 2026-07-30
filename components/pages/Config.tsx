@@ -1,10 +1,11 @@
 "use client";
 
-import React, { useRef, useState } from "react";
+import React, { useMemo, useRef, useState } from "react";
 import { useStore } from "@/lib/store";
 import { useToast } from "@/lib/toast";
 import { STORAGE_KEY } from "@/lib/types";
-import { Card, PageHeader, Field, Input, Button, InfoRow } from "@/components/ui";
+import { fNum } from "@/lib/calc";
+import { Card, PageHeader, Field, Input, Button, InfoRow, TableWrap, Th, Td, TrHover, EmptyState } from "@/components/ui";
 
 export function Config() {
   const { data, setData, resetToEmpty, reloadSeed } = useStore();
@@ -12,6 +13,12 @@ export function Config() {
   const [valor, setValor] = useState(data.tipo_cambio.valor);
   const [fuente, setFuente] = useState(data.tipo_cambio.fuente);
   const fileRef = useRef<HTMLInputElement>(null);
+
+  const totalTokensIa = useMemo(
+    () => data.ia_log.reduce((acc, l) => acc + l.tokens_entrada + l.tokens_salida, 0),
+    [data.ia_log]
+  );
+  const iaLogReciente = useMemo(() => [...data.ia_log].reverse().slice(0, 20), [data.ia_log]);
 
   function guardarTipoCambio() {
     setData((d) => ({ ...d, tipo_cambio: { valor, fuente } }));
@@ -70,6 +77,41 @@ export function Config() {
         <InfoRow label="Clientes" value={data.clientes.length} />
         <InfoRow label="Pedidos" value={data.pedidos.length} />
         <InfoRow label="Ingredientes" value={data.ingredientes.length} />
+      </Card>
+
+      <Card title="Uso de IA" className="mb-4">
+        {data.ia_log.length === 0 ? (
+          <EmptyState text="Todavía no se hizo ninguna llamada a la IA." />
+        ) : (
+          <>
+            <InfoRow label="Llamadas registradas" value={fNum(data.ia_log.length, 0)} />
+            <InfoRow label="Tokens totales (entrada + salida)" value={fNum(totalTokensIa, 0)} />
+            <div className="mt-3">
+              <TableWrap>
+                <table className="w-full">
+                  <thead>
+                    <tr>
+                      <Th>Fecha</Th>
+                      <Th>Función</Th>
+                      <Th>Tokens entrada</Th>
+                      <Th>Tokens salida</Th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {iaLogReciente.map((l, i) => (
+                      <TrHover key={i}>
+                        <Td>{new Date(l.fecha).toLocaleString("es-AR")}</Td>
+                        <Td main>{l.funcion}</Td>
+                        <Td>{fNum(l.tokens_entrada, 0)}</Td>
+                        <Td>{fNum(l.tokens_salida, 0)}</Td>
+                      </TrHover>
+                    ))}
+                  </tbody>
+                </table>
+              </TableWrap>
+            </div>
+          </>
+        )}
       </Card>
 
       <Card title="Copia de seguridad">
