@@ -301,6 +301,14 @@ export interface ConfigPlanificacion {
   umbral_desvio_semana_pct: number;
 }
 
+/** Borrador armado desde "Generar orden de compra" (Planificación) para que Compras lo
+ * precargue en su modal de Nueva Compra — el usuario siempre revisa y confirma ahí, esto
+ * nunca escribe una compra por sí solo. Se limpia apenas Compras lo consume. */
+export interface BorradorCompra {
+  descripcion: string;
+  lineas: { id_ingrediente: string; cantidad: number; precio_unitario: number }[];
+}
+
 export interface IaLogEntry {
   fecha: string;
   funcion: string;
@@ -367,6 +375,7 @@ export interface RicordoData {
   pulso: PulsoCache | null;
   plan_produccion: PlanProduccionMes[];
   config_planificacion: ConfigPlanificacion;
+  borrador_compra_pendiente: BorradorCompra | null;
 }
 
 export const STORAGE_KEY = "ricordo_data";
@@ -428,5 +437,6 @@ export function emptyData(): RicordoData {
     pulso: null,
     plan_produccion: [],
     config_planificacion: { ventana_meses_referencia: 3, umbral_desvio_semana_pct: 15 },
+    borrador_compra_pendiente: null,
   };
 }

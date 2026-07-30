@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useMemo, useRef, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import { Paperclip, X, ScanLine } from "lucide-react";
 import { useStore } from "@/lib/store";
 import { useToast } from "@/lib/toast";
@@ -94,6 +94,20 @@ export function Compras() {
   const [umbralAmber, setUmbralAmber] = useState(data.umbral_compras_consumo_amber);
   const [umbralRed, setUmbralRed] = useState(data.umbral_compras_consumo_red);
   const comprasVsConsumo = useMemo(() => comprasVsConsumoUltimosMeses(data), [data]);
+
+  // Borrador armado desde "Generar orden de compra" en Planificación: se precarga una única vez
+  // al llegar y se limpia enseguida — el usuario siempre revisa y confirma acá, nunca se guarda solo.
+  const borradorConsumido = useRef(false);
+  useEffect(() => {
+    if (borradorConsumido.current || !data.borrador_compra_pendiente) return;
+    borradorConsumido.current = true;
+    const borrador = data.borrador_compra_pendiente;
+    setEditing(null);
+    setForm({ ...emptyForm(), descripcion: borrador.descripcion, lineas: borrador.lineas, total_manual: false });
+    setModalOpen(true);
+    setData((d) => ({ ...d, borrador_compra_pendiente: null }));
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- solo debe dispararse una vez al montar
+  }, []);
 
   function guardarUmbrales() {
     setData((d) => ({ ...d, umbral_compras_consumo_amber: umbralAmber, umbral_compras_consumo_red: umbralRed }));

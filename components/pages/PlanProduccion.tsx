@@ -5,8 +5,9 @@ import { TrendingUp, TrendingDown, Minus, ChevronRight, ChevronDown } from "luci
 import { useStore } from "@/lib/store";
 import { usePeriod, MESES } from "@/lib/period";
 import { useToast } from "@/lib/toast";
+import { useRouter } from "@/lib/nav-context";
 import { uid } from "@/lib/id";
-import { fARS, fNum, fPct, calcCosto } from "@/lib/calc";
+import { fARS, fNum, fPct, calcCosto, calcStockIngrediente, pvr } from "@/lib/calc";
 import {
   referenciaVentasPorGusto,
   desvioPlanSemana,
@@ -561,9 +562,33 @@ function CuadroNecesidadTabla({
   componente: "masa" | "relleno";
   cajasPorGusto: Map<string, number>;
 }) {
-  const { data } = useStore();
+  const { data, setData } = useStore();
+  const { go } = useRouter();
+  const { toast } = useToast();
   const cuadro = useMemo(() => calcularCuadroNecesidad(data, componente, cajasPorGusto), [data, componente, cajasPorGusto]);
   const [expandido, setExpandido] = useState<Record<string, boolean>>({});
+  const [mostrarStock, setMostrarStock] = useState(false);
+
+  function cantidadParaComparar(i: (typeof cuadro.ingredientes)[number]) {
+    return i.unidadesConversion !== undefined ? i.unidadesConversion : i.cantidadNativa;
+  }
+
+  function generarOrdenDeCompra() {
+    const lineas = cuadro.ingredientes.map((i) => ({
+      id_ingrediente: i.id_ingrediente,
+      cantidad: i.unidadesConversion !== undefined ? i.unidadesConversion : i.cantidadNativaRedondeada,
+      precio_unitario: pvr(data.ingredientes.find((ing) => ing.id === i.id_ingrediente)),
+    }));
+    setData((d) => ({
+      ...d,
+      borrador_compra_pendiente: {
+        descripcion: `Orden generada desde Planificación — ${titulo}`,
+        lineas,
+      },
+    }));
+    toast("Borrador de compra generado — revisalo y confirmalo en Compras");
+    go("compras");
+  }
 
   return (
     <Card title={titulo} className="mb-4">
@@ -578,6 +603,11 @@ function CuadroNecesidadTabla({
         <EmptyState text="Cargá y guardá el plan del mes, y clasificá al menos un gusto, para ver este cuadro." />
       ) : (
         <>
+          <div className="mb-3 flex justify-end">
+            <Button size="sm" variant="ghost" onClick={() => setMostrarStock((v) => !v)}>
+              {mostrarStock ? "Ocultar comparación con stock" : "Comparar con stock"}
+            </Button>
+          </div>
           <TableWrap>
             <table className="w-full">
               <thead>
@@ -586,45 +616,68 @@ function CuadroNecesidadTabla({
                   <Th>Ingrediente</Th>
                   <Th>Cantidad (3 dec.)</Th>
                   <Th>A comprar</Th>
+                  {mostrarStock && <Th>Stock actual</Th>}
+                  {mostrarStock && <Th>Falta</Th>}
                   <Th>Costo est.</Th>
                 </tr>
               </thead>
               <tbody>
-                {cuadro.ingredientes.map((i) => (
-                  <React.Fragment key={i.id_ingrediente}>
-                    <TrHover
-                      className="cursor-pointer"
-                      onClick={() => setExpandido((e) => ({ ...e, [i.id_ingrediente]: !e[i.id_ingrediente] }))}
-                    >
-                      <Td>{expandido[i.id_ingrediente] ? <ChevronDown className="h-3.5 w-3.5" /> : <ChevronRight className="h-3.5 w-3.5" />}</Td>
-                      <Td main>{i.nombre}</Td>
-                      <Td>
-                        {fNum(i.cantidadNativa, 3)} {i.unidad}
-                        {i.unidadesConversion !== undefined ? ` (${fNum(i.gramosTotales, 0)} g)` : ""}
-                      </Td>
-                      <Td main>
-                        {i.unidadesConversion !== undefined
-                          ? `${fNum(i.unidadesConversion, 0)} unidades`
-                          : `${fNum(i.cantidadNativaRedondeada, 0)} ${i.unidad}`}
-                      </Td>
-                      <Td>{fARS(i.costoEstimado)}</Td>
-                    </TrHover>
-                    {expandido[i.id_ingrediente] &&
-                      i.detallePorGusto.map((d) => (
-                        <tr key={d.id_producto} className="bg-surface2/30 text-[11.5px] text-text3">
-                          <Td></Td>
-                          <Td colSpan={4}>
-                            {d.nombreProducto}: {fNum(d.gramosNecesarios, 0)} g
+                {cuadro.ingredientes.map((i) => {
+                  const stockActual = mostrarStock ? calcStockIngrediente(data, i.id_ingrediente) : 0;
+                  const falta = Math.max(0, cantidadParaComparar(i) - stockActual);
+                  return (
+                    <React.Fragment key={i.id_ingrediente}>
+                      <TrHover
+                        className="cursor-pointer"
+                        onClick={() => setExpandido((e) => ({ ...e, [i.id_ingrediente]: !e[i.id_ingrediente] }))}
+                      >
+                        <Td>
+                          {expandido[i.id_ingrediente] ? <ChevronDown className="h-3.5 w-3.5" /> : <ChevronRight className="h-3.5 w-3.5" />}
+                        </Td>
+                        <Td main>{i.nombre}</Td>
+                        <Td>
+                          {fNum(i.cantidadNativa, 3)} {i.unidad}
+                          {i.unidadesConversion !== undefined ? ` (${fNum(i.gramosTotales, 0)} g)` : ""}
+                        </Td>
+                        <Td main>
+                          {i.unidadesConversion !== undefined
+                            ? `${fNum(i.unidadesConversion, 0)} unidades`
+                            : `${fNum(i.cantidadNativaRedondeada, 0)} ${i.unidad}`}
+                        </Td>
+                        {mostrarStock && (
+                          <Td>
+                            {fNum(stockActual, 2)} {i.unidadesConversion !== undefined ? "unidades" : i.unidad}
                           </Td>
-                        </tr>
-                      ))}
-                  </React.Fragment>
-                ))}
+                        )}
+                        {mostrarStock && (
+                          <Td>
+                            <Badge color={falta > 0 ? "red" : "green"}>
+                              {falta > 0 ? fNum(falta, 2) : "Cubierto"}
+                            </Badge>
+                          </Td>
+                        )}
+                        <Td>{fARS(i.costoEstimado)}</Td>
+                      </TrHover>
+                      {expandido[i.id_ingrediente] &&
+                        i.detallePorGusto.map((d) => (
+                          <tr key={d.id_producto} className="bg-surface2/30 text-[11.5px] text-text3">
+                            <Td></Td>
+                            <Td colSpan={mostrarStock ? 6 : 4}>
+                              {d.nombreProducto}: {fNum(d.gramosNecesarios, 0)} g
+                            </Td>
+                          </tr>
+                        ))}
+                    </React.Fragment>
+                  );
+                })}
               </tbody>
             </table>
           </TableWrap>
-          <div className="mt-3.5 flex justify-end border-t border-border pt-3">
+          <div className="mt-3.5 flex flex-wrap items-center justify-between gap-2 border-t border-border pt-3">
             <span className="text-[13px] font-semibold text-accent">Costo total estimado: {fARS(cuadro.costoTotal)}</span>
+            <Button size="sm" onClick={generarOrdenDeCompra}>
+              Generar orden de compra
+            </Button>
           </div>
         </>
       )}
