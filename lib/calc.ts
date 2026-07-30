@@ -1,4 +1,4 @@
-import type { RicordoData, Ingrediente, Pedido, TipoCosto, Amortizacion, CajaMovimiento } from "./types";
+import type { RicordoData, Ingrediente, Pedido, TipoCosto, Amortizacion, CajaMovimiento, Cliente } from "./types";
 import { uid } from "./id";
 
 export function fARS(n: number | null | undefined): string {
@@ -284,6 +284,53 @@ export function crearMovimientoCajaDesdePedido(pedido: Pedido): CajaMovimiento {
     metodo: pedido.metodo_pago || "Efectivo",
     ref: pedido.id_detalle,
   };
+}
+
+export interface RecurrenciaMayorista {
+  cliente: Cliente;
+  cantidadPedidos: number;
+  mesesDistintos: number;
+  fechaUltimoPedido: string | null;
+  diasDesdeUltimo: number | null;
+  ticketPromedio: number;
+  estado: "Recurrente" | "Único" | "En riesgo";
+}
+
+/** Recurrencia real de clientes mayoristas: se calcula de los pedidos, nunca se carga a mano.
+ * Recurrente = compró en 2+ meses distintos · Único = un solo pedido/mes ·
+ * En riesgo = recurrente pero sin comprar hace más de `umbralDias`. */
+export function recurrenciaMayorista(data: RicordoData, umbralDias: number, hoy: Date = new Date()): RecurrenciaMayorista[] {
+  return data.clientes
+    .filter((c) => c.canal === "Mayorista")
+    .map((cliente) => {
+      const pedidos = data.pedidos.filter((p) => p.id_cliente === cliente.id && p.estado !== "Cancelado");
+      const idsUnicos = new Set(pedidos.map((p) => p.id_pedido));
+      const meses = new Set(pedidos.map((p) => p.fecha.slice(0, 7)));
+      const fechas = pedidos.map((p) => p.fecha).sort();
+      const fechaUltimoPedido = fechas.length > 0 ? fechas[fechas.length - 1] : null;
+      const diasDesdeUltimo = fechaUltimoPedido
+        ? Math.floor((hoy.getTime() - new Date(fechaUltimoPedido).getTime()) / (1000 * 60 * 60 * 24))
+        : null;
+      const total = pedidos.reduce((acc, p) => acc + p.precio_neto, 0);
+      const ticketPromedio = idsUnicos.size > 0 ? total / idsUnicos.size : 0;
+      const esRecurrente = meses.size >= 2;
+      const estado: RecurrenciaMayorista["estado"] =
+        esRecurrente && diasDesdeUltimo !== null && diasDesdeUltimo > umbralDias
+          ? "En riesgo"
+          : esRecurrente
+          ? "Recurrente"
+          : "Único";
+      return {
+        cliente,
+        cantidadPedidos: idsUnicos.size,
+        mesesDistintos: meses.size,
+        fechaUltimoPedido,
+        diasDesdeUltimo,
+        ticketPromedio,
+        estado,
+      };
+    })
+    .sort((a, b) => (b.diasDesdeUltimo ?? -1) - (a.diasDesdeUltimo ?? -1));
 }
 
 export interface DiscrepanciaCaja {

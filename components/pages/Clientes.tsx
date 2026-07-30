@@ -20,16 +20,86 @@ import {
   Select,
   StatGrid,
   KpiCard,
+  FilterTabs,
 } from "@/components/ui";
 import { Modal } from "@/components/Modal";
-import { fARS, fNum } from "@/lib/calc";
+import { fARS, fNum, recurrenciaMayorista } from "@/lib/calc";
 import type { Canal, Cliente } from "@/lib/types";
 
 function emptyForm() {
   return { nombre: "", canal: "Minorista" as Canal, direccion: "", telefono: "", email: "" };
 }
 
-export function Clientes() {
+const ESTADO_RECURRENCIA_COLOR: Record<string, "green" | "blue" | "red"> = {
+  Recurrente: "green",
+  Único: "blue",
+  "En riesgo": "red",
+};
+
+function MayoristasTab() {
+  const { data, setData } = useStore();
+  const { toast } = useToast();
+  const [umbral, setUmbral] = useState(data.umbral_dias_mayorista_riesgo);
+
+  const filas = useMemo(() => recurrenciaMayorista(data, umbral), [data, umbral]);
+
+  function guardarUmbral() {
+    setData((d) => ({ ...d, umbral_dias_mayorista_riesgo: umbral }));
+    toast("Umbral guardado");
+  }
+
+  return (
+    <div>
+      <Card title="Umbral para 'En riesgo'" className="mb-4">
+        <div className="flex flex-wrap items-end gap-3">
+          <Field label="Días sin comprar">
+            <Input type="number" value={umbral} onChange={(e) => setUmbral(Number(e.target.value))} />
+          </Field>
+          <Button onClick={guardarUmbral}>Guardar</Button>
+        </div>
+      </Card>
+
+      <Card>
+        {filas.length === 0 ? (
+          <EmptyState text="Todavía no hay clientes mayoristas." />
+        ) : (
+          <TableWrap>
+            <table className="w-full">
+              <thead>
+                <tr>
+                  <Th>Cliente</Th>
+                  <Th>Pedidos</Th>
+                  <Th>Meses distintos</Th>
+                  <Th>Último pedido</Th>
+                  <Th>Días desde el último</Th>
+                  <Th>Ticket promedio</Th>
+                  <Th>Estado</Th>
+                </tr>
+              </thead>
+              <tbody>
+                {filas.map((f) => (
+                  <TrHover key={f.cliente.id}>
+                    <Td main>{f.cliente.nombre}</Td>
+                    <Td>{f.cantidadPedidos}</Td>
+                    <Td>{f.mesesDistintos}</Td>
+                    <Td>{f.fechaUltimoPedido ?? "—"}</Td>
+                    <Td>{f.diasDesdeUltimo ?? "—"}</Td>
+                    <Td>{fARS(f.ticketPromedio)}</Td>
+                    <Td>
+                      <Badge color={ESTADO_RECURRENCIA_COLOR[f.estado]}>{f.estado}</Badge>
+                    </Td>
+                  </TrHover>
+                ))}
+              </tbody>
+            </table>
+          </TableWrap>
+        )}
+      </Card>
+    </div>
+  );
+}
+
+function TodosTab() {
   const { data, setData } = useStore();
   const { toast } = useToast();
   const [modalOpen, setModalOpen] = useState(false);
@@ -105,7 +175,9 @@ export function Clientes() {
 
   return (
     <div>
-      <PageHeader title="Clientes" right={<Button onClick={openNew}>+ Nuevo</Button>} />
+      <div className="mb-4 flex justify-end">
+        <Button onClick={openNew}>+ Nuevo</Button>
+      </div>
 
       <StatGrid>
         <KpiCard label="Clientes totales" value={totalClientes} color="gold" />
@@ -232,6 +304,24 @@ export function Clientes() {
           </TableWrap>
         )}
       </Modal>
+    </div>
+  );
+}
+
+export function Clientes() {
+  const [tab, setTab] = useState("todos");
+  return (
+    <div>
+      <PageHeader title="Clientes" />
+      <FilterTabs
+        value={tab}
+        onChange={setTab}
+        options={[
+          { value: "todos", label: "Todos" },
+          { value: "mayoristas", label: "Mayoristas — Recurrencia" },
+        ]}
+      />
+      {tab === "todos" ? <TodosTab /> : <MayoristasTab />}
     </div>
   );
 }

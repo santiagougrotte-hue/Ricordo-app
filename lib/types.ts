@@ -300,6 +300,7 @@ export interface RicordoData {
   /** id_detalle de pedidos que se revisaron en la conciliación de Caja y se confirmaron
    * como realmente sin cobrar (no un error) — se excluyen de la lista de discrepancias. */
   conciliacion_ignorados: string[];
+  umbral_dias_mayorista_riesgo: number;
   af_elasticidades: Record<string, AfElasticidad>;
   af_cap_trabajo: AfCapTrabajo;
   af_payback_items: AfPaybackItem[];
@@ -340,6 +341,7 @@ export function emptyData(): RicordoData {
     fecha_corte_cmv: null,
     fecha_corte_compras: null,
     conciliacion_ignorados: [],
+    umbral_dias_mayorista_riesgo: 45,
     af_elasticidades: {},
     af_cap_trabajo: { ac_extra: [], pc_items: [] },
     af_payback_items: [],
