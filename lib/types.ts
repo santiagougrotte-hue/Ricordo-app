@@ -194,6 +194,7 @@ export interface HistorialPrecio {
   precio_anterior: number;
   precio_nuevo: number;
   fecha: string;
+  origen?: string;
 }
 
 export interface ConteoIngrediente {

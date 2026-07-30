@@ -29,6 +29,7 @@ export function HistorialPrecios() {
                   <Th>Precio anterior</Th>
                   <Th>Precio nuevo</Th>
                   <Th>Variación</Th>
+                  <Th>Origen</Th>
                 </tr>
               </thead>
               <tbody>
@@ -46,6 +47,7 @@ export function HistorialPrecios() {
                           {fPct(variacion)}
                         </Badge>
                       </Td>
+                      <Td>{h.origen ?? "—"}</Td>
                     </TrHover>
                   );
                 })}
