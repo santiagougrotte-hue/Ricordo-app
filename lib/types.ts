@@ -42,12 +42,17 @@ export interface Cliente {
   email?: string;
 }
 
+export type ComponenteReceta = "masa" | "relleno" | "packaging";
+
 export interface RecetaLinea {
   id: string;
   id_producto: string;
   tipo: TipoRecetaLinea;
   concepto: string; // id_ingrediente | id_packaging | id_costo_fijo
   cantidad: number;
+  /** A qué parte del producto pertenece este renglón (Planificación de Producción). Opcional:
+   * el costeo (calcCosto) nunca lee este campo, solo lo usa el módulo de planificación. */
+  componente?: ComponenteReceta;
 }
 
 export interface Packaging {
