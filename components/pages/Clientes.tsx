@@ -50,7 +50,7 @@ function MayoristasTab() {
 
   return (
     <div>
-      <Card title="Umbral para 'En riesgo'" className="mb-4">
+      <Card title="Umbral para 'En riesgo'" className="mb-4" color="green">
         <div className="flex flex-wrap items-end gap-3">
           <Field label="Días sin comprar">
             <Input type="number" value={umbral} onChange={(e) => setUmbral(Number(e.target.value))} />
@@ -59,7 +59,7 @@ function MayoristasTab() {
         </div>
       </Card>
 
-      <Card>
+      <Card color="green">
         {filas.length === 0 ? (
           <EmptyState text="Todavía no hay clientes mayoristas." />
         ) : (
@@ -185,7 +185,7 @@ function TodosTab() {
         <KpiCard label="Facturado histórico" value={fARS(totalFacturado)} color="green" />
       </StatGrid>
 
-      <Card>
+      <Card color="green">
         {stats.length === 0 ? (
           <EmptyState text="Todavía no hay clientes." />
         ) : (

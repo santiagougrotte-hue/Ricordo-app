@@ -192,7 +192,7 @@ export function Compras() {
         <KpiCard label="Registros" value={data.compras.length} color="purple" />
       </StatGrid>
 
-      <Card title="Compras vs. consumo real (últimos 3 meses)" className="mb-4">
+      <Card title="Compras vs. consumo real (últimos 3 meses)" className="mb-4" color="orange">
         <p className="mb-3 text-[12.5px] text-text3">
           Compara lo comprado en materia prima contra el costo de lo efectivamente vendido. Una diferencia positiva no es
           necesariamente un problema — puede ser stock intencional o pruebas. El indicador señala, no juzga.
@@ -236,7 +236,7 @@ export function Compras() {
         </div>
       </Card>
 
-      <Card>
+      <Card color="orange">
         {data.compras.length === 0 ? (
           <EmptyState text="Sin compras registradas." />
         ) : (

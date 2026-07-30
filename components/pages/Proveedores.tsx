@@ -71,7 +71,7 @@ export function Proveedores() {
   return (
     <div>
       <PageHeader title="Proveedores" right={<Button onClick={openNew}>+ Nuevo</Button>} />
-      <Card>
+      <Card color="blue">
         {items.length === 0 ? (
           <EmptyState text="Sin proveedores registrados." />
         ) : (

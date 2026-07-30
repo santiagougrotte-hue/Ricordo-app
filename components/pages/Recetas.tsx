@@ -19,6 +19,7 @@ import {
   Input,
   InfoRow,
 } from "@/components/ui";
+import { Bar } from "@/components/ds";
 import type { RecetaLinea, TipoRecetaLinea, Ingrediente, Packaging, CostoFijo } from "@/lib/types";
 
 export function Recetas() {
@@ -95,7 +96,7 @@ export function Recetas() {
     <div>
       <PageHeader title="Recetas" sub="Composición de cada producto y su costo" />
 
-      <Card className="mb-4">
+      <Card className="mb-4" color="purple">
         <Field label="Producto">
           <Select
             value={idProducto}
@@ -119,7 +120,7 @@ export function Recetas() {
         <EmptyState text="Elegí un producto para ver y editar su receta." />
       ) : (
         <>
-          <Card title={editingId ? "Editar línea" : "Agregar línea"} className="mb-4">
+          <Card title={editingId ? "Editar línea" : "Agregar línea"} className="mb-4" color="purple">
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-[140px_1fr_120px_auto]">
               <Field label="Tipo">
                 <Select
@@ -160,7 +161,7 @@ export function Recetas() {
             </div>
           </Card>
 
-          <Card>
+          <Card color="purple">
             {lineas.length === 0 ? (
               <EmptyState text="Sin líneas de receta." />
             ) : (
@@ -202,6 +203,9 @@ export function Recetas() {
               <InfoRow label="Costo total de receta" value={fARS(costo)} color="gold" />
               <InfoRow label="Precio de venta" value={fARS(producto?.precio_venta ?? 0)} />
               <InfoRow label="Margen" value={fPct(margen)} color={margen >= 30 ? "green" : "red"} />
+              <div className="mt-2">
+                <Bar pct={Math.max(0, margen)} color={margen >= 30 ? "green" : "red"} />
+              </div>
             </div>
           </Card>
         </>

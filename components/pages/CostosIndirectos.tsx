@@ -90,7 +90,7 @@ export function CostosIndirectos() {
         <KpiCard label="Conceptos" value={delPeriodo.length} color="purple" />
       </StatGrid>
 
-      <Card>
+      <Card color="red">
         {delPeriodo.length === 0 ? (
           <EmptyState text="Sin costos indirectos en este período." />
         ) : (

@@ -68,7 +68,7 @@ export function CostosFijos() {
         <KpiCard label="Cantidad de conceptos" value={items.length} color="blue" />
       </StatGrid>
 
-      <Card>
+      <Card color="red">
         {items.length === 0 ? (
           <EmptyState text="Sin costos fijos registrados." />
         ) : (
