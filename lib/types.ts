@@ -301,6 +301,8 @@ export interface RicordoData {
    * como realmente sin cobrar (no un error) — se excluyen de la lista de discrepancias. */
   conciliacion_ignorados: string[];
   umbral_dias_mayorista_riesgo: number;
+  umbral_compras_consumo_amber: number;
+  umbral_compras_consumo_red: number;
   af_elasticidades: Record<string, AfElasticidad>;
   af_cap_trabajo: AfCapTrabajo;
   af_payback_items: AfPaybackItem[];
@@ -342,6 +344,8 @@ export function emptyData(): RicordoData {
     fecha_corte_compras: null,
     conciliacion_ignorados: [],
     umbral_dias_mayorista_riesgo: 45,
+    umbral_compras_consumo_amber: 20,
+    umbral_compras_consumo_red: 40,
     af_elasticidades: {},
     af_cap_trabajo: { ac_extra: [], pc_items: [] },
     af_payback_items: [],

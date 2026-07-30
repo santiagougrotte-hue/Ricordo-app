@@ -5,7 +5,7 @@ import { Paperclip, X } from "lucide-react";
 import { useStore } from "@/lib/store";
 import { useToast } from "@/lib/toast";
 import { uid } from "@/lib/id";
-import { fARS } from "@/lib/calc";
+import { comprasVsConsumoUltimosMeses, fARS, fPct } from "@/lib/calc";
 import {
   PageHeader,
   Button,
@@ -21,10 +21,13 @@ import {
   Textarea,
   StatGrid,
   KpiCard,
+  Semaforo,
 } from "@/components/ui";
 import { Modal } from "@/components/Modal";
 import { FileAttach } from "@/components/FileAttach";
 import type { Adjunto, Compra, CompraLineaIngrediente, CompraLineaPackaging } from "@/lib/types";
+
+const MESES_CORTOS = ["Ene", "Feb", "Mar", "Abr", "May", "Jun", "Jul", "Ago", "Sep", "Oct", "Nov", "Dic"];
 
 function emptyForm() {
   return {
@@ -63,6 +66,15 @@ export function Compras() {
       form.lineasPkg.reduce((a, l) => a + l.cantidad * l.precio_unitario, 0),
     [form.lineas, form.lineasPkg]
   );
+
+  const [umbralAmber, setUmbralAmber] = useState(data.umbral_compras_consumo_amber);
+  const [umbralRed, setUmbralRed] = useState(data.umbral_compras_consumo_red);
+  const comprasVsConsumo = useMemo(() => comprasVsConsumoUltimosMeses(data), [data]);
+
+  function guardarUmbrales() {
+    setData((d) => ({ ...d, umbral_compras_consumo_amber: umbralAmber, umbral_compras_consumo_red: umbralRed }));
+    toast("Umbrales guardados");
+  }
 
   function openNew() {
     setEditing(null);
@@ -179,6 +191,50 @@ export function Compras() {
         <KpiCard label="Total histórico" value={fARS(totalHistorico)} color="blue" />
         <KpiCard label="Registros" value={data.compras.length} color="purple" />
       </StatGrid>
+
+      <Card title="Compras vs. consumo real (últimos 3 meses)" className="mb-4">
+        <p className="mb-3 text-[12.5px] text-text3">
+          Compara lo comprado en materia prima contra el costo de lo efectivamente vendido. Una diferencia positiva no es
+          necesariamente un problema — puede ser stock intencional o pruebas. El indicador señala, no juzga.
+        </p>
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+          {comprasVsConsumo.map((m) => (
+            <div key={`${m.anio}-${m.mes}`} className="rounded-lg border border-border bg-surface2/40 p-3.5">
+              <div className="mb-2 flex items-center justify-between">
+                <span className="text-[11px] font-semibold uppercase tracking-wide text-text3">
+                  {MESES_CORTOS[m.mes - 1]} {m.anio}
+                </span>
+                <Semaforo nivel={m.nivel} size="sm" />
+              </div>
+              <div className="flex justify-between py-0.5 text-[12.5px]">
+                <span className="text-text2">Comprado</span>
+                <span className="font-medium">{fARS(m.compras)}</span>
+              </div>
+              <div className="flex justify-between py-0.5 text-[12.5px]">
+                <span className="text-text2">Consumido (vendido)</span>
+                <span className="font-medium">{fARS(m.consumoVendido)}</span>
+              </div>
+              <div className="mt-1 flex justify-between border-t border-border pt-1.5 text-[12.5px]">
+                <span className="text-text3">Diferencia</span>
+                <span className={m.diferencia >= 0 ? "font-semibold text-orange" : "font-semibold text-green"}>
+                  {fARS(m.diferencia)} {m.porcentaje !== null ? `(${m.porcentaje >= 0 ? "+" : ""}${fPct(m.porcentaje)})` : ""}
+                </span>
+              </div>
+            </div>
+          ))}
+        </div>
+        <div className="mt-4 flex flex-wrap items-end gap-3 border-t border-border pt-3.5">
+          <Field label="Umbral amarillo (%)">
+            <Input type="number" value={umbralAmber} onChange={(e) => setUmbralAmber(Number(e.target.value))} />
+          </Field>
+          <Field label="Umbral rojo (%)">
+            <Input type="number" value={umbralRed} onChange={(e) => setUmbralRed(Number(e.target.value))} />
+          </Field>
+          <Button size="sm" onClick={guardarUmbrales}>
+            Guardar umbrales
+          </Button>
+        </div>
+      </Card>
 
       <Card>
         {data.compras.length === 0 ? (

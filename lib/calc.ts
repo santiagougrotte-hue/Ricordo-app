@@ -286,6 +286,44 @@ export function crearMovimientoCajaDesdePedido(pedido: Pedido): CajaMovimiento {
   };
 }
 
+export interface ComprasVsConsumoMes {
+  mes: number;
+  anio: number;
+  compras: number;
+  consumoVendido: number;
+  diferencia: number;
+  /** null cuando no hay consumo del período contra el cual comparar (no es 0%, es "sin base") */
+  porcentaje: number | null;
+  nivel: "green" | "orange" | "red";
+}
+
+/** Compara, mes a mes, cuánto se compró de materia prima contra el costo de lo que
+ * efectivamente se vendió — solo señala, no juzga: una diferencia positiva puede ser
+ * stock intencional. Umbrales de amber/red configurables. */
+export function comprasVsConsumoUltimosMeses(
+  data: RicordoData,
+  hoy: Date = new Date(),
+  cantidadMeses = 3
+): ComprasVsConsumoMes[] {
+  const umbralAmber = data.umbral_compras_consumo_amber;
+  const umbralRed = data.umbral_compras_consumo_red;
+  const resultado: ComprasVsConsumoMes[] = [];
+  for (let i = cantidadMeses - 1; i >= 0; i--) {
+    const d = new Date(hoy.getFullYear(), hoy.getMonth() - i, 1);
+    const mes = d.getMonth() + 1;
+    const anio = d.getFullYear();
+    const compras = data.compras.filter((c) => inPeriod(c.fecha, mes, anio)).reduce((acc, c) => acc + c.total, 0);
+    const pedidosMes = data.pedidos.filter((p) => p.estado === "Entregado" && inPeriod(p.fecha, mes, anio));
+    const consumoVendido = cmvPeriodo(data, pedidosMes);
+    const diferencia = compras - consumoVendido;
+    const porcentaje = consumoVendido > 0 ? (diferencia / consumoVendido) * 100 : null;
+    const magnitud = porcentaje === null ? (compras > 0 ? Infinity : 0) : Math.abs(porcentaje);
+    const nivel: ComprasVsConsumoMes["nivel"] = magnitud >= umbralRed ? "red" : magnitud >= umbralAmber ? "orange" : "green";
+    resultado.push({ mes, anio, compras, consumoVendido, diferencia, porcentaje, nivel });
+  }
+  return resultado;
+}
+
 export interface RecurrenciaMayorista {
   cliente: Cliente;
   cantidadPedidos: number;
