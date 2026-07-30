@@ -316,10 +316,38 @@ function ConciliacionTab() {
 }
 
 export function Caja() {
+  const { data } = useStore();
   const [tab, setTab] = useState("movimientos");
+
+  // Siempre visible: cuánto de lo vendido (pedidos entregados) todavía no tiene su
+  // ingreso de caja cargado, o cargado con un monto distinto (Parte A, Fase 4).
+  const discrepancias = useMemo(() => discrepanciasCaja(data), [data]);
+  const diferenciaTotal = discrepancias.reduce((acc, { pedido, movimiento }) => acc + (pedido.precio_neto - (movimiento?.monto ?? 0)), 0);
+
   return (
     <div>
       <PageHeader title="Caja" sub="Movimientos de ingresos y egresos" />
+
+      <Card title="Ventas vs. ingresos de caja cargados" className="mb-4">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <div className={`text-2xl font-[750] tracking-[-0.8px] [font-variant-numeric:tabular-nums] ${diferenciaTotal === 0 ? "text-green" : "text-red"}`}>
+              {fARS(diferenciaTotal)}
+            </div>
+            <div className="text-[11.5px] text-text3">
+              {discrepancias.length === 0
+                ? "Todo lo entregado tiene su ingreso cargado y coincide."
+                : `${discrepancias.length} ${discrepancias.length === 1 ? "pedido entregado" : "pedidos entregados"} sin conciliar en Caja.`}
+            </div>
+          </div>
+          {discrepancias.length > 0 && (
+            <Button size="sm" variant="ghost" onClick={() => setTab("conciliacion")}>
+              Ver conciliación
+            </Button>
+          )}
+        </div>
+      </Card>
+
       <FilterTabs
         value={tab}
         onChange={setTab}

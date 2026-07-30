@@ -303,6 +303,7 @@ export interface RicordoData {
   umbral_dias_mayorista_riesgo: number;
   umbral_compras_consumo_amber: number;
   umbral_compras_consumo_red: number;
+  umbral_stock_bajo_producto: number;
   af_elasticidades: Record<string, AfElasticidad>;
   af_cap_trabajo: AfCapTrabajo;
   af_payback_items: AfPaybackItem[];
@@ -346,6 +347,7 @@ export function emptyData(): RicordoData {
     umbral_dias_mayorista_riesgo: 45,
     umbral_compras_consumo_amber: 20,
     umbral_compras_consumo_red: 40,
+    umbral_stock_bajo_producto: 10,
     af_elasticidades: {},
     af_cap_trabajo: { ac_extra: [], pc_items: [] },
     af_payback_items: [],

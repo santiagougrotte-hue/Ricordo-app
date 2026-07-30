@@ -39,6 +39,17 @@ function ProductosTab() {
   const { toast } = useToast();
   const [modalProducto, setModalProducto] = useState<string | null>(null);
   const [cantidad, setCantidad] = useState(0);
+  const [umbralBajo, setUmbralBajo] = useState(data.umbral_stock_bajo_producto);
+
+  // Orden: en cero primero, después bajos, después normales (Parte A, Fase 4).
+  const productosOrdenados = useMemo(() => {
+    return [...data.productos].sort((a, b) => (data.stock_manual[a.id] ?? 0) - (data.stock_manual[b.id] ?? 0));
+  }, [data.productos, data.stock_manual]);
+
+  function guardarUmbral() {
+    setData((d) => ({ ...d, umbral_stock_bajo_producto: umbralBajo }));
+    toast("Umbral guardado");
+  }
 
   function registrarConteo() {
     if (!modalProducto) return;
@@ -57,8 +68,19 @@ function ProductosTab() {
 
   return (
     <>
+      <Card title="Umbral de stock bajo" className="mb-4">
+        <div className="flex flex-wrap items-end gap-3">
+          <Field label="Unidades">
+            <Input type="number" value={umbralBajo} onChange={(e) => setUmbralBajo(Number(e.target.value))} />
+          </Field>
+          <Button size="sm" onClick={guardarUmbral}>
+            Guardar
+          </Button>
+        </div>
+      </Card>
+
       <Card>
-        {data.productos.length === 0 ? (
+        {productosOrdenados.length === 0 ? (
           <EmptyState text="Sin productos." />
         ) : (
           <TableWrap>
@@ -67,20 +89,31 @@ function ProductosTab() {
                 <tr>
                   <Th>Producto</Th>
                   <Th>Stock manual</Th>
+                  <Th>Estado</Th>
                   <Th>Último conteo</Th>
                   <Th>Acciones</Th>
                 </tr>
               </thead>
               <tbody>
-                {data.productos.map((p) => {
+                {productosOrdenados.map((p) => {
                   const conteos = data.conteos_stock
                     .filter((c) => c.id_producto === p.id)
                     .sort((a, b) => new Date(b.fecha).getTime() - new Date(a.fecha).getTime());
                   const ultimo = conteos[0];
+                  const stock = data.stock_manual[p.id] ?? 0;
                   return (
                     <TrHover key={p.id}>
                       <Td main>{p.nombre}</Td>
-                      <Td>{fNum(data.stock_manual[p.id] ?? 0, 0)}</Td>
+                      <Td>{fNum(stock, 0)}</Td>
+                      <Td>
+                        {stock <= 0 ? (
+                          <Badge color="red">En cero</Badge>
+                        ) : stock < umbralBajo ? (
+                          <Badge color="orange">Bajo</Badge>
+                        ) : (
+                          <Badge color="green">Normal</Badge>
+                        )}
+                      </Td>
                       <Td>{ultimo ? ultimo.fecha : "—"}</Td>
                       <Td>
                         <Button

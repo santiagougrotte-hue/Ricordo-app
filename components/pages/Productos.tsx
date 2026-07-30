@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useMemo, useState } from "react";
 import { useStore } from "@/lib/store";
 import { useToast } from "@/lib/toast";
 import { uid } from "@/lib/id";
@@ -24,6 +24,7 @@ import {
 import { Modal } from "@/components/Modal";
 import { Wizard } from "@/components/Wizard";
 import { FileAttach } from "@/components/FileAttach";
+import { Bar } from "@/components/ds";
 import type { Adjunto, Ingrediente, Packaging, CostoFijo, Producto, RecetaLinea, TipoRecetaLinea } from "@/lib/types";
 
 function emptyForm() {
@@ -127,6 +128,17 @@ export function Productos() {
     setWizardOpen(false);
   }
 
+  // Orden por margen % descendente (Parte A, Fase 4).
+  const productosOrdenados = useMemo(() => {
+    return data.productos
+      .map((p) => {
+        const costo = calcCosto(data, p.id);
+        const margen = p.precio_venta > 0 ? ((p.precio_venta - costo) / p.precio_venta) * 100 : 0;
+        return { producto: p, costo, margen };
+      })
+      .sort((a, b) => b.margen - a.margen);
+  }, [data]);
+
   const prodReceta = verReceta ? data.productos.find((p) => p.id === verReceta) : null;
   const lineasReceta = verReceta ? data.recetas.filter((r) => r.id_producto === verReceta) : [];
   const costoReceta = verReceta ? calcCosto(data, verReceta) : 0;
@@ -155,9 +167,7 @@ export function Productos() {
                 </tr>
               </thead>
               <tbody>
-                {data.productos.map((p) => {
-                  const costo = calcCosto(data, p.id);
-                  const margen = p.precio_venta > 0 ? ((p.precio_venta - costo) / p.precio_venta) * 100 : 0;
+                {productosOrdenados.map(({ producto: p, costo, margen }) => {
                   const base = data.productos.find((b) => b.id === p.id_base);
                   return (
                     <TrHover key={p.id}>
@@ -174,7 +184,14 @@ export function Productos() {
                       <Td>{fARS(p.precio_venta)}</Td>
                       <Td>{fARS(costo)}</Td>
                       <Td>
-                        <Badge color={margen >= 50 ? "green" : margen >= 30 ? "orange" : "red"}>{fPct(margen)}</Badge>
+                        <div className="flex items-center gap-2">
+                          <div className="w-16">
+                            <Bar pct={Math.max(0, margen)} color={margen >= 60 ? "green" : "orange"} />
+                          </div>
+                          <span className={`text-[12px] font-medium ${margen >= 60 ? "text-green" : "text-orange"}`}>
+                            {fPct(margen)}
+                          </span>
+                        </div>
                       </Td>
                       <Td>
                         <Badge color={p.activo ? "green" : "red"}>{p.activo ? "Activo" : "Inactivo"}</Badge>
