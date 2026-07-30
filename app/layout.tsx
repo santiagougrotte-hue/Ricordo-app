@@ -15,13 +15,13 @@ export const metadata: Metadata = {
   description: "Gestión artesanal de pasta: ventas, producción, stock y finanzas.",
   appleWebApp: {
     capable: true,
-    statusBarStyle: "default",
+    statusBarStyle: "black-translucent",
     title: "Ricordo",
   },
 };
 
 export const viewport: Viewport = {
-  themeColor: "#f6f7f9",
+  themeColor: "#0a0c11",
   width: "device-width",
   initialScale: 1,
 };
