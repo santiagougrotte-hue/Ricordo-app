@@ -14,6 +14,9 @@ export interface Ingrediente {
   precio_vigente: number | null;
   seguimiento_stock: boolean;
   stock_minimo?: number;
+  /** Solo tiene sentido si el insumo se compra por unidad pero participa por peso en alguna
+   * receta (ej. huevo ≈ 50g) — usado por Planificación de Producción para escalar por peso. */
+  peso_unitario_g?: number;
 }
 
 export interface Adjunto {
@@ -31,6 +34,11 @@ export interface Producto {
   precio_venta: number;
   activo: boolean;
   foto?: Adjunto;
+  /** Gramaje por caja para Planificación de Producción — derivado inicialmente de la receta
+   * clasificada (masa/relleno) y editable. Editarlo reescala proporcionalmente las líneas de
+   * receta de ese componente, por eso siempre pasa por confirmación (cambia costo/margen). */
+  gramos_masa_por_caja?: number;
+  gramos_relleno_por_caja?: number;
 }
 
 export interface Cliente {
@@ -274,6 +282,25 @@ export interface ConfigEnvios {
   precio_envio_fijo: number;
 }
 
+/** Plan de producción cargado a mano por gusto para un mes de referencia — queda en historial
+ * (Bloque 2 de Planificación): se puede consultar en septiembre qué se planificó en agosto. */
+export interface PlanProduccionMes {
+  id: string;
+  mes: number;
+  anio: number;
+  id_producto: string;
+  cajas_mes: number;
+  cajas_semana: number;
+  fecha_guardado: string;
+}
+
+export interface ConfigPlanificacion {
+  /** Ventana de meses hacia atrás para el promedio de ventas del Bloque 1. */
+  ventana_meses_referencia: number;
+  /** % de desvío entre cajas_semana×4,33 y cajas_mes que dispara el aviso ámbar del Bloque 2. */
+  umbral_desvio_semana_pct: number;
+}
+
 export interface IaLogEntry {
   fecha: string;
   funcion: string;
@@ -338,6 +365,8 @@ export interface RicordoData {
   config_envios: ConfigEnvios;
   ia_log: IaLogEntry[];
   pulso: PulsoCache | null;
+  plan_produccion: PlanProduccionMes[];
+  config_planificacion: ConfigPlanificacion;
 }
 
 export const STORAGE_KEY = "ricordo_data";
@@ -397,5 +426,7 @@ export function emptyData(): RicordoData {
     },
     ia_log: [],
     pulso: null,
+    plan_produccion: [],
+    config_planificacion: { ventana_meses_referencia: 3, umbral_desvio_semana_pct: 15 },
   };
 }

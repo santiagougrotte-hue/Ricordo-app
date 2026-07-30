@@ -26,7 +26,7 @@ import { Wizard } from "@/components/Wizard";
 import type { Ingrediente, Packaging } from "@/lib/types";
 
 function emptyForm() {
-  return { nombre: "", unidad: "", categoria: "", precio_ref: 0, stock_minimo: 0 };
+  return { nombre: "", unidad: "", categoria: "", precio_ref: 0, stock_minimo: 0, peso_unitario_g: 0 };
 }
 
 function IngredientesTab() {
@@ -55,6 +55,7 @@ function IngredientesTab() {
       categoria: i.categoria ?? "",
       precio_ref: i.precio_ref,
       stock_minimo: i.stock_minimo ?? 0,
+      peso_unitario_g: i.peso_unitario_g ?? 0,
     });
     setModalOpen(true);
   }
@@ -129,6 +130,7 @@ function IngredientesTab() {
                   <Th>Precio ref.</Th>
                   <Th>Precio vigente</Th>
                   <Th>Variación</Th>
+                  <Th title="Solo aplica a insumos comprados por unidad que pesan (ej. huevo)">Peso unit.</Th>
                   <Th>Seguim. stock</Th>
                   <Th>Acciones</Th>
                 </tr>
@@ -153,6 +155,7 @@ function IngredientesTab() {
                           </Badge>
                         )}
                       </Td>
+                      <Td>{i.peso_unitario_g ? `${i.peso_unitario_g} g` : "—"}</Td>
                       <Td>
                         <button
                           onClick={() => toggleSeguimiento(i.id)}
@@ -220,6 +223,14 @@ function IngredientesTab() {
                 onChange={(e) => setForm({ ...form, stock_minimo: Number(e.target.value) })}
               />
             </Field>
+            <Field label="Peso unitario (g)">
+              <Input
+                type="number"
+                value={form.peso_unitario_g}
+                onChange={(e) => setForm({ ...form, peso_unitario_g: Number(e.target.value) })}
+                placeholder="Solo si se compra por unidad y pesa (ej. huevo)"
+              />
+            </Field>
           </FormGrid>
         </Modal>
       ) : (
@@ -267,6 +278,14 @@ function IngredientesTab() {
                       type="number"
                       value={form.stock_minimo}
                       onChange={(e) => setForm({ ...form, stock_minimo: Number(e.target.value) })}
+                    />
+                  </Field>
+                  <Field label="Peso unitario (g)">
+                    <Input
+                      type="number"
+                      value={form.peso_unitario_g}
+                      onChange={(e) => setForm({ ...form, peso_unitario_g: Number(e.target.value) })}
+                      placeholder="Solo si se compra por unidad y pesa (ej. huevo)"
                     />
                   </Field>
                 </FormGrid>
