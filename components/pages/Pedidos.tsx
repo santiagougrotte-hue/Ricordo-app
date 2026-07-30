@@ -27,7 +27,7 @@ import {
 import { Modal } from "@/components/Modal";
 import { Wizard } from "@/components/Wizard";
 import { FileAttach } from "@/components/FileAttach";
-import { fARS, inPeriod } from "@/lib/calc";
+import { crearMovimientoCajaDesdePedido, fARS, inPeriod } from "@/lib/calc";
 import type { Adjunto, Canal, EstadoPedido, Pedido } from "@/lib/types";
 
 const ESTADOS: EstadoPedido[] = ["Confirmado", "Produccion", "Entregado", "Cancelado"];
@@ -211,7 +211,16 @@ export function Pedidos() {
       };
     });
 
-    setData((d) => ({ ...d, pedidos: [...d.pedidos, ...nuevos] }));
+    setData((d) => {
+      let caja_movimientos = d.caja_movimientos;
+      if (orderForm.estado === "Entregado") {
+        const nuevosMovs = nuevos
+          .filter((p) => !caja_movimientos.some((m) => m.ref === p.id_detalle))
+          .map((p) => crearMovimientoCajaDesdePedido(p));
+        caja_movimientos = [...caja_movimientos, ...nuevosMovs];
+      }
+      return { ...d, pedidos: [...d.pedidos, ...nuevos], caja_movimientos };
+    });
     toast(lineasValidas.length > 1 ? `Pedido creado con ${lineasValidas.length} productos` : "Pedido creado");
     setOrderModalOpen(false);
   }
@@ -225,23 +234,36 @@ export function Pedidos() {
     const producto = data.productos.find((pr) => pr.id === editForm.id_producto);
     const total = editForm.precio_unitario * editForm.cantidad;
     const neto = total - editForm.descuento_monto;
-    setData((d) => ({
-      ...d,
-      pedidos: d.pedidos.map((p) =>
+    setData((d) => {
+      const pedidos = d.pedidos.map((p) =>
         p.id_detalle === editing
           ? { ...p, ...editForm, nombre_producto: producto?.nombre ?? p.nombre_producto, precio_total: total, precio_neto: neto }
           : p
-      ),
-    }));
+      );
+      let caja_movimientos = d.caja_movimientos;
+      if (editForm.estado === "Entregado" && !caja_movimientos.some((m) => m.ref === editing)) {
+        const pedidoActualizado = pedidos.find((p) => p.id_detalle === editing);
+        if (pedidoActualizado) caja_movimientos = [...caja_movimientos, crearMovimientoCajaDesdePedido(pedidoActualizado)];
+      }
+      return { ...d, pedidos, caja_movimientos };
+    });
     toast("Pedido actualizado");
     setEditModalOpen(false);
   }
 
+  // Al marcar un pedido como "Entregado" se crea automáticamente su ingreso en Caja
+  // (una vez por línea, idempotente por ref = id_detalle). Si un pedido sale de "Entregado"
+  // el movimiento ya creado no se toca — queda para revisar en la conciliación de Caja.
   function cambiarEstado(idDetalle: string, estado: EstadoPedido) {
-    setData((d) => ({
-      ...d,
-      pedidos: d.pedidos.map((p) => (p.id_detalle === idDetalle ? { ...p, estado } : p)),
-    }));
+    setData((d) => {
+      const pedidos = d.pedidos.map((p) => (p.id_detalle === idDetalle ? { ...p, estado } : p));
+      let caja_movimientos = d.caja_movimientos;
+      if (estado === "Entregado" && !caja_movimientos.some((m) => m.ref === idDetalle)) {
+        const pedido = pedidos.find((p) => p.id_detalle === idDetalle);
+        if (pedido) caja_movimientos = [...caja_movimientos, crearMovimientoCajaDesdePedido(pedido)];
+      }
+      return { ...d, pedidos, caja_movimientos };
+    });
     toast(`Estado → ${estado}`);
   }
 

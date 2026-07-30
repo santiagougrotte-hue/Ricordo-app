@@ -1,4 +1,5 @@
-import type { RicordoData, Ingrediente, Pedido, TipoCosto, Amortizacion } from "./types";
+import type { RicordoData, Ingrediente, Pedido, TipoCosto, Amortizacion, CajaMovimiento } from "./types";
+import { uid } from "./id";
 
 export function fARS(n: number | null | undefined): string {
   const v = n ?? 0;
@@ -269,6 +270,35 @@ export function saldoCaja(data: RicordoData): number {
     0
   );
   return (data.saldo_anterior_caja?.valor ?? 0) + movs;
+}
+
+/** Movimiento de ingreso que corresponde a una línea de pedido entregada — un movimiento por línea,
+ * referenciado por id_detalle para poder detectar si ya existe (idempotente). */
+export function crearMovimientoCajaDesdePedido(pedido: Pedido): CajaMovimiento {
+  return {
+    id: uid("CAJ"),
+    fecha: pedido.fecha,
+    tipo: "ingreso",
+    concepto: `Pedido ${pedido.id_pedido} — ${pedido.nombre_producto}`,
+    monto: pedido.precio_neto,
+    metodo: pedido.metodo_pago || "Efectivo",
+    ref: pedido.id_detalle,
+  };
+}
+
+export interface DiscrepanciaCaja {
+  pedido: Pedido;
+  movimiento: CajaMovimiento | null;
+}
+
+/** Pedidos entregados cuyo ingreso de caja no existe o no coincide con precio_neto,
+ * excluyendo los que ya se revisaron y se confirmaron como intencionalmente sin cobrar. */
+export function discrepanciasCaja(data: RicordoData): DiscrepanciaCaja[] {
+  const ignorados = new Set(data.conciliacion_ignorados ?? []);
+  return data.pedidos
+    .filter((p) => p.estado === "Entregado" && !ignorados.has(p.id_detalle))
+    .map((p) => ({ pedido: p, movimiento: data.caja_movimientos.find((m) => m.ref === p.id_detalle) ?? null }))
+    .filter(({ pedido, movimiento }) => !movimiento || movimiento.monto !== pedido.precio_neto);
 }
 
 export function cmvAcumulado(data: RicordoData): number {
