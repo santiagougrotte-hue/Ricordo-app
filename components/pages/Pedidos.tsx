@@ -85,7 +85,94 @@ function emptyEditForm() {
   };
 }
 
-export function Pedidos() {
+// Chequeo de salud de datos permanente: líneas de pedido sin id_producto, o con un
+// id_producto que ya no existe en el catálogo (por ejemplo, si el producto se borró después).
+function LineasHuerfanas() {
+  const { data, setData } = useStore();
+  const { toast } = useToast();
+  const [seleccion, setSeleccion] = useState<Record<string, string>>({});
+
+  const clienteNombre = (id: string) => data.clientes.find((c) => c.id === id)?.nombre ?? "—";
+
+  const huerfanas = useMemo(
+    () => data.pedidos.filter((p) => !p.id_producto || !data.productos.some((pr) => pr.id === p.id_producto)),
+    [data.pedidos, data.productos]
+  );
+
+  function asignar(idDetalle: string) {
+    const idProducto = seleccion[idDetalle];
+    const producto = data.productos.find((p) => p.id === idProducto);
+    if (!producto) {
+      toast("Elegí un producto para asignar", "error");
+      return;
+    }
+    setData((d) => ({
+      ...d,
+      pedidos: d.pedidos.map((p) =>
+        p.id_detalle === idDetalle ? { ...p, id_producto: producto.id, nombre_producto: producto.nombre } : p
+      ),
+    }));
+    setSeleccion((s) => {
+      const resto = { ...s };
+      delete resto[idDetalle];
+      return resto;
+    });
+    toast("Producto asignado");
+  }
+
+  return (
+    <Card title="Líneas de pedido sin producto asignado">
+      {huerfanas.length === 0 ? (
+        <EmptyState text="No hay líneas sin producto asignado. Todo está bien." />
+      ) : (
+        <TableWrap>
+          <table className="w-full">
+            <thead>
+              <tr>
+                <Th>Fecha</Th>
+                <Th>Cliente</Th>
+                <Th>Cantidad</Th>
+                <Th>Precio neto</Th>
+                <Th>Asignar producto</Th>
+                <Th>Acciones</Th>
+              </tr>
+            </thead>
+            <tbody>
+              {huerfanas.map((p) => (
+                <TrHover key={p.id_detalle}>
+                  <Td>{p.fecha}</Td>
+                  <Td main>{clienteNombre(p.id_cliente)}</Td>
+                  <Td>{p.cantidad}</Td>
+                  <Td>{fARS(p.precio_neto)}</Td>
+                  <Td>
+                    <Select
+                      value={seleccion[p.id_detalle] ?? ""}
+                      onChange={(e) => setSeleccion((s) => ({ ...s, [p.id_detalle]: e.target.value }))}
+                    >
+                      <option value="">Elegir producto…</option>
+                      {data.productos.map((prod) => (
+                        <option key={prod.id} value={prod.id}>
+                          {prod.nombre}
+                        </option>
+                      ))}
+                    </Select>
+                  </Td>
+                  <Td>
+                    <Button size="sm" onClick={() => asignar(p.id_detalle)}>
+                      Asignar
+                    </Button>
+                  </Td>
+                </TrHover>
+              ))}
+            </tbody>
+          </table>
+        </TableWrap>
+      )}
+    </Card>
+  );
+}
+
+function PedidosTab() {
   const { data, setData } = useStore();
   const { mes, anio } = usePeriod();
   const { toast } = useToast();
@@ -177,7 +264,16 @@ export function Pedidos() {
       toast("Elegí un cliente", "error");
       return;
     }
-    const lineasValidas = orderForm.lineas.filter((l) => l.id_producto && l.cantidad > 0);
+    if (orderForm.lineas.some((l) => !l.id_producto)) {
+      toast("Hay una línea sin producto seleccionado — elegí uno o quitá esa línea", "error");
+      return;
+    }
+    const idsCatalogo = new Set(data.productos.map((p) => p.id));
+    if (orderForm.lineas.some((l) => !idsCatalogo.has(l.id_producto))) {
+      toast("Una línea tiene un producto que ya no existe en el catálogo", "error");
+      return;
+    }
+    const lineasValidas = orderForm.lineas.filter((l) => l.cantidad > 0);
     if (lineasValidas.length === 0) {
       toast("Agregá al menos un producto", "error");
       return;
@@ -232,6 +328,10 @@ export function Pedidos() {
       return;
     }
     const producto = data.productos.find((pr) => pr.id === editForm.id_producto);
+    if (!producto) {
+      toast("Ese producto ya no existe en el catálogo — elegí otro", "error");
+      return;
+    }
     const total = editForm.precio_unitario * editForm.cantidad;
     const neto = total - editForm.descuento_monto;
     setData((d) => {
@@ -274,11 +374,9 @@ export function Pedidos() {
 
   return (
     <div>
-      <PageHeader
-        title="Pedidos"
-        sub="Gestión de pedidos"
-        right={<Button onClick={openNew}>+ Nuevo Pedido</Button>}
-      />
+      <div className="mb-4 flex justify-end">
+        <Button onClick={openNew}>+ Nuevo Pedido</Button>
+      </div>
 
       <FilterTabs
         value={estadoFiltro}
@@ -449,10 +547,12 @@ export function Pedidos() {
           },
           {
             title: "Productos",
-            validate: () =>
-              orderForm.lineas.filter((l) => l.id_producto && l.cantidad > 0).length === 0
-                ? "Agregá al menos un producto"
-                : null,
+            validate: () => {
+              if (orderForm.lineas.some((l) => !l.id_producto)) {
+                return "Hay una línea sin producto seleccionado — elegí uno o quitá esa línea";
+              }
+              return orderForm.lineas.filter((l) => l.cantidad > 0).length === 0 ? "Agregá al menos un producto" : null;
+            },
             content: (
               <div>
                 <div className="mb-2 flex items-center justify-between">
@@ -699,6 +799,24 @@ export function Pedidos() {
           </Field>
         </FormGrid>
       </Modal>
+    </div>
+  );
+}
+
+export function Pedidos() {
+  const [tab, setTab] = useState("pedidos");
+  return (
+    <div>
+      <PageHeader title="Pedidos" sub="Gestión de pedidos" />
+      <FilterTabs
+        value={tab}
+        onChange={setTab}
+        options={[
+          { value: "pedidos", label: "Pedidos" },
+          { value: "huerfanas", label: "Líneas sin producto" },
+        ]}
+      />
+      {tab === "pedidos" ? <PedidosTab /> : <LineasHuerfanas />}
     </div>
   );
 }
