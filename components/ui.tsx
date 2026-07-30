@@ -237,12 +237,23 @@ export function Td({
   );
 }
 
-export function TrHover({ children, className = "" }: { children: React.ReactNode; className?: string }) {
+export function TrHover({
+  children,
+  className = "",
+  onClick,
+}: {
+  children: React.ReactNode;
+  className?: string;
+  onClick?: () => void;
+}) {
   // Hover scoped to (hover: hover) devices only — on touch screens a plain `hover:` class
   // makes the first tap register as "hover" instead of a click, so buttons inside the row
   // needed a second tap to actually fire.
   return (
-    <tr className={`[@media(hover:hover)]:hover:bg-surface2/60 [@media(hover:hover)]:[&:hover_td]:text-text ${className}`}>
+    <tr
+      onClick={onClick}
+      className={`[@media(hover:hover)]:hover:bg-surface2/60 [@media(hover:hover)]:[&:hover_td]:text-text ${className}`}
+    >
       {children}
     </tr>
   );

@@ -1,15 +1,40 @@
 "use client";
 
 import React, { useMemo, useState } from "react";
-import { TrendingUp, TrendingDown, Minus } from "lucide-react";
+import { TrendingUp, TrendingDown, Minus, ChevronRight, ChevronDown } from "lucide-react";
 import { useStore } from "@/lib/store";
 import { usePeriod, MESES } from "@/lib/period";
 import { useToast } from "@/lib/toast";
 import { uid } from "@/lib/id";
-import { fNum, fPct } from "@/lib/calc";
-import { referenciaVentasPorGusto, desvioPlanSemana, type ReferenciaVentasGusto, type TendenciaVentas } from "@/lib/planificacion";
-import { PageHeader, Card, TableWrap, Th, Td, TrHover, EmptyState, Button, Field, Input, Badge } from "@/components/ui";
-import type { Producto, PlanProduccionMes } from "@/lib/types";
+import { fARS, fNum, fPct, calcCosto } from "@/lib/calc";
+import {
+  referenciaVentasPorGusto,
+  desvioPlanSemana,
+  proponerClasificacionRecetas,
+  calcularComposicionGusto,
+  reescalarLineasComponente,
+  calcularCuadroNecesidad,
+  type ReferenciaVentasGusto,
+  type TendenciaVentas,
+} from "@/lib/planificacion";
+import {
+  PageHeader,
+  Card,
+  TableWrap,
+  Th,
+  Td,
+  TrHover,
+  EmptyState,
+  Button,
+  Field,
+  Input,
+  Select,
+  Badge,
+  Alert,
+  InfoRow,
+} from "@/components/ui";
+import { Modal } from "@/components/Modal";
+import type { Producto, PlanProduccionMes, ComponenteReceta, RecetaLinea } from "@/lib/types";
 
 function TendenciaIcono({ tendencia }: { tendencia: TendenciaVentas }) {
   if (tendencia === "up") {
@@ -246,6 +271,367 @@ function PlanEditable({
   );
 }
 
+function nombreConcepto(data: ReturnType<typeof useStore>["data"], linea: RecetaLinea): string {
+  if (linea.tipo === "Ingrediente") return data.ingredientes.find((i) => i.id === linea.concepto)?.nombre ?? linea.concepto;
+  if (linea.tipo === "Packaging") return data.packaging.find((p) => p.id === linea.concepto)?.nombre ?? linea.concepto;
+  return data.costos_fijos.find((c) => c.id === linea.concepto)?.descripcion ?? linea.concepto;
+}
+
+/** Revisión y corrección de la propuesta de clasificación, gusto por gusto. Se remonta (vía
+ * `key` en el padre) cada vez que cambia el gusto elegido, para no arrastrar ediciones a medio
+ * hacer de un gusto a otro. Nada se escribe en data.recetas hasta tocar "Confirmar". */
+function RevisionClasificacionGusto({
+  idProducto,
+  lineas,
+}: {
+  idProducto: string;
+  lineas: RecetaLinea[];
+}) {
+  const { data, setData } = useStore();
+  const { toast } = useToast();
+  const propuestas = useMemo(() => proponerClasificacionRecetas(data), [data]);
+  const [seleccion, setSeleccion] = useState<Record<string, ComponenteReceta | "">>(() => {
+    const inicial: Record<string, ComponenteReceta | ""> = {};
+    for (const l of lineas) {
+      const propuesta = propuestas.find((p) => p.id === l.id)?.componente ?? "";
+      inicial[l.id] = l.componente ?? propuesta;
+    }
+    return inicial;
+  });
+
+  const sinClasificar = lineas.filter((l) => !seleccion[l.id]).length;
+
+  function confirmar() {
+    if (sinClasificar > 0) {
+      toast("Todavía hay líneas sin clasificar en este gusto", "error");
+      return;
+    }
+    setData((d) => ({
+      ...d,
+      recetas: d.recetas.map((r) =>
+        r.id_producto === idProducto && seleccion[r.id] ? { ...r, componente: seleccion[r.id] as ComponenteReceta } : r
+      ),
+    }));
+    toast("Clasificación confirmada");
+  }
+
+  if (lineas.length === 0) return <EmptyState text="Este gusto todavía no tiene receta cargada." />;
+
+  return (
+    <>
+      <TableWrap>
+        <table className="w-full">
+          <thead>
+            <tr>
+              <Th>Concepto</Th>
+              <Th>Tipo</Th>
+              <Th>Cantidad</Th>
+              <Th>Componente</Th>
+            </tr>
+          </thead>
+          <tbody>
+            {lineas.map((l) => (
+              <TrHover key={l.id}>
+                <Td main>{nombreConcepto(data, l)}</Td>
+                <Td>{l.tipo}</Td>
+                <Td>{l.cantidad}</Td>
+                <Td>
+                  <Select
+                    value={seleccion[l.id]}
+                    onChange={(e) => setSeleccion((s) => ({ ...s, [l.id]: e.target.value as ComponenteReceta }))}
+                    style={{ width: 140 }}
+                  >
+                    <option value="">Elegir…</option>
+                    <option value="masa">Masa</option>
+                    <option value="relleno">Relleno</option>
+                    <option value="packaging">Packaging</option>
+                  </Select>
+                </Td>
+              </TrHover>
+            ))}
+          </tbody>
+        </table>
+      </TableWrap>
+      <div className="mt-3 flex flex-wrap items-center justify-between gap-2">
+        <span className="text-[11.5px] text-text3">
+          {sinClasificar > 0 ? `${sinClasificar} línea(s) sin clasificar` : "Todo clasificado"}
+        </span>
+        <Button size="sm" onClick={confirmar}>
+          Confirmar clasificación
+        </Button>
+      </div>
+    </>
+  );
+}
+
+/** Composición derivada + gramos por caja editables. Editar el gramaje reescala
+ * proporcionalmente las líneas de receta de ese componente — como eso cambia costo y margen,
+ * siempre pasa por un cartel de confirmación antes de escribir nada. */
+function ParametrosGramaje({ producto }: { producto: Producto }) {
+  const { data, setData } = useStore();
+  const { toast } = useToast();
+
+  const composicionMasa = useMemo(() => calcularComposicionGusto(data, producto.id, "masa"), [data, producto.id]);
+  const composicionRelleno = useMemo(() => calcularComposicionGusto(data, producto.id, "relleno"), [data, producto.id]);
+  const gramosMasaActual = producto.gramos_masa_por_caja ?? composicionMasa.totalGramosPorCaja;
+  const gramosRellenoActual = producto.gramos_relleno_por_caja ?? composicionRelleno.totalGramosPorCaja;
+
+  const [inputMasa, setInputMasa] = useState(gramosMasaActual);
+  const [inputRelleno, setInputRelleno] = useState(gramosRellenoActual);
+  const [confirmando, setConfirmando] = useState<{
+    componente: "masa" | "relleno";
+    nuevoValor: number;
+    margenAntes: number;
+    margenDespues: number;
+    costoAntes: number;
+    costoDespues: number;
+  } | null>(null);
+
+  function pedirConfirmacion(componente: "masa" | "relleno", nuevoValor: number) {
+    const actual = componente === "masa" ? gramosMasaActual : gramosRellenoActual;
+    if (actual <= 0) {
+      toast("Todavía no hay líneas clasificadas de este componente para este gusto — confirmá la clasificación primero", "error");
+      return;
+    }
+    if (nuevoValor === actual) return;
+    const factor = nuevoValor / actual;
+    const costoAntes = calcCosto(data, producto.id);
+    const costoDespues = calcCosto({ ...data, recetas: reescalarLineasComponente(data, producto.id, componente, factor) }, producto.id);
+    const margenAntes = producto.precio_venta > 0 ? ((producto.precio_venta - costoAntes) / producto.precio_venta) * 100 : 0;
+    const margenDespues = producto.precio_venta > 0 ? ((producto.precio_venta - costoDespues) / producto.precio_venta) * 100 : 0;
+    setConfirmando({ componente, nuevoValor, margenAntes, margenDespues, costoAntes, costoDespues });
+  }
+
+  function confirmarCambio() {
+    if (!confirmando) return;
+    const actual = confirmando.componente === "masa" ? gramosMasaActual : gramosRellenoActual;
+    const factor = confirmando.nuevoValor / actual;
+    setData((d) => ({
+      ...d,
+      recetas: reescalarLineasComponente(d, producto.id, confirmando.componente, factor),
+      productos: d.productos.map((p) =>
+        p.id === producto.id
+          ? {
+              ...p,
+              ...(confirmando.componente === "masa"
+                ? { gramos_masa_por_caja: confirmando.nuevoValor }
+                : { gramos_relleno_por_caja: confirmando.nuevoValor }),
+            }
+          : p
+      ),
+    }));
+    toast("Gramaje actualizado y receta reescalada");
+    setConfirmando(null);
+  }
+
+  return (
+    <>
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+        <div>
+          <Field label="Gramos de masa por caja">
+            <div className="flex gap-2">
+              <Input type="number" value={inputMasa} onChange={(e) => setInputMasa(Number(e.target.value))} />
+              <Button size="sm" onClick={() => pedirConfirmacion("masa", inputMasa)}>
+                Guardar
+              </Button>
+            </div>
+          </Field>
+          <div className="mt-2.5 flex flex-col gap-1">
+            {composicionMasa.ingredientes.map((i) => (
+              <div key={i.id_ingrediente} className="flex justify-between text-[11.5px] text-text3">
+                <span>{i.nombre}</span>
+                <span>{fPct(i.pctComposicion)}</span>
+              </div>
+            ))}
+          </div>
+          {composicionMasa.ingredientesSinPesoConfigurado.length > 0 && (
+            <div className="mt-2">
+              <Alert kind="warning">Falta peso unitario: {composicionMasa.ingredientesSinPesoConfigurado.join(", ")}</Alert>
+            </div>
+          )}
+        </div>
+
+        <div>
+          <Field label="Gramos de relleno por caja">
+            <div className="flex gap-2">
+              <Input type="number" value={inputRelleno} onChange={(e) => setInputRelleno(Number(e.target.value))} />
+              <Button size="sm" onClick={() => pedirConfirmacion("relleno", inputRelleno)}>
+                Guardar
+              </Button>
+            </div>
+          </Field>
+          <div className="mt-2.5 flex flex-col gap-1">
+            {composicionRelleno.ingredientes.map((i) => (
+              <div key={i.id_ingrediente} className="flex justify-between text-[11.5px] text-text3">
+                <span>{i.nombre}</span>
+                <span>{fPct(i.pctComposicion)}</span>
+              </div>
+            ))}
+          </div>
+          {composicionRelleno.ingredientesSinPesoConfigurado.length > 0 && (
+            <div className="mt-2">
+              <Alert kind="warning">Falta peso unitario: {composicionRelleno.ingredientesSinPesoConfigurado.join(", ")}</Alert>
+            </div>
+          )}
+        </div>
+      </div>
+
+      <Modal
+        open={!!confirmando}
+        onClose={() => setConfirmando(null)}
+        title="Este cambio afecta el costo y el margen"
+        footer={
+          <>
+            <Button variant="ghost" onClick={() => setConfirmando(null)}>
+              Cancelar
+            </Button>
+            <Button onClick={confirmarCambio}>Confirmar y reescalar receta</Button>
+          </>
+        }
+      >
+        {confirmando && (
+          <div>
+            <p className="mb-3 text-[12.5px] text-text3">
+              Cambiar los gramos de {confirmando.componente} por caja de {producto.nombre} reescala proporcionalmente esa parte de
+              la receta. Esto es lo que va a pasar con el costo y el margen:
+            </p>
+            <InfoRow label="Costo actual" value={fARS(confirmando.costoAntes)} />
+            <InfoRow label="Costo nuevo" value={fARS(confirmando.costoDespues)} />
+            <InfoRow label="Margen actual" value={fPct(confirmando.margenAntes)} color={confirmando.margenAntes >= 30 ? "green" : "red"} />
+            <InfoRow
+              label="Margen nuevo"
+              value={fPct(confirmando.margenDespues)}
+              color={confirmando.margenDespues >= 30 ? "green" : "red"}
+            />
+          </div>
+        )}
+      </Modal>
+    </>
+  );
+}
+
+/** Bloque 3 — elegí un gusto y revisá su clasificación y gramaje. */
+function ParametrosPorGusto() {
+  const { data } = useStore();
+  const productosActivos = useMemo(() => data.productos.filter((p) => p.activo), [data.productos]);
+  const [idProducto, setIdProducto] = useState(productosActivos[0]?.id ?? "");
+  const producto = data.productos.find((p) => p.id === idProducto);
+  const lineas = useMemo(
+    () => data.recetas.filter((r) => r.id_producto === idProducto && r.tipo !== "CostoFijo"),
+    [data.recetas, idProducto]
+  );
+
+  return (
+    <Card title="Parámetros por gusto" className="mb-4">
+      <Field label="Gusto">
+        <Select value={idProducto} onChange={(e) => setIdProducto(e.target.value)} style={{ maxWidth: 340 }}>
+          <option value="">Seleccionar…</option>
+          {productosActivos.map((p) => (
+            <option key={p.id} value={p.id}>
+              {p.nombre}
+            </option>
+          ))}
+        </Select>
+      </Field>
+
+      {producto && (
+        <>
+          <div className="mt-4">
+            <div className="mb-2 text-[11px] font-bold uppercase tracking-[1.3px] text-text2">Clasificación de la receta</div>
+            <RevisionClasificacionGusto key={idProducto} idProducto={idProducto} lineas={lineas} />
+          </div>
+          <div className="mt-5 border-t border-border pt-4">
+            <div className="mb-2 text-[11px] font-bold uppercase tracking-[1.3px] text-text2">Gramaje por caja</div>
+            <ParametrosGramaje key={idProducto} producto={producto} />
+          </div>
+        </>
+      )}
+    </Card>
+  );
+}
+
+/** Bloque 4 — Tabla A (masa/semana) o Tabla B (relleno/mes) según `componente`. El detalle por
+ * gusto de cada ingrediente se puede plegar/desplegar tocando la fila. */
+function CuadroNecesidadTabla({
+  titulo,
+  componente,
+  cajasPorGusto,
+}: {
+  titulo: string;
+  componente: "masa" | "relleno";
+  cajasPorGusto: Map<string, number>;
+}) {
+  const { data } = useStore();
+  const cuadro = useMemo(() => calcularCuadroNecesidad(data, componente, cajasPorGusto), [data, componente, cajasPorGusto]);
+  const [expandido, setExpandido] = useState<Record<string, boolean>>({});
+
+  return (
+    <Card title={titulo} className="mb-4">
+      {cuadro.gustosSinComposicion.length > 0 && (
+        <div className="mb-3">
+          <Alert kind="warning">
+            Sin clasificar todavía: {cuadro.gustosSinComposicion.join(", ")} — revisalos en &quot;Parámetros por gusto&quot;.
+          </Alert>
+        </div>
+      )}
+      {cuadro.ingredientes.length === 0 ? (
+        <EmptyState text="Cargá y guardá el plan del mes, y clasificá al menos un gusto, para ver este cuadro." />
+      ) : (
+        <>
+          <TableWrap>
+            <table className="w-full">
+              <thead>
+                <tr>
+                  <Th></Th>
+                  <Th>Ingrediente</Th>
+                  <Th>Cantidad (3 dec.)</Th>
+                  <Th>A comprar</Th>
+                  <Th>Costo est.</Th>
+                </tr>
+              </thead>
+              <tbody>
+                {cuadro.ingredientes.map((i) => (
+                  <React.Fragment key={i.id_ingrediente}>
+                    <TrHover
+                      className="cursor-pointer"
+                      onClick={() => setExpandido((e) => ({ ...e, [i.id_ingrediente]: !e[i.id_ingrediente] }))}
+                    >
+                      <Td>{expandido[i.id_ingrediente] ? <ChevronDown className="h-3.5 w-3.5" /> : <ChevronRight className="h-3.5 w-3.5" />}</Td>
+                      <Td main>{i.nombre}</Td>
+                      <Td>
+                        {fNum(i.cantidadNativa, 3)} {i.unidad}
+                        {i.unidadesConversion !== undefined ? ` (${fNum(i.gramosTotales, 0)} g)` : ""}
+                      </Td>
+                      <Td main>
+                        {i.unidadesConversion !== undefined
+                          ? `${fNum(i.unidadesConversion, 0)} unidades`
+                          : `${fNum(i.cantidadNativaRedondeada, 0)} ${i.unidad}`}
+                      </Td>
+                      <Td>{fARS(i.costoEstimado)}</Td>
+                    </TrHover>
+                    {expandido[i.id_ingrediente] &&
+                      i.detallePorGusto.map((d) => (
+                        <tr key={d.id_producto} className="bg-surface2/30 text-[11.5px] text-text3">
+                          <Td></Td>
+                          <Td colSpan={4}>
+                            {d.nombreProducto}: {fNum(d.gramosNecesarios, 0)} g
+                          </Td>
+                        </tr>
+                      ))}
+                  </React.Fragment>
+                ))}
+              </tbody>
+            </table>
+          </TableWrap>
+          <div className="mt-3.5 flex justify-end border-t border-border pt-3">
+            <span className="text-[13px] font-semibold text-accent">Costo total estimado: {fARS(cuadro.costoTotal)}</span>
+          </div>
+        </>
+      )}
+    </Card>
+  );
+}
+
 export function PlanProduccion() {
   const { data } = useStore();
   const { mes, anio } = usePeriod();
@@ -256,6 +642,12 @@ export function PlanProduccion() {
     () => data.plan_produccion.filter((p) => p.mes === mes && p.anio === anio),
     [data.plan_produccion, mes, anio]
   );
+
+  const cajasSemanaPorGusto = useMemo(
+    () => new Map(planesGuardados.map((p) => [p.id_producto, p.cajas_semana])),
+    [planesGuardados]
+  );
+  const cajasMesPorGusto = useMemo(() => new Map(planesGuardados.map((p) => [p.id_producto, p.cajas_mes])), [planesGuardados]);
 
   return (
     <div>
@@ -268,6 +660,17 @@ export function PlanProduccion() {
         referencia={referencia}
         productos={productosActivos}
         planesGuardados={planesGuardados}
+      />
+      <ParametrosPorGusto />
+      <CuadroNecesidadTabla
+        titulo={`Ingredientes de masa — por semana (${MESES[mes - 1]} ${anio})`}
+        componente="masa"
+        cajasPorGusto={cajasSemanaPorGusto}
+      />
+      <CuadroNecesidadTabla
+        titulo={`Ingredientes de relleno — por mes (${MESES[mes - 1]} ${anio})`}
+        componente="relleno"
+        cajasPorGusto={cajasMesPorGusto}
       />
     </div>
   );

@@ -1,6 +1,14 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { proponerClasificacionRecetas, referenciaVentasPorGusto, desvioPlanSemana } from "./planificacion";
+import {
+  proponerClasificacionRecetas,
+  referenciaVentasPorGusto,
+  desvioPlanSemana,
+  calcularComposicionGusto,
+  reescalarLineasComponente,
+  calcularCuadroNecesidad,
+} from "./planificacion";
+import { calcCosto } from "./calc";
 import { emptyData } from "./types";
 import type { Ingrediente, RecetaLinea, Pedido, Producto } from "./types";
 
@@ -157,4 +165,130 @@ test("desvioPlanSemana: marca el aviso cuando el desvío supera el umbral, sin b
   const r = desvioPlanSemana(30, 10, 15);
   assert.ok(r.desviacionPct !== null && r.desviacionPct > 15);
   assert.equal(r.excedeUmbral, true);
+});
+
+// --- Bloques 3 y 4: composición, reescalado y cuadros de necesidad ----------------------
+
+function ingredienteEspinaca(): Ingrediente[] {
+  return [
+    { id: "ING-PREMEZCLA", nombre: "Premezcla", unidad: "kg", precio_ref: 2000, precio_vigente: null, seguimiento_stock: false },
+    { id: "ING-HARINA", nombre: "Harina de arroz", unidad: "kg", precio_ref: 1500, precio_vigente: null, seguimiento_stock: false },
+    { id: "ING-HUEVO", nombre: "Huevos", unidad: "unidad", precio_ref: 150, precio_vigente: null, seguimiento_stock: false, peso_unitario_g: 50 },
+    { id: "ING-CURCUMA", nombre: "Cúrcuma", unidad: "kg", precio_ref: 8000, precio_vigente: null, seguimiento_stock: false },
+    { id: "ING-ESPINACA", nombre: "Espinaca", unidad: "kg", precio_ref: 1600, precio_vigente: null, seguimiento_stock: false },
+    { id: "ING-RICOTTA", nombre: "Ricotta", unidad: "kg", precio_ref: 4500, precio_vigente: null, seguimiento_stock: false },
+  ];
+}
+
+function recetaEspinacaClasificada(): RecetaLinea[] {
+  return [
+    { id: "REC-1", id_producto: "PROD-03", tipo: "Ingrediente", concepto: "ING-PREMEZCLA", cantidad: 0.087, componente: "masa" },
+    { id: "REC-2", id_producto: "PROD-03", tipo: "Ingrediente", concepto: "ING-HARINA", cantidad: 0.063, componente: "masa" },
+    { id: "REC-3", id_producto: "PROD-03", tipo: "Ingrediente", concepto: "ING-HUEVO", cantidad: 1, componente: "masa" },
+    { id: "REC-4", id_producto: "PROD-03", tipo: "Ingrediente", concepto: "ING-CURCUMA", cantidad: 0.005, componente: "masa" },
+    { id: "REC-5", id_producto: "PROD-03", tipo: "Ingrediente", concepto: "ING-ESPINACA", cantidad: 0.28, componente: "relleno" },
+    { id: "REC-6", id_producto: "PROD-03", tipo: "Ingrediente", concepto: "ING-RICOTTA", cantidad: 0.084, componente: "relleno" },
+  ];
+}
+
+test("calcularComposicionGusto: masa de espinaca da 205g/caja con el % correcto (huevo incluido por peso)", () => {
+  const data = emptyData();
+  data.ingredientes = ingredienteEspinaca();
+  data.recetas = recetaEspinacaClasificada();
+  const composicion = calcularComposicionGusto(data, "PROD-03", "masa");
+  assert.equal(composicion.totalGramosPorCaja, 205); // 87+63+50+5
+  const huevo = composicion.ingredientes.find((i) => i.id_ingrediente === "ING-HUEVO");
+  assert.ok(huevo);
+  assert.ok(Math.abs(huevo!.pctComposicion - (50 / 205) * 100) < 0.001);
+  assert.equal(composicion.ingredientesSinPesoConfigurado.length, 0);
+});
+
+test("calcularComposicionGusto: relleno de espinaca da 364g/caja", () => {
+  const data = emptyData();
+  data.ingredientes = ingredienteEspinaca();
+  data.recetas = recetaEspinacaClasificada();
+  const composicion = calcularComposicionGusto(data, "PROD-03", "relleno");
+  assert.equal(composicion.totalGramosPorCaja, 364); // 280+84
+});
+
+test("calcularComposicionGusto: ingrediente 'unidad' sin peso_unitario_g no rompe, queda marcado", () => {
+  const data = emptyData();
+  data.ingredientes = [{ id: "ING-BOLSA", nombre: "Bolsas", unidad: "unidad", precio_ref: 10, precio_vigente: null, seguimiento_stock: false }];
+  data.recetas = [{ id: "REC-1", id_producto: "PROD-X", tipo: "Ingrediente", concepto: "ING-BOLSA", cantidad: 2, componente: "masa" }];
+  const composicion = calcularComposicionGusto(data, "PROD-X", "masa");
+  assert.equal(composicion.totalGramosPorCaja, 0);
+  assert.deepEqual(composicion.ingredientesSinPesoConfigurado, ["Bolsas"]);
+});
+
+test("reescalarLineasComponente: reescala solo las líneas del componente indicado", () => {
+  const data = emptyData();
+  data.ingredientes = ingredienteEspinaca();
+  data.recetas = recetaEspinacaClasificada();
+  const reescaladas = reescalarLineasComponente(data, "PROD-03", "masa", 2);
+  const premezcla = reescaladas.find((r) => r.id === "REC-1");
+  const espinaca = reescaladas.find((r) => r.id === "REC-5");
+  assert.equal(premezcla?.cantidad, 0.174); // masa: se duplica
+  assert.equal(espinaca?.cantidad, 0.28); // relleno: no se toca
+});
+
+test("reescalarLineasComponente + calcCosto: escalar la masa cambia el costo del producto (para el cartel de margen)", () => {
+  const data = emptyData();
+  data.ingredientes = ingredienteEspinaca();
+  data.recetas = recetaEspinacaClasificada();
+  const costoOriginal = calcCosto(data, "PROD-03");
+  const dataEscalada = { ...data, recetas: reescalarLineasComponente(data, "PROD-03", "masa", 2) };
+  const costoNuevo = calcCosto(dataEscalada, "PROD-03");
+  assert.ok(costoNuevo > costoOriginal, "duplicar la masa tiene que aumentar el costo total del producto");
+});
+
+test("calcularCuadroNecesidad: 10 cajas de espinaca dan la premezcla redondeada hacia arriba y el huevo en gramos y unidades", () => {
+  const data = emptyData();
+  data.ingredientes = ingredienteEspinaca();
+  data.recetas = recetaEspinacaClasificada();
+  data.productos = [producto({ id: "PROD-03", nombre: "Raviolón de espinaca" })];
+
+  const cuadro = calcularCuadroNecesidad(data, "masa", new Map([["PROD-03", 10]]));
+  const premezcla = cuadro.ingredientes.find((i) => i.id_ingrediente === "ING-PREMEZCLA");
+  assert.ok(premezcla);
+  assert.equal(premezcla!.cantidadNativa, 0.87); // 87g × 10 = 870g = 0,87kg
+  assert.equal(premezcla!.cantidadNativaRedondeada, 1); // "a comprar" redondeado hacia arriba
+
+  const huevo = cuadro.ingredientes.find((i) => i.id_ingrediente === "ING-HUEVO");
+  assert.ok(huevo);
+  assert.equal(huevo!.cantidadNativa, 500); // 50g × 10 cajas
+  assert.equal(huevo!.unidadesConversion, 10); // 500g ÷ 50g/huevo = 10 huevos
+
+  assert.ok(cuadro.costoTotal > 0);
+});
+
+test("calcularCuadroNecesidad: consolida el mismo ingrediente entre dos gustos", () => {
+  const data = emptyData();
+  data.ingredientes = ingredienteEspinaca();
+  data.recetas = [
+    ...recetaEspinacaClasificada(),
+    { id: "REC-7", id_producto: "PROD-05", tipo: "Ingrediente", concepto: "ING-PREMEZCLA", cantidad: 0.1, componente: "masa" },
+  ];
+  data.productos = [producto({ id: "PROD-03" }), producto({ id: "PROD-05", nombre: "Jamón y queso" })];
+
+  const cuadro = calcularCuadroNecesidad(
+    data,
+    "masa",
+    new Map([
+      ["PROD-03", 10],
+      ["PROD-05", 5],
+    ])
+  );
+  const premezcla = cuadro.ingredientes.find((i) => i.id_ingrediente === "ING-PREMEZCLA");
+  assert.ok(premezcla);
+  assert.equal(premezcla!.detallePorGusto.length, 2);
+  // PROD-03: 87g×10=870g, PROD-05: 100g×5=500g (100% premezcla, único ingrediente) → total 1370g = 1,37kg
+  assert.equal(premezcla!.cantidadNativa, 1.37);
+});
+
+test("calcularCuadroNecesidad: gusto con cajas planificadas pero sin líneas clasificadas queda en gustosSinComposicion", () => {
+  const data = emptyData();
+  data.productos = [producto({ id: "PROD-14", nombre: "Salsa" })];
+  const cuadro = calcularCuadroNecesidad(data, "masa", new Map([["PROD-14", 5]]));
+  assert.deepEqual(cuadro.gustosSinComposicion, ["Salsa"]);
+  assert.equal(cuadro.ingredientes.length, 0);
 });
