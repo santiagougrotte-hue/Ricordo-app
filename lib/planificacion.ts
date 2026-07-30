@@ -3,6 +3,9 @@
 // tipo/concepto/cantidad de cada RecetaLinea, nunca el campo `componente`.
 
 import type { RicordoData, ComponenteReceta } from "./types";
+import { inPeriod } from "./calc";
+
+export const CAJAS_POR_SEMANA_DIVISOR = 4.33;
 
 // Palabras reconocidas con confianza — todo lo que no matchea ninguna de las dos listas
 // queda sin propuesta a propósito (null), para que el usuario lo revise y elija a mano
@@ -72,4 +75,58 @@ export function proponerClasificacionRecetas(data: RicordoData): PropuestaClasif
     if (esRelleno && !esMasa) return { id: linea.id, id_producto: linea.id_producto, componente: "relleno" };
     return { id: linea.id, id_producto: linea.id_producto, componente: null };
   });
+}
+
+export type TendenciaVentas = "up" | "down" | "flat";
+
+export interface ReferenciaVentasGusto {
+  id_producto: string;
+  nombre: string;
+  /** Del más viejo al más nuevo, longitud = ventana de meses configurada. */
+  historicoMeses: number[];
+  promedioMes: number;
+  promedioSemana: number;
+  ultimoMesCerrado: number;
+  tendencia: TendenciaVentas;
+}
+
+/** Bloque 1: referencia de ventas por gusto (producto activo) — promedio de una ventana de
+ * meses cerrados (el mes en curso no cuenta, todavía no terminó), el último mes cerrado, y la
+ * tendencia de ese último mes contra el promedio. Un gusto sin ventas en la ventana aparece en
+ * cero, nunca se oculta. */
+export function referenciaVentasPorGusto(data: RicordoData, hoy: Date = new Date()): ReferenciaVentasGusto[] {
+  const ventana = data.config_planificacion.ventana_meses_referencia;
+  return data.productos
+    .filter((p) => p.activo)
+    .map((p): ReferenciaVentasGusto => {
+      const historicoMeses: number[] = [];
+      for (let i = ventana; i >= 1; i--) {
+        const d = new Date(hoy.getFullYear(), hoy.getMonth() - i, 1);
+        const cajas = data.pedidos
+          .filter(
+            (pe) => pe.id_producto === p.id && pe.estado !== "Cancelado" && inPeriod(pe.fecha, d.getMonth() + 1, d.getFullYear())
+          )
+          .reduce((acc, pe) => acc + pe.cantidad, 0);
+        historicoMeses.push(cajas);
+      }
+      const promedioMes = historicoMeses.reduce((a, b) => a + b, 0) / ventana;
+      const promedioSemana = promedioMes / CAJAS_POR_SEMANA_DIVISOR;
+      const ultimoMesCerrado = historicoMeses[historicoMeses.length - 1] ?? 0;
+      const tendencia: TendenciaVentas = ultimoMesCerrado > promedioMes ? "up" : ultimoMesCerrado < promedioMes ? "down" : "flat";
+      return { id_producto: p.id, nombre: p.nombre, historicoMeses, promedioMes, promedioSemana, ultimoMesCerrado, tendencia };
+    });
+}
+
+export interface DesvioPlanSemana {
+  desviacionPct: number | null; // null si cajas_mes es 0 (no se puede calcular %)
+  excedeUmbral: boolean;
+}
+
+/** Bloque 2: compara lo cargado en cajas_semana×4,33 contra cajas_mes — no bloquea ni corrige,
+ * solo informa si el desvío supera el umbral configurado (para que el usuario decida si es
+ * intencional). */
+export function desvioPlanSemana(cajasMes: number, cajasSemana: number, umbralPct: number): DesvioPlanSemana {
+  if (cajasMes <= 0) return { desviacionPct: null, excedeUmbral: cajasSemana > 0 };
+  const desviacionPct = ((cajasSemana * CAJAS_POR_SEMANA_DIVISOR - cajasMes) / cajasMes) * 100;
+  return { desviacionPct, excedeUmbral: Math.abs(desviacionPct) > umbralPct };
 }

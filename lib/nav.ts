@@ -33,6 +33,7 @@ import {
   Briefcase,
   Timer,
   Settings,
+  ClipboardList,
   type LucideIcon,
 } from "lucide-react";
 
@@ -74,6 +75,7 @@ const NAV_RAW: NavGroup[] = [
     items: [
       { key: "stock", label: "Stock", icon: BarChart3 },
       { key: "produccion", label: "Producción", icon: Factory },
+      { key: "planificacion-produccion", label: "Planificación", icon: ClipboardList },
       { key: "envios", label: "Envíos", icon: Truck },
     ],
   },
