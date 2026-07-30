@@ -40,11 +40,11 @@ export function Card({
 }) {
   return (
     <div
-      className={`rounded-xl border border-border ${colorBorder[color]} border-t-2 bg-surface p-[18px] shadow-[var(--shadow-card)] ${className}`}
+      className={`rounded-[var(--radius-card)] border border-border ${colorBorder[color]} border-t-2 bg-surface p-[18px] shadow-[var(--shadow-card)] ${className}`}
     >
       {title && (
         <div className="mb-3.5 flex items-center justify-between">
-          <div className="text-[11px] font-semibold uppercase tracking-[1.5px] text-text3">{title}</div>
+          <div className="text-[11px] font-bold uppercase tracking-[1.3px] text-text2">{title}</div>
           {right}
         </div>
       )}
@@ -66,10 +66,14 @@ export function KpiCard({
 }) {
   return (
     <div
-      className={`rounded-xl border border-border ${colorBorder[color]} border-t-2 bg-surface p-4 shadow-[var(--shadow-card)]`}
+      className={`rounded-[var(--radius-card)] border border-border ${colorBorder[color]} border-t-2 bg-surface p-4 shadow-[var(--shadow-card)]`}
     >
-      <div className="text-[10px] uppercase tracking-[1.2px] text-text3">{label}</div>
-      <div className={`my-1.5 text-2xl leading-none font-semibold ${colorValue[color]}`}>{value}</div>
+      <div className="text-[10px] font-bold uppercase tracking-[1.2px] text-text2">{label}</div>
+      <div
+        className={`my-1.5 text-2xl leading-none font-[750] tracking-[-0.8px] [font-variant-numeric:tabular-nums] ${colorValue[color]}`}
+      >
+        {value}
+      </div>
       {sub && <div className="text-[11px] text-text3">{sub}</div>}
     </div>
   );
