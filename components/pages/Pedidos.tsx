@@ -1,11 +1,12 @@
 "use client";
 
 import React, { useMemo, useState } from "react";
-import { Paperclip, X } from "lucide-react";
+import { Paperclip, X, MessageSquareText } from "lucide-react";
 import { useStore } from "@/lib/store";
 import { usePeriod } from "@/lib/period";
 import { useToast } from "@/lib/toast";
 import { uid } from "@/lib/id";
+import { useIaClient } from "@/lib/ia-client";
 import {
   PageHeader,
   Button,
@@ -23,12 +24,32 @@ import {
   SearchInput,
   Select,
   Textarea,
+  Alert,
 } from "@/components/ui";
 import { Modal } from "@/components/Modal";
 import { Wizard } from "@/components/Wizard";
 import { FileAttach } from "@/components/FileAttach";
 import { crearMovimientoCajaDesdePedido, fARS, inPeriod } from "@/lib/calc";
 import type { Adjunto, Canal, EstadoPedido, Pedido } from "@/lib/types";
+
+type Confianza = "alta" | "media" | "baja";
+
+interface ItemParseado {
+  id_producto: string;
+  nombre: string;
+  cantidad: number;
+  confianza: Confianza;
+}
+
+interface ParsePedidoResponse {
+  cliente: { id: string | null; nombre_detectado: string | null; confianza: Confianza };
+  canal: Canal | null;
+  fecha_entrega: string | null;
+  items: ItemParseado[];
+  no_identificado: string[];
+  notas: string;
+  error?: string;
+}
 
 const ESTADOS: EstadoPedido[] = ["Confirmado", "Produccion", "Entregado", "Cancelado"];
 const ESTADO_COLOR: Record<EstadoPedido, "blue" | "orange" | "green" | "red"> = {
@@ -188,6 +209,12 @@ function PedidosTab() {
   const [editing, setEditing] = useState<string | null>(null);
   const [editForm, setEditForm] = useState(emptyEditForm());
 
+  const [pasteModalOpen, setPasteModalOpen] = useState(false);
+  const [pasteTexto, setPasteTexto] = useState("");
+  const [pasteLoading, setPasteLoading] = useState(false);
+  const [pasteResultado, setPasteResultado] = useState<ParsePedidoResponse | null>(null);
+  const { call: llamarIa } = useIaClient();
+
   const clienteNombre = (id: string) => data.clientes.find((c) => c.id === id)?.nombre ?? "—";
 
   const filtrados = useMemo(() => {
@@ -221,6 +248,75 @@ function PedidosTab() {
   function openNew() {
     setOrderForm(emptyOrderForm());
     setOrderModalOpen(true);
+  }
+
+  function abrirPasteModal() {
+    setPasteTexto("");
+    setPasteResultado(null);
+    setPasteModalOpen(true);
+  }
+
+  async function analizarWhatsapp() {
+    if (!pasteTexto.trim()) {
+      toast("Pegá el mensaje del cliente primero", "error");
+      return;
+    }
+    setPasteLoading(true);
+    const catalogo = data.productos.filter((p) => p.activo).map((p) => ({ id: p.id, nombre: p.nombre }));
+    const clientes = data.clientes.map((c) => ({ id: c.id, nombre: c.nombre }));
+    const resultado = await llamarIa<ParsePedidoResponse>(
+      "parse-pedido",
+      { texto: pasteTexto, catalogo, clientes },
+      "parse-pedido"
+    );
+    setPasteLoading(false);
+    if (resultado) setPasteResultado(resultado);
+  }
+
+  function crearClienteDetectado() {
+    if (!pasteResultado?.cliente.nombre_detectado) return;
+    const nuevo = {
+      id: uid("CLI"),
+      nombre: pasteResultado.cliente.nombre_detectado,
+      canal: pasteResultado.canal ?? ("Minorista" as Canal),
+    };
+    setData((d) => ({ ...d, clientes: [...d.clientes, nuevo] }));
+    setPasteResultado((r) => (r ? { ...r, cliente: { ...r.cliente, id: nuevo.id, confianza: "alta" } } : r));
+    toast("Cliente creado");
+  }
+
+  function usarResultadoPaste() {
+    if (!pasteResultado) return;
+    const lineasDesdeItems: LineaPedido[] = pasteResultado.items.map((item) => {
+      const producto = data.productos.find((p) => p.id === item.id_producto);
+      return {
+        id_producto: item.id_producto,
+        gusto: "",
+        cantidad: item.cantidad,
+        precio_unitario: producto?.precio_venta ?? 0,
+        descuento_monto: 0,
+      };
+    });
+    setOrderForm({
+      ...emptyOrderForm(),
+      id_cliente: pasteResultado.cliente.id ?? "",
+      canal: pasteResultado.canal ?? "Minorista",
+      fecha: pasteResultado.fecha_entrega ?? new Date().toISOString().slice(0, 10),
+      notas: pasteResultado.notas || "",
+      lineas: lineasDesdeItems.length > 0 ? lineasDesdeItems : [emptyLinea()],
+    });
+    setPasteModalOpen(false);
+    setOrderModalOpen(true);
+    if (pasteResultado.no_identificado.length > 0) {
+      toast(`No se pudieron identificar: ${pasteResultado.no_identificado.join(", ")} — agregalos manualmente si corresponde`, "info");
+    }
+  }
+
+  function descartarPasteYCargarManual() {
+    setPasteModalOpen(false);
+    setPasteResultado(null);
+    setPasteTexto("");
+    openNew();
   }
 
   function openEdit(p: Pedido) {
@@ -374,7 +470,10 @@ function PedidosTab() {
 
   return (
     <div>
-      <div className="mb-4 flex justify-end">
+      <div className="mb-4 flex justify-end gap-2">
+        <Button variant="ghost" onClick={abrirPasteModal}>
+          <MessageSquareText className="h-3.5 w-3.5" /> Pegar de WhatsApp
+        </Button>
         <Button onClick={openNew}>+ Nuevo Pedido</Button>
       </div>
 
@@ -798,6 +897,117 @@ function PedidosTab() {
             <FileAttach value={editForm.adjunto} onChange={(adjunto) => setEditForm({ ...editForm, adjunto })} />
           </Field>
         </FormGrid>
+      </Modal>
+
+      {/* Pegar de WhatsApp: la IA propone, el usuario confirma — nunca guarda nada directo. */}
+      <Modal
+        open={pasteModalOpen}
+        onClose={() => setPasteModalOpen(false)}
+        title="Pegar pedido de WhatsApp"
+        wide
+        footer={
+          pasteResultado ? (
+            <>
+              <Button variant="ghost" onClick={descartarPasteYCargarManual}>
+                Descartar y cargar manual
+              </Button>
+              <Button onClick={usarResultadoPaste}>Usar estos datos</Button>
+            </>
+          ) : (
+            <>
+              <Button variant="ghost" onClick={() => setPasteModalOpen(false)}>
+                Cancelar
+              </Button>
+              <Button onClick={analizarWhatsapp} disabled={pasteLoading}>
+                {pasteLoading ? "Analizando…" : "Analizar"}
+              </Button>
+            </>
+          )
+        }
+      >
+        {!pasteResultado ? (
+          <Field label="Mensaje del cliente" full>
+            <Textarea
+              rows={8}
+              placeholder="Pegá acá el mensaje tal cual lo mandó el cliente por WhatsApp…"
+              value={pasteTexto}
+              onChange={(e) => setPasteTexto(e.target.value)}
+              disabled={pasteLoading}
+            />
+          </Field>
+        ) : (
+          <div className="flex flex-col gap-3.5">
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+              <div>
+                <div className="mb-1 text-[11px] font-medium uppercase tracking-wide text-text3">Cliente</div>
+                <div className="flex items-center gap-1.5 text-[13px] text-text">
+                  {pasteResultado.cliente.id
+                    ? clienteNombre(pasteResultado.cliente.id)
+                    : pasteResultado.cliente.nombre_detectado ?? "No detectado"}
+                  <Badge color={pasteResultado.cliente.confianza === "alta" ? "green" : "orange"}>
+                    {pasteResultado.cliente.confianza}
+                  </Badge>
+                </div>
+                {!pasteResultado.cliente.id && pasteResultado.cliente.nombre_detectado && (
+                  <button onClick={crearClienteDetectado} className="mt-1 text-[11.5px] font-medium text-accent hover:text-accent2">
+                    + Crear cliente &quot;{pasteResultado.cliente.nombre_detectado}&quot;
+                  </button>
+                )}
+              </div>
+              <div>
+                <div className="mb-1 text-[11px] font-medium uppercase tracking-wide text-text3">Canal</div>
+                <div className="text-[13px] text-text">{pasteResultado.canal ?? "No informado"}</div>
+              </div>
+              <div>
+                <div className="mb-1 text-[11px] font-medium uppercase tracking-wide text-text3">Fecha de entrega</div>
+                <div className="text-[13px] text-text">{pasteResultado.fecha_entrega ?? "No informada"}</div>
+              </div>
+            </div>
+
+            <div>
+              <div className="mb-2 text-[11px] font-medium uppercase tracking-wide text-text3">Productos identificados</div>
+              {pasteResultado.items.length === 0 ? (
+                <EmptyState text="No se identificó ningún producto del catálogo en el mensaje." />
+              ) : (
+                <TableWrap>
+                  <table className="w-full">
+                    <thead>
+                      <tr>
+                        <Th>Producto</Th>
+                        <Th>Cantidad</Th>
+                        <Th>Confianza</Th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {pasteResultado.items.map((item, idx) => (
+                        <tr key={idx} className={item.confianza !== "alta" ? "bg-orange-dim/40" : ""}>
+                          <Td main>{item.nombre}</Td>
+                          <Td>{item.cantidad}</Td>
+                          <Td>
+                            <Badge color={item.confianza === "alta" ? "green" : "orange"}>{item.confianza}</Badge>
+                          </Td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </TableWrap>
+              )}
+            </div>
+
+            {pasteResultado.no_identificado.length > 0 && (
+              <Alert kind="warning">
+                No se pudieron identificar: {pasteResultado.no_identificado.join(", ")}. Agregalos manualmente si corresponde.
+              </Alert>
+            )}
+
+            {pasteResultado.notas && (
+              <div>
+                <div className="mb-1 text-[11px] font-medium uppercase tracking-wide text-text3">Notas</div>
+                <div className="text-[13px] text-text2">{pasteResultado.notas}</div>
+              </div>
+            )}
+          </div>
+        )}
       </Modal>
     </div>
   );
