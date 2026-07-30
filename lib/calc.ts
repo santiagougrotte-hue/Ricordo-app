@@ -1,4 +1,4 @@
-import type { RicordoData, Ingrediente, Pedido, TipoCosto, Amortizacion, CajaMovimiento, Cliente } from "./types";
+import type { RicordoData, Ingrediente, Pedido, TipoCosto, Amortizacion, CajaMovimiento, Cliente, Canal } from "./types";
 import { uid } from "./id";
 
 export function fARS(n: number | null | undefined): string {
@@ -8,6 +8,13 @@ export function fARS(n: number | null | undefined): string {
     currency: "ARS",
     maximumFractionDigits: 0,
   });
+}
+
+/** Convierte una fecha ISO ("2026-07-30" o con hora) al formato DD/MM/YYYY usado en la interfaz. */
+export function fFechaCorta(iso: string): string {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return iso;
+  return d.toLocaleDateString("es-AR", { day: "2-digit", month: "2-digit", year: "numeric" });
 }
 
 export function fNum(n: number | null | undefined, decimals = 2): string {
@@ -410,4 +417,80 @@ export function calcCVProducto(data: RicordoData, idProducto: string): number {
 
 export function unidadesEntregadas(pedidos: Pedido[]): number {
   return pedidos.filter((p) => p.estado === "Entregado").reduce((acc, p) => acc + p.cantidad, 0);
+}
+
+export interface VentaMesCanalPulso {
+  mes: number;
+  anio: number;
+  canal: Canal;
+  total: number;
+  unidades: number;
+}
+
+export interface ProductoResumenPulso {
+  id: string;
+  nombre: string;
+  margenPct: number;
+  unidadesVendidasMesActual: number;
+  stock: number;
+}
+
+export interface ResumenPulso {
+  ventasPorMesCanal: VentaMesCanalPulso[];
+  productos: ProductoResumenPulso[];
+  diferenciaCajaVentas: number;
+  comprasVsConsumo: ComprasVsConsumoMes[];
+  pendientesEntrega: number;
+}
+
+/** Arma el resumen agregado que se manda a la IA para el pulso semanal — nunca los registros
+ * crudos, solo estos totales ya calculados con la misma lógica que usa el resto de la app. */
+export function construirResumenPulso(data: RicordoData, hoy: Date = new Date()): ResumenPulso {
+  const canales: Canal[] = ["Minorista", "Mayorista"];
+  const ventasPorMesCanal: VentaMesCanalPulso[] = [];
+  for (let i = 2; i >= 0; i--) {
+    const d = new Date(hoy.getFullYear(), hoy.getMonth() - i, 1);
+    const mes = d.getMonth() + 1;
+    const anio = d.getFullYear();
+    for (const canal of canales) {
+      const pedidosCanal = data.pedidos.filter(
+        (p) => inPeriod(p.fecha, mes, anio) && p.estado !== "Cancelado" && p.canal === canal
+      );
+      ventasPorMesCanal.push({
+        mes,
+        anio,
+        canal,
+        total: pedidosCanal.reduce((acc, p) => acc + p.precio_neto, 0),
+        unidades: pedidosCanal.reduce((acc, p) => acc + p.cantidad, 0),
+      });
+    }
+  }
+
+  const mesActual = hoy.getMonth() + 1;
+  const anioActual = hoy.getFullYear();
+  const productos: ProductoResumenPulso[] = data.productos
+    .filter((p) => p.activo)
+    .map((p) => {
+      const costo = calcCosto(data, p.id);
+      const margenPct = p.precio_venta > 0 ? ((p.precio_venta - costo) / p.precio_venta) * 100 : 0;
+      const unidadesVendidasMesActual = data.pedidos
+        .filter((pe) => pe.id_producto === p.id && pe.estado !== "Cancelado" && inPeriod(pe.fecha, mesActual, anioActual))
+        .reduce((acc, pe) => acc + pe.cantidad, 0);
+      return { id: p.id, nombre: p.nombre, margenPct, unidadesVendidasMesActual, stock: data.stock_manual[p.id] ?? 0 };
+    });
+
+  const diferenciaCajaVentas = discrepanciasCaja(data).reduce(
+    (acc, { pedido, movimiento }) => acc + (pedido.precio_neto - (movimiento?.monto ?? 0)),
+    0
+  );
+
+  const pendientesEntrega = data.pedidos.filter((p) => p.estado === "Confirmado" || p.estado === "Produccion").length;
+
+  return {
+    ventasPorMesCanal,
+    productos,
+    diferenciaCajaVentas,
+    comprasVsConsumo: comprasVsConsumoUltimosMeses(data, hoy),
+    pendientesEntrega,
+  };
 }

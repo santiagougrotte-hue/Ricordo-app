@@ -1,8 +1,8 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { crearMovimientoCajaDesdePedido, discrepanciasCaja } from "./calc";
+import { crearMovimientoCajaDesdePedido, discrepanciasCaja, construirResumenPulso } from "./calc";
 import { emptyData } from "./types";
-import type { Pedido } from "./types";
+import type { Pedido, Producto } from "./types";
 
 function pedidoBase(overrides: Partial<Pedido> = {}): Pedido {
   return {
@@ -82,4 +82,26 @@ test("discrepanciasCaja: pedido marcado como revisado se excluye aunque no tenga
 
   const discrepancias = discrepanciasCaja(data);
   assert.equal(discrepancias.length, 0);
+});
+
+test("construirResumenPulso: arma el resumen agregado sin exponer los pedidos crudos", () => {
+  const data = emptyData();
+  const hoy = new Date("2026-07-15T12:00:00");
+  const producto: Producto = { id: "PROD-01", id_base: "PROD-01", nombre: "Ravioles de ricotta", precio_venta: 20000, activo: true };
+  data.productos = [producto];
+  data.stock_manual = { "PROD-01": 0 };
+  data.pedidos = [
+    pedidoBase({ fecha: "2026-07-10", estado: "Entregado", precio_neto: 22000 }),
+    pedidoBase({ id_detalle: "PED-101-A", fecha: "2026-06-05", canal: "Mayorista", precio_neto: 15000 }),
+  ];
+  data.caja_movimientos = []; // nada cargado en caja todavía
+
+  const resumen = construirResumenPulso(data, hoy);
+
+  assert.equal(resumen.ventasPorMesCanal.length, 6, "3 meses x 2 canales");
+  assert.equal(resumen.productos.length, 1);
+  assert.equal(resumen.productos[0].stock, 0);
+  assert.equal(resumen.pendientesEntrega, 0);
+  assert.ok(resumen.diferenciaCajaVentas > 0, "hay ventas entregadas sin ingreso de caja cargado");
+  assert.ok(!("pedidos" in resumen), "el resumen no debe incluir los registros crudos de pedidos");
 });

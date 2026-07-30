@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useMemo } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from "recharts";
 import {
   ShoppingCart,
@@ -19,10 +19,29 @@ import {
 import { useStore } from "@/lib/store";
 import { usePeriod } from "@/lib/period";
 import { useRouter } from "@/lib/nav-context";
+import { useIaClient } from "@/lib/ia-client";
 import { Card, EmptyState } from "@/components/ui";
 import { Hero, ModuleRail, PulseCard, Row, type ModuleRailItem } from "@/components/ds";
-import { calcCosto, fARS, fNum, inPeriod } from "@/lib/calc";
+import { calcCosto, construirResumenPulso, fARS, fFechaCorta, fNum, inPeriod } from "@/lib/calc";
 import { CHART_COLORS } from "@/lib/chart-colors";
+import type { ObservacionPulso, SeveridadPulso } from "@/lib/types";
+
+const SIETE_DIAS_MS = 7 * 24 * 60 * 60 * 1000;
+
+const MODULO_A_PAGINA: Record<string, string> = {
+  ventas: "pedidos",
+  stock: "stock",
+  caja: "caja",
+  productos: "productos",
+  produccion: "produccion",
+  compras: "compras",
+};
+
+function peorSeveridad(observaciones: ObservacionPulso[]): SeveridadPulso {
+  if (observaciones.some((o) => o.severidad === "alta")) return "alta";
+  if (observaciones.some((o) => o.severidad === "media")) return "media";
+  return "info";
+}
 
 const MESES_CORTOS = ["Ene", "Feb", "Mar", "Abr", "May", "Jun", "Jul", "Ago", "Sep", "Oct", "Nov", "Dic"];
 
@@ -42,9 +61,12 @@ const MODULOS: ModuleRailItem[] = [
 ];
 
 export function Dashboard() {
-  const { data } = useStore();
+  const { data, setData } = useStore();
   const { mes, anio } = usePeriod();
   const { go, page } = useRouter();
+  const { call: llamarIa } = useIaClient();
+  const [pulsoLoading, setPulsoLoading] = useState(false);
+  const autoActualizadoRef = useRef(false);
 
   const pedidosPeriodo = useMemo(
     () => data.pedidos.filter((p) => inPeriod(p.fecha, mes, anio)),
@@ -115,6 +137,33 @@ export function Dashboard() {
 
   const clienteNombre = (id: string) => data.clientes.find((c) => c.id === id)?.nombre ?? "—";
 
+  async function actualizarPulso() {
+    setPulsoLoading(true);
+    const resumen = construirResumenPulso(data);
+    const resultado = await llamarIa<{ observaciones: ObservacionPulso[]; error?: string }>(
+      "pulso",
+      { resumen },
+      "pulso"
+    );
+    setPulsoLoading(false);
+    if (resultado) {
+      setData((d) => ({ ...d, pulso: { fecha: new Date().toISOString(), observaciones: resultado.observaciones } }));
+    }
+  }
+
+  // Se actualiza solo si el último pulso guardado tiene más de 7 días (o no existe todavía).
+  // Si la llamada falla, se sigue mostrando el último pulso guardado con su fecha, no un error.
+  useEffect(() => {
+    if (autoActualizadoRef.current) return;
+    const vencido = !data.pulso || Date.now() - new Date(data.pulso.fecha).getTime() > SIETE_DIAS_MS;
+    if (vencido) {
+      autoActualizadoRef.current = true;
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- refresco único al montar si el pulso está vencido
+      actualizarPulso();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- solo debe dispararse una vez al montar
+  }, []);
+
   return (
     <div>
       <div className="mb-4">
@@ -133,9 +182,39 @@ export function Dashboard() {
       </div>
 
       <div className="mb-4">
-        <PulseCard fecha={undefined}>
-          Todavía no se generó ningún pulso semanal — esta función se conecta cuando esté lista la Parte B (IA).
-        </PulseCard>
+        {!data.pulso ? (
+          <PulseCard onRefresh={actualizarPulso}>
+            {pulsoLoading ? "Generando el pulso semanal…" : "Todavía no se generó ningún pulso semanal."}
+          </PulseCard>
+        ) : (
+          <PulseCard
+            severidad={peorSeveridad(data.pulso.observaciones)}
+            fecha={fFechaCorta(data.pulso.fecha)}
+            onRefresh={actualizarPulso}
+          >
+            {pulsoLoading ? (
+              "Actualizando…"
+            ) : data.pulso.observaciones.length === 0 ? (
+              "Sin observaciones destacadas esta semana."
+            ) : (
+              <div className="flex flex-col gap-2.5">
+                {data.pulso.observaciones.map((o, idx) => (
+                  <button
+                    key={idx}
+                    onClick={() => {
+                      const pagina = MODULO_A_PAGINA[o.modulo];
+                      if (pagina) go(pagina);
+                    }}
+                    className="text-left hover:opacity-90"
+                  >
+                    <div className="font-semibold">{o.titulo}</div>
+                    <div className="text-white/85">{o.texto}</div>
+                  </button>
+                ))}
+              </div>
+            )}
+          </PulseCard>
+        )}
       </div>
 
       <Card title="Ventas — Últimos 12 meses" className="mb-4">

@@ -276,6 +276,20 @@ export interface IaLogEntry {
   tokens_salida: number;
 }
 
+export type SeveridadPulso = "alta" | "media" | "info";
+
+export interface ObservacionPulso {
+  titulo: string;
+  texto: string;
+  severidad: SeveridadPulso;
+  modulo: string;
+}
+
+export interface PulsoCache {
+  fecha: string;
+  observaciones: ObservacionPulso[];
+}
+
 export interface RicordoData {
   ingredientes: Ingrediente[];
   productos: Producto[];
@@ -318,6 +332,7 @@ export interface RicordoData {
   caja_inteligente: CajaInteligente;
   config_envios: ConfigEnvios;
   ia_log: IaLogEntry[];
+  pulso: PulsoCache | null;
 }
 
 export const STORAGE_KEY = "ricordo_data";
@@ -376,5 +391,6 @@ export function emptyData(): RicordoData {
       precio_envio_fijo: 2000,
     },
     ia_log: [],
+    pulso: null,
   };
 }
