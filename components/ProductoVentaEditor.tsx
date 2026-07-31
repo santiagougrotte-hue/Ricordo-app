@@ -17,7 +17,7 @@ import {
 import type { LineaRecetaDerivada } from "@/lib/calc";
 import { Modal } from "@/components/Modal";
 import { Button, Field, FormGrid, Select, Input, TableWrap, Th, Td, TrHover, EmptyState, InfoRow } from "@/components/ui";
-import type { Producto, ComplementoVenta, Canal, GrupoRecetaDerivada } from "@/lib/types";
+import type { Producto, ComplementoVenta, Canal, GrupoRecetaDerivada, ExcepcionLinea } from "@/lib/types";
 
 interface Props {
   producto: Producto | null;
@@ -46,6 +46,11 @@ export function ProductoVentaEditor({ producto, onClose }: Props) {
   const [complementos, setComplementos] = useState<ComplementoVenta[]>([]);
   const [draftComplementoBase, setDraftComplementoBase] = useState("");
   const [draftComplementoCant, setDraftComplementoCant] = useState(0);
+  const [excepciones, setExcepciones] = useState<ExcepcionLinea[]>([]);
+  const [draftExcGrupo, setDraftExcGrupo] = useState<GrupoRecetaDerivada>("masa");
+  const [draftExcTipo, setDraftExcTipo] = useState<"Ingrediente" | "Packaging">("Ingrediente");
+  const [draftExcConcepto, setDraftExcConcepto] = useState("");
+  const [draftExcCantidad, setDraftExcCantidad] = useState(0);
   const [idCargado, setIdCargado] = useState<string | null>(null);
 
   // Ajuste de estado durante el render cuando se abre para un producto distinto (patrón
@@ -57,6 +62,7 @@ export function ProductoVentaEditor({ producto, onClose }: Props) {
     setCanal(producto.canal ?? "Minorista");
     setPrecio(producto.precio_venta);
     setComplementos((producto.complementos ?? []).map((c) => ({ ...c })));
+    setExcepciones((producto.excepciones ?? []).map((e) => ({ ...e })));
   }
 
   if (!producto) return null;
@@ -69,6 +75,7 @@ export function ProductoVentaEditor({ producto, onClose }: Props) {
     canal,
     precio_venta: precio,
     complementos,
+    excepciones,
   };
 
   const lineas = recetaDerivada(data, draftProducto);
@@ -96,6 +103,22 @@ export function ProductoVentaEditor({ producto, onClose }: Props) {
     setComplementos((cs) => cs.filter((c) => c.id !== id));
   }
 
+  function agregarExcepcion() {
+    if (!draftExcConcepto || draftExcCantidad <= 0) {
+      toast("Elegí un concepto y una cantidad", "error");
+      return;
+    }
+    setExcepciones((es) => [
+      ...es,
+      { id: uid("EXC"), grupo: draftExcGrupo, tipo: draftExcTipo, concepto: draftExcConcepto, cantidad: draftExcCantidad },
+    ]);
+    setDraftExcConcepto("");
+    setDraftExcCantidad(0);
+  }
+  function quitarExcepcion(id: string) {
+    setExcepciones((es) => es.filter((e) => e.id !== id));
+  }
+
   function guardar() {
     if (!idBase) {
       toast("Elegí el producto base", "error");
@@ -105,7 +128,15 @@ export function ProductoVentaEditor({ producto, onClose }: Props) {
       ...d,
       productos: d.productos.map((p) =>
         p.id === producto!.id
-          ? { ...p, id_base: idBase, unidades_por_paquete: unidades > 0 ? unidades : undefined, canal, precio_venta: precio, complementos }
+          ? {
+              ...p,
+              id_base: idBase,
+              unidades_por_paquete: unidades > 0 ? unidades : undefined,
+              canal,
+              precio_venta: precio,
+              complementos,
+              excepciones,
+            }
           : p
       ),
     }));
@@ -195,6 +226,76 @@ export function ProductoVentaEditor({ producto, onClose }: Props) {
                     <Td>{c.cantidad}</Td>
                     <Td>
                       <Button size="sm" variant="danger" onClick={() => quitarComplemento(c.id)}>
+                        Quitar
+                      </Button>
+                    </Td>
+                  </TrHover>
+                ))}
+              </tbody>
+            </table>
+          </TableWrap>
+        )}
+      </div>
+
+      <div className="mt-5 border-t border-border pt-4">
+        <div className="mb-2 text-[13px] font-semibold text-text2">
+          Excepciones (reemplazan la cantidad calculada de esa línea — quedan marcadas y listadas en Familias)
+        </div>
+        <div className="mb-2 grid grid-cols-1 gap-2 sm:grid-cols-[110px_120px_1fr_90px_90px]">
+          <Select value={draftExcGrupo} onChange={(e) => setDraftExcGrupo(e.target.value as GrupoRecetaDerivada)}>
+            <option value="masa">Masa</option>
+            <option value="relleno">Relleno</option>
+            <option value="complementos">Complementos</option>
+            <option value="packaging">Packaging</option>
+          </Select>
+          <Select
+            value={draftExcTipo}
+            onChange={(e) => {
+              setDraftExcTipo(e.target.value as "Ingrediente" | "Packaging");
+              setDraftExcConcepto("");
+            }}
+          >
+            <option value="Ingrediente">Ingrediente</option>
+            <option value="Packaging">Packaging</option>
+          </Select>
+          <Select value={draftExcConcepto} onChange={(e) => setDraftExcConcepto(e.target.value)}>
+            <option value="">Seleccionar…</option>
+            {(draftExcTipo === "Ingrediente" ? data.ingredientes : data.packaging).map((o) => (
+              <option key={o.id} value={o.id}>
+                {o.nombre}
+              </option>
+            ))}
+          </Select>
+          <Input type="number" value={draftExcCantidad} onChange={(e) => setDraftExcCantidad(Number(e.target.value))} placeholder="Cantidad" />
+          <Button size="sm" onClick={agregarExcepcion} className="justify-center">
+            + Agregar
+          </Button>
+        </div>
+        {excepciones.length === 0 ? (
+          <EmptyState text="Sin excepciones." />
+        ) : (
+          <TableWrap>
+            <table className="w-full">
+              <thead>
+                <tr>
+                  <Th>Grupo</Th>
+                  <Th>Concepto</Th>
+                  <Th>Cantidad</Th>
+                  <Th>Acciones</Th>
+                </tr>
+              </thead>
+              <tbody>
+                {excepciones.map((e) => (
+                  <TrHover key={e.id}>
+                    <Td>{NOMBRE_GRUPO[e.grupo]}</Td>
+                    <Td main>
+                      {e.tipo === "Ingrediente"
+                        ? data.ingredientes.find((i) => i.id === e.concepto)?.nombre ?? e.concepto
+                        : data.packaging.find((p) => p.id === e.concepto)?.nombre ?? e.concepto}
+                    </Td>
+                    <Td>{e.cantidad}</Td>
+                    <Td>
+                      <Button size="sm" variant="danger" onClick={() => quitarExcepcion(e.id)}>
                         Quitar
                       </Button>
                     </Td>

@@ -19,6 +19,8 @@ import {
   impactoCambioBase,
   costoLegacy,
   informeControl,
+  unidadesVendidasUltimosMeses,
+  excepcionesActivas,
 } from "./calc";
 import { emptyData } from "./types";
 import type { Pedido, Producto, Ingrediente, RecetaLinea } from "./types";
@@ -448,4 +450,44 @@ test("informeControl: compara costo viejo (RecetaLinea) vs nuevo (receta derivad
   assert.equal(fila.costoNuevo, 0.007 * 10 * 2000);
   assert.ok(fila.diferenciaCosto !== 0, "el costo cambió al migrar, como esperado dado el desvío real");
   assert.ok(fila.diferenciaPct !== null);
+});
+
+test("unidadesVendidasUltimosMeses: suma unidades no canceladas de los últimos N meses, excluyendo otros productos", () => {
+  const data = emptyData();
+  const hoy = new Date("2026-07-15T12:00:00");
+  data.pedidos = [
+    pedidoBase({ id_detalle: "A", id_producto: "PROD-01", cantidad: 5, fecha: "2026-07-10", estado: "Entregado" }),
+    pedidoBase({ id_detalle: "B", id_producto: "PROD-01", cantidad: 3, fecha: "2026-06-05", estado: "Entregado" }),
+    pedidoBase({ id_detalle: "C", id_producto: "PROD-01", cantidad: 9, fecha: "2026-04-05", estado: "Entregado" }), // fuera de la ventana de 3 meses
+    pedidoBase({ id_detalle: "D", id_producto: "PROD-01", cantidad: 100, fecha: "2026-07-12", estado: "Cancelado" }),
+    pedidoBase({ id_detalle: "E", id_producto: "PROD-02", cantidad: 50, fecha: "2026-07-12", estado: "Entregado" }),
+  ];
+  assert.equal(unidadesVendidasUltimosMeses(data, "PROD-01", hoy, 3), 5 + 3);
+});
+
+test("excepcionesActivas: junta las excepciones de todos los productos en un solo listado", () => {
+  const data = emptyData();
+  data.productos = [
+    { id: "PROD-01", id_base: "PROD-01", nombre: "Ravioles de calabaza", precio_venta: 13000, activo: true },
+    {
+      id: "PROD-08",
+      id_base: "PROD-01",
+      nombre: "Calabaza mayorista",
+      precio_venta: 11000,
+      activo: true,
+      excepciones: [{ id: "EXC-1", grupo: "masa", tipo: "Ingrediente", concepto: "ING-ACEITE", cantidad: 0.5 }],
+    },
+    {
+      id: "PROD-09",
+      id_base: "PROD-01",
+      nombre: "Calabaza sin salsa",
+      precio_venta: 9000,
+      activo: true,
+      excepciones: [{ id: "EXC-2", grupo: "packaging", tipo: "Packaging", concepto: "PKG-1", cantidad: 2 }],
+    },
+  ];
+  const activas = excepcionesActivas(data);
+  assert.equal(activas.length, 2);
+  assert.equal(activas[0].producto.id, "PROD-08");
+  assert.equal(activas[1].excepcion.id, "EXC-2");
 });

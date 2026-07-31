@@ -10,6 +10,7 @@ import type {
   Producto,
   TipoRecetaLinea,
   GrupoRecetaDerivada,
+  ExcepcionLinea,
 } from "./types";
 import { uid } from "./id";
 
@@ -657,6 +658,32 @@ export function calcCVProducto(data: RicordoData, idProducto: string): number {
 
 export function unidadesEntregadas(pedidos: Pedido[]): number {
   return pedidos.filter((p) => p.estado === "Entregado").reduce((acc, p) => acc + p.cantidad, 0);
+}
+
+/** Unidades vendidas (no Canceladas) de un producto puntual en los últimos `meses` meses,
+ * incluyendo el actual — para comparar presentaciones de una misma familia en la vista de
+ * familia (Fase 5). */
+export function unidadesVendidasUltimosMeses(data: RicordoData, idProducto: string, hoy: Date = new Date(), meses = 3): number {
+  let total = 0;
+  for (let i = 0; i < meses; i++) {
+    const d = new Date(hoy.getFullYear(), hoy.getMonth() - i, 1);
+    total += data.pedidos
+      .filter((p) => p.id_producto === idProducto && p.estado !== "Cancelado" && inPeriod(p.fecha, d.getMonth() + 1, d.getFullYear()))
+      .reduce((acc, p) => acc + p.cantidad, 0);
+  }
+  return total;
+}
+
+export interface ExcepcionActiva {
+  producto: Producto;
+  excepcion: ExcepcionLinea;
+}
+
+/** Todas las excepciones cargadas en cualquier producto de venta de toda la app — para que
+ * nunca se acumulen en silencio, siempre tienen que poder verse todas juntas en un solo lugar
+ * (vista de familia / Fase 5). */
+export function excepcionesActivas(data: RicordoData): ExcepcionActiva[] {
+  return data.productos.flatMap((p) => (p.excepciones ?? []).map((excepcion) => ({ producto: p, excepcion })));
 }
 
 // --- Agrupación por producto base (gusto) --------------------------------------------------
