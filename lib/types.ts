@@ -39,6 +39,44 @@ export interface Producto {
    * receta de ese componente, por eso siempre pasa por confirmación (cambia costo/margen). */
   gramos_masa_por_caja?: number;
   gramos_relleno_por_caja?: number;
+  /** Receta por unidad de producción (la pieza física: un raviol, un sorrentino). Solo tiene
+   * sentido si este producto actúa como "producto base" de su familia — nunca se infiere de
+   * las recetas viejas por variante, se carga a mano. */
+  receta_masa_unidad?: RecetaUnidadLinea[];
+  receta_relleno_unidad?: RecetaUnidadLinea[];
+  /** Cuántas unidades del producto base entran en este paquete — el campo que activa la
+   * migración de este producto de venta al modelo de receta derivada. Se carga a mano. */
+  unidades_por_paquete?: number;
+  /** Cosas que se agregan al paquete con una cantidad propia, independiente de
+   * unidades_por_paquete (ej. una porción de salsa, sin importar cuántos raviolis tenga el
+   * paquete) — apuntan a otro producto base para no duplicar su receta acá. */
+  complementos?: ComplementoVenta[];
+  /** Overrides puntuales de la receta derivada (ej. "lleva más aceite") — cada uno reemplaza
+   * la cantidad calculada de esa línea, nunca se suma. Deben verse marcados en la pantalla del
+   * producto y listarse en el panel global de excepciones. */
+  excepciones?: ExcepcionLinea[];
+}
+
+export interface RecetaUnidadLinea {
+  id: string;
+  id_ingrediente: string;
+  cantidad: number;
+}
+
+export interface ComplementoVenta {
+  id: string;
+  id_base: string;
+  cantidad: number;
+}
+
+export type GrupoRecetaDerivada = "masa" | "relleno" | "complementos" | "packaging";
+
+export interface ExcepcionLinea {
+  id: string;
+  grupo: GrupoRecetaDerivada;
+  tipo: "Ingrediente" | "Packaging";
+  concepto: string;
+  cantidad: number;
 }
 
 export interface Cliente {

@@ -8,9 +8,16 @@ import {
   movimientosStockGusto,
   stockCalculadoGusto,
   stockRealGusto,
+  calcCosto,
+  tieneRecetaBase,
+  estaMigrado,
+  recetaDerivada,
+  costoDerivado,
+  costoUnidadBase,
+  gramosUnidadBase,
 } from "./calc";
 import { emptyData } from "./types";
-import type { Pedido, Producto } from "./types";
+import type { Pedido, Producto, Ingrediente, RecetaLinea } from "./types";
 
 function pedidoBase(overrides: Partial<Pedido> = {}): Pedido {
   return {
@@ -184,4 +191,187 @@ test("stockRealGusto: con conteo manual, resta ventas Entregado posteriores a la
   ];
   const gusto = gustosActivos(data)[0];
   assert.equal(stockRealGusto(data, gusto), 40 - 8); // 32
+});
+
+// --- Producto base / producto de venta: receta derivada -----------------------------------
+
+function ingredientesCalabaza(): Ingrediente[] {
+  return [
+    { id: "ING-HARINA", nombre: "Harina de arroz", unidad: "kg", precio_ref: 2000, precio_vigente: null, seguimiento_stock: false },
+    { id: "ING-PREMEZCLA", nombre: "Premezcla", unidad: "kg", precio_ref: 3000, precio_vigente: null, seguimiento_stock: false },
+    { id: "ING-CALABAZA", nombre: "Calabaza", unidad: "kg", precio_ref: 1000, precio_vigente: null, seguimiento_stock: false },
+    { id: "ING-ACEITE", nombre: "Aceite", unidad: "kg", precio_ref: 1500, precio_vigente: null, seguimiento_stock: false },
+  ];
+}
+
+test("tieneRecetaBase / estaMigrado: un producto de venta sin unidades_por_paquete no migra aunque su base tenga receta", () => {
+  const data = emptyData();
+  const base: Producto = {
+    id: "PROD-01",
+    id_base: "PROD-01",
+    nombre: "Ravioles de calabaza",
+    precio_venta: 13000,
+    activo: true,
+    receta_masa_unidad: [{ id: "RU-1", id_ingrediente: "ING-HARINA", cantidad: 0.003 }],
+  };
+  const venta: Producto = { id: "PROD-08", id_base: "PROD-01", nombre: "Calabaza mayorista", precio_venta: 11000, activo: true };
+  data.productos = [base, venta];
+  assert.equal(tieneRecetaBase(base), true);
+  assert.equal(estaMigrado(data, venta), false, "sin unidades_por_paquete no migra");
+});
+
+test("calcCosto: un producto NO migrado sigue leyendo sus RecetaLinea de siempre (regresión, output sin cambios)", () => {
+  const data = emptyData();
+  const producto: Producto = { id: "PROD-08", id_base: "PROD-01", nombre: "Calabaza mayorista", precio_venta: 11000, activo: true };
+  data.productos = [producto];
+  data.ingredientes = ingredientesCalabaza();
+  const recetas: RecetaLinea[] = [
+    { id: "R1", id_producto: "PROD-08", tipo: "Ingrediente", concepto: "ING-HARINA", cantidad: 0.063 },
+    { id: "R2", id_producto: "PROD-08", tipo: "Ingrediente", concepto: "ING-PREMEZCLA", cantidad: 0.112 },
+  ];
+  data.recetas = recetas;
+  const costoEsperado = 0.063 * 2000 + 0.112 * 3000;
+  assert.equal(calcCosto(data, "PROD-08"), costoEsperado);
+});
+
+test("recetaDerivada: masa y relleno escalan por unidades_por_paquete, complementos por su propia cantidad", () => {
+  const data = emptyData();
+  const base: Producto = {
+    id: "PROD-01",
+    id_base: "PROD-01",
+    nombre: "Ravioles de calabaza",
+    precio_venta: 13000,
+    activo: true,
+    receta_masa_unidad: [{ id: "RU-1", id_ingrediente: "ING-HARINA", cantidad: 0.003 }],
+    receta_relleno_unidad: [{ id: "RU-2", id_ingrediente: "ING-CALABAZA", cantidad: 0.01 }],
+  };
+  const salsa: Producto = {
+    id: "PROD-14",
+    id_base: "PROD-14",
+    nombre: "Salsa",
+    precio_venta: 0,
+    activo: true,
+    receta_relleno_unidad: [{ id: "RU-3", id_ingrediente: "ING-ACEITE", cantidad: 0.5 }],
+  };
+  const venta: Producto = {
+    id: "PROD-08",
+    id_base: "PROD-01",
+    nombre: "Calabaza mayorista",
+    precio_venta: 11000,
+    activo: true,
+    unidades_por_paquete: 10,
+    complementos: [{ id: "C1", id_base: "PROD-14", cantidad: 1 }],
+  };
+  data.productos = [base, salsa, venta];
+  data.ingredientes = ingredientesCalabaza();
+  data.recetas = [{ id: "R1", id_producto: "PROD-08", tipo: "Packaging", concepto: "PKG-1", cantidad: 1 }];
+  data.packaging = [{ id: "PKG-1", nombre: "Bolsa", unidad: "unidad", precio: 50 }];
+
+  assert.equal(estaMigrado(data, venta), true);
+  const lineas = recetaDerivada(data, venta);
+  const masa = lineas.find((l) => l.grupo === "masa" && l.concepto === "ING-HARINA");
+  const relleno = lineas.find((l) => l.grupo === "relleno" && l.concepto === "ING-CALABAZA");
+  const complemento = lineas.find((l) => l.grupo === "complementos" && l.concepto === "ING-ACEITE");
+  const packaging = lineas.find((l) => l.grupo === "packaging");
+  assert.equal(masa?.cantidad, 0.003 * 10, "masa escala por unidades_por_paquete");
+  assert.equal(relleno?.cantidad, 0.01 * 10, "relleno escala por unidades_por_paquete");
+  assert.equal(complemento?.cantidad, 0.5 * 1, "complemento escala por su propia cantidad, no por unidades_por_paquete");
+  assert.equal(packaging?.cantidad, 1, "packaging propio se lee de RecetaLinea sin cambios");
+
+  const costoEsperado = 0.003 * 10 * 2000 + 0.01 * 10 * 1000 + 0.5 * 1 * 1500 + 1 * 50;
+  assert.equal(costoDerivado(data, venta), costoEsperado);
+  assert.equal(calcCosto(data, "PROD-08"), costoEsperado, "calcCosto despacha a la receta derivada para un producto migrado");
+});
+
+test("recetaDerivada: cambiar unidades_por_paquete entre dos presentaciones de la misma familia no desincroniza la masa/relleno (el bug real que motivó todo esto)", () => {
+  const data = emptyData();
+  const base: Producto = {
+    id: "PROD-01",
+    id_base: "PROD-01",
+    nombre: "Ravioles de calabaza",
+    precio_venta: 13000,
+    activo: true,
+    receta_masa_unidad: [{ id: "RU-1", id_ingrediente: "ING-HARINA", cantidad: 0.007 }],
+    receta_relleno_unidad: [{ id: "RU-2", id_ingrediente: "ING-CALABAZA", cantidad: 0.02 }],
+  };
+  const minorista: Producto = { id: "PROD-08", id_base: "PROD-01", nombre: "Ravioles de calabaza", precio_venta: 13000, activo: true, unidades_por_paquete: 18 };
+  const mayorista: Producto = { id: "PROD-09", id_base: "PROD-01", nombre: "Calabaza mayorista", precio_venta: 11000, activo: true, unidades_por_paquete: 12 };
+  data.productos = [base, minorista, mayorista];
+  data.ingredientes = ingredientesCalabaza();
+
+  const costoMinorista = calcCosto(data, "PROD-08");
+  const costoMayorista = calcCosto(data, "PROD-09");
+  // La masa por unidad es la misma para toda la familia: el costo escala exactamente con
+  // unidades_por_paquete, sin el desvío manual que hoy tienen calabaza/espinaca.
+  assert.equal(costoMinorista / 18, costoMayorista / 12);
+});
+
+test("recetaDerivada: una excepción reemplaza la cantidad derivada y queda marcada", () => {
+  const data = emptyData();
+  const base: Producto = {
+    id: "PROD-01",
+    id_base: "PROD-01",
+    nombre: "Ravioles de calabaza",
+    precio_venta: 13000,
+    activo: true,
+    receta_masa_unidad: [{ id: "RU-1", id_ingrediente: "ING-ACEITE", cantidad: 0.001 }],
+  };
+  const venta: Producto = {
+    id: "PROD-08",
+    id_base: "PROD-01",
+    nombre: "Calabaza mayorista",
+    precio_venta: 11000,
+    activo: true,
+    unidades_por_paquete: 10,
+    excepciones: [{ id: "EXC-1", grupo: "masa", tipo: "Ingrediente", concepto: "ING-ACEITE", cantidad: 0.5 }],
+  };
+  data.productos = [base, venta];
+  data.ingredientes = ingredientesCalabaza();
+
+  const lineas = recetaDerivada(data, venta);
+  const aceite = lineas.find((l) => l.concepto === "ING-ACEITE");
+  assert.equal(aceite?.cantidad, 0.5, "la excepción reemplaza, no suma, sobre 0.001*10=0.01");
+  assert.equal(aceite?.esExcepcion, true);
+  assert.equal(lineas.filter((l) => l.concepto === "ING-ACEITE").length, 1, "no duplica la línea");
+});
+
+test("recetaDerivada: una excepción sin línea derivada correspondiente se agrega como línea nueva marcada", () => {
+  const data = emptyData();
+  const base: Producto = { id: "PROD-01", id_base: "PROD-01", nombre: "Ravioles de calabaza", precio_venta: 13000, activo: true, receta_masa_unidad: [] };
+  const venta: Producto = {
+    id: "PROD-08",
+    id_base: "PROD-01",
+    nombre: "Calabaza mayorista",
+    precio_venta: 11000,
+    activo: true,
+    unidades_por_paquete: 10,
+    excepciones: [{ id: "EXC-1", grupo: "relleno", tipo: "Ingrediente", concepto: "ING-ACEITE", cantidad: 0.2 }],
+  };
+  data.productos = [base, venta];
+  data.ingredientes = ingredientesCalabaza();
+
+  const lineas = recetaDerivada(data, venta);
+  assert.equal(lineas.length, 1);
+  assert.equal(lineas[0].esExcepcion, true);
+  assert.equal(lineas[0].cantidad, 0.2);
+});
+
+test("costoUnidadBase / gramosUnidadBase: costo y gramaje por unidad de un producto base", () => {
+  const data = emptyData();
+  const base: Producto = {
+    id: "PROD-01",
+    id_base: "PROD-01",
+    nombre: "Ravioles de calabaza",
+    precio_venta: 13000,
+    activo: true,
+    receta_masa_unidad: [{ id: "RU-1", id_ingrediente: "ING-HARINA", cantidad: 0.003 }],
+    receta_relleno_unidad: [{ id: "RU-2", id_ingrediente: "ING-CALABAZA", cantidad: 0.01 }],
+  };
+  data.productos = [base];
+  data.ingredientes = ingredientesCalabaza();
+
+  assert.equal(costoUnidadBase(data, base), 0.003 * 2000 + 0.01 * 1000);
+  const gramos = gramosUnidadBase(data, base);
+  assert.equal(gramos.masa, 0.003 * 1000, "kg se convierte a gramos");
+  assert.equal(gramos.relleno, 0.01 * 1000);
 });

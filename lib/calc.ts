@@ -1,4 +1,16 @@
-import type { RicordoData, Ingrediente, Pedido, TipoCosto, Amortizacion, CajaMovimiento, Cliente, Canal, Producto } from "./types";
+import type {
+  RicordoData,
+  Ingrediente,
+  Pedido,
+  TipoCosto,
+  Amortizacion,
+  CajaMovimiento,
+  Cliente,
+  Canal,
+  Producto,
+  TipoRecetaLinea,
+  GrupoRecetaDerivada,
+} from "./types";
 import { uid } from "./id";
 
 export function fARS(n: number | null | undefined): string {
@@ -36,8 +48,15 @@ export function pvr(ing: Ingrediente | undefined | null): number {
   return ing.precio_vigente ?? ing.precio_ref ?? 0;
 }
 
-/** Costo de un producto = Σ receta × precio vigente (ingredientes y packaging); costos fijos de receta se suman en $ directo */
+/** Costo de un producto = Σ receta × precio vigente (ingredientes y packaging); costos fijos de receta se suman en $ directo.
+ * Si el producto está migrado al modelo de producto base/producto de venta (ver más abajo), el
+ * costo se calcula desde la receta derivada en vez de leer sus RecetaLinea de Ingrediente
+ * directamente — para un producto no migrado el comportamiento es exactamente el de siempre. */
 export function calcCosto(data: RicordoData, idProducto: string): number {
+  const producto = data.productos.find((p) => p.id === idProducto);
+  if (estaMigrado(data, producto)) {
+    return costoDerivado(data, producto as Producto);
+  }
   const lineas = data.recetas.filter((r) => r.id_producto === idProducto);
   let total = 0;
   for (const linea of lineas) {
@@ -53,6 +72,146 @@ export function calcCosto(data: RicordoData, idProducto: string): number {
     }
   }
   return total;
+}
+
+// --- Producto base / producto de venta: receta derivada ------------------------------------
+// Hoy cada variante de un mismo gusto (minorista, mayorista, al vacío, sin salsa…) carga su
+// propia receta a mano en RecetaLinea, y con el tiempo se desincronizan entre sí (la razón de
+// ser de todo este bloque). El modelo nuevo separa: un "producto base" carga la receta de masa
+// y relleno UNA SOLA VEZ por unidad de producción; cada "producto de venta" solo carga cuántas
+// unidades entran en su paquete (unidades_por_paquete) y su propio packaging/complementos —
+// la receta de ingredientes se deriva, nunca se vuelve a tipear.
+//
+// La migración es opt-in y por familia: mientras un producto de venta no tenga
+// unidades_por_paquete cargado, o su producto base no tenga receta por unidad cargada, sigue
+// costeándose exactamente como hoy (RecetaLinea propia). No hay ningún flag de "migrado" que se
+// pueda desincronizar de los datos: es siempre estas dos condiciones, calculadas al vuelo.
+
+/** Un producto "es" producto base si tiene cargada su receta de masa y/o relleno por unidad. */
+export function tieneRecetaBase(producto: Producto | undefined | null): boolean {
+  if (!producto) return false;
+  return (producto.receta_masa_unidad?.length ?? 0) > 0 || (producto.receta_relleno_unidad?.length ?? 0) > 0;
+}
+
+/** Un producto de venta está migrado cuando tiene unidades_por_paquete cargado y su id_base
+ * apunta a un producto base con receta por unidad cargada. Derivado siempre, nunca guardado. */
+export function estaMigrado(data: RicordoData, producto: Producto | undefined | null): producto is Producto {
+  if (!producto || producto.unidades_por_paquete == null) return false;
+  const base = data.productos.find((p) => p.id === producto.id_base);
+  return tieneRecetaBase(base);
+}
+
+export interface LineaRecetaDerivada {
+  grupo: GrupoRecetaDerivada | "costo_fijo";
+  tipo: TipoRecetaLinea;
+  concepto: string; // id_ingrediente | id_packaging | id_costo_fijo
+  cantidad: number;
+  esExcepcion: boolean;
+  id_complemento?: string;
+}
+
+/** Receta completa de un producto de venta migrado:
+ *   receta base × unidades_por_paquete + Σ(receta de cada complemento × su propia cantidad)
+ *   + packaging/costos fijos propios (esos siguen viviendo en RecetaLinea, sin cambios).
+ * Las excepciones se aplican al final y reemplazan (nunca suman) la cantidad de la línea que
+ * coincide en (grupo, tipo, concepto); si no hay ninguna coincidencia, se agregan como línea
+ * nueva — así una excepción siempre queda marcada, sea override o agregado. */
+export function recetaDerivada(data: RicordoData, productoVenta: Producto): LineaRecetaDerivada[] {
+  const lineas: LineaRecetaDerivada[] = [];
+  const base = data.productos.find((p) => p.id === productoVenta.id_base);
+  const unidades = productoVenta.unidades_por_paquete ?? 0;
+
+  for (const l of base?.receta_masa_unidad ?? []) {
+    lineas.push({ grupo: "masa", tipo: "Ingrediente", concepto: l.id_ingrediente, cantidad: l.cantidad * unidades, esExcepcion: false });
+  }
+  for (const l of base?.receta_relleno_unidad ?? []) {
+    lineas.push({ grupo: "relleno", tipo: "Ingrediente", concepto: l.id_ingrediente, cantidad: l.cantidad * unidades, esExcepcion: false });
+  }
+
+  for (const c of productoVenta.complementos ?? []) {
+    const complementoBase = data.productos.find((p) => p.id === c.id_base);
+    const lineasComplemento = [...(complementoBase?.receta_masa_unidad ?? []), ...(complementoBase?.receta_relleno_unidad ?? [])];
+    for (const l of lineasComplemento) {
+      lineas.push({
+        grupo: "complementos",
+        tipo: "Ingrediente",
+        concepto: l.id_ingrediente,
+        cantidad: l.cantidad * c.cantidad,
+        esExcepcion: false,
+        id_complemento: c.id,
+      });
+    }
+  }
+
+  for (const r of data.recetas) {
+    if (r.id_producto !== productoVenta.id) continue;
+    if (r.tipo === "Packaging") {
+      lineas.push({ grupo: "packaging", tipo: "Packaging", concepto: r.concepto, cantidad: r.cantidad, esExcepcion: false });
+    } else if (r.tipo === "CostoFijo") {
+      lineas.push({ grupo: "costo_fijo", tipo: "CostoFijo", concepto: r.concepto, cantidad: r.cantidad, esExcepcion: false });
+    }
+  }
+
+  for (const e of productoVenta.excepciones ?? []) {
+    const existente = lineas.find((l) => l.grupo === e.grupo && l.tipo === e.tipo && l.concepto === e.concepto);
+    if (existente) {
+      existente.cantidad = e.cantidad;
+      existente.esExcepcion = true;
+    } else {
+      lineas.push({ grupo: e.grupo, tipo: e.tipo, concepto: e.concepto, cantidad: e.cantidad, esExcepcion: true });
+    }
+  }
+
+  return lineas;
+}
+
+export function costoLineasDerivadas(data: RicordoData, lineas: LineaRecetaDerivada[]): number {
+  let total = 0;
+  for (const l of lineas) {
+    if (l.tipo === "Ingrediente") {
+      const ing = data.ingredientes.find((i) => i.id === l.concepto);
+      total += l.cantidad * pvr(ing);
+    } else if (l.tipo === "Packaging") {
+      const pkg = data.packaging.find((p) => p.id === l.concepto);
+      total += l.cantidad * (pkg?.precio ?? 0);
+    } else if (l.tipo === "CostoFijo") {
+      const cf = data.costos_fijos.find((c) => c.id === l.concepto);
+      total += l.cantidad * (cf?.monto ?? 0);
+    }
+  }
+  return total;
+}
+
+export function costoDerivado(data: RicordoData, productoVenta: Producto): number {
+  return costoLineasDerivadas(data, recetaDerivada(data, productoVenta));
+}
+
+/** Costo por unidad de producción de un producto base (Σ masa + relleno × precio vigente) —
+ * para el costo en vivo de la pantalla de producto base, antes de que exista ningún producto
+ * de venta que use esa receta. */
+export function costoUnidadBase(data: RicordoData, productoBase: Producto): number {
+  const lineas = [...(productoBase.receta_masa_unidad ?? []), ...(productoBase.receta_relleno_unidad ?? [])];
+  return lineas.reduce((acc, l) => {
+    const ing = data.ingredientes.find((i) => i.id === l.id_ingrediente);
+    return acc + l.cantidad * pvr(ing);
+  }, 0);
+}
+
+/** Convierte la cantidad de una línea a gramos según la unidad nativa del ingrediente — mismo
+ * criterio que usa Planificación de Producción para no reportar dos conversiones distintas. */
+function gramosDeLinea(ingrediente: Ingrediente | undefined, cantidad: number): number {
+  if (!ingrediente) return 0;
+  const unidad = ingrediente.unidad.trim().toLowerCase();
+  if (unidad === "kg" || unidad === "litro" || unidad === "l") return cantidad * 1000;
+  if (unidad === "g" || unidad === "gr" || unidad === "gramo" || unidad === "gramos" || unidad === "ml") return cantidad;
+  if (unidad === "unidad") return ingrediente.peso_unitario_g ? cantidad * ingrediente.peso_unitario_g : 0;
+  return 0;
+}
+
+export function gramosUnidadBase(data: RicordoData, productoBase: Producto): { masa: number; relleno: number } {
+  const gramosDe = (lineas: Producto["receta_masa_unidad"]) =>
+    (lineas ?? []).reduce((acc, l) => acc + gramosDeLinea(data.ingredientes.find((i) => i.id === l.id_ingrediente), l.cantidad), 0);
+  return { masa: gramosDe(productoBase.receta_masa_unidad), relleno: gramosDe(productoBase.receta_relleno_unidad) };
 }
 
 export function inPeriod(fecha: string | undefined | null, mes: number, anio: number): boolean {
