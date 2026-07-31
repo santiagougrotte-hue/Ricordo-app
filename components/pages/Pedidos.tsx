@@ -96,7 +96,6 @@ function emptyEditForm() {
     precio_unitario: 0,
     descuento_monto: 0,
     fecha: new Date().toISOString().slice(0, 10),
-    estado: "Confirmado" as EstadoPedido,
     canal: "Minorista" as Canal,
     km_envio: 0,
     costo_envio: 0,
@@ -329,7 +328,6 @@ function PedidosTab() {
       precio_unitario: p.precio_unitario,
       descuento_monto: p.descuento_monto,
       fecha: p.fecha,
-      estado: p.estado,
       canal: p.canal,
       km_envio: p.km_envio,
       costo_envio: p.costo_envio,
@@ -430,33 +428,32 @@ function PedidosTab() {
     }
     const total = editForm.precio_unitario * editForm.cantidad;
     const neto = total - editForm.descuento_monto;
-    setData((d) => {
-      const pedidos = d.pedidos.map((p) =>
+    setData((d) => ({
+      ...d,
+      pedidos: d.pedidos.map((p) =>
         p.id_detalle === editing
           ? { ...p, ...editForm, nombre_producto: producto?.nombre ?? p.nombre_producto, precio_total: total, precio_neto: neto }
           : p
-      );
-      let caja_movimientos = d.caja_movimientos;
-      if (editForm.estado === "Entregado" && !caja_movimientos.some((m) => m.ref === editing)) {
-        const pedidoActualizado = pedidos.find((p) => p.id_detalle === editing);
-        if (pedidoActualizado) caja_movimientos = [...caja_movimientos, crearMovimientoCajaDesdePedido(pedidoActualizado)];
-      }
-      return { ...d, pedidos, caja_movimientos };
-    });
+      ),
+    }));
     toast("Pedido actualizado");
     setEditModalOpen(false);
   }
 
-  // Al marcar un pedido como "Entregado" se crea automáticamente su ingreso en Caja
-  // (una vez por línea, idempotente por ref = id_detalle). Si un pedido sale de "Entregado"
-  // el movimiento ya creado no se toca — queda para revisar en la conciliación de Caja.
-  function cambiarEstado(idDetalle: string, estado: EstadoPedido) {
+  // El estado es del pedido entero, no de cada línea de producto — cambiar uno cambia todas
+  // las líneas de ese id_pedido a la vez. Al marcar "Entregado" se crea automáticamente el
+  // ingreso en Caja de cada línea (idempotente por ref = id_detalle). Si un pedido sale de
+  // "Entregado" los movimientos ya creados no se tocan — quedan para revisar en Caja.
+  function cambiarEstadoPedido(idPedido: string, estado: EstadoPedido) {
     setData((d) => {
-      const pedidos = d.pedidos.map((p) => (p.id_detalle === idDetalle ? { ...p, estado } : p));
+      const pedidos = d.pedidos.map((p) => (p.id_pedido === idPedido ? { ...p, estado } : p));
       let caja_movimientos = d.caja_movimientos;
-      if (estado === "Entregado" && !caja_movimientos.some((m) => m.ref === idDetalle)) {
-        const pedido = pedidos.find((p) => p.id_detalle === idDetalle);
-        if (pedido) caja_movimientos = [...caja_movimientos, crearMovimientoCajaDesdePedido(pedido)];
+      if (estado === "Entregado") {
+        const lineasDelPedido = pedidos.filter((p) => p.id_pedido === idPedido);
+        const nuevosMovs = lineasDelPedido
+          .filter((p) => !caja_movimientos.some((m) => m.ref === p.id_detalle))
+          .map((p) => crearMovimientoCajaDesdePedido(p));
+        caja_movimientos = [...caja_movimientos, ...nuevosMovs];
       }
       return { ...d, pedidos, caja_movimientos };
     });
@@ -523,7 +520,7 @@ function PedidosTab() {
                     <React.Fragment key={primero.id_pedido}>
                       <tr className="bg-surface2/60">
                         <Td colSpan={5} className="py-2">
-                          <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-1">
+                          <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-1.5">
                             <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[12.5px]">
                               <span className="font-semibold text-text">{primero.fecha}</span>
                               <span className="text-text3">·</span>
@@ -547,9 +544,23 @@ function PedidosTab() {
                                 </a>
                               )}
                             </div>
-                            <div className="text-[12.5px]">
-                              <span className="text-text3">Total pedido:&nbsp;</span>
-                              <span className="font-semibold text-accent">{fARS(totalOrden)}</span>
+                            <div className="flex flex-wrap items-center gap-2.5">
+                              <span className="text-[12.5px]">
+                                <span className="text-text3">Total pedido:&nbsp;</span>
+                                <span className="font-semibold text-accent">{fARS(totalOrden)}</span>
+                              </span>
+                              <Badge color={ESTADO_COLOR[primero.estado]}>{primero.estado}</Badge>
+                              <Select
+                                value={primero.estado}
+                                onChange={(e) => cambiarEstadoPedido(primero.id_pedido, e.target.value as EstadoPedido)}
+                                style={{ width: 130, padding: "4px 8px" }}
+                              >
+                                {ESTADOS.map((e) => (
+                                  <option key={e} value={e}>
+                                    {e}
+                                  </option>
+                                ))}
+                              </Select>
                             </div>
                           </div>
                         </Td>
@@ -563,20 +574,7 @@ function PedidosTab() {
                           <Td>{p.cantidad}</Td>
                           <Td main>{fARS(p.precio_neto)}</Td>
                           <Td>
-                            <div className="flex items-center gap-2">
-                              <Badge color={ESTADO_COLOR[p.estado]}>{p.estado}</Badge>
-                            </div>
-                            <Select
-                              value={p.estado}
-                              onChange={(e) => cambiarEstado(p.id_detalle, e.target.value as EstadoPedido)}
-                              style={{ width: 120, padding: "4px 8px", marginTop: 4 }}
-                            >
-                              {ESTADOS.map((e) => (
-                                <option key={e} value={e}>
-                                  {e}
-                                </option>
-                              ))}
-                            </Select>
+                            <Badge color={ESTADO_COLOR[p.estado]}>{p.estado}</Badge>
                           </Td>
                           <Td>
                             <div className="flex gap-1.5">
@@ -857,15 +855,6 @@ function PedidosTab() {
           </Field>
           <Field label="Fecha">
             <Input type="date" value={editForm.fecha} onChange={(e) => setEditForm({ ...editForm, fecha: e.target.value })} />
-          </Field>
-          <Field label="Estado">
-            <Select value={editForm.estado} onChange={(e) => setEditForm({ ...editForm, estado: e.target.value as EstadoPedido })}>
-              {ESTADOS.map((e) => (
-                <option key={e} value={e}>
-                  {e}
-                </option>
-              ))}
-            </Select>
           </Field>
           <Field label="Canal">
             <Select value={editForm.canal} onChange={(e) => setEditForm({ ...editForm, canal: e.target.value as Canal })}>
