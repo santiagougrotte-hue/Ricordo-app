@@ -17,6 +17,8 @@ import {
   gramosUnidadBase,
   productosBaseDisponibles,
   impactoCambioBase,
+  costoLegacy,
+  informeControl,
 } from "./calc";
 import { emptyData } from "./types";
 import type { Pedido, Producto, Ingrediente, RecetaLinea } from "./types";
@@ -416,4 +418,34 @@ test("impactoCambioBase: solo lista productos de venta migrados de la familia, c
 
   // No modifica los datos originales
   assert.equal(data.productos.find((p) => p.id === "PROD-01")!.receta_masa_unidad![0].cantidad, 0.003);
+});
+
+test("informeControl: compara costo viejo (RecetaLinea) vs nuevo (receta derivada) solo para productos migrados", () => {
+  const data = emptyData();
+  const base: Producto = {
+    id: "PROD-01",
+    id_base: "PROD-01",
+    nombre: "Ravioles de calabaza",
+    precio_venta: 13000,
+    activo: true,
+    receta_masa_unidad: [{ id: "RU-1", id_ingrediente: "ING-HARINA", cantidad: 0.007 }],
+  };
+  const migrado: Producto = { id: "PROD-08", id_base: "PROD-01", nombre: "Calabaza mayorista", precio_venta: 11000, activo: true, unidades_por_paquete: 10 };
+  const noMigrado: Producto = { id: "PROD-09", id_base: "PROD-01", nombre: "Calabaza sin salsa", precio_venta: 9000, activo: true };
+  data.productos = [base, migrado, noMigrado];
+  data.ingredientes = ingredientesCalabaza();
+  // La receta vieja de "migrado" quedó guardada (nunca se borra), con un valor desincronizado
+  // respecto de lo que da la nueva — exactamente el bug real que motivó todo esto.
+  data.recetas = [{ id: "R1", id_producto: "PROD-08", tipo: "Ingrediente", concepto: "ING-HARINA", cantidad: 0.05 }];
+
+  const informe = informeControl(data);
+  assert.equal(informe.length, 1, "solo aparece el migrado");
+  const fila = informe[0];
+  assert.equal(fila.producto.id, "PROD-08");
+  assert.equal(fila.nombreFamilia, "Ravioles de calabaza");
+  assert.equal(fila.costoViejo, costoLegacy(data, "PROD-08"));
+  assert.equal(fila.costoViejo, 0.05 * 2000);
+  assert.equal(fila.costoNuevo, 0.007 * 10 * 2000);
+  assert.ok(fila.diferenciaCosto !== 0, "el costo cambió al migrar, como esperado dado el desvío real");
+  assert.ok(fila.diferenciaPct !== null);
 });

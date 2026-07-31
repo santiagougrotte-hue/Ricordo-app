@@ -52,11 +52,11 @@ export function pvr(ing: Ingrediente | undefined | null): number {
  * Si el producto está migrado al modelo de producto base/producto de venta (ver más abajo), el
  * costo se calcula desde la receta derivada en vez de leer sus RecetaLinea de Ingrediente
  * directamente — para un producto no migrado el comportamiento es exactamente el de siempre. */
-export function calcCosto(data: RicordoData, idProducto: string): number {
-  const producto = data.productos.find((p) => p.id === idProducto);
-  if (estaMigrado(data, producto)) {
-    return costoDerivado(data, producto as Producto);
-  }
+/** Costo leyendo directamente las RecetaLinea propias del producto — el cálculo de siempre,
+ * ignorando si el producto está migrado o no. Las líneas viejas nunca se borran cuando una
+ * familia migra (quedan de historial), así que esto sigue siendo calculable para cualquier
+ * producto y es lo que usa el informe de control para comparar "costo antes" vs "costo después". */
+export function costoLegacy(data: RicordoData, idProducto: string): number {
   const lineas = data.recetas.filter((r) => r.id_producto === idProducto);
   let total = 0;
   for (const linea of lineas) {
@@ -72,6 +72,14 @@ export function calcCosto(data: RicordoData, idProducto: string): number {
     }
   }
   return total;
+}
+
+export function calcCosto(data: RicordoData, idProducto: string): number {
+  const producto = data.productos.find((p) => p.id === idProducto);
+  if (estaMigrado(data, producto)) {
+    return costoDerivado(data, producto as Producto);
+  }
+  return costoLegacy(data, idProducto);
 }
 
 // --- Producto base / producto de venta: receta derivada ------------------------------------
@@ -235,6 +243,38 @@ export interface ImpactoCambioBase {
   margenAntes: number;
   costoDespues: number;
   margenDespues: number;
+}
+
+export interface FilaInformeControl {
+  producto: Producto;
+  nombreFamilia: string;
+  costoViejo: number;
+  costoNuevo: number;
+  margenViejoPct: number;
+  margenNuevoPct: number;
+  diferenciaCosto: number;
+  /** null cuando no había receta vieja contra la cual comparar (no es "0% de diferencia") */
+  diferenciaPct: number | null;
+}
+
+/** Compara, para cada producto de venta migrado, el costo que daba su RecetaLinea vieja
+ * (nunca se borra al migrar) contra el que da la receta derivada nueva — para detectar si la
+ * migración cambió algo y por qué, familia por familia. Un producto sin ninguna RecetaLinea
+ * vieja (se cargó directo con el modelo nuevo) simplemente no tiene con qué comparar. */
+export function informeControl(data: RicordoData): FilaInformeControl[] {
+  return data.productos
+    .filter((p) => estaMigrado(data, p))
+    .map((p) => {
+      const base = data.productos.find((b) => b.id === p.id_base);
+      const costoViejo = costoLegacy(data, p.id);
+      const costoNuevo = costoDerivado(data, p);
+      const margenViejoPct = p.precio_venta > 0 ? ((p.precio_venta - costoViejo) / p.precio_venta) * 100 : 0;
+      const margenNuevoPct = p.precio_venta > 0 ? ((p.precio_venta - costoNuevo) / p.precio_venta) * 100 : 0;
+      const diferenciaCosto = costoNuevo - costoViejo;
+      const diferenciaPct = costoViejo > 0 ? (diferenciaCosto / costoViejo) * 100 : null;
+      return { producto: p, nombreFamilia: base?.nombre ?? p.id_base, costoViejo, costoNuevo, margenViejoPct, margenNuevoPct, diferenciaCosto, diferenciaPct };
+    })
+    .sort((a, b) => a.nombreFamilia.localeCompare(b.nombreFamilia, "es"));
 }
 
 /** Simula reemplazar la receta por unidad de un producto base (sin tocar `data`) y calcula el

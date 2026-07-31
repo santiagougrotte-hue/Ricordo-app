@@ -34,6 +34,8 @@ import {
   Timer,
   Settings,
   ClipboardList,
+  GitCompare,
+  Layers,
   type LucideIcon,
 } from "lucide-react";
 
@@ -68,6 +70,8 @@ const NAV_RAW: NavGroup[] = [
       { key: "insumos", label: "Insumos", icon: Wheat },
       { key: "compras", label: "Compras", icon: ShoppingBag },
       { key: "proveedores", label: "Proveedores", icon: Store },
+      { key: "familias", label: "Familias", icon: Layers },
+      { key: "informe-control", label: "Informe de Control", icon: GitCompare },
     ],
   },
   {
