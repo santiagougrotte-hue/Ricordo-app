@@ -25,6 +25,7 @@ import { Modal } from "@/components/Modal";
 import { Wizard } from "@/components/Wizard";
 import { FileAttach } from "@/components/FileAttach";
 import { ProductoBaseEditor } from "@/components/ProductoBaseEditor";
+import { ProductoVentaEditor } from "@/components/ProductoVentaEditor";
 import { Bar } from "@/components/ds";
 import type { Adjunto, Ingrediente, Packaging, CostoFijo, Producto, RecetaLinea, TipoRecetaLinea } from "@/lib/types";
 
@@ -50,6 +51,7 @@ export function Productos() {
   const [form, setForm] = useState(emptyForm());
   const [verReceta, setVerReceta] = useState<string | null>(null);
   const [editarBase, setEditarBase] = useState<string | null>(null);
+  const [editarVenta, setEditarVenta] = useState<string | null>(null);
 
   const [wizardOpen, setWizardOpen] = useState(false);
   const [draftForm, setDraftForm] = useState(emptyForm());
@@ -208,6 +210,9 @@ export function Productos() {
                               Base
                             </Button>
                           )}
+                          <Button size="sm" variant="ghost" onClick={() => setEditarVenta(p.id)}>
+                            Venta
+                          </Button>
                           <Button size="sm" variant="ghost" onClick={() => openEdit(p)}>
                             Editar
                           </Button>
@@ -478,6 +483,11 @@ export function Productos() {
       <ProductoBaseEditor
         producto={editarBase ? data.productos.find((p) => p.id === editarBase) ?? null : null}
         onClose={() => setEditarBase(null)}
+      />
+
+      <ProductoVentaEditor
+        producto={editarVenta ? data.productos.find((p) => p.id === editarVenta) ?? null : null}
+        onClose={() => setEditarVenta(null)}
       />
     </div>
   );

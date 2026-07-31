@@ -4,7 +4,7 @@ import React, { useMemo, useState } from "react";
 import { useStore } from "@/lib/store";
 import { useToast } from "@/lib/toast";
 import { uid } from "@/lib/id";
-import { calcCosto, fARS, fPct, pvr } from "@/lib/calc";
+import { calcCosto, estaMigrado, fARS, fPct, pvr } from "@/lib/calc";
 import {
   PageHeader,
   Button,
@@ -18,6 +18,7 @@ import {
   Select,
   Input,
   InfoRow,
+  Alert,
 } from "@/components/ui";
 import { Bar } from "@/components/ds";
 import type { RecetaLinea, TipoRecetaLinea, Ingrediente, Packaging, CostoFijo } from "@/lib/types";
@@ -38,6 +39,7 @@ export function Recetas() {
   const producto = data.productos.find((p) => p.id === idProducto);
   const costo = idProducto ? calcCosto(data, idProducto) : 0;
   const margen = producto && producto.precio_venta > 0 ? ((producto.precio_venta - costo) / producto.precio_venta) * 100 : 0;
+  const migrado = estaMigrado(data, producto);
 
   const opcionesConcepto =
     tipo === "Ingrediente" ? data.ingredientes : tipo === "Packaging" ? data.packaging : data.costos_fijos;
@@ -120,6 +122,13 @@ export function Recetas() {
         <EmptyState text="Elegí un producto para ver y editar su receta." />
       ) : (
         <>
+          {migrado && (
+            <Alert kind="info">
+              Este producto está migrado al modelo de producto base: su masa y relleno se calculan solos desde{" "}
+              {data.productos.find((p) => p.id === producto?.id_base)?.nombre ?? "su producto base"} (ver Productos → Venta). Las
+              líneas de Ingrediente de acá abajo ya no se usan para el costo — solo Packaging y Costo Fijo siguen aplicando.
+            </Alert>
+          )}
           <Card title={editingId ? "Editar línea" : "Agregar línea"} className="mb-4" color="purple">
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-[140px_1fr_120px_auto]">
               <Field label="Tipo">

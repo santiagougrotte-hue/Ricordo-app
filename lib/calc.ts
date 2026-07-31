@@ -165,21 +165,22 @@ export function recetaDerivada(data: RicordoData, productoVenta: Producto): Line
   return lineas;
 }
 
-export function costoLineasDerivadas(data: RicordoData, lineas: LineaRecetaDerivada[]): number {
-  let total = 0;
-  for (const l of lineas) {
-    if (l.tipo === "Ingrediente") {
-      const ing = data.ingredientes.find((i) => i.id === l.concepto);
-      total += l.cantidad * pvr(ing);
-    } else if (l.tipo === "Packaging") {
-      const pkg = data.packaging.find((p) => p.id === l.concepto);
-      total += l.cantidad * (pkg?.precio ?? 0);
-    } else if (l.tipo === "CostoFijo") {
-      const cf = data.costos_fijos.find((c) => c.id === l.concepto);
-      total += l.cantidad * (cf?.monto ?? 0);
-    }
+export function costoLineaDerivada(data: RicordoData, l: LineaRecetaDerivada): number {
+  if (l.tipo === "Ingrediente") {
+    const ing = data.ingredientes.find((i) => i.id === l.concepto);
+    return l.cantidad * pvr(ing);
+  } else if (l.tipo === "Packaging") {
+    const pkg = data.packaging.find((p) => p.id === l.concepto);
+    return l.cantidad * (pkg?.precio ?? 0);
+  } else if (l.tipo === "CostoFijo") {
+    const cf = data.costos_fijos.find((c) => c.id === l.concepto);
+    return l.cantidad * (cf?.monto ?? 0);
   }
-  return total;
+  return 0;
+}
+
+export function costoLineasDerivadas(data: RicordoData, lineas: LineaRecetaDerivada[]): number {
+  return lineas.reduce((acc, l) => acc + costoLineaDerivada(data, l), 0);
 }
 
 export function costoDerivado(data: RicordoData, productoVenta: Producto): number {

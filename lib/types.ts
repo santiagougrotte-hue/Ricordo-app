@@ -47,6 +47,9 @@ export interface Producto {
   /** Cuántas unidades del producto base entran en este paquete — el campo que activa la
    * migración de este producto de venta al modelo de receta derivada. Se carga a mano. */
   unidades_por_paquete?: number;
+  /** Canal de venta de esta presentación (minorista, mayorista) — propio del producto de venta,
+   * no del producto base. */
+  canal?: Canal;
   /** Cosas que se agregan al paquete con una cantidad propia, independiente de
    * unidades_por_paquete (ej. una porción de salsa, sin importar cuántos raviolis tenga el
    * paquete) — apuntan a otro producto base para no duplicar su receta acá. */
