@@ -24,6 +24,7 @@ import {
 import { Modal } from "@/components/Modal";
 import { Wizard } from "@/components/Wizard";
 import { FileAttach } from "@/components/FileAttach";
+import { ProductoBaseEditor } from "@/components/ProductoBaseEditor";
 import { Bar } from "@/components/ds";
 import type { Adjunto, Ingrediente, Packaging, CostoFijo, Producto, RecetaLinea, TipoRecetaLinea } from "@/lib/types";
 
@@ -48,6 +49,7 @@ export function Productos() {
   const [editing, setEditing] = useState<string | null>(null);
   const [form, setForm] = useState(emptyForm());
   const [verReceta, setVerReceta] = useState<string | null>(null);
+  const [editarBase, setEditarBase] = useState<string | null>(null);
 
   const [wizardOpen, setWizardOpen] = useState(false);
   const [draftForm, setDraftForm] = useState(emptyForm());
@@ -197,10 +199,15 @@ export function Productos() {
                         <Badge color={p.activo ? "green" : "red"}>{p.activo ? "Activo" : "Inactivo"}</Badge>
                       </Td>
                       <Td>
-                        <div className="flex gap-1.5">
+                        <div className="flex flex-wrap gap-1.5">
                           <Button size="sm" variant="ghost" onClick={() => setVerReceta(p.id)}>
                             Receta
                           </Button>
+                          {p.id === p.id_base && (
+                            <Button size="sm" variant="ghost" onClick={() => setEditarBase(p.id)}>
+                              Base
+                            </Button>
+                          )}
                           <Button size="sm" variant="ghost" onClick={() => openEdit(p)}>
                             Editar
                           </Button>
@@ -467,6 +474,11 @@ export function Productos() {
           </>
         )}
       </Modal>
+
+      <ProductoBaseEditor
+        producto={editarBase ? data.productos.find((p) => p.id === editarBase) ?? null : null}
+        onClose={() => setEditarBase(null)}
+      />
     </div>
   );
 }

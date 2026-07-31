@@ -15,6 +15,8 @@ import {
   costoDerivado,
   costoUnidadBase,
   gramosUnidadBase,
+  productosBaseDisponibles,
+  impactoCambioBase,
 } from "./calc";
 import { emptyData } from "./types";
 import type { Pedido, Producto, Ingrediente, RecetaLinea } from "./types";
@@ -374,4 +376,44 @@ test("costoUnidadBase / gramosUnidadBase: costo y gramaje por unidad de un produ
   const gramos = gramosUnidadBase(data, base);
   assert.equal(gramos.masa, 0.003 * 1000, "kg se convierte a gramos");
   assert.equal(gramos.relleno, 0.01 * 1000);
+});
+
+test("productosBaseDisponibles: solo los productos autorreferenciados (id === id_base)", () => {
+  const data = emptyData();
+  data.productos = [
+    { id: "PROD-01", id_base: "PROD-01", nombre: "Ravioles de calabaza", precio_venta: 13000, activo: true },
+    { id: "PROD-08", id_base: "PROD-01", nombre: "Calabaza mayorista", precio_venta: 11000, activo: true },
+  ];
+  const bases = productosBaseDisponibles(data);
+  assert.equal(bases.length, 1);
+  assert.equal(bases[0].id, "PROD-01");
+});
+
+test("impactoCambioBase: solo lista productos de venta migrados de la familia, con costo/margen antes y después", () => {
+  const data = emptyData();
+  const base: Producto = {
+    id: "PROD-01",
+    id_base: "PROD-01",
+    nombre: "Ravioles de calabaza",
+    precio_venta: 13000,
+    activo: true,
+    receta_masa_unidad: [{ id: "RU-1", id_ingrediente: "ING-HARINA", cantidad: 0.003 }],
+  };
+  const migrado: Producto = { id: "PROD-08", id_base: "PROD-01", nombre: "Calabaza mayorista", precio_venta: 11000, activo: true, unidades_por_paquete: 10 };
+  const noMigrado: Producto = { id: "PROD-09", id_base: "PROD-01", nombre: "Calabaza sin salsa", precio_venta: 9000, activo: true };
+  data.productos = [base, migrado, noMigrado];
+  data.ingredientes = ingredientesCalabaza();
+  data.recetas = [{ id: "R1", id_producto: "PROD-09", tipo: "Ingrediente", concepto: "ING-HARINA", cantidad: 0.05 }];
+
+  const baseNueva: Producto = { ...base, receta_masa_unidad: [{ id: "RU-1", id_ingrediente: "ING-HARINA", cantidad: 0.006 }] };
+  const impacto = impactoCambioBase(data, "PROD-01", baseNueva);
+
+  assert.equal(impacto.length, 1, "el no migrado no aparece, sigue con su RecetaLinea propia");
+  assert.equal(impacto[0].producto.id, "PROD-08");
+  assert.equal(impacto[0].costoAntes, 0.003 * 10 * 2000);
+  assert.equal(impacto[0].costoDespues, 0.006 * 10 * 2000);
+  assert.ok(impacto[0].costoDespues > impacto[0].costoAntes);
+
+  // No modifica los datos originales
+  assert.equal(data.productos.find((p) => p.id === "PROD-01")!.receta_masa_unidad![0].cantidad, 0.003);
 });

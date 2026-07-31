@@ -214,6 +214,46 @@ export function gramosUnidadBase(data: RicordoData, productoBase: Producto): { m
   return { masa: gramosDe(productoBase.receta_masa_unidad), relleno: gramosDe(productoBase.receta_relleno_unidad) };
 }
 
+/** Peso total (en gramos) de una receta derivada, sumando solo las líneas de Ingrediente —
+ * packaging y costo fijo no pesan. Usado en la pantalla de producto de venta. */
+export function pesoTotalDerivado(data: RicordoData, lineas: LineaRecetaDerivada[]): number {
+  return lineas
+    .filter((l) => l.tipo === "Ingrediente")
+    .reduce((acc, l) => acc + gramosDeLinea(data.ingredientes.find((i) => i.id === l.concepto), l.cantidad), 0);
+}
+
+/** Todo producto donde id === id_base es candidato a "producto base" de una familia (así se
+ * cargan hoy en el import — un producto autónomo o el primero de una familia). */
+export function productosBaseDisponibles(data: RicordoData): Producto[] {
+  return data.productos.filter((p) => p.id === p.id_base);
+}
+
+export interface ImpactoCambioBase {
+  producto: Producto;
+  costoAntes: number;
+  margenAntes: number;
+  costoDespues: number;
+  margenDespues: number;
+}
+
+/** Simula reemplazar la receta por unidad de un producto base (sin tocar `data`) y calcula el
+ * impacto en costo y margen de cada producto de venta de la familia que ya esté migrado — la
+ * tabla que hay que mostrar y confirmar antes de guardar un cambio de receta base, porque puede
+ * afectar a varias presentaciones a la vez. Los productos de venta no migrados no aparecen acá:
+ * siguen usando su RecetaLinea propia, un cambio en la receta base no les afecta. */
+export function impactoCambioBase(data: RicordoData, idBase: string, baseNueva: Producto): ImpactoCambioBase[] {
+  const dataNueva: RicordoData = { ...data, productos: data.productos.map((p) => (p.id === idBase ? baseNueva : p)) };
+  return data.productos
+    .filter((p) => p.id_base === idBase && estaMigrado(data, p))
+    .map((p) => {
+      const costoAntes = calcCosto(data, p.id);
+      const costoDespues = calcCosto(dataNueva, p.id);
+      const margenAntes = p.precio_venta > 0 ? ((p.precio_venta - costoAntes) / p.precio_venta) * 100 : 0;
+      const margenDespues = p.precio_venta > 0 ? ((p.precio_venta - costoDespues) / p.precio_venta) * 100 : 0;
+      return { producto: p, costoAntes, margenAntes, costoDespues, margenDespues };
+    });
+}
+
 export function inPeriod(fecha: string | undefined | null, mes: number, anio: number): boolean {
   if (!fecha) return false;
   const d = new Date(fecha + (fecha.length <= 10 ? "T00:00:00" : ""));
