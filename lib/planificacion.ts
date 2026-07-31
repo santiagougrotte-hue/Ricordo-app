@@ -3,7 +3,7 @@
 // tipo/concepto/cantidad de cada RecetaLinea, nunca el campo `componente`.
 
 import type { RicordoData, ComponenteReceta, Ingrediente, RecetaLinea } from "./types";
-import { inPeriod, pvr } from "./calc";
+import { gustosActivos, inPeriod, pvr } from "./calc";
 
 export const CAJAS_POR_SEMANA_DIVISOR = 4.33;
 
@@ -80,8 +80,10 @@ export function proponerClasificacionRecetas(data: RicordoData): PropuestaClasif
 export type TendenciaVentas = "up" | "down" | "flat";
 
 export interface ReferenciaVentasGusto {
-  id_producto: string;
+  id_base: string;
   nombre: string;
+  /** ids de todas las fichas de canal (minorista, mayorista, etc.) que se suman bajo este gusto. */
+  idsVariantes: string[];
   /** Del más viejo al más nuevo, longitud = ventana de meses configurada. */
   historicoMeses: number[];
   promedioMes: number;
@@ -90,31 +92,30 @@ export interface ReferenciaVentasGusto {
   tendencia: TendenciaVentas;
 }
 
-/** Bloque 1: referencia de ventas por gusto (producto activo) — promedio de una ventana de
- * meses cerrados (el mes en curso no cuenta, todavía no terminó), el último mes cerrado, y la
- * tendencia de ese último mes contra el promedio. Un gusto sin ventas en la ventana aparece en
- * cero, nunca se oculta. */
+/** Bloque 1: referencia de ventas por gusto (producto base) — suma las ventas de todas sus
+ * variantes de canal (minorista, mayorista, sellado al vacío, etc.), ya que todas salen de la
+ * misma masa/relleno física. Promedio de una ventana de meses cerrados (el mes en curso no
+ * cuenta, todavía no terminó), el último mes cerrado, y la tendencia de ese último mes contra
+ * el promedio. Un gusto sin ventas en la ventana aparece en cero, nunca se oculta. */
 export function referenciaVentasPorGusto(data: RicordoData, hoy: Date = new Date()): ReferenciaVentasGusto[] {
   const ventana = data.config_planificacion.ventana_meses_referencia;
-  return data.productos
-    .filter((p) => p.activo)
-    .map((p): ReferenciaVentasGusto => {
-      const historicoMeses: number[] = [];
-      for (let i = ventana; i >= 1; i--) {
-        const d = new Date(hoy.getFullYear(), hoy.getMonth() - i, 1);
-        const cajas = data.pedidos
-          .filter(
-            (pe) => pe.id_producto === p.id && pe.estado !== "Cancelado" && inPeriod(pe.fecha, d.getMonth() + 1, d.getFullYear())
-          )
-          .reduce((acc, pe) => acc + pe.cantidad, 0);
-        historicoMeses.push(cajas);
-      }
-      const promedioMes = historicoMeses.reduce((a, b) => a + b, 0) / ventana;
-      const promedioSemana = promedioMes / CAJAS_POR_SEMANA_DIVISOR;
-      const ultimoMesCerrado = historicoMeses[historicoMeses.length - 1] ?? 0;
-      const tendencia: TendenciaVentas = ultimoMesCerrado > promedioMes ? "up" : ultimoMesCerrado < promedioMes ? "down" : "flat";
-      return { id_producto: p.id, nombre: p.nombre, historicoMeses, promedioMes, promedioSemana, ultimoMesCerrado, tendencia };
-    });
+  return gustosActivos(data).map((g): ReferenciaVentasGusto => {
+    const idsVariantes = g.variantes.map((v) => v.id);
+    const idsSet = new Set(idsVariantes);
+    const historicoMeses: number[] = [];
+    for (let i = ventana; i >= 1; i--) {
+      const d = new Date(hoy.getFullYear(), hoy.getMonth() - i, 1);
+      const cajas = data.pedidos
+        .filter((pe) => idsSet.has(pe.id_producto) && pe.estado !== "Cancelado" && inPeriod(pe.fecha, d.getMonth() + 1, d.getFullYear()))
+        .reduce((acc, pe) => acc + pe.cantidad, 0);
+      historicoMeses.push(cajas);
+    }
+    const promedioMes = historicoMeses.reduce((a, b) => a + b, 0) / ventana;
+    const promedioSemana = promedioMes / CAJAS_POR_SEMANA_DIVISOR;
+    const ultimoMesCerrado = historicoMeses[historicoMeses.length - 1] ?? 0;
+    const tendencia: TendenciaVentas = ultimoMesCerrado > promedioMes ? "up" : ultimoMesCerrado < promedioMes ? "down" : "flat";
+    return { id_base: g.id_base, nombre: g.nombre, idsVariantes, historicoMeses, promedioMes, promedioSemana, ultimoMesCerrado, tendencia };
+  });
 }
 
 export interface DesvioPlanSemana {
@@ -316,4 +317,63 @@ export function calcularCuadroNecesidad(
   ingredientes.sort((a, b) => b.gramosTotales - a.gramosTotales);
 
   return { ingredientes, costoTotal, gustosSinComposicion };
+}
+
+/** Reparte las cajas planificadas de un gusto entre sus variantes de canal, según el peso de
+ * ventas históricas de cada una (misma ventana de meses que el Bloque 1) — cada variante tiene
+ * su propia receta, así que hace falta saber cuánto de la producción total corresponde a cada
+ * una antes de calcular ingredientes. Si el gusto no tiene ventas históricas en ninguna
+ * variante, todo se asigna al producto base (el canal por defecto). */
+export function distribuirCajasPorVariante(
+  data: RicordoData,
+  idBase: string,
+  cajasTotal: number,
+  hoy: Date = new Date()
+): Map<string, number> {
+  const ventana = data.config_planificacion.ventana_meses_referencia;
+  const variantes = data.productos.filter((p) => p.id_base === idBase && p.activo);
+  const resultado = new Map<string, number>();
+  if (variantes.length === 0) return resultado;
+
+  const ventasPorVariante = variantes.map((v) => {
+    let ventas = 0;
+    for (let i = ventana; i >= 1; i--) {
+      const d = new Date(hoy.getFullYear(), hoy.getMonth() - i, 1);
+      ventas += data.pedidos
+        .filter((pe) => pe.id_producto === v.id && pe.estado !== "Cancelado" && inPeriod(pe.fecha, d.getMonth() + 1, d.getFullYear()))
+        .reduce((acc, pe) => acc + pe.cantidad, 0);
+    }
+    return { id: v.id, ventas };
+  });
+  const totalVentas = ventasPorVariante.reduce((acc, v) => acc + v.ventas, 0);
+
+  if (totalVentas <= 0) {
+    const base = variantes.find((v) => v.id === idBase) ?? variantes[0];
+    resultado.set(base.id, cajasTotal);
+    return resultado;
+  }
+  for (const v of ventasPorVariante) {
+    if (v.ventas <= 0) continue;
+    resultado.set(v.id, cajasTotal * (v.ventas / totalVentas));
+  }
+  return resultado;
+}
+
+/** Envuelve calcularCuadroNecesidad() expandiendo las cajas planificadas por gusto (id_base) a
+ * cajas por variante de canal antes de calcular — así cada variante sigue usando su propia
+ * receta/composición, pero el plan se carga una sola vez por gusto (Bloque 2). */
+export function calcularCuadroNecesidadPorGusto(
+  data: RicordoData,
+  componente: "masa" | "relleno",
+  cajasPorGustoBase: Map<string, number>,
+  hoy: Date = new Date()
+): CuadroNecesidad {
+  const cajasPorVariante = new Map<string, number>();
+  for (const [idBase, cajas] of cajasPorGustoBase) {
+    if (cajas <= 0) continue;
+    for (const [idProducto, cajasVariante] of distribuirCajasPorVariante(data, idBase, cajas, hoy)) {
+      cajasPorVariante.set(idProducto, (cajasPorVariante.get(idProducto) ?? 0) + cajasVariante);
+    }
+  }
+  return calcularCuadroNecesidad(data, componente, cajasPorVariante);
 }

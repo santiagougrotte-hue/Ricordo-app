@@ -7,14 +7,14 @@ import { usePeriod, MESES } from "@/lib/period";
 import { useToast } from "@/lib/toast";
 import { useRouter } from "@/lib/nav-context";
 import { uid } from "@/lib/id";
-import { fARS, fNum, fPct, calcCosto, calcStockIngrediente, pvr } from "@/lib/calc";
+import { fARS, fNum, fPct, calcCosto, calcStockIngrediente, gustosActivos, pvr, type GustoBase } from "@/lib/calc";
 import {
   referenciaVentasPorGusto,
   desvioPlanSemana,
   proponerClasificacionRecetas,
   calcularComposicionGusto,
   reescalarLineasComponente,
-  calcularCuadroNecesidad,
+  calcularCuadroNecesidadPorGusto,
   type ReferenciaVentasGusto,
   type TendenciaVentas,
 } from "@/lib/planificacion";
@@ -101,7 +101,7 @@ function ReferenciaVentas({ referencia }: { referencia: ReferenciaVentasGusto[] 
             </thead>
             <tbody>
               {referencia.map((r) => (
-                <TrHover key={r.id_producto}>
+                <TrHover key={r.id_base}>
                   <Td main>{r.nombre}</Td>
                   <Td>{fNum(r.promedioMes, 1)}</Td>
                   <Td>{fNum(r.promedioSemana, 1)}</Td>
@@ -125,13 +125,13 @@ function PlanEditable({
   mes,
   anio,
   referencia,
-  productos,
+  gustos,
   planesGuardados,
 }: {
   mes: number;
   anio: number;
   referencia: ReferenciaVentasGusto[];
-  productos: Producto[];
+  gustos: GustoBase[];
   planesGuardados: PlanProduccionMes[];
 }) {
   const { data, setData } = useStore();
@@ -139,21 +139,21 @@ function PlanEditable({
   const [umbral, setUmbral] = useState(data.config_planificacion.umbral_desvio_semana_pct);
   const [filas, setFilas] = useState<Record<string, { cajas_mes: number; cajas_semana: number }>>(() => {
     const inicial: Record<string, { cajas_mes: number; cajas_semana: number }> = {};
-    for (const p of productos) {
-      const guardado = planesGuardados.find((g) => g.id_producto === p.id);
-      inicial[p.id] = { cajas_mes: guardado?.cajas_mes ?? 0, cajas_semana: guardado?.cajas_semana ?? 0 };
+    for (const g of gustos) {
+      const guardado = planesGuardados.find((pl) => pl.id_base === g.id_base);
+      inicial[g.id_base] = { cajas_mes: guardado?.cajas_mes ?? 0, cajas_semana: guardado?.cajas_semana ?? 0 };
     }
     return inicial;
   });
 
-  function actualizarFila(idProducto: string, patch: Partial<{ cajas_mes: number; cajas_semana: number }>) {
-    setFilas((f) => ({ ...f, [idProducto]: { ...f[idProducto], ...patch } }));
+  function actualizarFila(idBase: string, patch: Partial<{ cajas_mes: number; cajas_semana: number }>) {
+    setFilas((f) => ({ ...f, [idBase]: { ...f[idBase], ...patch } }));
   }
 
-  function traerPromedio(idProducto: string) {
-    const ref = referencia.find((r) => r.id_producto === idProducto);
+  function traerPromedio(idBase: string) {
+    const ref = referencia.find((r) => r.id_base === idBase);
     if (!ref) return;
-    actualizarFila(idProducto, {
+    actualizarFila(idBase, {
       cajas_mes: Math.round(ref.promedioMes * 10) / 10,
       cajas_semana: Math.round(ref.promedioSemana * 10) / 10,
     });
@@ -163,7 +163,7 @@ function PlanEditable({
     setFilas((f) => {
       const nuevo = { ...f };
       for (const r of referencia) {
-        nuevo[r.id_producto] = { cajas_mes: Math.round(r.promedioMes * 10) / 10, cajas_semana: Math.round(r.promedioSemana * 10) / 10 };
+        nuevo[r.id_base] = { cajas_mes: Math.round(r.promedioMes * 10) / 10, cajas_semana: Math.round(r.promedioSemana * 10) / 10 };
       }
       return nuevo;
     });
@@ -178,13 +178,13 @@ function PlanEditable({
     const fecha_guardado = new Date().toISOString();
     setData((d) => {
       const sinEsteMes = d.plan_produccion.filter((p) => !(p.mes === mes && p.anio === anio));
-      const nuevas: PlanProduccionMes[] = productos.map((p) => ({
+      const nuevas: PlanProduccionMes[] = gustos.map((g) => ({
         id: uid("PLAN"),
         mes,
         anio,
-        id_producto: p.id,
-        cajas_mes: filas[p.id]?.cajas_mes ?? 0,
-        cajas_semana: filas[p.id]?.cajas_semana ?? 0,
+        id_base: g.id_base,
+        cajas_mes: filas[g.id_base]?.cajas_mes ?? 0,
+        cajas_semana: filas[g.id_base]?.cajas_semana ?? 0,
         fecha_guardado,
       }));
       return { ...d, plan_produccion: [...sinEsteMes, ...nuevas] };
@@ -208,7 +208,7 @@ function PlanEditable({
         </Button>
       </div>
 
-      {productos.length === 0 ? (
+      {gustos.length === 0 ? (
         <EmptyState text="Sin productos activos todavía." />
       ) : (
         <TableWrap>
@@ -223,17 +223,17 @@ function PlanEditable({
               </tr>
             </thead>
             <tbody>
-              {productos.map((p) => {
-                const fila = filas[p.id] ?? { cajas_mes: 0, cajas_semana: 0 };
+              {gustos.map((g) => {
+                const fila = filas[g.id_base] ?? { cajas_mes: 0, cajas_semana: 0 };
                 const desvio = desvioPlanSemana(fila.cajas_mes, fila.cajas_semana, umbral);
                 return (
-                  <TrHover key={p.id}>
-                    <Td main>{p.nombre}</Td>
+                  <TrHover key={g.id_base}>
+                    <Td main>{g.nombre}</Td>
                     <Td>
                       <Input
                         type="number"
                         value={fila.cajas_mes}
-                        onChange={(e) => actualizarFila(p.id, { cajas_mes: Number(e.target.value) })}
+                        onChange={(e) => actualizarFila(g.id_base, { cajas_mes: Number(e.target.value) })}
                         style={{ width: 90 }}
                       />
                     </Td>
@@ -241,7 +241,7 @@ function PlanEditable({
                       <Input
                         type="number"
                         value={fila.cajas_semana}
-                        onChange={(e) => actualizarFila(p.id, { cajas_semana: Number(e.target.value) })}
+                        onChange={(e) => actualizarFila(g.id_base, { cajas_semana: Number(e.target.value) })}
                         style={{ width: 90 }}
                       />
                     </Td>
@@ -253,7 +253,7 @@ function PlanEditable({
                       )}
                     </Td>
                     <Td>
-                      <Button size="sm" variant="ghost" onClick={() => traerPromedio(p.id)}>
+                      <Button size="sm" variant="ghost" onClick={() => traerPromedio(g.id_base)}>
                         Traer promedio
                       </Button>
                     </Td>
@@ -511,11 +511,13 @@ function ParametrosGramaje({ producto }: { producto: Producto }) {
   );
 }
 
-/** Bloque 3 — elegí un gusto y revisá su clasificación y gramaje. */
+/** Bloque 3 — elegí una ficha de producto (cada variante de canal tiene su propia receta,
+ * incluso dentro del mismo gusto) y revisá su clasificación y gramaje. El selector agrupa las
+ * variantes bajo su gusto para que quede claro cuáles comparten producción física. */
 function ParametrosPorGusto() {
   const { data } = useStore();
-  const productosActivos = useMemo(() => data.productos.filter((p) => p.activo), [data.productos]);
-  const [idProducto, setIdProducto] = useState(productosActivos[0]?.id ?? "");
+  const gustos = useMemo(() => gustosActivos(data), [data]);
+  const [idProducto, setIdProducto] = useState(gustos[0]?.variantes[0]?.id ?? "");
   const producto = data.productos.find((p) => p.id === idProducto);
   const lineas = useMemo(
     () => data.recetas.filter((r) => r.id_producto === idProducto && r.tipo !== "CostoFijo"),
@@ -524,13 +526,17 @@ function ParametrosPorGusto() {
 
   return (
     <Card title="Parámetros por gusto" className="mb-4">
-      <Field label="Gusto">
+      <Field label="Producto (cada variante de canal tiene su propia receta)">
         <Select value={idProducto} onChange={(e) => setIdProducto(e.target.value)} style={{ maxWidth: 340 }}>
           <option value="">Seleccionar…</option>
-          {productosActivos.map((p) => (
-            <option key={p.id} value={p.id}>
-              {p.nombre}
-            </option>
+          {gustos.map((g) => (
+            <optgroup key={g.id_base} label={g.nombre}>
+              {g.variantes.map((v) => (
+                <option key={v.id} value={v.id}>
+                  {v.nombre}
+                </option>
+              ))}
+            </optgroup>
           ))}
         </Select>
       </Field>
@@ -560,12 +566,15 @@ function CuadroNecesidadTabla({
 }: {
   titulo: string;
   componente: "masa" | "relleno";
-  cajasPorGusto: Map<string, number>;
+  cajasPorGusto: Map<string, number>; // id_base -> cajas totales del gusto
 }) {
   const { data, setData } = useStore();
   const { go } = useRouter();
   const { toast } = useToast();
-  const cuadro = useMemo(() => calcularCuadroNecesidad(data, componente, cajasPorGusto), [data, componente, cajasPorGusto]);
+  const cuadro = useMemo(
+    () => calcularCuadroNecesidadPorGusto(data, componente, cajasPorGusto),
+    [data, componente, cajasPorGusto]
+  );
   const [expandido, setExpandido] = useState<Record<string, boolean>>({});
   const [mostrarStock, setMostrarStock] = useState(false);
 
@@ -690,17 +699,17 @@ export function PlanProduccion() {
   const { mes, anio } = usePeriod();
 
   const referencia = useMemo(() => referenciaVentasPorGusto(data), [data]);
-  const productosActivos = useMemo(() => data.productos.filter((p) => p.activo), [data.productos]);
+  const gustos = useMemo(() => gustosActivos(data), [data]);
   const planesGuardados = useMemo(
     () => data.plan_produccion.filter((p) => p.mes === mes && p.anio === anio),
     [data.plan_produccion, mes, anio]
   );
 
   const cajasSemanaPorGusto = useMemo(
-    () => new Map(planesGuardados.map((p) => [p.id_producto, p.cajas_semana])),
+    () => new Map(planesGuardados.map((p) => [p.id_base, p.cajas_semana])),
     [planesGuardados]
   );
-  const cajasMesPorGusto = useMemo(() => new Map(planesGuardados.map((p) => [p.id_producto, p.cajas_mes])), [planesGuardados]);
+  const cajasMesPorGusto = useMemo(() => new Map(planesGuardados.map((p) => [p.id_base, p.cajas_mes])), [planesGuardados]);
 
   return (
     <div>
@@ -711,7 +720,7 @@ export function PlanProduccion() {
         mes={mes}
         anio={anio}
         referencia={referencia}
-        productos={productosActivos}
+        gustos={gustos}
         planesGuardados={planesGuardados}
       />
       <ParametrosPorGusto />

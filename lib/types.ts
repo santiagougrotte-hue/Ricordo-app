@@ -282,13 +282,15 @@ export interface ConfigEnvios {
   precio_envio_fijo: number;
 }
 
-/** Plan de producción cargado a mano por gusto para un mes de referencia — queda en historial
- * (Bloque 2 de Planificación): se puede consultar en septiembre qué se planificó en agosto. */
+/** Plan de producción cargado a mano por gusto (producto base) para un mes de referencia —
+ * queda en historial (Bloque 2 de Planificación): se puede consultar en septiembre qué se
+ * planificó en agosto. Un gusto agrupa todas sus variantes de canal (minorista, mayorista,
+ * etc.), que comparten el mismo lote físico de producción. */
 export interface PlanProduccionMes {
   id: string;
   mes: number;
   anio: number;
-  id_producto: string;
+  id_base: string;
   cajas_mes: number;
   cajas_semana: number;
   fecha_guardado: string;

@@ -7,6 +7,8 @@ import {
   calcularComposicionGusto,
   reescalarLineasComponente,
   calcularCuadroNecesidad,
+  distribuirCajasPorVariante,
+  calcularCuadroNecesidadPorGusto,
 } from "./planificacion";
 import { calcCosto } from "./calc";
 import { emptyData } from "./types";
@@ -291,4 +293,75 @@ test("calcularCuadroNecesidad: gusto con cajas planificadas pero sin líneas cla
   const cuadro = calcularCuadroNecesidad(data, "masa", new Map([["PROD-14", 5]]));
   assert.deepEqual(cuadro.gustosSinComposicion, ["Salsa"]);
   assert.equal(cuadro.ingredientes.length, 0);
+});
+
+// --- Agrupación por producto base (gusto): Bloques 1 y 4 ---------------------------------
+
+test("referenciaVentasPorGusto: suma las ventas de todas las variantes de canal bajo el mismo gusto", () => {
+  const data = emptyData();
+  const hoy = new Date("2026-08-15T12:00:00");
+  data.productos = [
+    producto({ id: "PROD-01", id_base: "PROD-01", nombre: "Ravioles de calabaza" }),
+    producto({ id: "PROD-08", id_base: "PROD-01", nombre: "Calabaza mayorista" }),
+  ];
+  data.pedidos = [
+    pedido({ id_detalle: "A", id_producto: "PROD-01", fecha: "2026-07-10", cantidad: 5 }),
+    pedido({ id_detalle: "B", id_producto: "PROD-08", fecha: "2026-07-12", cantidad: 3 }),
+  ];
+  const [ref] = referenciaVentasPorGusto(data, hoy);
+  assert.equal(ref.id_base, "PROD-01");
+  assert.deepEqual(ref.idsVariantes.sort(), ["PROD-01", "PROD-08"]);
+  assert.equal(ref.ultimoMesCerrado, 8); // 5 + 3, ambas variantes suman al mismo gusto
+});
+
+test("distribuirCajasPorVariante: reparte proporcional a las ventas históricas de cada variante", () => {
+  const data = emptyData();
+  const hoy = new Date("2026-08-15T12:00:00");
+  data.productos = [
+    producto({ id: "PROD-01", id_base: "PROD-01", nombre: "Ravioles de calabaza" }),
+    producto({ id: "PROD-08", id_base: "PROD-01", nombre: "Calabaza mayorista" }),
+  ];
+  // 75% de las ventas históricas son PROD-01, 25% PROD-08
+  data.pedidos = [
+    pedido({ id_detalle: "A", id_producto: "PROD-01", fecha: "2026-07-10", cantidad: 15 }),
+    pedido({ id_detalle: "B", id_producto: "PROD-08", fecha: "2026-07-12", cantidad: 5 }),
+  ];
+  const distribucion = distribuirCajasPorVariante(data, "PROD-01", 40, hoy);
+  assert.equal(distribucion.get("PROD-01"), 30); // 75% de 40
+  assert.equal(distribucion.get("PROD-08"), 10); // 25% de 40
+});
+
+test("distribuirCajasPorVariante: sin ventas históricas, todo va al producto base", () => {
+  const data = emptyData();
+  data.productos = [
+    producto({ id: "PROD-01", id_base: "PROD-01", nombre: "Ravioles de calabaza" }),
+    producto({ id: "PROD-08", id_base: "PROD-01", nombre: "Calabaza mayorista" }),
+  ];
+  const distribucion = distribuirCajasPorVariante(data, "PROD-01", 20);
+  assert.equal(distribucion.get("PROD-01"), 20);
+  assert.equal(distribucion.get("PROD-08"), undefined);
+});
+
+test("calcularCuadroNecesidadPorGusto: cada variante usa su propia receta al expandir desde el plan por gusto", () => {
+  const data = emptyData();
+  const hoy = new Date("2026-08-15T12:00:00");
+  data.ingredientes = ingredienteEspinaca();
+  data.productos = [
+    producto({ id: "PROD-03", id_base: "PROD-03", nombre: "Raviolón de espinaca" }),
+    producto({ id: "PROD-09", id_base: "PROD-03", nombre: "Espinaca mayorista" }),
+  ];
+  // PROD-03 usa la receta "espinaca" de siempre (masa 205g); PROD-09 tiene su propia receta,
+  // con el doble de premezcla por caja.
+  data.recetas = [
+    ...recetaEspinacaClasificada(),
+    { id: "REC-9", id_producto: "PROD-09", tipo: "Ingrediente", concepto: "ING-PREMEZCLA", cantidad: 0.174, componente: "masa" },
+  ];
+  // Todas las ventas históricas son de PROD-09 → toda la producción planificada del gusto se
+  // reparte ahí, y debe usar SU receta (0.174kg de premezcla por caja), no la de PROD-03.
+  data.pedidos = [pedido({ id_detalle: "A", id_producto: "PROD-09", fecha: "2026-07-10", cantidad: 10 })];
+
+  const cuadro = calcularCuadroNecesidadPorGusto(data, "masa", new Map([["PROD-03", 10]]), hoy);
+  const premezcla = cuadro.ingredientes.find((i) => i.id_ingrediente === "ING-PREMEZCLA");
+  assert.ok(premezcla);
+  assert.equal(premezcla!.cantidadNativa, 1.74); // 0.174kg × 10 cajas, con la receta de PROD-09
 });
