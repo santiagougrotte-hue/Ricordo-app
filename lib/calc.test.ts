@@ -1,6 +1,14 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { crearMovimientoCajaDesdePedido, discrepanciasCaja, construirResumenPulso } from "./calc";
+import {
+  crearMovimientoCajaDesdePedido,
+  discrepanciasCaja,
+  construirResumenPulso,
+  gustosActivos,
+  movimientosStockGusto,
+  stockCalculadoGusto,
+  stockRealGusto,
+} from "./calc";
 import { emptyData } from "./types";
 import type { Pedido, Producto } from "./types";
 
@@ -104,4 +112,76 @@ test("construirResumenPulso: arma el resumen agregado sin exponer los pedidos cr
   assert.equal(resumen.pendientesEntrega, 0);
   assert.ok(resumen.diferenciaCajaVentas > 0, "hay ventas entregadas sin ingreso de caja cargado");
   assert.ok(!("pedidos" in resumen), "el resumen no debe incluir los registros crudos de pedidos");
+});
+
+// --- Agrupación por producto base (gusto) ------------------------------------------------
+
+function productoBaseCalabaza(): Producto[] {
+  return [
+    { id: "PROD-01", id_base: "PROD-01", nombre: "Ravioles de calabaza", precio_venta: 13000, activo: true },
+    { id: "PROD-08", id_base: "PROD-01", nombre: "Calabaza mayorista", precio_venta: 11000, activo: true },
+    { id: "PROD-12", id_base: "PROD-01", nombre: "Calabaza al vacío mayo", precio_venta: 10000, activo: true },
+  ];
+}
+
+test("gustosActivos: agrupa las variantes de canal bajo su producto base", () => {
+  const data = emptyData();
+  data.productos = [
+    ...productoBaseCalabaza(),
+    { id: "PROD-02", id_base: "PROD-02", nombre: "Ravioles de ricotta", precio_venta: 12000, activo: true },
+  ];
+  const gustos = gustosActivos(data);
+  assert.equal(gustos.length, 2);
+  const calabaza = gustos.find((g) => g.id_base === "PROD-01");
+  assert.ok(calabaza);
+  assert.equal(calabaza!.nombre, "Ravioles de calabaza");
+  assert.equal(calabaza!.variantes.length, 3);
+});
+
+test("gustosActivos: excluye variantes inactivas pero conserva el gusto si otra variante sigue activa", () => {
+  const data = emptyData();
+  const variantes = productoBaseCalabaza();
+  variantes[1].activo = false; // Calabaza mayorista discontinuada
+  data.productos = variantes;
+  const gustos = gustosActivos(data);
+  assert.equal(gustos.length, 1);
+  assert.equal(gustos[0].variantes.length, 2);
+});
+
+test("movimientosStockGusto + stockCalculadoGusto: suma producción y resta ventas Entregado de todas las variantes", () => {
+  const data = emptyData();
+  data.produccion = [
+    { id: "PRODLOG-1", id_producto: "PROD-01", nombre_producto: "Ravioles de calabaza", cantidad: 50, fecha: "2026-07-01" },
+    { id: "PRODLOG-2", id_producto: "PROD-08", nombre_producto: "Calabaza mayorista", cantidad: 30, fecha: "2026-07-05" },
+  ];
+  data.pedidos = [
+    pedidoBase({ id_detalle: "A", id_producto: "PROD-01", nombre_producto: "Ravioles de calabaza", cantidad: 20, fecha: "2026-07-10", estado: "Entregado" }),
+    pedidoBase({ id_detalle: "B", id_producto: "PROD-08", nombre_producto: "Calabaza mayorista", cantidad: 15, fecha: "2026-07-12", estado: "Entregado" }),
+    pedidoBase({ id_detalle: "C", id_producto: "PROD-01", nombre_producto: "Ravioles de calabaza", cantidad: 999, fecha: "2026-07-15", estado: "Confirmado" }),
+  ];
+  const movimientos = movimientosStockGusto(data, ["PROD-01", "PROD-08", "PROD-12"]);
+  assert.equal(movimientos.length, 4, "3 movimientos reales + el pedido Confirmado no cuenta");
+  assert.equal(movimientos[0].fecha, "2026-07-01"); // ordenado del más viejo al más nuevo
+  assert.equal(stockCalculadoGusto(movimientos), 50 + 30 - 20 - 15); // 45
+});
+
+test("stockRealGusto: sin conteo manual usa el calculado por la app", () => {
+  const data = emptyData();
+  data.productos = productoBaseCalabaza();
+  data.produccion = [{ id: "PRODLOG-1", id_producto: "PROD-01", nombre_producto: "Ravioles de calabaza", cantidad: 50, fecha: "2026-07-01" }];
+  const gusto = gustosActivos(data)[0];
+  assert.equal(stockRealGusto(data, gusto), 50);
+});
+
+test("stockRealGusto: con conteo manual, resta ventas Entregado posteriores a la fecha del conteo (de cualquier variante)", () => {
+  const data = emptyData();
+  data.productos = productoBaseCalabaza();
+  data.produccion = [{ id: "PRODLOG-1", id_producto: "PROD-01", nombre_producto: "Ravioles de calabaza", cantidad: 50, fecha: "2026-07-01" }];
+  data.conteos_stock = [{ id: "CTK-1", id_producto: "PROD-01", cantidad: 40, fecha: "2026-07-10" }];
+  data.pedidos = [
+    pedidoBase({ id_detalle: "A", id_producto: "PROD-01", cantidad: 5, fecha: "2026-07-05", estado: "Entregado" }), // antes del conteo, no cuenta
+    pedidoBase({ id_detalle: "B", id_producto: "PROD-08", nombre_producto: "Calabaza mayorista", cantidad: 8, fecha: "2026-07-12", estado: "Entregado" }), // otra variante, después del conteo
+  ];
+  const gusto = gustosActivos(data)[0];
+  assert.equal(stockRealGusto(data, gusto), 40 - 8); // 32
 });

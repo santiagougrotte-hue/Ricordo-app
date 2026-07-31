@@ -22,7 +22,7 @@ import { useRouter } from "@/lib/nav-context";
 import { useIaClient } from "@/lib/ia-client";
 import { Card, EmptyState } from "@/components/ui";
 import { Hero, ModuleRail, PulseCard, Row, type ModuleRailItem } from "@/components/ds";
-import { calcCosto, construirResumenPulso, fARS, fFechaCorta, fNum, inPeriod } from "@/lib/calc";
+import { calcCosto, construirResumenPulso, fARS, fFechaCorta, fNum, gustosActivos, inPeriod, stockRealGusto } from "@/lib/calc";
 import { CHART_COLORS } from "@/lib/chart-colors";
 import type { ObservacionPulso, SeveridadPulso } from "@/lib/types";
 
@@ -101,15 +101,14 @@ export function Dashboard() {
     return meses;
   }, [data.pedidos]);
 
-  // Stock terminado: productos activos ordenados con los que están en cero primero (misma
-  // regla que va a usar la pantalla de Stock en la Fase 4).
+  // Stock terminado: por gusto (producto base), con los que están en cero primero — mismo
+  // agrupamiento que usa la pantalla de Stock (una variante de canal no tiene stock propio).
   const stockTerminado = useMemo(() => {
-    return data.productos
-      .filter((p) => p.activo)
-      .map((p) => ({ producto: p, stock: data.stock_manual[p.id] ?? 0 }))
+    return gustosActivos(data)
+      .map((g) => ({ gusto: g, stock: stockRealGusto(data, g) }))
       .sort((a, b) => a.stock - b.stock)
       .slice(0, 5);
-  }, [data.productos, data.stock_manual]);
+  }, [data]);
 
   // Rentabilidad: productos con ventas en el período, por margen % descendente.
   const rentabilidad = useMemo(() => {
@@ -257,12 +256,12 @@ export function Dashboard() {
             <EmptyState text="Sin productos activos todavía." />
           ) : (
             <div className="flex flex-col">
-              {stockTerminado.map(({ producto, stock }) => (
+              {stockTerminado.map(({ gusto, stock }) => (
                 <Row
-                  key={producto.id}
+                  key={gusto.id_base}
                   icon={UtensilsCrossed}
                   iconColor={stock <= 0 ? "var(--red)" : stock < 10 ? "var(--orange)" : "var(--mod-stock)"}
-                  title={producto.nombre}
+                  title={gusto.nombre}
                   value={fNum(stock, 0)}
                 />
               ))}

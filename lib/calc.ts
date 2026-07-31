@@ -1,4 +1,4 @@
-import type { RicordoData, Ingrediente, Pedido, TipoCosto, Amortizacion, CajaMovimiento, Cliente, Canal } from "./types";
+import type { RicordoData, Ingrediente, Pedido, TipoCosto, Amortizacion, CajaMovimiento, Cliente, Canal, Producto } from "./types";
 import { uid } from "./id";
 
 export function fARS(n: number | null | undefined): string {
@@ -417,6 +417,74 @@ export function calcCVProducto(data: RicordoData, idProducto: string): number {
 
 export function unidadesEntregadas(pedidos: Pedido[]): number {
   return pedidos.filter((p) => p.estado === "Entregado").reduce((acc, p) => acc + p.cantidad, 0);
+}
+
+// --- Agrupación por producto base (gusto) --------------------------------------------------
+// Un mismo gusto (ej. "Calabaza") se vende bajo varias fichas de Producto — minorista,
+// mayorista, sellado al vacío, sin salsa — cada una con su propia receta, pero comparten un
+// solo lote físico de producción y un solo stock. Producto.id_base ya identifica esa relación
+// (se carga bien desde el import); estas funciones son el punto único donde se agrupa por ahí,
+// para que Stock, Dashboard y Planificación no dupliquen la lógica.
+
+export interface GustoBase {
+  id_base: string;
+  nombre: string;
+  variantes: Producto[];
+}
+
+/** Un gusto por cada id_base distinto entre los productos activos. El nombre mostrado es el
+ * del producto base si sigue activo; si no, el de la primera variante activa que encuentre. */
+export function gustosActivos(data: RicordoData): GustoBase[] {
+  const activos = data.productos.filter((p) => p.activo);
+  const idsBase = [...new Set(activos.map((p) => p.id_base))];
+  return idsBase.map((idBase) => {
+    const variantes = activos.filter((p) => p.id_base === idBase);
+    const base = data.productos.find((p) => p.id === idBase) ?? variantes[0];
+    return { id_base: idBase, nombre: base?.nombre ?? idBase, variantes };
+  });
+}
+
+export interface MovimientoStockGusto {
+  fecha: string;
+  tipo: "produccion" | "venta";
+  cantidad: number; // positivo = producción, negativo = venta — para sumar directo
+  detalle: string;
+}
+
+/** Historial de movimientos de stock de un gusto: cada lote de producción suma, cada pedido
+ * Entregado de cualquiera de sus variantes resta. Ordenado del más viejo al más nuevo. */
+export function movimientosStockGusto(data: RicordoData, idsVariantes: string[]): MovimientoStockGusto[] {
+  const variantesSet = new Set(idsVariantes);
+  const movimientos: MovimientoStockGusto[] = [];
+  for (const lote of data.produccion) {
+    if (!variantesSet.has(lote.id_producto)) continue;
+    movimientos.push({ fecha: lote.fecha, tipo: "produccion", cantidad: lote.cantidad, detalle: lote.nombre_producto });
+  }
+  for (const pedido of data.pedidos) {
+    if (pedido.estado !== "Entregado" || !variantesSet.has(pedido.id_producto)) continue;
+    movimientos.push({ fecha: pedido.fecha, tipo: "venta", cantidad: -pedido.cantidad, detalle: pedido.nombre_producto });
+  }
+  return movimientos.sort((a, b) => new Date(a.fecha).getTime() - new Date(b.fecha).getTime());
+}
+
+export function stockCalculadoGusto(movimientos: MovimientoStockGusto[]): number {
+  return movimientos.reduce((acc, m) => acc + m.cantidad, 0);
+}
+
+/** El número "oficial" de stock de un gusto: si hay un conteo manual cargado, parte de ahí y
+ * resta las ventas Entregado posteriores a esa fecha; si no hay conteo, usa el calculado por la
+ * app (todo el historial de producción menos ventas). Mismo criterio en Stock y en Dashboard. */
+export function stockRealGusto(data: RicordoData, gusto: GustoBase): number {
+  const idsVariantes = gusto.variantes.map((v) => v.id);
+  const movimientos = movimientosStockGusto(data, idsVariantes);
+  const ultimoConteo = data.conteos_stock
+    .filter((c) => c.id_producto === gusto.id_base)
+    .sort((a, b) => new Date(b.fecha).getTime() - new Date(a.fecha).getTime())[0];
+  if (!ultimoConteo) return stockCalculadoGusto(movimientos);
+  const ventasPostConteo = movimientos
+    .filter((m) => m.tipo === "venta" && m.fecha >= ultimoConteo.fecha)
+    .reduce((acc, m) => acc + m.cantidad, 0);
+  return ultimoConteo.cantidad + ventasPostConteo;
 }
 
 export interface VentaMesCanalPulso {

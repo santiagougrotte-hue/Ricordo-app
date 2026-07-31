@@ -10,9 +10,14 @@ import {
   cmvAcumulado,
   comprasAcumuladas,
   fARS,
+  fFechaCorta,
   fNum,
+  gustosActivos,
   inPeriod,
+  movimientosStockGusto,
   pvr,
+  stockCalculadoGusto,
+  stockRealGusto,
 } from "@/lib/calc";
 import { usePeriod } from "@/lib/period";
 import {
@@ -37,14 +42,32 @@ import { CHART_COLORS } from "@/lib/chart-colors";
 function ProductosTab() {
   const { data, setData } = useStore();
   const { toast } = useToast();
-  const [modalProducto, setModalProducto] = useState<string | null>(null);
+  const [modalConteo, setModalConteo] = useState<string | null>(null); // id_base
   const [cantidad, setCantidad] = useState(0);
+  const [modalHistorial, setModalHistorial] = useState<string | null>(null); // id_base
   const [umbralBajo, setUmbralBajo] = useState(data.umbral_stock_bajo_producto);
 
-  // Orden: en cero primero, después bajos, después normales (Parte A, Fase 4).
-  const productosOrdenados = useMemo(() => {
-    return [...data.productos].sort((a, b) => (data.stock_manual[a.id] ?? 0) - (data.stock_manual[b.id] ?? 0));
-  }, [data.productos, data.stock_manual]);
+  const gustos = useMemo(() => gustosActivos(data), [data]);
+
+  // Cada gusto agrupa: producción y ventas Entregado de todas sus variantes de canal (misma
+  // masa/relleno física), stock calculado por la app (todo el historial), y el conteo manual
+  // como fuente de verdad — igual que el criterio que ya usaba la app antes de este módulo.
+  const filas = useMemo(() => {
+    return gustos.map((g) => {
+      const idsVariantes = g.variantes.map((v) => v.id);
+      const movimientos = movimientosStockGusto(data, idsVariantes);
+      const stockApp = stockCalculadoGusto(movimientos);
+      const ultimoConteo = data.conteos_stock
+        .filter((c) => c.id_producto === g.id_base)
+        .sort((a, b) => new Date(b.fecha).getTime() - new Date(a.fecha).getTime())[0];
+      const stockReal = stockRealGusto(data, g);
+      const diferencia = ultimoConteo ? stockReal - stockApp : null;
+      return { gusto: g, movimientos, stockApp, ultimoConteo, stockReal, diferencia };
+    });
+  }, [gustos, data]);
+
+  // Orden: en cero primero, después bajos, después normales.
+  const filasOrdenadas = useMemo(() => [...filas].sort((a, b) => a.stockReal - b.stockReal), [filas]);
 
   function guardarUmbral() {
     setData((d) => ({ ...d, umbral_stock_bajo_producto: umbralBajo }));
@@ -52,19 +75,20 @@ function ProductosTab() {
   }
 
   function registrarConteo() {
-    if (!modalProducto) return;
+    if (!modalConteo) return;
     const fecha = new Date().toISOString().slice(0, 10);
     setData((d) => ({
       ...d,
-      conteos_stock: [...d.conteos_stock, { id: uid("CTK"), id_producto: modalProducto, cantidad, fecha }],
-      stock_manual: { ...d.stock_manual, [modalProducto]: cantidad },
+      conteos_stock: [...d.conteos_stock, { id: uid("CTK"), id_producto: modalConteo, cantidad, fecha }],
+      stock_manual: { ...d.stock_manual, [modalConteo]: cantidad },
     }));
     toast("Conteo registrado");
-    setModalProducto(null);
+    setModalConteo(null);
     setCantidad(0);
   }
 
-  const prodSel = data.productos.find((p) => p.id === modalProducto);
+  const gustoConteo = gustos.find((g) => g.id_base === modalConteo);
+  const filaHistorial = filas.find((f) => f.gusto.id_base === modalHistorial);
 
   return (
     <>
@@ -80,56 +104,79 @@ function ProductosTab() {
       </Card>
 
       <Card>
-        {productosOrdenados.length === 0 ? (
+        {filasOrdenadas.length === 0 ? (
           <EmptyState text="Sin productos." />
         ) : (
           <TableWrap>
             <table className="w-full">
               <thead>
                 <tr>
-                  <Th>Producto</Th>
-                  <Th>Stock manual</Th>
+                  <Th>Gusto</Th>
+                  <Th title="Producción + ventas Entregado de todas las variantes de canal, desde siempre">Stock app</Th>
+                  <Th>Conteo manual</Th>
+                  <Th title="Conteo manual − ventas Entregado desde la fecha del conteo">Stock real</Th>
+                  <Th>Diferencia</Th>
                   <Th>Estado</Th>
-                  <Th>Último conteo</Th>
                   <Th>Acciones</Th>
                 </tr>
               </thead>
               <tbody>
-                {productosOrdenados.map((p) => {
-                  const conteos = data.conteos_stock
-                    .filter((c) => c.id_producto === p.id)
-                    .sort((a, b) => new Date(b.fecha).getTime() - new Date(a.fecha).getTime());
-                  const ultimo = conteos[0];
-                  const stock = data.stock_manual[p.id] ?? 0;
-                  return (
-                    <TrHover key={p.id}>
-                      <Td main>{p.nombre}</Td>
-                      <Td>{fNum(stock, 0)}</Td>
-                      <Td>
-                        {stock <= 0 ? (
-                          <Badge color="red">En cero</Badge>
-                        ) : stock < umbralBajo ? (
-                          <Badge color="orange">Bajo</Badge>
-                        ) : (
-                          <Badge color="green">Normal</Badge>
-                        )}
-                      </Td>
-                      <Td>{ultimo ? ultimo.fecha : "—"}</Td>
-                      <Td>
+                {filasOrdenadas.map(({ gusto: g, ultimoConteo, stockApp, stockReal, diferencia }) => (
+                  <TrHover key={g.id_base}>
+                    <Td main>
+                      {g.nombre}
+                      {g.variantes.length > 1 && (
+                        <div className="mt-0.5 text-[11px] font-normal text-text3">
+                          {g.variantes
+                            .filter((v) => v.id !== g.id_base)
+                            .map((v) => v.nombre)
+                            .join(" · ")}
+                        </div>
+                      )}
+                    </Td>
+                    <Td>{fNum(stockApp, 0)}</Td>
+                    <Td>
+                      {ultimoConteo ? fNum(ultimoConteo.cantidad, 0) : "—"}
+                      {ultimoConteo && <div className="text-[11px] text-text3">{fFechaCorta(ultimoConteo.fecha)}</div>}
+                    </Td>
+                    <Td main>{fNum(stockReal, 0)}</Td>
+                    <Td>
+                      {diferencia === null ? (
+                        "—"
+                      ) : (
+                        <Badge color={diferencia === 0 ? "green" : Math.abs(diferencia) <= 2 ? "orange" : "red"}>
+                          {diferencia > 0 ? `+${fNum(diferencia, 0)}` : fNum(diferencia, 0)}
+                        </Badge>
+                      )}
+                    </Td>
+                    <Td>
+                      {stockReal <= 0 ? (
+                        <Badge color="red">En cero</Badge>
+                      ) : stockReal < umbralBajo ? (
+                        <Badge color="orange">Bajo</Badge>
+                      ) : (
+                        <Badge color="green">Normal</Badge>
+                      )}
+                    </Td>
+                    <Td>
+                      <div className="flex gap-1.5">
+                        <Button size="sm" variant="ghost" onClick={() => setModalHistorial(g.id_base)}>
+                          Historial
+                        </Button>
                         <Button
                           size="sm"
                           variant="ghost"
                           onClick={() => {
-                            setModalProducto(p.id);
-                            setCantidad(data.stock_manual[p.id] ?? 0);
+                            setModalConteo(g.id_base);
+                            setCantidad(data.stock_manual[g.id_base] ?? 0);
                           }}
                         >
                           Registrar conteo
                         </Button>
-                      </Td>
-                    </TrHover>
-                  );
-                })}
+                      </div>
+                    </Td>
+                  </TrHover>
+                ))}
               </tbody>
             </table>
           </TableWrap>
@@ -137,12 +184,12 @@ function ProductosTab() {
       </Card>
 
       <Modal
-        open={!!modalProducto}
-        onClose={() => setModalProducto(null)}
-        title={`Conteo — ${prodSel?.nombre ?? ""}`}
+        open={!!modalConteo}
+        onClose={() => setModalConteo(null)}
+        title={`Conteo — ${gustoConteo?.nombre ?? ""}`}
         footer={
           <>
-            <Button variant="ghost" onClick={() => setModalProducto(null)}>
+            <Button variant="ghost" onClick={() => setModalConteo(null)}>
               Cancelar
             </Button>
             <Button onClick={registrarConteo}>Guardar</Button>
@@ -152,6 +199,49 @@ function ProductosTab() {
         <Field label="Cantidad contada">
           <Input type="number" value={cantidad} onChange={(e) => setCantidad(Number(e.target.value))} />
         </Field>
+      </Modal>
+
+      <Modal open={!!modalHistorial} onClose={() => setModalHistorial(null)} title={`Historial — ${filaHistorial?.gusto.nombre ?? ""}`} wide>
+        {!filaHistorial || filaHistorial.movimientos.length === 0 ? (
+          <EmptyState text="Sin movimientos de producción o ventas todavía." />
+        ) : (
+          <TableWrap>
+            <table className="w-full">
+              <thead>
+                <tr>
+                  <Th>Fecha</Th>
+                  <Th>Tipo</Th>
+                  <Th>Detalle</Th>
+                  <Th>Cantidad</Th>
+                  <Th>Saldo</Th>
+                </tr>
+              </thead>
+              <tbody>
+                {(() => {
+                  let saldo = 0;
+                  return filaHistorial.movimientos.map((m, idx) => {
+                    saldo += m.cantidad;
+                    return (
+                      <TrHover key={idx}>
+                        <Td>{fFechaCorta(m.fecha)}</Td>
+                        <Td>
+                          <Badge color={m.tipo === "produccion" ? "green" : "blue"}>
+                            {m.tipo === "produccion" ? "Producción" : "Venta"}
+                          </Badge>
+                        </Td>
+                        <Td>{m.detalle}</Td>
+                        <Td main className={m.cantidad >= 0 ? "text-green" : "text-red"}>
+                          {m.cantidad >= 0 ? `+${fNum(m.cantidad, 0)}` : fNum(m.cantidad, 0)}
+                        </Td>
+                        <Td>{fNum(saldo, 0)}</Td>
+                      </TrHover>
+                    );
+                  });
+                })()}
+              </tbody>
+            </table>
+          </TableWrap>
+        )}
       </Modal>
     </>
   );
