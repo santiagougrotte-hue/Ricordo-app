@@ -5,7 +5,12 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Facultad — Gestión académica</title>
 <meta name="theme-color" content="#3454d1">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="Facultad">
+<link rel="manifest" href="manifest.json">
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Crect width='100' height='100' rx='20' fill='%233454d1'/%3E%3Cpath d='M20 38 L50 24 L80 38 L50 52 Z' fill='white'/%3E%3Crect x='30' y='48' width='40' height='7' fill='white' opacity='.85'/%3E%3Crect x='30' y='60' width='40' height='7' fill='white' opacity='.65'/%3E%3C/svg%3E">
+<link rel="apple-touch-icon" href="icons/icon-192.png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
@@ -649,27 +654,27 @@ a{color:inherit;}
 <div class="modal-backdrop" id="modal-apunte">
   <div class="modal" style="max-width:640px;">
     <h3 id="modal-apunte-title">Nuevo apunte</h3>
-    <form id="form-apunte" onsubmit="Apuntes.saveForm(event)">
+    <form id="form-apunte" onsubmit="event.preventDefault(); Apuntes.flushAutosave();">
       <input type="hidden" id="f-apunte-id">
       <div style="display:flex; gap:10px;">
-        <div class="field" style="flex:1;"><label>Materia</label><select id="f-apunte-materia"></select></div>
-        <div class="field" style="flex:1;"><label>Tema / Unidad</label><input type="text" id="f-apunte-tema" placeholder="Ej: Unidad 3"></div>
+        <div class="field" style="flex:1;"><label>Materia</label><select id="f-apunte-materia" onchange="Apuntes.scheduleAutosave()"></select></div>
+        <div class="field" style="flex:1;"><label>Tema / Unidad</label><input type="text" id="f-apunte-tema" placeholder="Ej: Unidad 3" oninput="Apuntes.scheduleAutosave()"></div>
       </div>
-      <div class="field"><label>Título</label><input type="text" id="f-apunte-titulo" required></div>
+      <div class="field"><label>Título</label><input type="text" id="f-apunte-titulo" required oninput="Apuntes.scheduleAutosave()"></div>
       <div class="field">
         <label>Contenido — admite **negrita**, *cursiva*, # títulos y listas con "- "</label>
-        <textarea id="f-apunte-contenido" style="min-height:160px;" oninput="Apuntes.updatePreview()"></textarea>
+        <textarea id="f-apunte-contenido" style="min-height:160px;" oninput="Apuntes.updatePreview(); Apuntes.scheduleAutosave();"></textarea>
       </div>
       <div class="field">
         <label>Vista previa</label>
         <div class="md-preview" id="apunte-preview" style="border:1px solid var(--border); border-radius:8px; padding:10px 12px; background:var(--surface-2); font-size:13px; max-height:150px; overflow:auto;"></div>
       </div>
-      <div class="field"><label>Tags (separados por coma)</label><input type="text" id="f-apunte-tags" placeholder="Ej: costos, parcial 1, teoría"></div>
+      <div class="field"><label>Tags (separados por coma)</label><input type="text" id="f-apunte-tags" placeholder="Ej: costos, parcial 1, teoría" oninput="Apuntes.scheduleAutosave()"></div>
+      <p class="faint small" id="apunte-autosave-status">Se guarda automáticamente mientras escribís.</p>
       <div class="modal-actions">
         <button type="button" class="btn btn-danger btn-sm" id="btn-eliminar-apunte" onclick="Apuntes.deleteCurrent()">Eliminar</button>
         <div class="modal-actions-right">
-          <button type="button" class="btn" onclick="Modal.close('modal-apunte')">Cancelar</button>
-          <button type="submit" class="btn btn-primary">Guardar</button>
+          <button type="button" class="btn" onclick="Apuntes.closeModal()">Cerrar</button>
         </div>
       </div>
     </form>
@@ -1649,17 +1654,28 @@ const Apuntes = {
     document.getElementById('f-apunte-contenido').value=a.contenido||'';
     document.getElementById('f-apunte-tags').value=(a.tags||[]).join(', ');
     document.getElementById('btn-eliminar-apunte').style.display=editing?'inline-flex':'none';
+    document.getElementById('apunte-autosave-status').textContent='Se guarda automáticamente mientras escribís.';
     Apuntes.updatePreview();
     Modal.open('modal-apunte');
   },
   updatePreview(){
     document.getElementById('apunte-preview').innerHTML = mdToHtml(document.getElementById('f-apunte-contenido').value);
   },
-  saveForm(ev){
-    ev.preventDefault();
-    const id=document.getElementById('f-apunte-id').value || uid();
+  _autosaveTimer:null,
+  scheduleAutosave(){
+    document.getElementById('apunte-autosave-status').textContent='Guardando…';
+    clearTimeout(Apuntes._autosaveTimer);
+    Apuntes._autosaveTimer=setTimeout(()=>Apuntes.autosave(), 700);
+  },
+  flushAutosave(){
+    if(Apuntes._autosaveTimer){ clearTimeout(Apuntes._autosaveTimer); Apuntes._autosaveTimer=null; Apuntes.autosave(); }
+  },
+  autosave(){
+    const statusEl=document.getElementById('apunte-autosave-status');
     const titulo=document.getElementById('f-apunte-titulo').value.trim();
-    if(!titulo){ Toast.show('Ingresá un título'); return; }
+    if(!titulo){ statusEl.textContent='Escribí un título para que se guarde.'; return; }
+    let id=document.getElementById('f-apunte-id').value;
+    if(!id){ id=uid(); document.getElementById('f-apunte-id').value=id; document.getElementById('btn-eliminar-apunte').style.display='inline-flex'; }
     const materiaId=document.getElementById('f-apunte-materia').value;
     const tema=document.getElementById('f-apunte-tema').value.trim();
     const contenido=document.getElementById('f-apunte-contenido').value;
@@ -1668,14 +1684,19 @@ const Apuntes = {
     if(existing){ Object.assign(existing,{materiaId,tema,titulo,contenido,tags,updatedAt:Date.now()}); }
     else{ State.data.apuntes.push({id,materiaId,tema,titulo,contenido,tags,updatedAt:Date.now()}); }
     State.save();
-    Modal.close('modal-apunte');
-    Toast.show('Apunte guardado ✓');
     Apuntes.render();
+    const hora=new Date().toLocaleTimeString('es-AR',{hour:'2-digit',minute:'2-digit'});
+    statusEl.textContent=`Guardado ✓ · ${hora}`;
+  },
+  closeModal(){
+    Apuntes.flushAutosave();
+    Modal.close('modal-apunte');
   },
   deleteCurrent(){
     const id=document.getElementById('f-apunte-id').value;
     if(!id) return;
     if(!confirm('¿Eliminar este apunte?')) return;
+    clearTimeout(Apuntes._autosaveTimer);
     State.data.apuntes = State.data.apuntes.filter(a=>a.id!==id);
     State.save();
     Modal.close('modal-apunte');
@@ -1868,7 +1889,12 @@ const Modal = {
   close(id){ document.getElementById(id).classList.remove('open'); }
 };
 document.querySelectorAll('.modal-backdrop').forEach(m=>{
-  m.addEventListener('click', e=>{ if(e.target===m) m.classList.remove('open'); });
+  m.addEventListener('click', e=>{
+    if(e.target===m){
+      if(m.id==='modal-apunte') Apuntes.flushAutosave();
+      m.classList.remove('open');
+    }
+  });
 });
 const Toast = {
   show(msg){
@@ -1924,6 +1950,9 @@ document.addEventListener('DOMContentLoaded', ()=>{
   Router.go('dashboard');
   NotificationsMgr.checkPending();
   setInterval(()=>NotificationsMgr.checkPending(), 30*60*1000);
+  if('serviceWorker' in navigator){
+    navigator.serviceWorker.register('sw.js').catch(()=>{});
+  }
 });
 </script>
 </body>
