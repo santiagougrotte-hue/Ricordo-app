@@ -987,17 +987,22 @@ const Program = {
     const wInPhase = ((week-1)%4)+1;
     const deload = this.isDeload(week);
     const phase = this.phaseOf(week).id;
-    let reps=6, rpe=7, load=72;
-    if(phase===2){ reps=5; rpe=7.5; load=76; }
-    if(phase===3){ reps=3; rpe=8.5; load=85; }
-    load = load + (wInPhase-1)*3;
-    if(deload){ load -= 10; rpe = Math.max(5, rpe-1.5); reps = Math.max(3, reps-1); }
-    return { sets: deload?2:3, reps, rpe: Math.round(rpe*10)/10, load: Math.round(load) };
+    // Fútbol: 80-90% 1RM, concéntrico explosivo, RIR 2→1 (RPE 8→9)
+    // S1: RIR 2 (RPE 8) · S2-S3: RIR 1 (RPE 9) · Sin fallo habitual
+    let reps='5-6', load=80;
+    if(phase===2){ reps='4-5'; load=83; }
+    if(phase===3){ reps='3-4'; load=87; }
+    load = load + (wInPhase-1)*2;            // +2% por semana dentro de la fase
+    if(deload){
+      return { sets:2, reps: phase===3?'3':phase===2?'4':'5', rpe:'6-7', load:Math.round(load)-12 };
+    }
+    return { sets:3, reps, rpe:'8→9', load:Math.round(load) };
   },
-  // Fuerza secundaria: 2 series, levemente menos intensa que la principal
+  // Fuerza secundaria: 2 series · RPE 8 fijo (RIR 2) para proteger recuperación
   strengthSecondary(week){
     const p = this.strengthPrincipal(week);
-    return { sets:2, reps: p.reps+2, rpe: Math.max(5, Math.round((p.rpe-1)*10)/10), load: Math.max(50, p.load-10) };
+    const deload = this.isDeload(week);
+    return { sets:2, reps: p.reps, rpe: deload?'6':'8', load: Math.max(60, p.load-8) };
   },
   // Potencia (oly-derivado / salto cargado): 2 series
   powerScheme(week){
@@ -1052,7 +1057,7 @@ const Program = {
           items: [ mkEx(oly, power.sets, power.reps, '2-3 min', power.rpe, power.load+'%') ] },
         { n:5, name:'Fuerza', dur:'20 min', goal:'Fuerza máxima — patrón de sentadilla', trackProgression:true,
           items: [
-            mkEx(mainLift, principal.sets, principal.reps, '2-3 min', principal.rpe, principal.load+'%'),
+            mkEx(mainLift, principal.sets, principal.reps, '3-4 min', principal.rpe, principal.load+'%'),
             mkEx('bulgarian_split_squat', secondary.sets, secondary.reps, '90s', secondary.rpe, secondary.load+'%')
           ] },
         { n:6, name:'Core — Anti-rotación · Anti-extensión · Flexión', dur:'6 min', goal:'Anti-rotación + anti-extensión + flexión de tronco',
@@ -1087,7 +1092,7 @@ const Program = {
           ] },
         { n:4, name:'Fuerza', dur:'20 min', goal:'Fuerza máxima — empuje y tracción horizontal', trackProgression:true,
           items: [
-            mkEx('bench_press', principal.sets, principal.reps, '2-3 min', principal.rpe, principal.load+'%'),
+            mkEx('bench_press', principal.sets, principal.reps, '3-4 min', principal.rpe, principal.load+'%'),
             mkEx('pull_up', secondary.sets, secondary.reps, '90s', secondary.rpe, secondary.load+'%')
           ] },
         { n:5, name:'Core — Estabilidad · Anti-inclinación · Rotación', dur:'6 min', goal:'Estabilidad global + anti-inclinación lateral + rotación estable',
@@ -1132,7 +1137,7 @@ const Program = {
           items: [ mkEx(oly2, power.sets, power.reps, '2-3 min', power.rpe, power.load+'%') ] },
         { n:5, name:'Fuerza', dur:'20 min', goal:'Fuerza máxima — bisagra de cadera + patrón unilateral', trackProgression:true,
           items: [
-            mkEx(hingeLift, principal.sets, principal.reps, '2-3 min', principal.rpe, principal.load+'%'),
+            mkEx(hingeLift, principal.sets, principal.reps, '3-4 min', principal.rpe, principal.load+'%'),
             mkEx('bulgarian_split_squat', secondary.sets, secondary.reps, '90s', secondary.rpe, secondary.load+'%')
           ] },
         { n:6, name:'Core — Anti-extensión · Flexión', dur:'6 min', goal:'Anti-extensión + flexión de tronco — sin repetir anti-rotación del Lunes',
@@ -1186,7 +1191,7 @@ const Dashboard = {
     const strength = Program.strengthPrincipal(week);
     document.getElementById('hero-load').textContent = strength.load+'% 1RM';
     const deload = Program.isDeload(week);
-    document.getElementById('hero-recovery').textContent = deload? 'Descarga' : (strength.rpe>=8.3? 'Exigente':'Óptima');
+    document.getElementById('hero-recovery').textContent = deload? 'Descarga' : (strength.load>=87? 'Exigente':'Óptima');
 
     const todayKey = d=>Object.keys(s.wellness).sort().reverse()[0];
     const lastDate = Object.keys(s.wellness).sort().reverse()[0];
