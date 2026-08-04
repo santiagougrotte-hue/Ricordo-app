@@ -2,9 +2,11 @@
 
 import React, { useState } from "react";
 import { useEntityCrud } from "@/lib/useEntity";
+import { useStore } from "@/lib/store";
+import { usePeriod } from "@/lib/period";
 import { useToast } from "@/lib/toast";
 import { uid } from "@/lib/id";
-import { fARS } from "@/lib/calc";
+import { fARS, totalAmortizacionesPeriodo } from "@/lib/calc";
 import {
   PageHeader,
   Button,
@@ -31,12 +33,18 @@ function emptyForm() {
 
 export function CostosFijos() {
   const { items, add, update, remove } = useEntityCrud<CostoFijo>("costos_fijos");
+  const { data } = useStore();
+  const { mes, anio } = usePeriod();
   const { toast } = useToast();
   const [modalOpen, setModalOpen] = useState(false);
   const [editing, setEditing] = useState<string | null>(null);
   const [form, setForm] = useState(emptyForm());
 
   const totalActivos = items.filter((c) => c.activo).reduce((a, c) => a + c.monto, 0);
+  // La cuota de amortizaciones activas del período se suma acá para que este total coincida
+  // con "Costos Fijos Totales" del EERR/Posición/PE Vivo/Costeo (que ya la incluían).
+  const totalAmortizaciones = totalAmortizacionesPeriodo(data, mes, anio);
+  const totalMensual = totalActivos + totalAmortizaciones;
 
   function openNew() {
     setEditing(null);
@@ -64,11 +72,16 @@ export function CostosFijos() {
       <PageHeader title="Costos Fijos" sub="Costos recurrentes mensuales" right={<Button onClick={openNew}>+ Nuevo</Button>} />
 
       <StatGrid>
-        <KpiCard label="Total mensual (activos)" value={fARS(totalActivos)} color="gold" />
+        <KpiCard
+          label="Total mensual (activos)"
+          value={fARS(totalMensual)}
+          sub={totalAmortizaciones > 0 ? `Incluye ${fARS(totalAmortizaciones)} de amortizaciones` : undefined}
+          color="gold"
+        />
         <KpiCard label="Cantidad de conceptos" value={items.length} color="blue" />
       </StatGrid>
 
-      <Card>
+      <Card color="red">
         {items.length === 0 ? (
           <EmptyState text="Sin costos fijos registrados." />
         ) : (

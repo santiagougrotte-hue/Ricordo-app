@@ -13,6 +13,17 @@ export interface Ingrediente {
   precio_ref: number;
   precio_vigente: number | null;
   seguimiento_stock: boolean;
+  stock_minimo?: number;
+  /** Solo tiene sentido si el insumo se compra por unidad pero participa por peso en alguna
+   * receta (ej. huevo ≈ 50g) — usado por Planificación de Producción para escalar por peso. */
+  peso_unitario_g?: number;
+}
+
+export interface Adjunto {
+  nombre: string;
+  tipo: string;
+  tamano: number;
+  data: string; // data URL (base64)
 }
 
 export interface Producto {
@@ -22,6 +33,53 @@ export interface Producto {
   categoria?: string;
   precio_venta: number;
   activo: boolean;
+  foto?: Adjunto;
+  /** Gramaje por caja para Planificación de Producción — derivado inicialmente de la receta
+   * clasificada (masa/relleno) y editable. Editarlo reescala proporcionalmente las líneas de
+   * receta de ese componente, por eso siempre pasa por confirmación (cambia costo/margen). */
+  gramos_masa_por_caja?: number;
+  gramos_relleno_por_caja?: number;
+  /** Receta por unidad de producción (la pieza física: un raviol, un sorrentino). Solo tiene
+   * sentido si este producto actúa como "producto base" de su familia — nunca se infiere de
+   * las recetas viejas por variante, se carga a mano. */
+  receta_masa_unidad?: RecetaUnidadLinea[];
+  receta_relleno_unidad?: RecetaUnidadLinea[];
+  /** Cuántas unidades del producto base entran en este paquete — el campo que activa la
+   * migración de este producto de venta al modelo de receta derivada. Se carga a mano. */
+  unidades_por_paquete?: number;
+  /** Canal de venta de esta presentación (minorista, mayorista) — propio del producto de venta,
+   * no del producto base. */
+  canal?: Canal;
+  /** Cosas que se agregan al paquete con una cantidad propia, independiente de
+   * unidades_por_paquete (ej. una porción de salsa, sin importar cuántos raviolis tenga el
+   * paquete) — apuntan a otro producto base para no duplicar su receta acá. */
+  complementos?: ComplementoVenta[];
+  /** Overrides puntuales de la receta derivada (ej. "lleva más aceite") — cada uno reemplaza
+   * la cantidad calculada de esa línea, nunca se suma. Deben verse marcados en la pantalla del
+   * producto y listarse en el panel global de excepciones. */
+  excepciones?: ExcepcionLinea[];
+}
+
+export interface RecetaUnidadLinea {
+  id: string;
+  id_ingrediente: string;
+  cantidad: number;
+}
+
+export interface ComplementoVenta {
+  id: string;
+  id_base: string;
+  cantidad: number;
+}
+
+export type GrupoRecetaDerivada = "masa" | "relleno" | "complementos" | "packaging";
+
+export interface ExcepcionLinea {
+  id: string;
+  grupo: GrupoRecetaDerivada;
+  tipo: "Ingrediente" | "Packaging";
+  concepto: string;
+  cantidad: number;
 }
 
 export interface Cliente {
@@ -33,12 +91,17 @@ export interface Cliente {
   email?: string;
 }
 
+export type ComponenteReceta = "masa" | "relleno" | "packaging";
+
 export interface RecetaLinea {
   id: string;
   id_producto: string;
   tipo: TipoRecetaLinea;
   concepto: string; // id_ingrediente | id_packaging | id_costo_fijo
   cantidad: number;
+  /** A qué parte del producto pertenece este renglón (Planificación de Producción). Opcional:
+   * el costeo (calcCosto) nunca lee este campo, solo lo usa el módulo de planificación. */
+  componente?: ComponenteReceta;
 }
 
 export interface Packaging {
@@ -67,6 +130,7 @@ export interface Pedido {
   costo_envio: number;
   metodo_pago?: string;
   notas?: string;
+  adjunto?: Adjunto;
 }
 
 export interface Produccion {
@@ -101,6 +165,7 @@ export interface Compra {
   lineas: CompraLineaIngrediente[];
   lineasPkg: CompraLineaPackaging[];
   registrar_caja: boolean;
+  adjunto?: Adjunto;
 }
 
 export interface CostoFijo {
@@ -121,6 +186,14 @@ export interface CostoIndirecto {
   anio: number;
   categoria: string;
   tipo_costo: TipoCosto;
+}
+
+export interface Amortizacion {
+  id: string;
+  nombre: string;
+  precio_total: number;
+  fecha_inicio: string;
+  meses_totales: number;
 }
 
 export interface GastoOperativo {
@@ -165,6 +238,7 @@ export interface Proveedor {
   telefono?: string;
   email?: string;
   notas?: string;
+  documento?: Adjunto;
 }
 
 export interface HistorialPrecio {
@@ -174,6 +248,7 @@ export interface HistorialPrecio {
   precio_anterior: number;
   precio_nuevo: number;
   fecha: string;
+  origen?: string;
 }
 
 export interface ConteoIngrediente {
@@ -248,6 +323,56 @@ export interface ConfigEnvios {
   precio_envio_fijo: number;
 }
 
+/** Plan de producción cargado a mano por gusto (producto base) para un mes de referencia —
+ * queda en historial (Bloque 2 de Planificación): se puede consultar en septiembre qué se
+ * planificó en agosto. Un gusto agrupa todas sus variantes de canal (minorista, mayorista,
+ * etc.), que comparten el mismo lote físico de producción. */
+export interface PlanProduccionMes {
+  id: string;
+  mes: number;
+  anio: number;
+  id_base: string;
+  cajas_mes: number;
+  cajas_semana: number;
+  fecha_guardado: string;
+}
+
+export interface ConfigPlanificacion {
+  /** Ventana de meses hacia atrás para el promedio de ventas del Bloque 1. */
+  ventana_meses_referencia: number;
+  /** % de desvío entre cajas_semana×4,33 y cajas_mes que dispara el aviso ámbar del Bloque 2. */
+  umbral_desvio_semana_pct: number;
+}
+
+/** Borrador armado desde "Generar orden de compra" (Planificación) para que Compras lo
+ * precargue en su modal de Nueva Compra — el usuario siempre revisa y confirma ahí, esto
+ * nunca escribe una compra por sí solo. Se limpia apenas Compras lo consume. */
+export interface BorradorCompra {
+  descripcion: string;
+  lineas: { id_ingrediente: string; cantidad: number; precio_unitario: number }[];
+}
+
+export interface IaLogEntry {
+  fecha: string;
+  funcion: string;
+  tokens_entrada: number;
+  tokens_salida: number;
+}
+
+export type SeveridadPulso = "alta" | "media" | "info";
+
+export interface ObservacionPulso {
+  titulo: string;
+  texto: string;
+  severidad: SeveridadPulso;
+  modulo: string;
+}
+
+export interface PulsoCache {
+  fecha: string;
+  observaciones: ObservacionPulso[];
+}
+
 export interface RicordoData {
   ingredientes: Ingrediente[];
   productos: Producto[];
@@ -259,6 +384,7 @@ export interface RicordoData {
   compras: Compra[];
   costos_fijos: CostoFijo[];
   costos_indirectos: CostoIndirecto[];
+  amortizaciones: Amortizacion[];
   gastos_operativos: GastoOperativo[];
   gastos_inversion: GastoInversion[];
   caja_movimientos: CajaMovimiento[];
@@ -276,11 +402,23 @@ export interface RicordoData {
   saldo_compras_anterior: number;
   fecha_corte_cmv: string | null;
   fecha_corte_compras: string | null;
+  /** id_detalle de pedidos que se revisaron en la conciliación de Caja y se confirmaron
+   * como realmente sin cobrar (no un error) — se excluyen de la lista de discrepancias. */
+  conciliacion_ignorados: string[];
+  umbral_dias_mayorista_riesgo: number;
+  umbral_compras_consumo_amber: number;
+  umbral_compras_consumo_red: number;
+  umbral_stock_bajo_producto: number;
   af_elasticidades: Record<string, AfElasticidad>;
   af_cap_trabajo: AfCapTrabajo;
   af_payback_items: AfPaybackItem[];
   caja_inteligente: CajaInteligente;
   config_envios: ConfigEnvios;
+  ia_log: IaLogEntry[];
+  pulso: PulsoCache | null;
+  plan_produccion: PlanProduccionMes[];
+  config_planificacion: ConfigPlanificacion;
+  borrador_compra_pendiente: BorradorCompra | null;
 }
 
 export const STORAGE_KEY = "ricordo_data";
@@ -297,6 +435,7 @@ export function emptyData(): RicordoData {
     compras: [],
     costos_fijos: [],
     costos_indirectos: [],
+    amortizaciones: [],
     gastos_operativos: [],
     gastos_inversion: [],
     caja_movimientos: [],
@@ -314,6 +453,11 @@ export function emptyData(): RicordoData {
     saldo_compras_anterior: 0,
     fecha_corte_cmv: null,
     fecha_corte_compras: null,
+    conciliacion_ignorados: [],
+    umbral_dias_mayorista_riesgo: 45,
+    umbral_compras_consumo_amber: 20,
+    umbral_compras_consumo_red: 40,
+    umbral_stock_bajo_producto: 10,
     af_elasticidades: {},
     af_cap_trabajo: { ac_extra: [], pc_items: [] },
     af_payback_items: [],
@@ -332,5 +476,10 @@ export function emptyData(): RicordoData {
       margen_exacto: 55,
       precio_envio_fijo: 2000,
     },
+    ia_log: [],
+    pulso: null,
+    plan_produccion: [],
+    config_planificacion: { ventana_meses_referencia: 3, umbral_desvio_semana_pct: 15 },
+    borrador_compra_pendiente: null,
   };
 }

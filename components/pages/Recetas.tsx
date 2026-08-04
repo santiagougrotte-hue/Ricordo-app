@@ -4,7 +4,7 @@ import React, { useMemo, useState } from "react";
 import { useStore } from "@/lib/store";
 import { useToast } from "@/lib/toast";
 import { uid } from "@/lib/id";
-import { calcCosto, fARS, fPct, pvr } from "@/lib/calc";
+import { calcCosto, estaMigrado, fARS, fPct, pvr } from "@/lib/calc";
 import {
   PageHeader,
   Button,
@@ -18,7 +18,9 @@ import {
   Select,
   Input,
   InfoRow,
+  Alert,
 } from "@/components/ui";
+import { Bar } from "@/components/ds";
 import type { RecetaLinea, TipoRecetaLinea, Ingrediente, Packaging, CostoFijo } from "@/lib/types";
 
 export function Recetas() {
@@ -28,6 +30,7 @@ export function Recetas() {
   const [tipo, setTipo] = useState<TipoRecetaLinea>("Ingrediente");
   const [concepto, setConcepto] = useState("");
   const [cantidad, setCantidad] = useState(0);
+  const [editingId, setEditingId] = useState<string | null>(null);
 
   const lineas = useMemo(
     () => data.recetas.filter((r) => r.id_producto === idProducto),
@@ -36,6 +39,7 @@ export function Recetas() {
   const producto = data.productos.find((p) => p.id === idProducto);
   const costo = idProducto ? calcCosto(data, idProducto) : 0;
   const margen = producto && producto.precio_venta > 0 ? ((producto.precio_venta - costo) / producto.precio_venta) * 100 : 0;
+  const migrado = estaMigrado(data, producto);
 
   const opcionesConcepto =
     tipo === "Ingrediente" ? data.ingredientes : tipo === "Packaging" ? data.packaging : data.costos_fijos;
@@ -52,29 +56,58 @@ export function Recetas() {
     return r.cantidad * (data.costos_fijos.find((c) => c.id === r.concepto)?.monto ?? 0);
   }
 
-  function agregar() {
+  function limpiarForm() {
+    setEditingId(null);
+    setTipo("Ingrediente");
+    setConcepto("");
+    setCantidad(0);
+  }
+
+  function editar(r: RecetaLinea) {
+    setEditingId(r.id);
+    setTipo(r.tipo);
+    setConcepto(r.concepto);
+    setCantidad(r.cantidad);
+  }
+
+  function guardar() {
     if (!idProducto || !concepto || cantidad <= 0) {
       toast("Completá concepto y cantidad", "error");
       return;
     }
-    const nueva: RecetaLinea = { id: uid("REC"), id_producto: idProducto, tipo, concepto, cantidad };
-    setData((d) => ({ ...d, recetas: [...d.recetas, nueva] }));
-    setConcepto("");
-    setCantidad(0);
-    toast("Línea agregada");
+    if (editingId) {
+      setData((d) => ({
+        ...d,
+        recetas: d.recetas.map((r) => (r.id === editingId ? { ...r, tipo, concepto, cantidad } : r)),
+      }));
+      toast("Línea actualizada");
+    } else {
+      const nueva: RecetaLinea = { id: uid("REC"), id_producto: idProducto, tipo, concepto, cantidad };
+      setData((d) => ({ ...d, recetas: [...d.recetas, nueva] }));
+      toast("Línea agregada");
+    }
+    limpiarForm();
   }
 
   function quitar(id: string) {
     setData((d) => ({ ...d, recetas: d.recetas.filter((r) => r.id !== id) }));
+    if (editingId === id) limpiarForm();
   }
 
   return (
     <div>
       <PageHeader title="Recetas" sub="Composición de cada producto y su costo" />
 
-      <Card className="mb-4">
+      <Card className="mb-4" color="purple">
         <Field label="Producto">
-          <Select value={idProducto} onChange={(e) => setIdProducto(e.target.value)} style={{ maxWidth: 340 }}>
+          <Select
+            value={idProducto}
+            onChange={(e) => {
+              setIdProducto(e.target.value);
+              limpiarForm();
+            }}
+            style={{ maxWidth: 340 }}
+          >
             <option value="">Seleccionar…</option>
             {data.productos.map((p) => (
               <option key={p.id} value={p.id}>
@@ -89,8 +122,15 @@ export function Recetas() {
         <EmptyState text="Elegí un producto para ver y editar su receta." />
       ) : (
         <>
-          <Card title="Agregar línea" className="mb-4">
-            <div className="grid grid-cols-1 gap-3 sm:grid-cols-[140px_1fr_120px_100px]">
+          {migrado && (
+            <Alert kind="info">
+              Este producto está migrado al modelo de producto base: su masa y relleno se calculan solos desde{" "}
+              {data.productos.find((p) => p.id === producto?.id_base)?.nombre ?? "su producto base"} (ver Productos → Venta). Las
+              líneas de Ingrediente de acá abajo ya no se usan para el costo — solo Packaging y Costo Fijo siguen aplicando.
+            </Alert>
+          )}
+          <Card title={editingId ? "Editar línea" : "Agregar línea"} className="mb-4" color="purple">
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-[140px_1fr_120px_auto]">
               <Field label="Tipo">
                 <Select
                   value={tipo}
@@ -117,15 +157,20 @@ export function Recetas() {
               <Field label="Cantidad">
                 <Input type="number" value={cantidad} onChange={(e) => setCantidad(Number(e.target.value))} />
               </Field>
-              <div className="flex items-end">
-                <Button onClick={agregar} className="w-full justify-center">
-                  + Agregar
+              <div className="flex items-end gap-2">
+                {editingId && (
+                  <Button variant="ghost" onClick={limpiarForm}>
+                    Cancelar
+                  </Button>
+                )}
+                <Button onClick={guardar} className="flex-1 justify-center">
+                  {editingId ? "Guardar cambios" : "+ Agregar"}
                 </Button>
               </div>
             </div>
           </Card>
 
-          <Card>
+          <Card color="purple">
             {lineas.length === 0 ? (
               <EmptyState text="Sin líneas de receta." />
             ) : (
@@ -142,15 +187,20 @@ export function Recetas() {
                   </thead>
                   <tbody>
                     {lineas.map((r) => (
-                      <TrHover key={r.id}>
+                      <TrHover key={r.id} className={editingId === r.id ? "bg-accent/10" : ""}>
                         <Td>{r.tipo}</Td>
                         <Td main>{nombreConcepto(r)}</Td>
                         <Td>{r.cantidad}</Td>
                         <Td>{fARS(costoLinea(r))}</Td>
                         <Td>
-                          <Button size="sm" variant="danger" onClick={() => quitar(r.id)}>
-                            Quitar
-                          </Button>
+                          <div className="flex gap-1.5">
+                            <Button size="sm" variant="ghost" onClick={() => editar(r)}>
+                              Editar
+                            </Button>
+                            <Button size="sm" variant="danger" onClick={() => quitar(r.id)}>
+                              Quitar
+                            </Button>
+                          </div>
                         </Td>
                       </TrHover>
                     ))}
@@ -162,6 +212,9 @@ export function Recetas() {
               <InfoRow label="Costo total de receta" value={fARS(costo)} color="gold" />
               <InfoRow label="Precio de venta" value={fARS(producto?.precio_venta ?? 0)} />
               <InfoRow label="Margen" value={fPct(margen)} color={margen >= 30 ? "green" : "red"} />
+              <div className="mt-2">
+                <Bar pct={Math.max(0, margen)} color={margen >= 30 ? "green" : "red"} />
+              </div>
             </div>
           </Card>
         </>

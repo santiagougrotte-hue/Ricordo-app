@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useEffect } from "react";
+import { X } from "lucide-react";
 
 export function Modal({
   open,
@@ -34,7 +35,7 @@ export function Modal({
       onClick={onClose}
     >
       <div
-        className={`max-h-[90vh] w-full overflow-y-auto rounded-xl border border-border bg-surface p-6 ${
+        className={`max-h-[90vh] w-full overflow-y-auto rounded-xl border border-border bg-surface p-6 shadow-[var(--shadow-modal)] ${
           wide ? "max-w-[860px]" : "max-w-[640px]"
         }`}
         onClick={(e) => e.stopPropagation()}
@@ -43,10 +44,10 @@ export function Modal({
           <h3 className="text-[17px] font-semibold">{title}</h3>
           <button
             onClick={onClose}
-            className="p-1 text-xl leading-none text-text3 hover:text-text"
+            className="rounded-md p-1 text-text3 hover:bg-surface2 hover:text-text"
             aria-label="Cerrar"
           >
-            ×
+            <X className="h-5 w-5" />
           </button>
         </div>
         {children}

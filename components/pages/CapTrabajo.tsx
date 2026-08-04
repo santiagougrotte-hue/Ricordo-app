@@ -3,7 +3,7 @@
 import React, { useState } from "react";
 import { useStore } from "@/lib/store";
 import { fARS, saldoCaja, valorStockIngredientes } from "@/lib/calc";
-import { Card, PageHeader, StatGrid, KpiCard, Field, Input, Button, TableWrap, Th, Td, TrHover, EmptyState, InfoRow } from "@/components/ui";
+import { Card, PageHeader, StatGrid, KpiCard, Field, Input, Button, TableWrap, Th, Td, TrHover, EmptyState, InfoRow, Semaforo } from "@/components/ui";
 
 export function CapTrabajo() {
   const { data, setData } = useStore();
@@ -23,7 +23,7 @@ export function CapTrabajo() {
   const capitalTrabajo = activoCorriente - pasivoCorriente;
   const ratio = pasivoCorriente > 0 ? activoCorriente / pasivoCorriente : activoCorriente > 0 ? Infinity : 0;
 
-  const semaforo = ratio >= 1.5 || pasivoCorriente === 0 ? "🟢" : ratio >= 1 ? "🟡" : "🔴";
+  const nivelSemaforo = ratio >= 1.5 || pasivoCorriente === 0 ? "green" : ratio >= 1 ? "orange" : "red";
 
   function addAC() {
     if (!nombreAC || montoAC <= 0) return;
@@ -52,7 +52,11 @@ export function CapTrabajo() {
         <KpiCard label="Activo corriente" value={fARS(activoCorriente)} color="blue" />
         <KpiCard label="Pasivo corriente" value={fARS(pasivoCorriente)} color="red" />
         <KpiCard label="Capital de trabajo" value={fARS(capitalTrabajo)} color={capitalTrabajo >= 0 ? "green" : "red"} />
-        <KpiCard label="Semáforo" value={semaforo} sub={`Ratio ${ratio === Infinity ? "∞" : ratio.toFixed(2)}`} />
+        <KpiCard
+          label="Semáforo"
+          value={<Semaforo nivel={nivelSemaforo} />}
+          sub={`Ratio ${ratio === Infinity ? "∞" : ratio.toFixed(2)}`}
+        />
       </StatGrid>
 
       <Card title="Detalle Activo Corriente" className="mb-4">

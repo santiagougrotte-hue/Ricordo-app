@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState } from "react";
+import { ChevronLeft, ChevronRight, ChevronDown, ChevronUp, X, LogOut } from "lucide-react";
 import { NAV } from "@/lib/nav";
 import { useRouter } from "@/lib/nav-context";
 import { useAuth } from "@/lib/auth-context";
@@ -18,7 +19,7 @@ export function Sidebar() {
     <>
       {mobileOpen && (
         <div
-          className="fixed inset-0 z-[99] bg-black/60 md:hidden"
+          className="fixed inset-0 z-[99] bg-black/40 backdrop-blur-[1px] md:hidden"
           onClick={() => setMobileOpen(false)}
         />
       )}
@@ -30,15 +31,15 @@ export function Sidebar() {
         <button
           onClick={() => setCollapsed(!collapsed)}
           title="Colapsar menú"
-          className="absolute top-2.5 right-[-14px] z-[101] hidden h-7 w-7 items-center justify-center rounded-full border border-border bg-surface text-xs text-text2 hover:bg-surface2 hover:text-text md:flex"
+          className="absolute top-2.5 right-[-14px] z-[101] hidden h-7 w-7 items-center justify-center rounded-full border border-border bg-surface text-text2 shadow-[var(--shadow-card)] hover:bg-surface2 hover:text-text md:flex"
         >
-          {collapsed ? "▶" : "◀"}
+          {collapsed ? <ChevronRight className="h-3.5 w-3.5" /> : <ChevronLeft className="h-3.5 w-3.5" />}
         </button>
         <button
           onClick={() => setMobileOpen(false)}
-          className="absolute top-3 right-3 flex h-7 w-7 items-center justify-center rounded-full border border-border bg-surface text-xs text-text2 md:hidden"
+          className="absolute top-3 right-3 flex h-7 w-7 items-center justify-center rounded-full border border-border bg-surface text-text2 md:hidden"
         >
-          ✕
+          <X className="h-4 w-4" />
         </button>
 
         <div className="border-b border-border px-[18px] pb-3.5 pt-5">
@@ -62,7 +63,11 @@ export function Sidebar() {
                   }`}
                 >
                   <span>{group.group}</span>
-                  <span className="text-[9px]">{closedGroups[group.group] ? "▸" : "▾"}</span>
+                  {closedGroups[group.group] ? (
+                    <ChevronUp className="h-3 w-3" />
+                  ) : (
+                    <ChevronDown className="h-3 w-3" />
+                  )}
                 </div>
               )}
               {(!closedGroups[group.group] || collapsed) &&
@@ -77,7 +82,7 @@ export function Sidebar() {
                         : "border-transparent text-text2 hover:bg-surface2 hover:text-text"
                     }`}
                   >
-                    <span className="w-4 shrink-0 text-center text-sm">{item.icon}</span>
+                    <item.icon className="h-[17px] w-[17px] shrink-0 stroke-[1.75]" />
                     <span className={collapsed ? "md:hidden" : ""}>{item.label}</span>
                   </div>
                 ))}
@@ -91,7 +96,7 @@ export function Sidebar() {
               onClick={() => signOut()}
               className="flex w-full items-center gap-2.5 rounded-md px-3.5 py-2 text-[12.5px] text-text2 hover:bg-surface2 hover:text-text"
             >
-              <span className="w-4 shrink-0 text-center text-sm">⏻</span>
+              <LogOut className="h-[17px] w-[17px] shrink-0 stroke-[1.75]" />
               <span className={collapsed ? "md:hidden" : ""}>Cerrar sesión</span>
             </button>
           </div>

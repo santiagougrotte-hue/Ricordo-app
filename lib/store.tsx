@@ -53,6 +53,9 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
   const [syncStatus, setSyncStatus] = useState<SyncStatus>(supabaseConfigured ? "syncing" : "local");
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const lastPushed = useRef<string | null>(null);
+  // True from the moment a local edit happens until it's confirmed pushed to Supabase.
+  // Guards against a lagging realtime echo of an older save overwriting a newer local edit.
+  const pendingSave = useRef(false);
 
   // Initial load: local cache first for instant paint, then Supabase (source of truth).
   useEffect(() => {
@@ -101,6 +104,9 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
         "postgres_changes",
         { event: "UPDATE", schema: "public", table: "app_state", filter: `id=eq.${ROW_ID}` },
         (payload) => {
+          // A local edit is queued or in flight: our own upcoming push will supersede
+          // this event, so applying it now would revert the not-yet-saved local change.
+          if (pendingSave.current) return;
           const incoming = payload.new?.data as RicordoData | undefined;
           if (!incoming) return;
           const serialized = JSON.stringify(incoming);
@@ -120,19 +126,22 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     if (!ready) return;
+    pendingSave.current = true;
     if (saveTimer.current) clearTimeout(saveTimer.current);
     saveTimer.current = setTimeout(async () => {
       saveToLocalStorage(data);
       if (supabaseConfigured && supabase) {
         const serialized = JSON.stringify(data);
-        if (serialized === lastPushed.current) return;
-        lastPushed.current = serialized;
-        setSyncStatus("syncing");
-        const { error } = await supabase
-          .from("app_state")
-          .upsert({ id: ROW_ID, data, updated_at: new Date().toISOString() });
-        setSyncStatus(error ? "error" : "synced");
+        if (serialized !== lastPushed.current) {
+          lastPushed.current = serialized;
+          setSyncStatus("syncing");
+          const { error } = await supabase
+            .from("app_state")
+            .upsert({ id: ROW_ID, data, updated_at: new Date().toISOString() });
+          setSyncStatus(error ? "error" : "synced");
+        }
       }
+      pendingSave.current = false;
     }, 400);
     return () => {
       if (saveTimer.current) clearTimeout(saveTimer.current);

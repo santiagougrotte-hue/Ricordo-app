@@ -1,28 +1,87 @@
 @import "tailwindcss";
 
+/* Sistema de diseño Ricordo — tema oscuro por defecto (Parte A, Fase 1).
+   Tokens extraídos del prototipo (ricordo-ui.html no llegó a subirse; se
+   trabajó directo del detalle de colores/tipografía/radios provisto). */
 :root {
-  --bg: #0d0d1a;
-  --surface: #13131f;
-  --surface2: #1a1a2e;
-  --surface3: #22223a;
-  --border: #2a2a45;
-  --border2: #363660;
-  --accent: #e8c97a;
-  --accent2: #f0d99a;
-  --accent-dim: rgba(232, 201, 122, 0.12);
-  --green: #4ec994;
-  --green-dim: rgba(78, 201, 148, 0.12);
-  --red: #e05c5c;
-  --red-dim: rgba(224, 92, 92, 0.12);
-  --blue: #5c9ae0;
-  --blue-dim: rgba(92, 154, 224, 0.12);
-  --orange: #e08c5c;
-  --orange-dim: rgba(224, 140, 92, 0.12);
-  --purple: #9c6fe0;
-  --purple-dim: rgba(156, 111, 224, 0.12);
-  --text: #f0ead6;
-  --text2: #9a9080;
-  --text3: #5a5560;
+  --bg: #0a0c11;
+  --surface: #141924;
+  --surface2: #1b2130;
+  --surface3: #232b40;
+  --border: rgba(255, 255, 255, 0.08);
+  --border2: rgba(255, 255, 255, 0.14);
+  --accent: #8b5cf6;
+  --accent2: #a78bfa;
+  --accent-dim: rgba(139, 92, 246, 0.14);
+  --green: #2dd4a7;
+  --green-dim: rgba(45, 212, 167, 0.14);
+  --red: #f5566e;
+  --red-dim: rgba(245, 86, 110, 0.14);
+  --blue: #3b82f6;
+  --blue-dim: rgba(59, 130, 246, 0.14);
+  --orange: #f5a524;
+  --orange-dim: rgba(245, 165, 36, 0.14);
+  --purple: #8b5cf6;
+  --purple-dim: rgba(139, 92, 246, 0.14);
+  --text: #f2f5fa;
+  --text2: #9aa6bc;
+  --text3: #5f6b82;
+  --shadow-card: none;
+  --shadow-modal: 0 12px 40px rgba(0, 0, 0, 0.5);
+
+  /* Radios (Parte A) */
+  --radius-card: 22px;
+  --radius-icon: 19px;
+  --radius-pill: 16px;
+  --radius-bar: 99px;
+
+  /* Tipografía de números grandes (Parte A) */
+  --num-weight: 750;
+  --num-tracking: -1.6px;
+
+  /* Colores por módulo — usados al 13% (fondo del ícono circular), 27% (borde)
+     y sólido (trazo), en el ModuleRail y donde se necesite identificar el módulo. */
+  --mod-ventas: #2dd4a7;
+  --mod-productos: #f97316;
+  --mod-stock: #3b82f6;
+  --mod-produccion: #ec4899;
+  --mod-caja: #84cc16;
+  --mod-recetas: #8b5cf6;
+  --mod-clientes: #14b8a6;
+  --mod-compras: #f5a524;
+  --mod-costos: #f5566e;
+  --mod-proveedores: #6366f1;
+  --mod-envios: #0ea5e9;
+  --mod-reportes: #a855f7;
+}
+
+/* Tema claro — el default anterior, guardado para cuando se conecte un
+   switch (set data-theme="light" en <html> para activarlo; sin UI todavía). */
+:root[data-theme="light"] {
+  --bg: #f6f7f9;
+  --surface: #ffffff;
+  --surface2: #f2f3f6;
+  --surface3: #e9ebef;
+  --border: #e3e5ea;
+  --border2: #cdd1d9;
+  --accent: #c8933e;
+  --accent2: #b47f2f;
+  --accent-dim: rgba(200, 147, 62, 0.12);
+  --green: #16a34a;
+  --green-dim: rgba(22, 163, 74, 0.1);
+  --red: #dc2626;
+  --red-dim: rgba(220, 38, 38, 0.1);
+  --blue: #2563eb;
+  --blue-dim: rgba(37, 99, 235, 0.1);
+  --orange: #ea580c;
+  --orange-dim: rgba(234, 88, 12, 0.1);
+  --purple: #7c3aed;
+  --purple-dim: rgba(124, 58, 237, 0.1);
+  --text: #191c22;
+  --text2: #5b6472;
+  --text3: #8b93a0;
+  --shadow-card: 0 1px 2px rgba(20, 24, 33, 0.04), 0 1px 8px rgba(20, 24, 33, 0.04);
+  --shadow-modal: 0 12px 40px rgba(20, 24, 33, 0.18);
 }
 
 @theme inline {
@@ -42,6 +101,19 @@
   --color-text: var(--text);
   --color-text2: var(--text2);
   --color-text3: var(--text3);
+  --color-mod-ventas: var(--mod-ventas);
+  --color-mod-productos: var(--mod-productos);
+  --color-mod-stock: var(--mod-stock);
+  --color-mod-produccion: var(--mod-produccion);
+  --color-mod-caja: var(--mod-caja);
+  --color-mod-recetas: var(--mod-recetas);
+  --color-mod-clientes: var(--mod-clientes);
+  --color-mod-compras: var(--mod-compras);
+  --color-mod-costos: var(--mod-costos);
+  --color-mod-proveedores: var(--mod-proveedores);
+  --color-mod-envios: var(--mod-envios);
+  --color-mod-reportes: var(--mod-reportes);
+  --font-sans: var(--font-inter);
 }
 
 * {
@@ -52,7 +124,7 @@ html,
 body {
   background: var(--bg);
   color: var(--text);
-  font-family: "Segoe UI", system-ui, -apple-system, sans-serif;
+  font-family: var(--font-inter), "Segoe UI", system-ui, -apple-system, sans-serif;
   font-size: 13px;
 }
 
@@ -87,6 +159,24 @@ table {
 }
 .animate-in {
   animation: toast-in 0.18s ease;
+}
+
+@keyframes pulse-glow {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.6;
+  }
+}
+.animate-pulse-glow {
+  animation: pulse-glow 2.4s ease-in-out infinite;
+}
+@media (prefers-reduced-motion: reduce) {
+  .animate-pulse-glow {
+    animation: none;
+  }
 }
 
 input,

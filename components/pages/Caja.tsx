@@ -5,7 +5,7 @@ import { useStore } from "@/lib/store";
 import { useToast } from "@/lib/toast";
 import { uid } from "@/lib/id";
 import { usePeriod } from "@/lib/period";
-import { fARS, inPeriod, saldoCaja } from "@/lib/calc";
+import { crearMovimientoCajaDesdePedido, discrepanciasCaja, fARS, inPeriod, saldoCaja } from "@/lib/calc";
 import {
   PageHeader,
   Button,
@@ -22,6 +22,7 @@ import {
   StatGrid,
   KpiCard,
   Badge,
+  FilterTabs,
 } from "@/components/ui";
 import { Modal } from "@/components/Modal";
 import type { CajaMovimiento, TipoMovCaja } from "@/lib/types";
@@ -37,7 +38,7 @@ function emptyForm() {
   };
 }
 
-export function Caja() {
+function MovimientosTab() {
   const { data, setData } = useStore();
   const { mes, anio } = usePeriod();
   const { toast } = useToast();
@@ -101,7 +102,9 @@ export function Caja() {
 
   return (
     <div>
-      <PageHeader title="Caja" sub="Movimientos de ingresos y egresos" right={<Button onClick={openNew}>+ Movimiento</Button>} />
+      <div className="mb-4 flex justify-end">
+        <Button onClick={openNew}>+ Movimiento</Button>
+      </div>
 
       <StatGrid>
         <KpiCard label="Saldo actual" value={fARS(saldoActual)} color="gold" />
@@ -204,6 +207,156 @@ export function Caja() {
           </Field>
         </FormGrid>
       </Modal>
+    </div>
+  );
+}
+
+function ConciliacionTab() {
+  const { data, setData } = useStore();
+  const { toast } = useToast();
+
+  const clienteNombre = (id: string) => data.clientes.find((c) => c.id === id)?.nombre ?? "—";
+
+  const discrepancias = useMemo(() => discrepanciasCaja(data), [data]);
+
+  function corregir(idDetalle: string) {
+    setData((d) => {
+      const pedido = d.pedidos.find((p) => p.id_detalle === idDetalle);
+      if (!pedido) return d;
+      const existente = d.caja_movimientos.find((m) => m.ref === idDetalle);
+      const caja_movimientos = existente
+        ? d.caja_movimientos.map((m) => (m.ref === idDetalle ? { ...m, monto: pedido.precio_neto } : m))
+        : [...d.caja_movimientos, crearMovimientoCajaDesdePedido(pedido)];
+      return { ...d, caja_movimientos };
+    });
+    toast("Movimiento corregido");
+  }
+
+  function corregirTodos() {
+    setData((d) => {
+      let caja_movimientos = d.caja_movimientos;
+      for (const { pedido } of discrepanciasCaja(d)) {
+        const existente = caja_movimientos.find((m) => m.ref === pedido.id_detalle);
+        caja_movimientos = existente
+          ? caja_movimientos.map((m) => (m.ref === pedido.id_detalle ? { ...m, monto: pedido.precio_neto } : m))
+          : [...caja_movimientos, crearMovimientoCajaDesdePedido(pedido)];
+      }
+      return { ...d, caja_movimientos };
+    });
+    toast("Todas las discrepancias corregidas");
+  }
+
+  function marcarRevisado(idDetalle: string) {
+    setData((d) => ({ ...d, conciliacion_ignorados: [...(d.conciliacion_ignorados ?? []), idDetalle] }));
+    toast("Marcado como revisado, sin cobrar", "info");
+  }
+
+  return (
+    <div>
+      <Card
+        title="Pedidos entregados sin conciliar"
+        right={
+          discrepancias.length > 0 ? (
+            <Button size="sm" onClick={corregirTodos}>
+              Corregir todos
+            </Button>
+          ) : undefined
+        }
+      >
+        {discrepancias.length === 0 ? (
+          <EmptyState text="No hay discrepancias entre pedidos entregados y caja. Todo concilia." />
+        ) : (
+          <TableWrap>
+            <table className="w-full">
+              <thead>
+                <tr>
+                  <Th>Fecha</Th>
+                  <Th>Cliente</Th>
+                  <Th>Producto</Th>
+                  <Th>Esperado (precio neto)</Th>
+                  <Th>Cargado en Caja</Th>
+                  <Th>Diferencia</Th>
+                  <Th>Acciones</Th>
+                </tr>
+              </thead>
+              <tbody>
+                {discrepancias.map(({ pedido, movimiento }) => {
+                  const diferencia = pedido.precio_neto - (movimiento?.monto ?? 0);
+                  return (
+                    <TrHover key={pedido.id_detalle}>
+                      <Td>{pedido.fecha}</Td>
+                      <Td main>{clienteNombre(pedido.id_cliente)}</Td>
+                      <Td>
+                        {pedido.nombre_producto}
+                        {pedido.gusto ? ` (${pedido.gusto})` : ""}
+                      </Td>
+                      <Td>{fARS(pedido.precio_neto)}</Td>
+                      <Td>{movimiento ? fARS(movimiento.monto) : "—"}</Td>
+                      <Td className={diferencia === 0 ? "" : "text-red"}>{fARS(diferencia)}</Td>
+                      <Td>
+                        <div className="flex gap-1.5">
+                          <Button size="sm" variant="ghost" onClick={() => corregir(pedido.id_detalle)}>
+                            Crear/ajustar movimiento
+                          </Button>
+                          <Button size="sm" variant="danger" onClick={() => marcarRevisado(pedido.id_detalle)}>
+                            Revisado, sin cobrar
+                          </Button>
+                        </div>
+                      </Td>
+                    </TrHover>
+                  );
+                })}
+              </tbody>
+            </table>
+          </TableWrap>
+        )}
+      </Card>
+    </div>
+  );
+}
+
+export function Caja() {
+  const { data } = useStore();
+  const [tab, setTab] = useState("movimientos");
+
+  // Siempre visible: cuánto de lo vendido (pedidos entregados) todavía no tiene su
+  // ingreso de caja cargado, o cargado con un monto distinto (Parte A, Fase 4).
+  const discrepancias = useMemo(() => discrepanciasCaja(data), [data]);
+  const diferenciaTotal = discrepancias.reduce((acc, { pedido, movimiento }) => acc + (pedido.precio_neto - (movimiento?.monto ?? 0)), 0);
+
+  return (
+    <div>
+      <PageHeader title="Caja" sub="Movimientos de ingresos y egresos" />
+
+      <Card title="Ventas vs. ingresos de caja cargados" className="mb-4">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <div className={`text-2xl font-[750] tracking-[-0.8px] [font-variant-numeric:tabular-nums] ${diferenciaTotal === 0 ? "text-green" : "text-red"}`}>
+              {fARS(diferenciaTotal)}
+            </div>
+            <div className="text-[11.5px] text-text3">
+              {discrepancias.length === 0
+                ? "Todo lo entregado tiene su ingreso cargado y coincide."
+                : `${discrepancias.length} ${discrepancias.length === 1 ? "pedido entregado" : "pedidos entregados"} sin conciliar en Caja.`}
+            </div>
+          </div>
+          {discrepancias.length > 0 && (
+            <Button size="sm" variant="ghost" onClick={() => setTab("conciliacion")}>
+              Ver conciliación
+            </Button>
+          )}
+        </div>
+      </Card>
+
+      <FilterTabs
+        value={tab}
+        onChange={setTab}
+        options={[
+          { value: "movimientos", label: "Movimientos" },
+          { value: "conciliacion", label: "Conciliación" },
+        ]}
+      />
+      {tab === "movimientos" ? <MovimientosTab /> : <ConciliacionTab />}
     </div>
   );
 }

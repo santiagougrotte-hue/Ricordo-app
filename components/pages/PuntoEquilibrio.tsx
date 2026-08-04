@@ -1,10 +1,22 @@
 "use client";
 
 import React, { useMemo } from "react";
+import {
+  LineChart,
+  Line,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip,
+  Legend,
+  ReferenceLine,
+  ResponsiveContainer,
+} from "recharts";
 import { useStore } from "@/lib/store";
 import { usePeriod } from "@/lib/period";
-import { calcCosto, fARS, fPct, inPeriod, puntoEquilibrio, ventasNetas } from "@/lib/calc";
-import { Card, PageHeader, StatGrid, KpiCard, TableWrap, Th, Td, TrHover, EmptyState, Badge } from "@/components/ui";
+import { calcCosto, fARS, fNum, fPct, inPeriod, puntoEquilibrio, ventasNetas } from "@/lib/calc";
+import { Card, PageHeader, StatGrid, KpiCard, TableWrap, Th, Td, TrHover, EmptyState, Badge, Semaforo } from "@/components/ui";
+import { CHART_COLORS } from "@/lib/chart-colors";
 
 export function PuntoEquilibrio() {
   const { data } = useStore();
@@ -15,12 +27,27 @@ export function PuntoEquilibrio() {
     [data.pedidos, mes, anio]
   );
 
-  const { pe, margenPromedioPonderado, cfTotal } = useMemo(
-    () => puntoEquilibrio(data, pedidosPeriodo),
-    [data, pedidosPeriodo]
-  );
+  const { pe, margenPromedioPonderado, cfTotal, precioPromedioPonderado, costoVariableUnitarioPromedio, unidadesTotales } =
+    useMemo(() => puntoEquilibrio(data, pedidosPeriodo, mes, anio), [data, pedidosPeriodo, mes, anio]);
   const ventaActual = ventasNetas(pedidosPeriodo);
   const cumplido = pe > 0 ? (ventaActual / pe) * 100 : 0;
+  const peUnidades = margenPromedioPonderado > 0 ? cfTotal / margenPromedioPonderado : 0;
+
+  const breakevenData = useMemo(() => {
+    const maxU = Math.max(unidadesTotales, peUnidades, 10) * 1.3;
+    const steps = 10;
+    const puntos = [];
+    for (let i = 0; i <= steps; i++) {
+      const u = (maxU / steps) * i;
+      puntos.push({
+        unidades: Math.round(u),
+        ingresos: precioPromedioPonderado * u,
+        costosTotales: cfTotal + costoVariableUnitarioPromedio * u,
+        costosFijos: cfTotal,
+      });
+    }
+    return puntos;
+  }, [unidadesTotales, peUnidades, precioPromedioPonderado, costoVariableUnitarioPromedio, cfTotal]);
 
   const margenPorProducto = useMemo(() => {
     const unidades = new Map<string, number>();
@@ -53,7 +80,7 @@ export function PuntoEquilibrio() {
 
       <Card title="Semáforo del período" className="mb-4">
         <div className="flex items-center gap-3">
-          <span className="text-2xl">{cumplido >= 100 ? "🟢" : cumplido >= 70 ? "🟡" : "🔴"}</span>
+          <Semaforo nivel={cumplido >= 100 ? "green" : cumplido >= 70 ? "orange" : "red"} />
           <span className="text-sm text-text2">
             {cumplido >= 100
               ? "Punto de equilibrio superado."
@@ -63,6 +90,60 @@ export function PuntoEquilibrio() {
           </span>
         </div>
       </Card>
+
+      {peUnidades > 0 && (
+        <Card title="Ingresos vs. Costos por volumen" className="mb-4">
+          <ResponsiveContainer width="100%" height={300}>
+            <LineChart data={breakevenData} margin={{ top: 10, right: 16, left: 0, bottom: 4 }}>
+              <CartesianGrid stroke={CHART_COLORS.grid} vertical={false} />
+              <XAxis
+                dataKey="unidades"
+                tick={{ fontSize: 11, fill: CHART_COLORS.text3 }}
+                axisLine={{ stroke: CHART_COLORS.border }}
+                tickLine={false}
+                label={{ value: "Unidades vendidas", position: "insideBottom", offset: -2, fontSize: 11, fill: CHART_COLORS.text3 }}
+              />
+              <YAxis
+                tick={{ fontSize: 11, fill: CHART_COLORS.text3 }}
+                axisLine={false}
+                tickLine={false}
+                width={72}
+                tickFormatter={(v: number) => fARS(v)}
+              />
+              <Tooltip
+                formatter={(v) => fARS(Number(v))}
+                labelFormatter={(l) => `${fNum(Number(l), 0)} unidades`}
+                contentStyle={{ borderRadius: 8, border: `1px solid ${CHART_COLORS.border}`, fontSize: 12 }}
+              />
+              <Legend wrapperStyle={{ fontSize: 12 }} />
+              <ReferenceLine
+                x={Math.round(peUnidades)}
+                stroke={CHART_COLORS.accent}
+                strokeDasharray="4 4"
+                label={{ value: "PE", position: "top", fill: CHART_COLORS.accent, fontSize: 11 }}
+              />
+              <Line type="monotone" dataKey="ingresos" name="Ingresos" stroke={CHART_COLORS.green} strokeWidth={2.5} dot={false} />
+              <Line
+                type="monotone"
+                dataKey="costosTotales"
+                name="Costos totales"
+                stroke={CHART_COLORS.red}
+                strokeWidth={2.5}
+                dot={false}
+              />
+              <Line
+                type="monotone"
+                dataKey="costosFijos"
+                name="Costos fijos"
+                stroke={CHART_COLORS.orange}
+                strokeWidth={1.5}
+                strokeDasharray="4 4"
+                dot={false}
+              />
+            </LineChart>
+          </ResponsiveContainer>
+        </Card>
+      )}
 
       <Card title="Margen de contribución por producto">
         {margenPorProducto.length === 0 ? (

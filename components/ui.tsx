@@ -1,6 +1,7 @@
 "use client";
 
 import React from "react";
+import { Inbox, Search, type LucideIcon } from "lucide-react";
 
 type Color = "gold" | "green" | "red" | "blue" | "orange" | "purple" | "none";
 
@@ -39,11 +40,11 @@ export function Card({
 }) {
   return (
     <div
-      className={`rounded-[10px] border border-border ${colorBorder[color]} border-t-2 bg-surface p-[18px] ${className}`}
+      className={`rounded-[var(--radius-card)] border border-border ${colorBorder[color]} border-t-2 bg-surface p-[18px] shadow-[var(--shadow-card)] ${className}`}
     >
       {title && (
         <div className="mb-3.5 flex items-center justify-between">
-          <div className="text-[11px] font-semibold uppercase tracking-[1.5px] text-text3">{title}</div>
+          <div className="text-[11px] font-bold uppercase tracking-[1.3px] text-text2">{title}</div>
           {right}
         </div>
       )}
@@ -65,10 +66,14 @@ export function KpiCard({
 }) {
   return (
     <div
-      className={`rounded-[10px] border border-border ${colorBorder[color]} border-t-2 bg-surface p-4`}
+      className={`rounded-[var(--radius-card)] border border-border ${colorBorder[color]} border-t-2 bg-surface p-4 shadow-[var(--shadow-card)]`}
     >
-      <div className="text-[10px] uppercase tracking-[1.2px] text-text3">{label}</div>
-      <div className={`my-1.5 text-2xl leading-none font-semibold ${colorValue[color]}`}>{value}</div>
+      <div className="text-[10px] font-bold uppercase tracking-[1.2px] text-text2">{label}</div>
+      <div
+        className={`my-1.5 text-2xl leading-none font-[750] tracking-[-0.8px] [font-variant-numeric:tabular-nums] ${colorValue[color]}`}
+      >
+        {value}
+      </div>
       {sub && <div className="text-[11px] text-text3">{sub}</div>}
     </div>
   );
@@ -215,20 +220,43 @@ export function Td({
   children,
   main,
   className = "",
+  colSpan,
 }: {
   children?: React.ReactNode;
   main?: boolean;
   className?: string;
+  colSpan?: number;
 }) {
   return (
-    <td className={`border-b border-border/50 px-3 py-2.5 align-middle ${main ? "font-medium text-text" : "text-text2"} ${className}`}>
+    <td
+      colSpan={colSpan}
+      className={`border-b border-border/50 px-3 py-2.5 align-middle ${main ? "font-medium text-text" : "text-text2"} ${className}`}
+    >
       {children}
     </td>
   );
 }
 
-export function TrHover({ children, className = "" }: { children: React.ReactNode; className?: string }) {
-  return <tr className={`hover:bg-surface2/60 [&:hover_td]:text-text ${className}`}>{children}</tr>;
+export function TrHover({
+  children,
+  className = "",
+  onClick,
+}: {
+  children: React.ReactNode;
+  className?: string;
+  onClick?: () => void;
+}) {
+  // Hover scoped to (hover: hover) devices only — on touch screens a plain `hover:` class
+  // makes the first tap register as "hover" instead of a click, so buttons inside the row
+  // needed a second tap to actually fire.
+  return (
+    <tr
+      onClick={onClick}
+      className={`[@media(hover:hover)]:hover:bg-surface2/60 [@media(hover:hover)]:[&:hover_td]:text-text ${className}`}
+    >
+      {children}
+    </tr>
+  );
 }
 
 export function FilterTabs({
@@ -259,11 +287,20 @@ export function FilterTabs({
   );
 }
 
-export function EmptyState({ icon = "🗂️", text }: { icon?: string; text: string }) {
+export function EmptyState({ icon: Icon = Inbox, text }: { icon?: LucideIcon; text: string }) {
   return (
     <div className="py-10 text-center text-text3">
-      <div className="mb-2.5 text-4xl">{icon}</div>
+      <Icon className="mx-auto mb-2.5 h-9 w-9 stroke-[1.5] opacity-60" />
       <div>{text}</div>
+    </div>
+  );
+}
+
+export function SearchInput(props: React.InputHTMLAttributes<HTMLInputElement>) {
+  return (
+    <div className="relative">
+      <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-text3" />
+      <Input {...props} className={`pl-9 ${props.className ?? ""}`} />
     </div>
   );
 }
@@ -314,7 +351,7 @@ export function BarRow({
           style={{ width: `${Math.max(0, Math.min(100, pct))}%` }}
         />
       </div>
-      <div className="w-20 shrink-0 text-right text-[11.5px] text-text2">{value}</div>
+      <div className="w-24 shrink-0 text-right text-[11.5px] text-text2">{value}</div>
     </div>
   );
 }
@@ -341,4 +378,16 @@ export function Alert({
 
 export function Sep() {
   return <div className="my-3.5 h-px bg-border" />;
+}
+
+export function Semaforo({ nivel, size = "md" }: { nivel: "green" | "orange" | "red"; size?: "sm" | "md" }) {
+  const dotColor = { green: "bg-green", orange: "bg-orange", red: "bg-red" }[nivel];
+  const ringColor = { green: "bg-green-dim", orange: "bg-orange-dim", red: "bg-red-dim" }[nivel];
+  const px = size === "sm" ? "h-2.5 w-2.5" : "h-3.5 w-3.5";
+  const wrap = size === "sm" ? "p-1" : "p-1.5";
+  return (
+    <span className={`inline-flex items-center justify-center rounded-full ${ringColor} ${wrap}`}>
+      <span className={`rounded-full ${dotColor} ${px}`} />
+    </span>
+  );
 }

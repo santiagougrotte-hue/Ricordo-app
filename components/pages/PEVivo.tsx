@@ -3,14 +3,14 @@
 import React, { useMemo } from "react";
 import { useStore } from "@/lib/store";
 import { usePeriod } from "@/lib/period";
-import { fARS, fPct, inPeriod, totalCostosFijos, unidadesEntregadas } from "@/lib/calc";
+import { costosFijosTotales, fARS, fPct, inPeriod, unidadesEntregadas } from "@/lib/calc";
 import { Card, PageHeader, StatGrid, KpiCard, InfoRow } from "@/components/ui";
 
 export function PEVivo() {
   const { data } = useStore();
   const { mes, anio } = usePeriod();
 
-  const cfTotal = totalCostosFijos(data);
+  const cfTotal = costosFijosTotales(data, mes, anio);
 
   const mesAnterior = mes === 1 ? 12 : mes - 1;
   const anioMesAnterior = mes === 1 ? anio - 1 : anio;

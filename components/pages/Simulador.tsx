@@ -45,8 +45,8 @@ export function Simulador() {
     );
   }, [dataSimulada, idProducto, nuevoPrecioVenta]);
 
-  const peActual = puntoEquilibrio(data, pedidosPeriodo).pe;
-  const peSimulado = puntoEquilibrio({ ...dataSimulada, productos: productosSimulados }, pedidosPeriodo).pe;
+  const peActual = puntoEquilibrio(data, pedidosPeriodo, mes, anio).pe;
+  const peSimulado = puntoEquilibrio({ ...dataSimulada, productos: productosSimulados }, pedidosPeriodo, mes, anio).pe;
 
   return (
     <div>
