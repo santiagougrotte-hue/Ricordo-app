@@ -26,7 +26,15 @@ import { Wizard } from "@/components/Wizard";
 import type { Ingrediente, Packaging } from "@/lib/types";
 
 function emptyForm() {
-  return { nombre: "", unidad: "", categoria: "", precio_ref: 0, stock_minimo: 0, peso_unitario_g: 0 };
+  return {
+    nombre: "",
+    unidad: "",
+    categoria: "",
+    precio_ref: 0,
+    precio_vigente: null as number | null,
+    stock_minimo: 0,
+    peso_unitario_g: 0,
+  };
 }
 
 function IngredientesTab() {
@@ -54,6 +62,7 @@ function IngredientesTab() {
       unidad: i.unidad,
       categoria: i.categoria ?? "",
       precio_ref: i.precio_ref,
+      precio_vigente: i.precio_vigente,
       stock_minimo: i.stock_minimo ?? 0,
       peso_unitario_g: i.peso_unitario_g ?? 0,
     });
@@ -67,19 +76,21 @@ function IngredientesTab() {
     }
     if (editing) {
       const prev = data.ingredientes.find((i) => i.id === editing);
+      const vigenteAnterior = prev ? pvr(prev) : 0;
+      const vigenteNuevo = form.precio_vigente ?? form.precio_ref;
       setData((d) => ({
         ...d,
         ingredientes: d.ingredientes.map((i) => (i.id === editing ? { ...i, ...form } : i)),
         historial_precios:
-          prev && prev.precio_ref !== form.precio_ref
+          prev && vigenteAnterior !== vigenteNuevo
             ? [
                 ...d.historial_precios,
                 {
                   id: uid("HIST"),
                   id_insumo: editing,
                   insumo: form.nombre,
-                  precio_anterior: prev.precio_ref,
-                  precio_nuevo: form.precio_ref,
+                  precio_anterior: vigenteAnterior,
+                  precio_nuevo: vigenteNuevo,
                   fecha: new Date().toISOString().slice(0, 10),
                 },
               ]
@@ -89,7 +100,7 @@ function IngredientesTab() {
     } else {
       setData((d) => ({
         ...d,
-        ingredientes: [...d.ingredientes, { id: uid("ING"), ...form, precio_vigente: null, seguimiento_stock: false }],
+        ingredientes: [...d.ingredientes, { id: uid("ING"), ...form, seguimiento_stock: false }],
       }));
       toast("Insumo creado");
     }
@@ -214,6 +225,14 @@ function IngredientesTab() {
                 type="number"
                 value={form.precio_ref}
                 onChange={(e) => setForm({ ...form, precio_ref: Number(e.target.value) })}
+              />
+            </Field>
+            <Field label="Precio vigente">
+              <Input
+                type="number"
+                value={form.precio_vigente ?? ""}
+                onChange={(e) => setForm({ ...form, precio_vigente: e.target.value === "" ? null : Number(e.target.value) })}
+                placeholder="Vacío = usar precio de referencia"
               />
             </Field>
             <Field label="Stock mínimo">
