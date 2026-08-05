@@ -271,7 +271,7 @@ test("recetaDerivada: masa y relleno escalan por unidades_por_paquete, complemen
   data.productos = [base, salsa, venta];
   data.ingredientes = ingredientesCalabaza();
   data.recetas = [{ id: "R1", id_producto: "PROD-08", tipo: "Packaging", concepto: "PKG-1", cantidad: 1 }];
-  data.packaging = [{ id: "PKG-1", nombre: "Bolsa", unidad: "unidad", precio: 50 }];
+  data.packaging = [{ id: "PKG-1", nombre: "Bolsa", unidad: "unidad", precio_ref: 50, precio_vigente: null }];
 
   assert.equal(estaMigrado(data, venta), true);
   const lineas = recetaDerivada(data, venta);

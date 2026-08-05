@@ -100,7 +100,7 @@ export function Productos() {
   }
   function costoLineaDraft(l: DraftLinea) {
     if (l.tipo === "Ingrediente") return l.cantidad * pvr(data.ingredientes.find((i) => i.id === l.concepto));
-    if (l.tipo === "Packaging") return l.cantidad * (data.packaging.find((p) => p.id === l.concepto)?.precio ?? 0);
+    if (l.tipo === "Packaging") return l.cantidad * pvr(data.packaging.find((p) => p.id === l.concepto));
     return l.cantidad * (data.costos_fijos.find((c) => c.id === l.concepto)?.monto ?? 0);
   }
   function agregarDraftLinea() {
@@ -453,7 +453,7 @@ export function Productos() {
                     } else if (r.tipo === "Packaging") {
                       const pkg = data.packaging.find((p) => p.id === r.concepto);
                       nombre = pkg?.nombre ?? r.concepto;
-                      costoUnit = pkg?.precio ?? 0;
+                      costoUnit = pvr(pkg);
                     } else {
                       const cf = data.costos_fijos.find((c) => c.id === r.concepto);
                       nombre = cf?.descripcion ?? r.concepto;

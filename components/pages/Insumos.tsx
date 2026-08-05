@@ -317,21 +317,25 @@ function IngredientesTab() {
   );
 }
 
+function emptyPackagingForm() {
+  return { nombre: "", unidad: "", precio_ref: 0, precio_vigente: null as number | null };
+}
+
 function PackagingTab() {
   const { data, setData } = useStore();
   const { toast } = useToast();
   const [modalOpen, setModalOpen] = useState(false);
   const [editing, setEditing] = useState<string | null>(null);
-  const [form, setForm] = useState({ nombre: "", unidad: "", precio: 0 });
+  const [form, setForm] = useState(emptyPackagingForm());
 
   function openNew() {
     setEditing(null);
-    setForm({ nombre: "", unidad: "", precio: 0 });
+    setForm(emptyPackagingForm());
     setModalOpen(true);
   }
   function openEdit(p: Packaging) {
     setEditing(p.id);
-    setForm({ nombre: p.nombre, unidad: p.unidad, precio: p.precio });
+    setForm({ nombre: p.nombre, unidad: p.unidad, precio_ref: p.precio_ref, precio_vigente: p.precio_vigente });
     setModalOpen(true);
   }
   function save() {
@@ -340,7 +344,27 @@ function PackagingTab() {
       return;
     }
     if (editing) {
-      setData((d) => ({ ...d, packaging: d.packaging.map((p) => (p.id === editing ? { ...p, ...form } : p)) }));
+      const prev = data.packaging.find((p) => p.id === editing);
+      const vigenteAnterior = prev ? pvr(prev) : 0;
+      const vigenteNuevo = form.precio_vigente ?? form.precio_ref;
+      setData((d) => ({
+        ...d,
+        packaging: d.packaging.map((p) => (p.id === editing ? { ...p, ...form } : p)),
+        historial_precios:
+          prev && vigenteAnterior !== vigenteNuevo
+            ? [
+                ...d.historial_precios,
+                {
+                  id: uid("HIST"),
+                  id_insumo: editing,
+                  insumo: form.nombre,
+                  precio_anterior: vigenteAnterior,
+                  precio_nuevo: vigenteNuevo,
+                  fecha: new Date().toISOString().slice(0, 10),
+                },
+              ]
+            : d.historial_precios,
+      }));
       toast("Packaging actualizado");
     } else {
       setData((d) => ({ ...d, packaging: [...d.packaging, { id: uid("PKG"), ...form }] }));
@@ -368,7 +392,8 @@ function PackagingTab() {
                 <tr>
                   <Th>Nombre</Th>
                   <Th>Unidad</Th>
-                  <Th>Precio</Th>
+                  <Th>Precio ref.</Th>
+                  <Th>Precio vigente</Th>
                   <Th>Acciones</Th>
                 </tr>
               </thead>
@@ -377,7 +402,8 @@ function PackagingTab() {
                   <TrHover key={p.id}>
                     <Td main>{p.nombre}</Td>
                     <Td>{p.unidad}</Td>
-                    <Td>{fARS(p.precio)}</Td>
+                    <Td>{fARS(p.precio_ref)}</Td>
+                    <Td>{fARS(pvr(p))}</Td>
                     <Td>
                       <div className="flex gap-1.5">
                         <Button size="sm" variant="ghost" onClick={() => openEdit(p)}>
@@ -415,9 +441,23 @@ function PackagingTab() {
           <Field label="Unidad">
             <Input value={form.unidad} onChange={(e) => setForm({ ...form, unidad: e.target.value })} />
           </Field>
-          <Field label="Precio">
-            <Input type="number" value={form.precio} onChange={(e) => setForm({ ...form, precio: Number(e.target.value) })} />
+          <Field label="Precio de referencia">
+            <Input
+              type="number"
+              value={form.precio_ref}
+              onChange={(e) => setForm({ ...form, precio_ref: Number(e.target.value) })}
+            />
           </Field>
+          {editing && (
+            <Field label="Precio vigente">
+              <Input
+                type="number"
+                value={form.precio_vigente ?? ""}
+                onChange={(e) => setForm({ ...form, precio_vigente: e.target.value === "" ? null : Number(e.target.value) })}
+                placeholder="Vacío = usar precio de referencia"
+              />
+            </Field>
+          )}
         </FormGrid>
       </Modal>
     </>
