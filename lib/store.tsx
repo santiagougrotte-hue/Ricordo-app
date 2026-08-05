@@ -9,7 +9,7 @@ import React, {
   useState,
 } from "react";
 import { emptyData, STORAGE_KEY, type RicordoData } from "./types";
-import { mapBackupToRicordoData } from "./seed";
+import { mapBackupToRicordoData, repararConceptoPackagingEnRecetas } from "./seed";
 import backupSeed from "./data/backup-seed.json";
 import { supabase, supabaseConfigured } from "./supabase";
 
@@ -61,7 +61,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     const local = loadFromLocalStorage();
     // eslint-disable-next-line react-hooks/set-state-in-effect -- initial hydration, SSR has no window/localStorage
-    if (local) setDataState(local);
+    if (local) setDataState(repararConceptoPackagingEnRecetas(local));
 
     const client = supabase;
     if (!supabaseConfigured || !client) {
@@ -84,9 +84,14 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
           return;
         }
         if (row?.data) {
-          const remote = { ...emptyData(), ...(row.data as Partial<RicordoData>) };
+          const remoteRaw = { ...emptyData(), ...(row.data as Partial<RicordoData>) };
+          // Datos viejos (importados antes de este fix) pueden tener líneas de receta de
+          // Packaging con el concepto guardado como nombre en vez de id — se reparan acá y,
+          // como lastPushed queda apuntando a la versión sin reparar, el guardado automático
+          // de abajo empuja la corrección a Supabase una sola vez.
+          const remote = repararConceptoPackagingEnRecetas(remoteRaw);
           setDataState(remote);
-          lastPushed.current = JSON.stringify(remote);
+          lastPushed.current = JSON.stringify(remoteRaw);
         } else {
           // First run: seed the shared row from whatever this device has locally.
           const seed = local ?? mapBackupToRicordoData(backupSeed);
