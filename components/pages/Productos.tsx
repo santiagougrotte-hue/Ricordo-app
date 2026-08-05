@@ -449,7 +449,7 @@ export function Productos() {
                     if (r.tipo === "Ingrediente") {
                       const ing = data.ingredientes.find((i) => i.id === r.concepto);
                       nombre = ing?.nombre ?? r.concepto;
-                      costoUnit = ing ? (ing.precio_vigente ?? ing.precio_ref) : 0;
+                      costoUnit = pvr(ing);
                     } else if (r.tipo === "Packaging") {
                       const pkg = data.packaging.find((p) => p.id === r.concepto);
                       nombre = pkg?.nombre ?? r.concepto;
