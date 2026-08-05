@@ -72,9 +72,13 @@ export function mapBackupToRicordoData(backup: any): RicordoData {
   // Algunos exports guardan, en las líneas de Packaging, el NOMBRE del packaging en vez de
   // su id (a diferencia de Ingrediente, que sí usa id) — sin esto, cada línea de Packaging
   // queda huérfana (no matchea contra ningún d.packaging.id) y su costo calcula siempre $0.
-  const idPackagingPorNombre = new Map((backup.packaging ?? []).map((p: any) => [p.nombre, p.id]));
+  // Se normaliza (trim + minúsculas) para no fallar por un espacio o mayúscula de más.
+  const normalizarNombre = (s: string) => s.trim().toLowerCase();
+  const idPackagingPorNombre = new Map((backup.packaging ?? []).map((p: any) => [normalizarNombre(p.nombre), p.id]));
   const resolverConceptoPackaging = (r: any) =>
-    r.tipo === "Packaging" && idPackagingPorNombre.has(r.concepto) ? idPackagingPorNombre.get(r.concepto) : r.concepto;
+    r.tipo === "Packaging" && typeof r.concepto === "string" && idPackagingPorNombre.has(normalizarNombre(r.concepto))
+      ? idPackagingPorNombre.get(normalizarNombre(r.concepto))
+      : r.concepto;
 
   // id_receta groups all lines of one producto's recipe under a single id in
   // some exports — generate a per-line id instead so each row stays unique.
@@ -337,15 +341,16 @@ export function mapBackupToRicordoData(backup: any): RicordoData {
  * Idempotente: si ya están todas con id, no cambia nada.
  */
 export function repararConceptoPackagingEnRecetas(data: RicordoData): RicordoData {
-  const idPorNombre = new Map(data.packaging.map((p) => [p.nombre, p.id]));
+  const normalizarNombre = (s: string) => s.trim().toLowerCase();
+  const idPorNombre = new Map(data.packaging.map((p) => [normalizarNombre(p.nombre), p.id]));
   const idsValidos = new Set(data.packaging.map((p) => p.id));
   let cambio = false;
   const recetas = data.recetas.map((r) => {
-    if (r.tipo === "Packaging" && !idsValidos.has(r.concepto) && idPorNombre.has(r.concepto)) {
-      cambio = true;
-      return { ...r, concepto: idPorNombre.get(r.concepto)! };
-    }
-    return r;
+    if (r.tipo !== "Packaging" || idsValidos.has(r.concepto)) return r;
+    const idResuelto = idPorNombre.get(normalizarNombre(r.concepto));
+    if (!idResuelto) return r;
+    cambio = true;
+    return { ...r, concepto: idResuelto };
   });
   return cambio ? { ...data, recetas } : data;
 }
