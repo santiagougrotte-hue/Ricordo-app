@@ -43,11 +43,17 @@ export function fPct(n: number | null | undefined, decimals = 1): string {
   return `${v.toLocaleString("es-AR", { maximumFractionDigits: decimals, minimumFractionDigits: decimals })}%`;
 }
 
+interface ConPrecioRefYVigente {
+  precio_ref: number;
+  precio_vigente: number | null;
+}
+
 /** precio_vigente ?? precio_ref — un vigente en 0 se trata como "no cargado" (no como precio
- * real) para que una compra vieja a $0 no deje el insumo costeando gratis para siempre. */
-export function pvr(ing: Ingrediente | undefined | null): number {
-  if (!ing) return 0;
-  return ing.precio_vigente || ing.precio_ref || 0;
+ * real) para que una compra vieja a $0 no deje el insumo/packaging costeando gratis para
+ * siempre. Sirve tanto para Ingrediente como para Packaging (misma forma de precio). */
+export function pvr(item: ConPrecioRefYVigente | undefined | null): number {
+  if (!item) return 0;
+  return item.precio_vigente || item.precio_ref || 0;
 }
 
 /** Costo de un producto = Σ receta × precio vigente (ingredientes y packaging); costos fijos de receta se suman en $ directo.
@@ -67,7 +73,7 @@ export function costoLegacy(data: RicordoData, idProducto: string): number {
       total += linea.cantidad * pvr(ing);
     } else if (linea.tipo === "Packaging") {
       const pkg = data.packaging.find((p) => p.id === linea.concepto);
-      total += linea.cantidad * (pkg?.precio ?? 0);
+      total += linea.cantidad * pvr(pkg);
     } else if (linea.tipo === "CostoFijo") {
       const cf = data.costos_fijos.find((c) => c.id === linea.concepto);
       total += linea.cantidad * (cf?.monto ?? 0);
@@ -181,7 +187,7 @@ export function costoLineaDerivada(data: RicordoData, l: LineaRecetaDerivada): n
     return l.cantidad * pvr(ing);
   } else if (l.tipo === "Packaging") {
     const pkg = data.packaging.find((p) => p.id === l.concepto);
-    return l.cantidad * (pkg?.precio ?? 0);
+    return l.cantidad * pvr(pkg);
   } else if (l.tipo === "CostoFijo") {
     const cf = data.costos_fijos.find((c) => c.id === l.concepto);
     return l.cantidad * (cf?.monto ?? 0);

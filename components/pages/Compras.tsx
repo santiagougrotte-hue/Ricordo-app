@@ -271,7 +271,21 @@ export function Compras() {
         }
       }
       for (const l of compraGuardada.lineasPkg) {
-        packaging = packaging.map((p) => (p.id === l.id_packaging ? { ...p, precio: l.precio_unitario } : p));
+        const pkg = packaging.find((p) => p.id === l.id_packaging);
+        if (pkg && pvr(pkg) !== l.precio_unitario) {
+          historial = [
+            ...historial,
+            {
+              id: uid("HIST"),
+              id_insumo: pkg.id,
+              insumo: pkg.nombre,
+              precio_anterior: pvr(pkg),
+              precio_nuevo: l.precio_unitario,
+              fecha: form.fecha,
+            },
+          ];
+          packaging = packaging.map((p) => (p.id === pkg.id ? { ...p, precio_vigente: l.precio_unitario } : p));
+        }
       }
 
       const compras = editing

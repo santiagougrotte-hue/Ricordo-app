@@ -108,7 +108,8 @@ export interface Packaging {
   id: string;
   nombre: string;
   unidad: string;
-  precio: number;
+  precio_ref: number;
+  precio_vigente: number | null;
 }
 
 export interface Pedido {

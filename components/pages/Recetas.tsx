@@ -52,7 +52,7 @@ export function Recetas() {
 
   function costoLinea(r: RecetaLinea) {
     if (r.tipo === "Ingrediente") return r.cantidad * pvr(data.ingredientes.find((i) => i.id === r.concepto));
-    if (r.tipo === "Packaging") return r.cantidad * (data.packaging.find((p) => p.id === r.concepto)?.precio ?? 0);
+    if (r.tipo === "Packaging") return r.cantidad * pvr(data.packaging.find((p) => p.id === r.concepto));
     return r.cantidad * (data.costos_fijos.find((c) => c.id === r.concepto)?.monto ?? 0);
   }
 

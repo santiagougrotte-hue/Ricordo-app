@@ -281,7 +281,7 @@ function MateriasPrimasTab() {
       const lineasReceta = data.recetas.filter((r) => r.id_producto === prod.id);
       const costoUnit = lineasReceta.reduce((a, l) => {
         if (l.tipo === "Ingrediente") return a + l.cantidad * pvr(data.ingredientes.find((i) => i.id === l.concepto));
-        if (l.tipo === "Packaging") return a + l.cantidad * (data.packaging.find((pk) => pk.id === l.concepto)?.precio ?? 0);
+        if (l.tipo === "Packaging") return a + l.cantidad * pvr(data.packaging.find((pk) => pk.id === l.concepto));
         return a + l.cantidad * (data.costos_fijos.find((c) => c.id === l.concepto)?.monto ?? 0);
       }, 0);
       return acc + costoUnit * p.cantidad;

@@ -28,7 +28,8 @@ export function mapBackupToRicordoData(backup: any): RicordoData {
     id: p.id,
     nombre: p.nombre,
     unidad: p.unidad,
-    precio: p.precio_vigente ?? p.precio_ref ?? 0,
+    precio_ref: p.precio_ref ?? 0,
+    precio_vigente: p.precio_vigente ?? null,
   }));
 
   d.productos = (backup.productos ?? []).map((p: any) => ({
@@ -180,7 +181,7 @@ export function mapBackupToRicordoData(backup: any): RicordoData {
     }
     for (const l of c.lineasPkg) {
       const pkg = d.packaging.find((p) => p.id === l.id_packaging);
-      if (pkg) pkg.precio = l.precio_unitario;
+      if (pkg) pkg.precio_vigente = l.precio_unitario;
     }
   }
 
