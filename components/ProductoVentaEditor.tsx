@@ -119,6 +119,24 @@ export function ProductoVentaEditor({ producto, onClose }: Props) {
     setExcepciones((es) => es.filter((e) => e.id !== id));
   }
 
+  /** Edita la cantidad directo desde la tabla de receta calculada (masa/relleno/packaging),
+   * sin pasar por el formulario de abajo — usa el mismo mecanismo de excepción: crea o
+   * actualiza la que coincide en (grupo, tipo, concepto). */
+  function actualizarCantidadLinea(l: LineaRecetaDerivada, cantidad: number) {
+    setExcepciones((es) => {
+      const idx = es.findIndex((e) => e.grupo === l.grupo && e.tipo === l.tipo && e.concepto === l.concepto);
+      if (idx >= 0) {
+        const next = [...es];
+        next[idx] = { ...next[idx], cantidad };
+        return next;
+      }
+      return [
+        ...es,
+        { id: uid("EXC"), grupo: l.grupo as GrupoRecetaDerivada, tipo: l.tipo as "Ingrediente" | "Packaging", concepto: l.concepto, cantidad },
+      ];
+    });
+  }
+
   function guardar() {
     if (!idBase) {
       toast("Elegí el producto base", "error");
@@ -333,7 +351,18 @@ export function ProductoVentaEditor({ producto, onClose }: Props) {
                           {nombreConcepto(l)}
                           {l.esExcepcion && <span className="ml-1.5 text-[10px] font-semibold uppercase text-orange">excepción</span>}
                         </Td>
-                        <Td>{fNum(l.cantidad, 3)}</Td>
+                        <Td>
+                          {grupo === "complementos" ? (
+                            fNum(l.cantidad, 3)
+                          ) : (
+                            <Input
+                              type="number"
+                              value={l.cantidad}
+                              onChange={(e) => actualizarCantidadLinea(l, Number(e.target.value))}
+                              className="w-24"
+                            />
+                          )}
+                        </Td>
                         <Td>{fARS(costoLineaDerivada(data, l))}</Td>
                       </TrHover>
                     ))
