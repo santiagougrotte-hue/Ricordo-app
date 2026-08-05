@@ -69,13 +69,20 @@ export function mapBackupToRicordoData(backup: any): RicordoData {
     notas: p.rubro,
   }));
 
+  // Algunos exports guardan, en las líneas de Packaging, el NOMBRE del packaging en vez de
+  // su id (a diferencia de Ingrediente, que sí usa id) — sin esto, cada línea de Packaging
+  // queda huérfana (no matchea contra ningún d.packaging.id) y su costo calcula siempre $0.
+  const idPackagingPorNombre = new Map((backup.packaging ?? []).map((p: any) => [p.nombre, p.id]));
+  const resolverConceptoPackaging = (r: any) =>
+    r.tipo === "Packaging" && idPackagingPorNombre.has(r.concepto) ? idPackagingPorNombre.get(r.concepto) : r.concepto;
+
   // id_receta groups all lines of one producto's recipe under a single id in
   // some exports — generate a per-line id instead so each row stays unique.
   d.recetas = (backup.recetas ?? []).map((r: any) => ({
     id: uid("REC"),
     id_producto: r.id_producto,
     tipo: r.tipo,
-    concepto: r.concepto,
+    concepto: resolverConceptoPackaging(r),
     cantidad: r.cantidad ?? 0,
   }));
 
@@ -320,4 +327,25 @@ export function mapBackupToRicordoData(backup: any): RicordoData {
   }
 
   return d;
+}
+
+/**
+ * Repara datos ya guardados (locales o en Supabase) que vengan de una importación vieja con el
+ * bug de arriba: líneas de receta de tipo Packaging cuyo concepto quedó como el NOMBRE del
+ * packaging en vez de su id, y por lo tanto nunca matchean contra ningún Packaging real (el
+ * costo de esa línea calcula siempre $0 sin importar qué precio tenga cargado el packaging).
+ * Idempotente: si ya están todas con id, no cambia nada.
+ */
+export function repararConceptoPackagingEnRecetas(data: RicordoData): RicordoData {
+  const idPorNombre = new Map(data.packaging.map((p) => [p.nombre, p.id]));
+  const idsValidos = new Set(data.packaging.map((p) => p.id));
+  let cambio = false;
+  const recetas = data.recetas.map((r) => {
+    if (r.tipo === "Packaging" && !idsValidos.has(r.concepto) && idPorNombre.has(r.concepto)) {
+      cambio = true;
+      return { ...r, concepto: idPorNombre.get(r.concepto)! };
+    }
+    return r;
+  });
+  return cambio ? { ...data, recetas } : data;
 }
