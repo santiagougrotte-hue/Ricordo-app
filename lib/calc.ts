@@ -43,10 +43,11 @@ export function fPct(n: number | null | undefined, decimals = 1): string {
   return `${v.toLocaleString("es-AR", { maximumFractionDigits: decimals, minimumFractionDigits: decimals })}%`;
 }
 
-/** precio_vigente ?? precio_ref */
+/** precio_vigente ?? precio_ref — un vigente en 0 se trata como "no cargado" (no como precio
+ * real) para que una compra vieja a $0 no deje el insumo costeando gratis para siempre. */
 export function pvr(ing: Ingrediente | undefined | null): number {
   if (!ing) return 0;
-  return ing.precio_vigente ?? ing.precio_ref ?? 0;
+  return ing.precio_vigente || ing.precio_ref || 0;
 }
 
 /** Costo de un producto = Σ receta × precio vigente (ingredientes y packaging); costos fijos de receta se suman en $ directo.
