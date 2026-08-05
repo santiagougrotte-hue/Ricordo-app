@@ -7,7 +7,7 @@ import { useToast } from "@/lib/toast";
 import { uid } from "@/lib/id";
 import { useIaClient } from "@/lib/ia-client";
 import { compressImageFile } from "@/lib/image-compress";
-import { comprasVsConsumoUltimosMeses, fARS, fPct } from "@/lib/calc";
+import { comprasVsConsumoUltimosMeses, fARS, fPct, pvr } from "@/lib/calc";
 import {
   PageHeader,
   Button,
@@ -148,7 +148,7 @@ export function Compras() {
       id: i.id,
       nombre: i.nombre,
       unidad: i.unidad,
-      precio_actual: i.precio_vigente ?? i.precio_ref,
+      precio_actual: pvr(i),
     }));
     const resultado = await llamarIa<ParseTicketResponse>(
       "parse-ticket",
@@ -179,7 +179,7 @@ export function Compras() {
       for (const r of aplicar) {
         const ing = ingredientes.find((i) => i.id === r.id_ingrediente);
         if (!ing) continue;
-        const anterior = ing.precio_vigente ?? ing.precio_ref;
+        const anterior = pvr(ing);
         historial = [
           ...historial,
           {
@@ -255,14 +255,14 @@ export function Compras() {
 
       for (const l of compraGuardada.lineas) {
         const ing = ingredientes.find((i) => i.id === l.id_ingrediente);
-        if (ing && (ing.precio_vigente ?? ing.precio_ref) !== l.precio_unitario) {
+        if (ing && pvr(ing) !== l.precio_unitario) {
           historial = [
             ...historial,
             {
               id: uid("HIST"),
               id_insumo: ing.id,
               insumo: ing.nombre,
-              precio_anterior: ing.precio_vigente ?? ing.precio_ref,
+              precio_anterior: pvr(ing),
               precio_nuevo: l.precio_unitario,
               fecha: form.fecha,
             },
@@ -709,7 +709,7 @@ export function Compras() {
                   <tbody>
                     {ticketResultado.renglones.map((r, idx) => {
                       const ing = r.id_ingrediente ? data.ingredientes.find((i) => i.id === r.id_ingrediente) : undefined;
-                      const precioActual = ing ? ing.precio_vigente ?? ing.precio_ref : 0;
+                      const precioActual = pvr(ing);
                       const variacion = ing && precioActual > 0 ? ((r.precio_unitario - precioActual) / precioActual) * 100 : null;
                       const variacionAlta = variacion !== null && Math.abs(variacion) > 30;
                       return (
