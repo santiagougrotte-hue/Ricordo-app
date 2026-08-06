@@ -749,7 +749,7 @@ a{color:inherit;}
       </div>
       <div class="editor-page-wrap">
         <div id="apunte-editor" class="editor-page" contenteditable="true" data-placeholder="Escribí acá…"
-             oninput="Apuntes.scheduleAutosave()" onmouseup="Apuntes.saveSelection()" onkeyup="Apuntes.saveSelection()"></div>
+             oninput="Apuntes.scheduleAutosave()" onmouseup="Apuntes.saveSelection()" onkeyup="Apuntes.saveSelection()" onpaste="Apuntes.handlePaste(event)"></div>
       </div>
 
       <p class="faint small" id="apunte-autosave-status">Se guarda automáticamente mientras escribís.</p>
@@ -1760,6 +1760,11 @@ const Apuntes = {
     const url=prompt('URL del enlace:', 'https://');
     if(!url) return;
     Apuntes.exec('createLink', url);
+  },
+  handlePaste(e){
+    e.preventDefault();
+    const text=(e.clipboardData || window.clipboardData).getData('text/plain');
+    document.execCommand('insertText', false, text);
   },
   _autosaveTimer:null,
   scheduleAutosave(){
