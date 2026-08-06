@@ -272,6 +272,35 @@ a{color:inherit;}
 .modal-actions{display:flex; align-items:center; justify-content:space-between; margin-top:18px; gap:8px;}
 .modal-actions-right{display:flex; gap:8px; margin-left:auto;}
 
+/* ===== Editor de apuntes (modo documento) ===== */
+#modal-apunte{align-items:center;}
+.modal-doc{width:94vw; max-width:1100px; height:88vh; display:flex; flex-direction:column;}
+.modal-doc form{display:flex; flex-direction:column; flex:1; min-height:0;}
+.apunte-head-row{display:flex; align-items:center; justify-content:space-between; gap:10px; margin-bottom:14px;}
+.apunte-head-row h3{margin-bottom:0;}
+.apunte-meta-row{display:flex; gap:10px; flex-wrap:wrap;}
+.apunte-title-input{
+  width:100%; border:none; background:transparent; color:var(--text); font-size:22px; font-weight:700;
+  padding:6px 2px 12px; margin-bottom:6px; border-bottom:1px solid var(--border); font-family:inherit;
+}
+.apunte-title-input:focus{outline:none; border-bottom-color:var(--accent);}
+.apunte-editor-row{display:flex; gap:16px; flex:1; min-height:0; margin-bottom:12px;}
+.apunte-editor-col{flex:1; display:flex; flex-direction:column; min-height:0;}
+.apunte-textarea{
+  flex:1; min-height:0; width:100%; resize:none; font-size:15px; line-height:1.7; padding:16px;
+  border-radius:10px; border:1px solid var(--border); background:var(--surface-2); color:var(--text); font-family:inherit;
+}
+.apunte-preview{
+  flex:1; min-height:0; overflow-y:auto; font-size:14.5px; line-height:1.7; padding:16px;
+  border-radius:10px; border:1px solid var(--border); background:var(--surface-2);
+}
+.apunte-editor-row.preview-hidden .apunte-editor-col:last-child{display:none;}
+@media (max-width:760px){
+  .modal-doc{width:100vw; height:100vh; max-width:none; border-radius:0;}
+  .apunte-editor-row{flex-direction:column;}
+  .apunte-meta-row{flex-direction:column;}
+}
+
 /* ===== Toast ===== */
 .toast{
   position:fixed; bottom:22px; left:50%; transform:translateX(-50%) translateY(20px); background:var(--text); color:var(--bg);
@@ -652,24 +681,27 @@ a{color:inherit;}
 
 <!-- Modal: apunte -->
 <div class="modal-backdrop" id="modal-apunte">
-  <div class="modal" style="max-width:640px;">
-    <h3 id="modal-apunte-title">Nuevo apunte</h3>
+  <div class="modal modal-doc">
+    <div class="apunte-head-row">
+      <h3 id="modal-apunte-title">Nuevo apunte</h3>
+      <button type="button" class="btn btn-sm" id="btn-toggle-preview" onclick="Apuntes.togglePreview()">Ocultar vista previa</button>
+    </div>
     <form id="form-apunte" onsubmit="event.preventDefault(); Apuntes.flushAutosave();">
       <input type="hidden" id="f-apunte-id">
-      <div style="display:flex; gap:10px;">
+      <div class="apunte-meta-row">
         <div class="field" style="flex:1;"><label>Materia</label><select id="f-apunte-materia" onchange="Apuntes.scheduleAutosave()"></select></div>
         <div class="field" style="flex:1;"><label>Tema / Unidad</label><input type="text" id="f-apunte-tema" placeholder="Ej: Unidad 3" oninput="Apuntes.scheduleAutosave()"></div>
+        <div class="field" style="flex:1;"><label>Tags</label><input type="text" id="f-apunte-tags" placeholder="costos, parcial 1, teoría" oninput="Apuntes.scheduleAutosave()"></div>
       </div>
-      <div class="field"><label>Título</label><input type="text" id="f-apunte-titulo" required oninput="Apuntes.scheduleAutosave()"></div>
-      <div class="field">
-        <label>Contenido — admite **negrita**, *cursiva*, # títulos y listas con "- "</label>
-        <textarea id="f-apunte-contenido" style="min-height:160px;" oninput="Apuntes.updatePreview(); Apuntes.scheduleAutosave();"></textarea>
+      <input type="text" id="f-apunte-titulo" class="apunte-title-input" required placeholder="Título del apunte" oninput="Apuntes.scheduleAutosave()">
+      <div class="apunte-editor-row" id="apunte-editor-row">
+        <div class="apunte-editor-col">
+          <textarea id="f-apunte-contenido" class="apunte-textarea" placeholder="Escribí acá — admite **negrita**, *cursiva*, # títulos y listas con &quot;- &quot;" oninput="Apuntes.updatePreview(); Apuntes.scheduleAutosave();"></textarea>
+        </div>
+        <div class="apunte-editor-col" id="apunte-preview-col">
+          <div class="md-preview apunte-preview" id="apunte-preview"></div>
+        </div>
       </div>
-      <div class="field">
-        <label>Vista previa</label>
-        <div class="md-preview" id="apunte-preview" style="border:1px solid var(--border); border-radius:8px; padding:10px 12px; background:var(--surface-2); font-size:13px; max-height:150px; overflow:auto;"></div>
-      </div>
-      <div class="field"><label>Tags (separados por coma)</label><input type="text" id="f-apunte-tags" placeholder="Ej: costos, parcial 1, teoría" oninput="Apuntes.scheduleAutosave()"></div>
       <p class="faint small" id="apunte-autosave-status">Se guarda automáticamente mientras escribís.</p>
       <div class="modal-actions">
         <button type="button" class="btn btn-danger btn-sm" id="btn-eliminar-apunte" onclick="Apuntes.deleteCurrent()">Eliminar</button>
@@ -1655,8 +1687,15 @@ const Apuntes = {
     document.getElementById('f-apunte-tags').value=(a.tags||[]).join(', ');
     document.getElementById('btn-eliminar-apunte').style.display=editing?'inline-flex':'none';
     document.getElementById('apunte-autosave-status').textContent='Se guarda automáticamente mientras escribís.';
+    document.getElementById('apunte-editor-row').classList.remove('preview-hidden');
+    document.getElementById('btn-toggle-preview').textContent='Ocultar vista previa';
     Apuntes.updatePreview();
     Modal.open('modal-apunte');
+  },
+  togglePreview(){
+    const row=document.getElementById('apunte-editor-row');
+    const hidden=row.classList.toggle('preview-hidden');
+    document.getElementById('btn-toggle-preview').textContent = hidden ? 'Mostrar vista previa' : 'Ocultar vista previa';
   },
   updatePreview(){
     document.getElementById('apunte-preview').innerHTML = mdToHtml(document.getElementById('f-apunte-contenido').value);
