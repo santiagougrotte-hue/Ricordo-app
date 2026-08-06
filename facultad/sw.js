@@ -1,4 +1,4 @@
-const CACHE = 'facultad-v1';
+const CACHE = 'facultad-v2';
 const ASSETS = [
   './',
   './index.html',
@@ -35,17 +35,14 @@ self.addEventListener('fetch', e => {
     );
     return;
   }
-  // Everything else: cache first, refresh in background
+  // Everything else: network first (so deploys show up immediately), cache as offline fallback
   e.respondWith(
-    caches.match(e.request).then(cached => {
-      const network = fetch(e.request).then(res => {
-        if (res.ok) {
-          const clone = res.clone();
-          caches.open(CACHE).then(c => c.put(e.request, clone));
-        }
-        return res;
-      }).catch(() => cached);
-      return cached || network;
-    })
+    fetch(e.request).then(res => {
+      if (res.ok) {
+        const clone = res.clone();
+        caches.open(CACHE).then(c => c.put(e.request, clone));
+      }
+      return res;
+    }).catch(() => caches.match(e.request))
   );
 });
