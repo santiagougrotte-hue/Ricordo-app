@@ -396,6 +396,23 @@ a{color:inherit;}
 .table-notas th{background:var(--surface-2); font-size:11.5px; text-transform:uppercase; color:var(--text-muted);}
 .table-notas tr:last-child td{border-bottom:none;}
 
+/* ===== Sueldo ===== */
+.sueldo-section{margin-bottom:26px;}
+.sueldo-section-title{display:flex; align-items:center; justify-content:space-between; margin-bottom:10px;}
+.sueldo-section-title h3{font-size:14px;}
+.sueldo-section-title .sub-total{font-size:12.5px; color:var(--text-muted); font-weight:600;}
+.gasto-row{display:flex; align-items:center; gap:12px; padding:10px 12px; border:1px solid var(--border); border-radius:8px; background:var(--surface); margin-bottom:8px;}
+.gasto-row.paid{opacity:.55;}
+.gasto-row input[type=checkbox]{width:18px; height:18px; flex:none; accent-color:var(--success);}
+.gasto-row .desc{flex:1; min-width:0;}
+.gasto-row .desc .t{font-size:13.5px; font-weight:600;}
+.gasto-row .desc .t.done{text-decoration:line-through; color:var(--text-muted);}
+.gasto-row .desc .m{font-size:11.5px; color:var(--text-muted); margin-top:2px;}
+.gasto-row .monto{font-weight:700; font-size:14px; white-space:nowrap;}
+.gasto-row .monto.expense{color:var(--danger);}
+.gasto-row .monto.income{color:var(--success);}
+.gasto-row .row-actions{display:flex; gap:4px; flex:none;}
+
 /* ===== Responsive ===== */
 @media (max-width:900px){
   .sidebar{position:fixed; left:0; top:0; transform:translateX(-100%); transition:transform .2s; box-shadow:0 0 30px rgba(0,0,0,.2);}
@@ -428,6 +445,7 @@ a{color:inherit;}
       <button class="navbtn" data-view="apuntes" onclick="Router.go('apuntes')"><span class="ic">📝</span> Apuntes</button>
       <button class="navbtn" data-view="archivos" onclick="Router.go('archivos')"><span class="ic">📎</span> Archivos</button>
       <button class="navbtn" data-view="notas" onclick="Router.go('notas')"><span class="ic">🧮</span> Notas / Promedio</button>
+      <button class="navbtn" data-view="sueldo" onclick="Router.go('sueldo')"><span class="ic">💰</span> Sueldo</button>
     </nav>
     <div class="sidebar-footer">
       <button class="btn" onclick="document.getElementById('import-input').click()">⬆ Importar backup</button>
@@ -539,6 +557,23 @@ a{color:inherit;}
           <button class="btn btn-primary" onclick="Notas.openForm()">+ Agregar nota</button>
         </div>
         <div id="notas-root"></div>
+      </section>
+
+      <!-- SUELDO -->
+      <section class="view" id="view-sueldo">
+        <div class="cal-toolbar">
+          <div class="cal-toolbar-left">
+            <button class="icon-btn" onclick="Sueldo.navigate(-1)">‹</button>
+            <div class="cal-period-label" id="sueldo-period-label"></div>
+            <button class="icon-btn" onclick="Sueldo.navigate(1)">›</button>
+            <button class="btn btn-sm" onclick="Sueldo.goToday()">Este mes</button>
+          </div>
+          <div style="display:flex; gap:8px;">
+            <button class="btn" onclick="Ingresos.openForm()">+ Ingreso</button>
+            <button class="btn btn-primary" onclick="Gastos.openForm()">+ Gasto</button>
+          </div>
+        </div>
+        <div id="sueldo-root"></div>
       </section>
 
     </main>
@@ -820,6 +855,63 @@ a{color:inherit;}
   </div>
 </div>
 
+<!-- Modal: ingreso -->
+<div class="modal-backdrop" id="modal-ingreso">
+  <div class="modal">
+    <h3 id="modal-ingreso-title">Nuevo ingreso</h3>
+    <form id="form-ingreso" onsubmit="Ingresos.saveForm(event)">
+      <input type="hidden" id="f-ingreso-id">
+      <div class="field"><label>Descripción</label><input type="text" id="f-ingreso-descripcion" required placeholder="Ej: Sueldo, changa, venta…"></div>
+      <div class="field"><label>Monto</label><input type="number" id="f-ingreso-monto" min="0" step="0.01" required></div>
+      <div class="field">
+        <label>Tipo</label>
+        <select id="f-ingreso-tipo" onchange="Ingresos.onTipoChange()">
+          <option value="fijo">Fijo mensual (se repite todos los meses)</option>
+          <option value="variable">Solo este mes</option>
+        </select>
+      </div>
+      <div class="field"><label id="f-ingreso-mes-label">Desde</label><input type="month" id="f-ingreso-mes" required></div>
+      <div class="modal-actions">
+        <button type="button" class="btn btn-danger btn-sm" id="btn-eliminar-ingreso" onclick="Ingresos.deleteCurrent()">Eliminar</button>
+        <div class="modal-actions-right">
+          <button type="button" class="btn" onclick="Modal.close('modal-ingreso')">Cancelar</button>
+          <button type="submit" class="btn btn-primary">Guardar</button>
+        </div>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- Modal: gasto -->
+<div class="modal-backdrop" id="modal-gasto">
+  <div class="modal">
+    <h3 id="modal-gasto-title">Nuevo gasto</h3>
+    <form id="form-gasto" onsubmit="Gastos.saveForm(event)">
+      <input type="hidden" id="f-gasto-id">
+      <div class="field"><label>Descripción</label><input type="text" id="f-gasto-descripcion" required placeholder="Ej: Alquiler, supermercado, notebook…"></div>
+      <div class="field">
+        <label>Tipo</label>
+        <select id="f-gasto-tipo" onchange="Gastos.onTipoChange()">
+          <option value="fijo">Fijo (todos los meses)</option>
+          <option value="variable">Variable (solo este mes)</option>
+          <option value="cuota">En cuotas</option>
+        </select>
+      </div>
+      <div class="field"><label id="f-gasto-monto-label">Monto</label><input type="number" id="f-gasto-monto" min="0" step="0.01" required></div>
+      <div class="field" id="f-gasto-cuotas-field" style="display:none;"><label>Cantidad de cuotas</label><input type="number" id="f-gasto-cuotas" min="2" step="1" placeholder="Ej: 12"></div>
+      <div class="field"><label id="f-gasto-mes-label">Desde</label><input type="month" id="f-gasto-mes" required></div>
+      <div class="field"><label>Categoría (opcional)</label><input type="text" id="f-gasto-categoria" placeholder="Ej: Comida, transporte, ocio…"></div>
+      <div class="modal-actions">
+        <button type="button" class="btn btn-danger btn-sm" id="btn-eliminar-gasto" onclick="Gastos.deleteCurrent()">Eliminar</button>
+        <div class="modal-actions-right">
+          <button type="button" class="btn" onclick="Modal.close('modal-gasto')">Cancelar</button>
+          <button type="submit" class="btn btn-primary">Guardar</button>
+        </div>
+      </div>
+    </form>
+  </div>
+</div>
+
 <div class="toast" id="toast"></div>
 
 <script>
@@ -868,6 +960,25 @@ function upcomingTerms(n){
 }
 function termKeyFromObj(t){ return `${t.year}-${t.term}`; }
 function parseTermKey(key){ const [year,term]=key.split('-').map(Number); return {year,term}; }
+const MESES=['Enero','Febrero','Marzo','Abril','Mayo','Junio','Julio','Agosto','Septiembre','Octubre','Noviembre','Diciembre'];
+function monthKey(d){ return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`; }
+function addMonthsToKey(key, n){
+  const [y,m]=key.split('-').map(Number);
+  const d=new Date(y, m-1+n, 1);
+  return monthKey(d);
+}
+function monthsBetweenKeys(fromKey, toKey){
+  const [fy,fm]=fromKey.split('-').map(Number);
+  const [ty,tm]=toKey.split('-').map(Number);
+  return (ty-fy)*12 + (tm-fm);
+}
+function formatMonthLabel(key){
+  const [y,m]=key.split('-').map(Number);
+  return `${MESES[m-1]} ${y}`;
+}
+function formatMoney(n){
+  return '$ ' + (Number(n)||0).toLocaleString('es-AR',{minimumFractionDigits:2, maximumFractionDigits:2});
+}
 function eventHoursLeft(e){ return (new Date(e.fecha+'T'+(e.hora||'23:59')) - new Date())/36e5; }
 function isEventUrgent(e){ if(e.estado==='hecho') return false; const h=eventHoursLeft(e); return h>=0 && h<48; }
 function stripHtml(html){
@@ -892,6 +1003,10 @@ const State = {
       apuntes:[],   // {id,materiaId,tema,titulo,contenido,tags,updatedAt} — módulo Apuntes
       tags:[],
       notas:[],     // parciales/otras notas sueltas — módulo Notas
+      sueldo:{
+        ingresos:[], // {id,descripcion,monto,tipo:'fijo'|'variable',mes:'YYYY-MM'} — mes=desde si es fijo
+        gastos:[]    // {id,descripcion,tipo:'fijo'|'variable'|'cuota',monto,cuotas,mes:'YYYY-MM',categoria,pagadoMeses:['YYYY-MM',...]}
+      },
       settings:{
         activeCuatrimestre: Term.guess(),
         notifDays:[2,1]
@@ -909,6 +1024,10 @@ const State = {
     if(!Array.isArray(this.data.apuntes)) this.data.apuntes=[];
     if(!Array.isArray(this.data.tags)) this.data.tags=[];
     if(!Array.isArray(this.data.notas)) this.data.notas=[];
+    if(!this.data.sueldo || typeof this.data.sueldo!=='object') this.data.sueldo={ingresos:[],gastos:[]};
+    if(!Array.isArray(this.data.sueldo.ingresos)) this.data.sueldo.ingresos=[];
+    if(!Array.isArray(this.data.sueldo.gastos)) this.data.sueldo.gastos=[];
+    this.data.sueldo.gastos.forEach(g=>{ if(!Array.isArray(g.pagadoMeses)) g.pagadoMeses=[]; });
     if(!this.data.settings) this.data.settings={activeCuatrimestre:Term.guess(), notifDays:[2,1]};
     if(!this.data.settings.activeCuatrimestre) this.data.settings.activeCuatrimestre=Term.guess();
     this.data.horario.forEach(c=>{ if(!c.term) c.term=termKeyFromObj(Term.guess()); });
@@ -977,6 +1096,7 @@ const Router = {
     if(view==='apuntes') Apuntes.render();
     if(view==='archivos') Archivos.render();
     if(view==='notas') Notas.render();
+    if(view==='sueldo') Sueldo.render();
     closeMobileSidebar();
     window.scrollTo(0,0);
   }
@@ -1988,6 +2108,201 @@ const Notas = {
   }
 };
 
+/* ---------- Sueldo (ingresos y gastos) ---------- */
+const Sueldo = {
+  cursor:new Date(),
+  navigate(n){ Sueldo.cursor=new Date(Sueldo.cursor.getFullYear(), Sueldo.cursor.getMonth()+n, 1); Sueldo.render(); },
+  goToday(){ Sueldo.cursor=new Date(); Sueldo.render(); },
+
+  ingresosDelMes(mk){
+    return (State.data.sueldo.ingresos||[])
+      .filter(i => (i.tipo==='fijo' && i.mes<=mk) || (i.tipo==='variable' && i.mes===mk))
+      .map(i => ({...i, montoMes:i.monto}));
+  },
+  gastosDelMes(mk){
+    const out=[];
+    (State.data.sueldo.gastos||[]).forEach(g=>{
+      if(g.tipo==='fijo' && g.mes<=mk){ out.push({...g, montoMes:g.monto}); }
+      else if(g.tipo==='variable' && g.mes===mk){ out.push({...g, montoMes:g.monto}); }
+      else if(g.tipo==='cuota'){
+        const idx=monthsBetweenKeys(g.mes, mk);
+        if(idx>=0 && idx<g.cuotas){ out.push({...g, montoMes: g.monto/g.cuotas, cuotaNum: idx+1}); }
+      }
+    });
+    return out;
+  },
+
+  render(){
+    const mk=monthKey(Sueldo.cursor);
+    document.getElementById('sueldo-period-label').textContent=formatMonthLabel(mk);
+    const ingresos=Sueldo.ingresosDelMes(mk).sort((a,b)=>a.descripcion.localeCompare(b.descripcion));
+    const fijos=Sueldo.gastosDelMes(mk).filter(g=>g.tipo==='fijo');
+    const variables=Sueldo.gastosDelMes(mk).filter(g=>g.tipo==='variable');
+    const cuotas=Sueldo.gastosDelMes(mk).filter(g=>g.tipo==='cuota');
+    const todosGastos=[...fijos,...variables,...cuotas];
+
+    const totalIngresos=ingresos.reduce((s,i)=>s+i.montoMes,0);
+    const totalPlanificado=todosGastos.reduce((s,g)=>s+g.montoMes,0);
+    const totalPagado=todosGastos.filter(g=>(g.pagadoMeses||[]).includes(mk)).reduce((s,g)=>s+g.montoMes,0);
+    const totalPendiente=totalPlanificado-totalPagado;
+    const balance=totalIngresos-totalPagado;
+
+    const root=document.getElementById('sueldo-root');
+    root.innerHTML=`
+      <div class="stat-grid" style="margin-bottom:22px;">
+        <div class="card stat-card"><div class="num" style="color:var(--success)">${formatMoney(totalIngresos)}</div><div class="lbl">Ingresos del mes</div></div>
+        <div class="card stat-card"><div class="num" style="color:var(--danger)">${formatMoney(totalPagado)}</div><div class="lbl">Gastos pagados</div></div>
+        <div class="card stat-card"><div class="num" style="color:var(--warn)">${formatMoney(totalPendiente)}</div><div class="lbl">Gastos pendientes</div></div>
+        <div class="card stat-card accent"><div class="num">${formatMoney(balance)}</div><div class="lbl">Balance disponible</div></div>
+      </div>
+      ${Sueldo.sectionHTML('Ingresos', ingresos, mk, 'ingreso')}
+      ${Sueldo.sectionHTML('Gastos fijos', fijos, mk, 'gasto')}
+      ${Sueldo.sectionHTML('Gastos variables (este mes)', variables, mk, 'gasto')}
+      ${Sueldo.sectionHTML('Compras en cuotas', cuotas, mk, 'gasto')}
+    `;
+  },
+
+  sectionHTML(title, items, mk, kind){
+    const total=items.reduce((s,i)=>s+i.montoMes,0);
+    return `<div class="sueldo-section">
+      <div class="sueldo-section-title"><h3>${title}</h3><span class="sub-total">${formatMoney(total)}</span></div>
+      ${items.length ? items.map(i=>Sueldo.rowHTML(i, mk, kind)).join('') : `<p class="empty">Nada cargado para este mes.</p>`}
+    </div>`;
+  },
+  rowHTML(item, mk, kind){
+    const isIngreso=kind==='ingreso';
+    const paid=!isIngreso && (item.pagadoMeses||[]).includes(mk);
+    const checkbox = isIngreso ? '' : `<input type="checkbox" ${paid?'checked':''} onchange="Gastos.togglePagado('${item.id}','${mk}')">`;
+    const cuotaTag = item.tipo==='cuota' ? ` · Cuota ${item.cuotaNum}/${item.cuotas}` : '';
+    const tipoTag = item.tipo==='fijo' ? ' · Fijo' : (item.tipo==='variable' ? '' : '');
+    const editFn = isIngreso ? `Ingresos.openForm('${item.id}')` : `Gastos.openForm('${item.id}')`;
+    return `<div class="gasto-row ${paid?'paid':''}">
+      ${checkbox}
+      <div class="desc">
+        <div class="t ${paid?'done':''}">${esc(item.descripcion)}</div>
+        <div class="m">${item.categoria?esc(item.categoria):''}${cuotaTag}${tipoTag}</div>
+      </div>
+      <div class="monto ${isIngreso?'income':'expense'}">${isIngreso?'+':'-'}${formatMoney(item.montoMes)}</div>
+      <div class="row-actions"><button class="icon-btn" title="Editar" onclick="${editFn}">✎</button></div>
+    </div>`;
+  }
+};
+
+const Ingresos = {
+  onTipoChange(){
+    const tipo=document.getElementById('f-ingreso-tipo').value;
+    document.getElementById('f-ingreso-mes-label').textContent = tipo==='fijo' ? 'Desde' : 'Mes';
+  },
+  openForm(id){
+    const editing=!!id;
+    const i = editing ? State.data.sueldo.ingresos.find(x=>x.id===id) : {descripcion:'',monto:'',tipo:'fijo',mes:monthKey(Sueldo.cursor)};
+    document.getElementById('modal-ingreso-title').textContent = editing?'Editar ingreso':'Nuevo ingreso';
+    document.getElementById('f-ingreso-id').value=id||'';
+    document.getElementById('f-ingreso-descripcion').value=i.descripcion;
+    document.getElementById('f-ingreso-monto').value=i.monto;
+    document.getElementById('f-ingreso-tipo').value=i.tipo;
+    document.getElementById('f-ingreso-mes').value=i.mes;
+    document.getElementById('btn-eliminar-ingreso').style.display=editing?'inline-flex':'none';
+    Ingresos.onTipoChange();
+    Modal.open('modal-ingreso');
+  },
+  saveForm(ev){
+    ev.preventDefault();
+    const id=document.getElementById('f-ingreso-id').value || uid();
+    const descripcion=document.getElementById('f-ingreso-descripcion').value.trim();
+    if(!descripcion){ Toast.show('Ingresá una descripción'); return; }
+    const monto=parseFloat(document.getElementById('f-ingreso-monto').value);
+    if(isNaN(monto)||monto<0){ Toast.show('Ingresá un monto válido'); return; }
+    const tipo=document.getElementById('f-ingreso-tipo').value;
+    const mes=document.getElementById('f-ingreso-mes').value;
+    if(!mes){ Toast.show('Elegí un mes'); return; }
+    const existing=State.data.sueldo.ingresos.find(x=>x.id===id);
+    if(existing){ Object.assign(existing,{descripcion,monto,tipo,mes}); }
+    else{ State.data.sueldo.ingresos.push({id,descripcion,monto,tipo,mes}); }
+    State.save();
+    Modal.close('modal-ingreso');
+    Toast.show('Ingreso guardado ✓');
+    Sueldo.render();
+  },
+  deleteCurrent(){
+    const id=document.getElementById('f-ingreso-id').value;
+    if(!id) return;
+    if(!confirm('¿Eliminar este ingreso?')) return;
+    State.data.sueldo.ingresos = State.data.sueldo.ingresos.filter(i=>i.id!==id);
+    State.save();
+    Modal.close('modal-ingreso');
+    Toast.show('Ingreso eliminado');
+    Sueldo.render();
+  }
+};
+
+const Gastos = {
+  onTipoChange(){
+    const tipo=document.getElementById('f-gasto-tipo').value;
+    document.getElementById('f-gasto-cuotas-field').style.display = tipo==='cuota' ? 'block' : 'none';
+    document.getElementById('f-gasto-monto-label').textContent = tipo==='cuota' ? 'Monto total de la compra' : 'Monto mensual';
+    document.getElementById('f-gasto-mes-label').textContent = tipo==='fijo' ? 'Desde' : (tipo==='cuota' ? 'Primera cuota' : 'Mes');
+  },
+  openForm(id){
+    const editing=!!id;
+    const g = editing ? State.data.sueldo.gastos.find(x=>x.id===id) : {descripcion:'',tipo:'variable',monto:'',cuotas:'',mes:monthKey(Sueldo.cursor),categoria:''};
+    document.getElementById('modal-gasto-title').textContent = editing?'Editar gasto':'Nuevo gasto';
+    document.getElementById('f-gasto-id').value=id||'';
+    document.getElementById('f-gasto-descripcion').value=g.descripcion;
+    document.getElementById('f-gasto-tipo').value=g.tipo;
+    document.getElementById('f-gasto-monto').value=g.monto;
+    document.getElementById('f-gasto-cuotas').value=g.cuotas||'';
+    document.getElementById('f-gasto-mes').value=g.mes;
+    document.getElementById('f-gasto-categoria').value=g.categoria||'';
+    document.getElementById('btn-eliminar-gasto').style.display=editing?'inline-flex':'none';
+    Gastos.onTipoChange();
+    Modal.open('modal-gasto');
+  },
+  saveForm(ev){
+    ev.preventDefault();
+    const id=document.getElementById('f-gasto-id').value || uid();
+    const descripcion=document.getElementById('f-gasto-descripcion').value.trim();
+    if(!descripcion){ Toast.show('Ingresá una descripción'); return; }
+    const tipo=document.getElementById('f-gasto-tipo').value;
+    const monto=parseFloat(document.getElementById('f-gasto-monto').value);
+    if(isNaN(monto)||monto<0){ Toast.show('Ingresá un monto válido'); return; }
+    let cuotas=null;
+    if(tipo==='cuota'){
+      cuotas=parseInt(document.getElementById('f-gasto-cuotas').value);
+      if(!cuotas || cuotas<2){ Toast.show('Ingresá la cantidad de cuotas (mínimo 2)'); return; }
+    }
+    const mes=document.getElementById('f-gasto-mes').value;
+    if(!mes){ Toast.show('Elegí un mes'); return; }
+    const categoria=document.getElementById('f-gasto-categoria').value.trim();
+    const existing=State.data.sueldo.gastos.find(x=>x.id===id);
+    if(existing){ Object.assign(existing,{descripcion,tipo,monto,cuotas,mes,categoria}); if(!existing.pagadoMeses) existing.pagadoMeses=[]; }
+    else{ State.data.sueldo.gastos.push({id,descripcion,tipo,monto,cuotas,mes,categoria,pagadoMeses:[]}); }
+    State.save();
+    Modal.close('modal-gasto');
+    Toast.show('Gasto guardado ✓');
+    Sueldo.render();
+  },
+  togglePagado(id, mk){
+    const g=State.data.sueldo.gastos.find(x=>x.id===id);
+    if(!g) return;
+    const set=new Set(g.pagadoMeses||[]);
+    if(set.has(mk)) set.delete(mk); else set.add(mk);
+    g.pagadoMeses=[...set];
+    State.save();
+    Sueldo.render();
+  },
+  deleteCurrent(){
+    const id=document.getElementById('f-gasto-id').value;
+    if(!id) return;
+    if(!confirm('¿Eliminar este gasto? Se va a borrar de todos los meses (fijo/cuotas incluidos).')) return;
+    State.data.sueldo.gastos = State.data.sueldo.gastos.filter(g=>g.id!==id);
+    State.save();
+    Modal.close('modal-gasto');
+    Toast.show('Gasto eliminado');
+    Sueldo.render();
+  }
+};
+
 /* ---------- Modal / Toast ---------- */
 const Modal = {
   open(id){ document.getElementById(id).classList.add('open'); },
@@ -2036,6 +2351,9 @@ const DataIO = {
         if(!Array.isArray(State.data.apuntes)) State.data.apuntes=[];
         if(!Array.isArray(State.data.tags)) State.data.tags=[];
         if(!Array.isArray(State.data.notas)) State.data.notas=[];
+        if(!State.data.sueldo || typeof State.data.sueldo!=='object') State.data.sueldo={ingresos:[],gastos:[]};
+        if(!Array.isArray(State.data.sueldo.ingresos)) State.data.sueldo.ingresos=[];
+        if(!Array.isArray(State.data.sueldo.gastos)) State.data.sueldo.gastos=[];
         State.save();
         Toast.show('Datos importados ✓');
         Term.render();
