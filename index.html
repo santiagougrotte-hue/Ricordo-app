@@ -340,6 +340,9 @@ svg.chart{width:100%; height:150px; overflow:visible;}
 /* Finalizar serie */
 .finish-serie-btn{width:100%; margin-top:12px; background:var(--accent); color:#04140A; border:none; border-radius:11px; padding:11px 16px; font-size:13.5px; font-weight:700; cursor:pointer; display:flex; align-items:center; justify-content:center; gap:8px; letter-spacing:.02em;}
 .finish-serie-btn:active{transform:scale(.97);}
+/* Always-visible log area below exercise row */
+.ex-log-area{padding:12px 14px; border-top:1px solid var(--border); background:rgba(29,31,35,.7);}
+.ex-log-area .session-log{margin-top:0;}
 .ex-video-link{display:flex; align-items:center; gap:6px; background:var(--surface); border:1px solid var(--border); border-radius:10px; padding:8px 12px; color:var(--accent); text-decoration:none; font-size:12px; font-weight:600; margin-top:10px; width:fit-content;}
 /* Progression toggle inside panel */
 .prog-panel-toggle{background:none; border:none; color:var(--text-faint); font-size:12px; cursor:pointer; padding:8px 0 0; text-align:left; width:100%;}
@@ -1675,10 +1678,7 @@ const Plan = {
                   ${swapBtn}
                   <svg id="${arrowId}" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--text-faint)" stroke-width="2" style="flex:none; transition:transform .2s ease;"><path d="M6 9l6 6 6-6"/></svg>
                 </div>
-                <div class="ex-panel" id="${panelId}">
-                  <div class="ex-panel-muscles">${ex.muscles}</div>
-                  <div class="ex-panel-goal">${ex.goal}</div>
-                  ${catNote}
+                <div class="ex-log-area">
                   ${SeriesLog.buildTable(key, it, funcCat || ex.cat)}
                   ${(()=>{
                     if(it.sup && it.sup.endsWith('1')){
@@ -1693,6 +1693,11 @@ const Plan = {
                     }
                     return `<button class="finish-serie-btn" onclick="Timer.start(${restSec},'${exNameSafe}')">⏱ Finalizar serie &nbsp;·&nbsp; ${restLbl} descanso</button>`;
                   })()}
+                </div>
+                <div class="ex-panel" id="${panelId}">
+                  <div class="ex-panel-muscles">${ex.muscles}</div>
+                  <div class="ex-panel-goal">${ex.goal}</div>
+                  ${catNote}
                   <a class="ex-video-link" href="${videoHref}" target="_blank" rel="noopener">
                     <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="5 3 19 12 5 21 5 3"/></svg>
                     Ver técnica en video
