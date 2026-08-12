@@ -358,6 +358,12 @@ svg.chart{width:100%; height:150px; overflow:visible;}
 /* ===== Prefill hint (referencia última sesión) ===== */
 .series-prefill{font-size:10.5px; color:var(--text-faint); background:var(--surface-2); border:1px solid var(--border); border-radius:7px; padding:5px 9px; margin-bottom:6px; display:flex; align-items:center; gap:5px; flex-wrap:wrap;}
 .series-prefill span{color:var(--text-muted); font-family:var(--font-mono); font-size:11px;}
+/* ===== Rest range selector ===== */
+.rest-range-wrap{margin-top:12px;}
+.rest-range-label{font-size:10px; color:var(--text-faint); text-transform:uppercase; letter-spacing:.06em; margin-bottom:6px;}
+.rest-range-btns{display:flex; gap:7px;}
+.rest-range-btn{flex:1; background:var(--surface-2); border:1px solid var(--border); color:var(--text-muted); border-radius:10px; padding:10px 6px; font-size:12.5px; font-weight:600; cursor:pointer; text-align:center; font-family:var(--font-mono);}
+.rest-range-btn:active{transform:scale(.96); background:var(--accent-glow); color:var(--accent); border-color:var(--accent);}
 @media print{
   .topbar,.bottomnav,.tabs,.week-rail,.hero-cta,.day-tabs{display:none !important;}
   body{background:#fff; color:#000; padding-bottom:0;}
@@ -1313,6 +1319,19 @@ const Timer = {
     this._interval = setInterval(()=>this._tick(), 500);
   },
 
+  // Inicia timer con selector de rango visible (para ejercicios con rango variable)
+  startRange(minSec, maxSec, label){
+    this.start(minSec, label); // comienza en el mínimo; el usuario eligió el rango antes
+  },
+
+  // Devuelve [minSec, maxSec] según FUNC_CAT del ejercicio (null si es fijo)
+  restRangeOf(exId){
+    const fc = FUNC_CAT[exId];
+    const map = { PLIOMETRÍA:[90,120], POTENCIA:[120,180], FUERZA:[180,240], CORE:[45,60], HIPERTROFIA:[60,90], ROBUSTEZ:[60,90] };
+    const r = map[fc];
+    return (r && r[0] !== r[1]) ? r : null;
+  },
+
   // Para biserie A1/B1: no iniciar descanso largo, solo notificar siguiente ejercicio
   nextSuperset(label){
     Toast.show(`⚡ Pasá al siguiente ejercicio de la superserie`);
@@ -1661,10 +1680,19 @@ const Plan = {
                   <div class="ex-panel-goal">${ex.goal}</div>
                   ${catNote}
                   ${SeriesLog.buildTable(key, it, funcCat || ex.cat)}
-                  ${it.sup && it.sup.endsWith('1')
-                    ? `<button class="next-superset-btn" onclick="Timer.nextSuperset('${exNameSafe}')">⚡ Siguiente ejercicio — Superserie ${it.sup.charAt(0)}</button>`
-                    : `<button class="finish-serie-btn" onclick="Timer.start(${restSec},'${exNameSafe}')">⏱ Finalizar serie &nbsp;·&nbsp; ${restLbl} descanso</button>`
-                  }
+                  ${(()=>{
+                    if(it.sup && it.sup.endsWith('1')){
+                      return `<button class="next-superset-btn" onclick="Timer.nextSuperset('${exNameSafe}')">⚡ Siguiente ejercicio — Superserie ${it.sup.charAt(0)}</button>`;
+                    }
+                    const rng = Timer.restRangeOf(actualId);
+                    if(rng){
+                      const [rMin, rMax] = rng;
+                      const rMid = Math.round((rMin+rMax)/2);
+                      const fmt = s => s>=60 ? Math.floor(s/60)+'m'+(s%60?s%60+'s':'') : s+'s';
+                      return `<div class="rest-range-wrap"><div class="rest-range-label">⏱ Descanso — elegí el tiempo</div><div class="rest-range-btns"><button class="rest-range-btn" onclick="Timer.start(${rMin},'${exNameSafe}')">${fmt(rMin)}</button><button class="rest-range-btn" onclick="Timer.start(${rMid},'${exNameSafe}')">${fmt(rMid)}</button><button class="rest-range-btn" onclick="Timer.start(${rMax},'${exNameSafe}')">${fmt(rMax)}</button></div></div>`;
+                    }
+                    return `<button class="finish-serie-btn" onclick="Timer.start(${restSec},'${exNameSafe}')">⏱ Finalizar serie &nbsp;·&nbsp; ${restLbl} descanso</button>`;
+                  })()}
                   <a class="ex-video-link" href="${videoHref}" target="_blank" rel="noopener">
                     <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="5 3 19 12 5 21 5 3"/></svg>
                     Ver técnica en video
@@ -1717,12 +1745,13 @@ const Plan = {
     const total = allItems.length;
     const done = allItems.filter(it=>s.completedExercises[`${week}-${day}-${it.id}`]).length;
     const phase = Program.phaseOf(week);
+    const routine = Program.routineOf(week);
     const today = new Date().toISOString().slice(0,10);
     if(!s.sessionHistory) s.sessionHistory = [];
     const idx = s.sessionHistory.findIndex(r=>r.week===week && r.day===day);
     const record = {
       week, day, dayLabel: Program.dayLabel(day), dayType: Program.dayType(day),
-      phase: phase.name, date: today, exercisesTotal: total, exercisesDone: done,
+      phase: phase.name, routine, date: today, exercisesTotal: total, exercisesDone: done,
       complete: done===total && total>0
     };
     if(idx>=0) s.sessionHistory[idx] = record; else s.sessionHistory.push(record);
@@ -1876,8 +1905,11 @@ const History = {
     listEl.innerHTML = hist.map(r=>`
       <div class="card" style="padding:12px 14px; display:flex; justify-content:space-between; align-items:center; gap:10px; margin-bottom:8px;">
         <div style="min-width:0;">
-          <div style="font-size:13px; font-weight:600;">Semana ${r.week} · ${r.dayLabel} — ${r.dayType}</div>
-          <div style="font-size:11px; color:var(--text-faint); margin-top:2px;">${r.date} · ${r.phase.split('—')[0].trim()}</div>
+          <div style="font-size:13px; font-weight:600; display:flex; align-items:center; gap:7px;">
+            Sem ${r.week} · ${r.dayLabel} — ${r.dayType}
+            ${r.routine ? `<span class="routine-badge ${r.routine==='B'?'b':''}">${r.routine}</span>` : ''}
+          </div>
+          <div style="font-size:11px; color:var(--text-faint); margin-top:2px;">${r.date} · ${r.phase}</div>
         </div>
         <div class="chip ${r.complete?'accent':''}" style="flex:none;">${r.exercisesDone}/${r.exercisesTotal}</div>
       </div>
