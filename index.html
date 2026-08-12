@@ -343,6 +343,10 @@ svg.chart{width:100%; height:150px; overflow:visible;}
 /* Always-visible log area below exercise row */
 .ex-log-area{padding:12px 14px; border-top:1px solid var(--border); background:rgba(29,31,35,.7);}
 .ex-log-area .session-log{margin-top:0;}
+/* Per-row timer button inside series table */
+.ser-timer-btn{background:var(--accent-glow); border:1.5px solid rgba(0,200,83,.35); color:var(--accent); border-radius:8px; padding:5px 7px; font-size:15px; cursor:pointer; line-height:1; display:flex; align-items:center; justify-content:center; width:100%;}
+.ser-timer-btn:active{transform:scale(.91);}
+.ser-timer-btn.sup-next{background:rgba(255,179,0,.1); color:var(--warn); border-color:rgba(255,179,0,.35);}
 .ex-video-link{display:flex; align-items:center; gap:6px; background:var(--surface); border:1px solid var(--border); border-radius:10px; padding:8px 12px; color:var(--accent); text-decoration:none; font-size:12px; font-weight:600; margin-top:10px; width:fit-content;}
 /* Progression toggle inside panel */
 .prog-panel-toggle{background:none; border:none; color:var(--text-faint); font-size:12px; cursor:pointer; padding:8px 0 0; text-align:left; width:100%;}
@@ -1411,7 +1415,7 @@ const SeriesLog = {
     return matches.length > 0 ? matches[0].data : null;
   },
 
-  buildTable(key, it, cat){
+  buildTable(key, it, cat, timerOpts){
     const numSets = this._parseSets(it.sets);
     const hasLoad = this._hasLoad(it.load);
     const isTimed = this._isTimed(it.reps);
@@ -1429,11 +1433,22 @@ const SeriesLog = {
       if(pts.length) prefillHint = `<div class="series-prefill">📋 Ref. última S1: <span>${pts.join(' · ')}</span></div>`;
     }
 
+    const to = timerOpts || {};
+    const isSupFirst = to.sup && to.sup.endsWith('1');
+    const timerSec = to.rng ? Math.round((to.rng[0] + to.rng[1]) / 2) : (to.restSec || 90);
+    const timerCell = to.exName
+      ? (isSupFirst
+          ? `<td><button class="ser-timer-btn sup-next" onclick="Timer.nextSuperset('${to.exName}')" title="Siguiente en superserie">→</button></td>`
+          : `<td><button class="ser-timer-btn" onclick="Timer.start(${timerSec},'${to.exName}')" title="Descanso">⏱</button></td>`)
+      : '';
+    const timerHeader = to.exName ? '<th style="width:34px;padding:0;"></th>' : '';
+
     const headers = `<tr>
       <th>S</th>
       ${hasLoad ? '<th>Peso (kg)</th>' : ''}
       <th>${isTimed ? 'Tiempo' : 'Reps'}</th>
       ${showRIR ? '<th>RIR</th>' : ''}
+      ${timerHeader}
     </tr>`;
 
     const rows = Array.from({length: numSets}, (_,i) => {
@@ -1443,6 +1458,7 @@ const SeriesLog = {
         ${hasLoad ? `<td><input type="number" inputmode="decimal" placeholder="kg" value="${e.peso||''}" onchange="SeriesLog.save('${key}',${i},'peso',this.value)"></td>` : ''}
         <td><input type="number" inputmode="numeric" placeholder="${isTimed?'seg':'reps'}" value="${e.reps||''}" onchange="SeriesLog.save('${key}',${i},'reps',this.value)"></td>
         ${showRIR ? `<td><input type="number" inputmode="numeric" placeholder="0-5" value="${e.rir||''}" onchange="SeriesLog.save('${key}',${i},'rir',this.value)" min="0" max="5"></td>` : ''}
+        ${timerCell}
       </tr>`;
     }).join('');
 
@@ -1679,20 +1695,12 @@ const Plan = {
                   <svg id="${arrowId}" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--text-faint)" stroke-width="2" style="flex:none; transition:transform .2s ease;"><path d="M6 9l6 6 6-6"/></svg>
                 </div>
                 <div class="ex-log-area">
-                  ${SeriesLog.buildTable(key, it, funcCat || ex.cat)}
-                  ${(()=>{
-                    if(it.sup && it.sup.endsWith('1')){
-                      return `<button class="next-superset-btn" onclick="Timer.nextSuperset('${exNameSafe}')">⚡ Siguiente ejercicio — Superserie ${it.sup.charAt(0)}</button>`;
-                    }
-                    const rng = Timer.restRangeOf(actualId);
-                    if(rng){
-                      const [rMin, rMax] = rng;
-                      const rMid = Math.round((rMin+rMax)/2);
-                      const fmt = s => s>=60 ? Math.floor(s/60)+'m'+(s%60?s%60+'s':'') : s+'s';
-                      return `<div class="rest-range-wrap"><div class="rest-range-label">⏱ Descanso — elegí el tiempo</div><div class="rest-range-btns"><button class="rest-range-btn" onclick="Timer.start(${rMin},'${exNameSafe}')">${fmt(rMin)}</button><button class="rest-range-btn" onclick="Timer.start(${rMid},'${exNameSafe}')">${fmt(rMid)}</button><button class="rest-range-btn" onclick="Timer.start(${rMax},'${exNameSafe}')">${fmt(rMax)}</button></div></div>`;
-                    }
-                    return `<button class="finish-serie-btn" onclick="Timer.start(${restSec},'${exNameSafe}')">⏱ Finalizar serie &nbsp;·&nbsp; ${restLbl} descanso</button>`;
-                  })()}
+                  ${SeriesLog.buildTable(key, it, funcCat || ex.cat, {
+                    exName: exNameSafe,
+                    restSec: restSec,
+                    rng: Timer.restRangeOf(actualId),
+                    sup: it.sup
+                  })}
                 </div>
                 <div class="ex-panel" id="${panelId}">
                   <div class="ex-panel-muscles">${ex.muscles}</div>
