@@ -670,10 +670,12 @@ svg.chart{width:100%; height:150px; overflow:visible;}
   <div style="font-size:12.5px; color:var(--text-faint); margin-bottom:14px;">Recomposición corporal · Proteína fija: <span class="mono" style="color:var(--accent);">185 g/día</span></div>
 
   <div class="tabs" id="nutri-day-tabs">
-    <div class="tab active" data-nday="futbol" onclick="Nutricion.setDay('futbol')">Fútbol mañana</div>
-    <div class="tab" data-nday="gymMediodia" onclick="Nutricion.setDay('gymMediodia')">Gym mediodía</div>
-    <div class="tab" data-nday="gymNoche" onclick="Nutricion.setDay('gymNoche')">Gym noche</div>
-    <div class="tab" data-nday="descanso" onclick="Nutricion.setDay('descanso')">Descanso</div>
+    <div class="tab active" data-nday="lunes"     onclick="Nutricion.setDay('lunes')">Lunes</div>
+    <div class="tab"        data-nday="martes"    onclick="Nutricion.setDay('martes')">Martes</div>
+    <div class="tab"        data-nday="miercoles" onclick="Nutricion.setDay('miercoles')">Miércoles</div>
+    <div class="tab"        data-nday="jueves"    onclick="Nutricion.setDay('jueves')">Jueves</div>
+    <div class="tab"        data-nday="viernes"   onclick="Nutricion.setDay('viernes')">Viernes</div>
+    <div class="tab"        data-nday="finde"     onclick="Nutricion.setDay('finde')">Finde</div>
   </div>
 
   <div id="nutricion-day-content" style="margin-top:14px;"></div>
@@ -2168,33 +2170,47 @@ const NUTRI = {
   ],
   plateRule:'El cuadrante de hidratos se llena entero si la comida está cerca del entreno, y se achica (más verdura/grasa) si está lejos.',
   days:{
-    futbol:{label:'Fútbol mañana + producción', kcal:'~2750–2800 kcal', meals:[
+    lunes:{label:'Lunes · Boxeo + producción', kcal:'~2800–3000 kcal', intensity:'Intenso', meals:[
+      {name:'Desayuno', sub:'Pre-boxeo · liviano', opts:['Avena (50 g) + leche (200 ml) + miel (10 g)','2 tostadas (60 g) + mantequilla de maní (20 g) + café','2 huevos revueltos (120 g) + 1 rodaja de pan (30 g)']},
+      {name:'Almuerzo', sub:'Post-boxeo · comida fuerte del día', opts:['Pollo grillado (200 g) + arroz (150 g cocido) + ensalada + aceite de oliva','Carne magra (200 g) + puré de batata (200 g) + verduras salteadas','Sorrentinos Ricordo + salsa liviana + proteína extra (pollo o atún 150 g)']},
+      {name:'Merienda', sub:'Recuperación', opts:['Yogur (200 g) + frutos secos (30 g) + 1 fruta (120 g)','2 huevos duros (120 g) + palta (60 g)']},
+      {name:'Cena', sub:'Mantenimiento — proteína alta', opts:['Pescado (180 g) + verduras al horno + palta (60 g)','Milanesa de pollo al horno (180 g) + ensalada grande + aceite de oliva','Carne (180 g) + verduras salteadas + aceite de oliva']},
+      {name:'Colación nocturna', sub:'Opcional — antes de dormir', opts:['Yogur (200 g) + frutos secos (20 g)']}
+    ]},
+    martes:{label:'Martes · Fútbol', kcal:'~2700–2800 kcal', intensity:'Medio / Intenso', meals:[
       {name:'Desayuno', sub:'Pre-fútbol · liviano', opts:['2 tostadas (60 g) + 1 banana (120 g) + café','Avena (40 g) + leche (200 ml) + miel (10 g)','2 huevos revueltos (120 g) + 1 rodaja de pan (30 g)']},
-      {name:'Almuerzo', sub:'Post-fútbol · comida fuerte del día', opts:['Pollo grillado + arroz + ensalada + aceite de oliva','Carne magra + puré de batata + verduras salteadas','Sorrentinos Ricordo con salsa liviana + ensalada + proteína extra (pollo o atún)']},
+      {name:'Almuerzo', sub:'Post-fútbol · comida fuerte del día', opts:['Pollo grillado (180 g) + arroz (130 g cocido) + ensalada + aceite de oliva','Carne magra (180 g) + puré de batata (180 g) + verduras salteadas','Sorrentinos Ricordo + salsa liviana + proteína extra (pollo 150 g)']},
       {name:'Merienda', sub:'Hidrato bajo', opts:['Yogur (200 g) + frutos secos (25 g) + 1 fruta chica (100 g)','2 huevos duros (120 g) + palta (50 g)']},
-      {name:'Cena', sub:'Reducida en hidratos', opts:['Pescado + verduras al horno + palta','Milanesa de pollo al horno + ensalada grande + aceite de oliva','Revuelto de verduras + huevo + queso']},
-      {name:'Colación nocturna', sub:'Opcional — antes de dormir', opts:['Yogur (150 g) o queso (30 g) + frutos secos (20–25 g)']}
-    ]},
-    gymMediodia:{label:'Gym al mediodía + producción', kcal:'~2550–2600 kcal', meals:[
-      {name:'Desayuno', sub:'Liviano', opts:['Café + 2 huevos (120 g)','Yogur (200 g) + frutos secos (25 g)']},
-      {name:'Pre-gym', sub:'60–90 min antes (si hay tiempo)', opts:['1 banana (120 g) o 1 fruta chica (100 g)']},
-      {name:'Almuerzo / Post-gym', sub:'Comida fuerte del día', opts:['Carne + arroz + ensalada + aceite','Pollo + fideos/ravioles Ricordo + salsa liviana','Pescado + puré de papa + verduras']},
-      {name:'Merienda', sub:'Hidrato bajo', opts:['Yogur (200 g) + nueces (25 g)','Queso port salut (50 g) + tomate (100 g)']},
-      {name:'Cena', sub:'Reducida en hidratos', opts:['Pollo + ensalada grande + palta','Pescado + verduras salteadas + aceite de oliva','Tortilla de verduras + ensalada']},
-      {name:'Colación nocturna', sub:'Opcional', opts:['Yogur (150 g) + 1 fruta chica (100 g)']}
-    ]},
-    gymNoche:{label:'Gym a la noche + producción', kcal:'~2550–2600 kcal', meals:[
-      {name:'Desayuno', sub:'Liviano — sin hidrato cargado', opts:['Café + 2 huevos (120 g)','Yogur (200 g) + frutos secos (25 g)']},
-      {name:'Almuerzo', sub:'Hidratos bajos — lejos del entreno', opts:['Pollo + ensalada grande + aceite de oliva','Pescado + verduras salteadas + palta','Carne + verduras al horno']},
-      {name:'Merienda / Pre-gym', sub:'Acá entra el hidrato', opts:['1 banana (120 g) + whey (30 g)','2 fetas de pan (60 g) + mermelada (20 g)','2 tostadas (60 g) + miel (15 g) + café']},
-      {name:'Cena / Post-gym', sub:'Comida fuerte del día', opts:['Carne + arroz o papa + ensalada','Pollo + ravioles/sorrentinos Ricordo + salsa','Pescado + puré + verduras']},
+      {name:'Cena', sub:'Reducida en hidratos', opts:['Pescado (170 g) + verduras al horno + palta (50 g)','Milanesa de pollo al horno (170 g) + ensalada grande + aceite de oliva','Revuelto de verduras + 3 huevos (180 g) + queso (30 g)']},
       {name:'Colación nocturna', sub:'Opcional', opts:['Yogur (150 g) + frutos secos (20 g)']}
     ]},
-    descanso:{label:'Sin entreno', kcal:'~2100 kcal', meals:[
-      {name:'Desayuno', sub:'', opts:['Café + 2 huevos (120 g)','Yogur (200 g) + frutos secos (25 g)']},
-      {name:'Almuerzo', sub:'', opts:['Proteína + verduras + grasa (aceite/palta) — hidrato chico opcional (1 papa o 2 cdas de arroz)']},
+    miercoles:{label:'Miércoles · Gimnasio', kcal:'~2500–2600 kcal', intensity:'Medio', meals:[
+      {name:'Desayuno', sub:'Liviano', opts:['Café + 2 huevos (120 g)','Yogur (200 g) + frutos secos (25 g)']},
+      {name:'Pre-gym', sub:'60–90 min antes (si hay tiempo)', opts:['1 banana (120 g) o 1 fruta chica (100 g)']},
+      {name:'Almuerzo / Post-gym', sub:'Comida fuerte del día', opts:['Carne (160 g) + arroz (120 g cocido) + ensalada + aceite','Pollo (160 g) + fideos/ravioles Ricordo + salsa liviana','Pescado (160 g) + puré de papa (150 g) + verduras']},
+      {name:'Merienda', sub:'Hidrato bajo', opts:['Yogur (200 g) + nueces (25 g)','Queso port salut (50 g) + tomate (100 g)']},
+      {name:'Cena', sub:'Reducida en hidratos', opts:['Pollo (160 g) + ensalada grande + palta (50 g)','Pescado (160 g) + verduras salteadas + aceite de oliva','Tortilla de 3 huevos (180 g) + verduras + ensalada']},
+      {name:'Colación nocturna', sub:'Opcional', opts:['Yogur (150 g) + 1 fruta chica (100 g)']}
+    ]},
+    jueves:{label:'Jueves · Fútbol', kcal:'~2700–2800 kcal', intensity:'Medio / Intenso', meals:[
+      {name:'Desayuno', sub:'Pre-fútbol · liviano', opts:['2 tostadas (60 g) + 1 banana (120 g) + café','Avena (40 g) + leche (200 ml) + miel (10 g)','2 huevos revueltos (120 g) + 1 rodaja de pan (30 g)']},
+      {name:'Almuerzo', sub:'Post-fútbol · comida fuerte del día', opts:['Pollo grillado (180 g) + arroz (130 g cocido) + ensalada + aceite de oliva','Carne magra (180 g) + puré de batata (180 g) + verduras salteadas','Sorrentinos Ricordo + salsa liviana + proteína extra (pollo 150 g)']},
+      {name:'Merienda', sub:'Hidrato bajo', opts:['Yogur (200 g) + frutos secos (25 g) + 1 fruta chica (100 g)','2 huevos duros (120 g) + palta (50 g)']},
+      {name:'Cena', sub:'Reducida en hidratos', opts:['Pescado (170 g) + verduras al horno + palta (50 g)','Milanesa de pollo al horno (170 g) + ensalada grande + aceite de oliva','Revuelto de verduras + 3 huevos (180 g) + queso (30 g)']},
+      {name:'Colación nocturna', sub:'Opcional', opts:['Yogur (150 g) + frutos secos (20 g)']}
+    ]},
+    viernes:{label:'Viernes · Gimnasio + producción', kcal:'~2500–2600 kcal', intensity:'Medio', meals:[
+      {name:'Desayuno', sub:'Liviano', opts:['Café + 2 huevos (120 g)','Yogur (200 g) + frutos secos (25 g)']},
+      {name:'Almuerzo', sub:'Hidratos moderados', opts:['Pollo (160 g) + ensalada grande + aceite de oliva','Pescado (160 g) + verduras salteadas + palta (50 g)','Carne (160 g) + verduras al horno']},
+      {name:'Merienda / Pre-gym', sub:'Hidrato antes del entreno', opts:['1 banana (120 g) + whey (30 g)','2 tostadas (60 g) + miel (15 g) + café','2 fetas de pan (60 g) + mantequilla de maní (20 g)']},
+      {name:'Cena / Post-gym', sub:'Comida fuerte del día', opts:['Carne (180 g) + arroz (120 g cocido) + ensalada','Pollo (180 g) + ravioles/sorrentinos Ricordo + salsa','Pescado (180 g) + puré de papa (150 g) + verduras']},
+      {name:'Colación nocturna', sub:'Opcional', opts:['Yogur (200 g) + frutos secos (20 g)']}
+    ]},
+    finde:{label:'Fin de semana · Descanso', kcal:'~2100–2200 kcal', intensity:'Descanso', meals:[
+      {name:'Desayuno', sub:'Sin apuro', opts:['Café + 2 huevos (120 g)','Yogur (200 g) + frutos secos (25 g)','Avena (40 g) + leche (200 ml) + 1 fruta (100 g)']},
+      {name:'Almuerzo', sub:'Proteína + grasa · hidrato chico', opts:['Pollo (160 g) + verduras + aceite de oliva — 1 papa chica opcional (100 g)','Pescado (160 g) + ensalada grande + palta (60 g)','Carne (160 g) + verduras al horno — 2 cdas de arroz opcional (60 g cocido)']},
       {name:'Merienda', sub:'', opts:['Yogur (200 g) + 1 fruta chica (100 g)','Queso port salut (50 g) + frutos secos (20 g)']},
-      {name:'Cena', sub:'', opts:['Proteína + verduras + grasa — hidrato mínimo o nulo']}
+      {name:'Cena', sub:'Liviana — hidrato mínimo', opts:['Proteína (150–180 g) + verduras + aceite de oliva o palta (50 g)']}
     ]}
   },
   rules:[
@@ -2206,7 +2222,11 @@ const NUTRI = {
 };
 
 const Nutricion = {
-  _day: 'futbol',
+  _day: 'lunes',
+  _dayFromToday(){
+    const map = {1:'lunes',2:'martes',3:'miercoles',4:'jueves',5:'viernes',6:'finde',0:'finde'};
+    return map[new Date().getDay()] || 'lunes';
+  },
   setDay(d){
     this._day = d;
     document.querySelectorAll('#nutri-day-tabs .tab').forEach(t => t.classList.toggle('active', t.dataset.nday === d));
@@ -2252,10 +2272,12 @@ const Nutricion = {
       </div>
     `;
 
+    const intensityColor = {Intenso:'var(--danger)',['Medio / Intenso']:'var(--warn)',Medio:'var(--accent)',Descanso:'var(--text-faint)'}[day.intensity] || 'var(--accent)';
     el.innerHTML = `
-      <div style="display:flex;align-items:baseline;gap:8px;margin-bottom:12px;">
+      <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px;flex-wrap:wrap;">
         <span style="font-size:15px;font-weight:600;">${day.label}</span>
-        <span class="mono" style="font-size:12px;color:var(--accent);">${day.kcal}</span>
+        <span style="font-size:10.5px;font-weight:700;color:${intensityColor};background:rgba(128,128,128,.08);border:1px solid ${intensityColor}44;border-radius:99px;padding:2px 9px;letter-spacing:.04em;">${day.intensity}</span>
+        <span class="mono" style="font-size:12px;color:var(--accent);margin-left:auto;">${day.kcal}</span>
       </div>
       ${mealsHtml}
       ${plateHtml}
@@ -2263,7 +2285,9 @@ const Nutricion = {
     `;
   },
   render(){
-    this.renderDay();
+    const today = this._dayFromToday();
+    if(this._day === 'lunes') this.setDay(today);
+    else this.renderDay();
   }
 };
 
