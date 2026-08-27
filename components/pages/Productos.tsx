@@ -132,15 +132,29 @@ export function Productos() {
     setWizardOpen(false);
   }
 
-  // Orden por margen % descendente (Parte A, Fase 4).
+  // Orden por sabor (producto base): agrupa alfabéticamente por el nombre del producto base,
+  // y adentro de cada grupo deja las variantes de canal (minorista, mayorista, …) una atrás de
+  // la otra, con el producto base primero.
   const productosOrdenados = useMemo(() => {
+    const nombreBase = (idBase: string) => data.productos.find((p) => p.id === idBase)?.nombre ?? idBase;
+    const ordenCanal: Record<string, number> = { Minorista: 0, Mayorista: 1 };
     return data.productos
       .map((p) => {
         const costo = calcCosto(data, p.id);
         const margen = p.precio_venta > 0 ? ((p.precio_venta - costo) / p.precio_venta) * 100 : 0;
         return { producto: p, costo, margen };
       })
-      .sort((a, b) => b.margen - a.margen);
+      .sort((a, b) => {
+        const grupo = nombreBase(a.producto.id_base).localeCompare(nombreBase(b.producto.id_base), "es");
+        if (grupo !== 0) return grupo;
+        const esBaseA = a.producto.id === a.producto.id_base ? 0 : 1;
+        const esBaseB = b.producto.id === b.producto.id_base ? 0 : 1;
+        if (esBaseA !== esBaseB) return esBaseA - esBaseB;
+        const canalA = ordenCanal[a.producto.canal ?? ""] ?? 2;
+        const canalB = ordenCanal[b.producto.canal ?? ""] ?? 2;
+        if (canalA !== canalB) return canalA - canalB;
+        return a.producto.nombre.localeCompare(b.producto.nombre, "es");
+      });
   }, [data]);
 
   const prodReceta = verReceta ? data.productos.find((p) => p.id === verReceta) : null;
