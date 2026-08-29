@@ -3,12 +3,13 @@
 import React from "react";
 import { Sidebar } from "@/components/Sidebar";
 import { Header } from "@/components/Header";
+import { ModuleTabsBar } from "@/components/ModuleTabsBar";
 import { useRouter } from "@/lib/nav-context";
 import { useStore } from "@/lib/store";
 import { PAGES } from "@/components/pages/registry";
 
 export default function Home() {
-  const { page, collapsed, setMobileOpen } = useRouter();
+  const { page, go, collapsed, setMobileOpen } = useRouter();
   const { ready } = useStore();
 
   const PageComponent = PAGES[page];
@@ -24,7 +25,10 @@ export default function Home() {
           {!ready ? (
             <div className="py-20 text-center text-text3">Cargando…</div>
           ) : PageComponent ? (
-            <PageComponent />
+            <>
+              <ModuleTabsBar page={page} go={go} />
+              <PageComponent />
+            </>
           ) : (
             <div className="py-20 text-center text-text3">Módulo no encontrado</div>
           )}

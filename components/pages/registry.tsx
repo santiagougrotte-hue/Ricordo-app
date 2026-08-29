@@ -1,5 +1,5 @@
 import React from "react";
-import { NAV } from "@/lib/nav";
+import { ALL_PAGE_KEYS } from "@/lib/modules";
 import { Placeholder } from "./Placeholder";
 import { Dashboard } from "./Dashboard";
 import { Pedidos } from "./Pedidos";
@@ -42,7 +42,7 @@ import { Payback } from "./Payback";
 import { Config } from "./Config";
 
 export const PAGES: Record<string, React.ComponentType> = Object.fromEntries(
-  NAV.flatMap((g) => g.items.map((i) => [i.key, Placeholder]))
+  ALL_PAGE_KEYS.map((key) => [key, Placeholder])
 );
 
 PAGES.dashboard = Dashboard;
