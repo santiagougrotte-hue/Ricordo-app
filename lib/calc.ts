@@ -8,6 +8,7 @@ import type {
   Cliente,
   Canal,
   Producto,
+  Produccion,
   TipoRecetaLinea,
   GrupoRecetaDerivada,
   ExcepcionLinea,
@@ -324,6 +325,25 @@ export function isAfter(fecha: string, cutoff: string | null): boolean {
 
 /** Stock estimado de un ingrediente con seguimiento activo:
  * último conteo + compras posteriores al conteo − uso en producción posterior al conteo */
+/** Cuánto de un ingrediente consumió una producción — despacha igual que calcCosto: receta
+ * derivada para un producto migrado al modelo base/venta, RecetaLinea propia para el resto. Sin
+ * esto, migrar una familia al modelo nuevo (ver recetaDerivada) hace que su consumo de
+ * ingredientes desaparezca silenciosamente de acá, porque sus RecetaLinea de Ingrediente ya no
+ * existen (se movieron a receta_masa_unidad/receta_relleno_unidad del producto base). */
+function consumoIngredienteEnProduccion(data: RicordoData, prod: Produccion, idIngrediente: string): number {
+  const producto = data.productos.find((p) => p.id === prod.id_producto);
+  if (estaMigrado(data, producto)) {
+    const cantidadPorPaquete = recetaDerivada(data, producto as Producto)
+      .filter((l) => l.tipo === "Ingrediente" && l.concepto === idIngrediente)
+      .reduce((acc, l) => acc + l.cantidad, 0);
+    return cantidadPorPaquete * prod.cantidad;
+  }
+  const cantidadPorPaquete = data.recetas
+    .filter((r) => r.id_producto === prod.id_producto && r.tipo === "Ingrediente" && r.concepto === idIngrediente)
+    .reduce((acc, r) => acc + r.cantidad, 0);
+  return cantidadPorPaquete * prod.cantidad;
+}
+
 export function calcStockIngrediente(data: RicordoData, idIngrediente: string): number {
   const conteos = data.conteos_ingredientes
     .filter((c) => c.id_ingrediente === idIngrediente)
@@ -343,12 +363,7 @@ export function calcStockIngrediente(data: RicordoData, idIngrediente: string): 
   let usadoPost = 0;
   for (const prod of data.produccion) {
     if (fechaBase && new Date(prod.fecha) <= new Date(fechaBase)) continue;
-    const recetaLineas = data.recetas.filter(
-      (r) => r.id_producto === prod.id_producto && r.tipo === "Ingrediente" && r.concepto === idIngrediente
-    );
-    for (const rl of recetaLineas) {
-      usadoPost += rl.cantidad * prod.cantidad;
-    }
+    usadoPost += consumoIngredienteEnProduccion(data, prod, idIngrediente);
   }
 
   return base + compradoPost - usadoPost;

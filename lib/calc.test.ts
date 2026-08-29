@@ -21,9 +21,10 @@ import {
   informeControl,
   unidadesVendidasUltimosMeses,
   excepcionesActivas,
+  calcStockIngrediente,
 } from "./calc";
 import { emptyData } from "./types";
-import type { Pedido, Producto, Ingrediente, RecetaLinea } from "./types";
+import type { Pedido, Producto, Ingrediente, RecetaLinea, Produccion } from "./types";
 
 function pedidoBase(overrides: Partial<Pedido> = {}): Pedido {
   return {
@@ -490,4 +491,53 @@ test("excepcionesActivas: junta las excepciones de todos los productos en un sol
   assert.equal(activas.length, 2);
   assert.equal(activas[0].producto.id, "PROD-08");
   assert.equal(activas[1].excepcion.id, "EXC-2");
+});
+
+function produccionBase(overrides: Partial<Produccion> = {}): Produccion {
+  return {
+    id: "PRODLOG-1",
+    id_producto: "PROD-08",
+    nombre_producto: "Calabaza mayorista",
+    cantidad: 5,
+    fecha: "2026-07-15",
+    ...overrides,
+  };
+}
+
+test("calcStockIngrediente: descuenta el consumo de una producción de un producto no migrado (RecetaLinea propia)", () => {
+  const data = emptyData();
+  data.ingredientes = ingredientesCalabaza();
+  data.conteos_ingredientes = [{ id: "CI-1", id_ingrediente: "ING-CALABAZA", cantidad: 10, fecha: "2026-07-01" }];
+  data.recetas = [{ id: "R1", id_producto: "PROD-08", tipo: "Ingrediente", concepto: "ING-CALABAZA", cantidad: 0.2 }];
+  data.produccion = [produccionBase()]; // 5 paquetes × 0,2 kg = 1 kg consumido
+
+  assert.equal(calcStockIngrediente(data, "ING-CALABAZA"), 10 - 1);
+});
+
+test("calcStockIngrediente: descuenta el consumo de una producción de un producto MIGRADO leyendo su receta derivada — no queda en 0 solo porque ya no tiene RecetaLinea propia", () => {
+  const data = emptyData();
+  const base: Producto = {
+    id: "PROD-01",
+    id_base: "PROD-01",
+    nombre: "Ravioles de calabaza",
+    precio_venta: 13000,
+    activo: true,
+    receta_relleno_unidad: [{ id: "RU-1", id_ingrediente: "ING-CALABAZA", cantidad: 0.02 }],
+  };
+  const venta: Producto = {
+    id: "PROD-08",
+    id_base: "PROD-01",
+    nombre: "Calabaza mayorista",
+    precio_venta: 11000,
+    activo: true,
+    unidades_por_paquete: 10, // 0,02 × 10 = 0,2 kg por paquete, igual que el caso legacy de arriba
+  };
+  data.productos = [base, venta];
+  data.ingredientes = ingredientesCalabaza();
+  data.conteos_ingredientes = [{ id: "CI-1", id_ingrediente: "ING-CALABAZA", cantidad: 10, fecha: "2026-07-01" }];
+  data.recetas = []; // el producto de venta migrado no tiene ninguna RecetaLinea de Ingrediente propia
+  data.produccion = [produccionBase()]; // 5 paquetes
+
+  assert.equal(estaMigrado(data, venta), true);
+  assert.equal(calcStockIngrediente(data, "ING-CALABAZA"), 10 - 1, "mismo consumo que el caso legacy: 5 × 0,2kg");
 });
