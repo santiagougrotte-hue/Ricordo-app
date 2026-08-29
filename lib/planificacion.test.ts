@@ -222,6 +222,52 @@ test("calcularComposicionGusto: ingrediente 'unidad' sin peso_unitario_g no romp
   assert.deepEqual(composicion.ingredientesSinPesoConfigurado, ["Bolsas"]);
 });
 
+test("calcularComposicionGusto: producto migrado al modelo base/venta usa la receta derivada, no queda 'sin composición'", () => {
+  const data = emptyData();
+  data.ingredientes = ingredienteEspinaca();
+  const base: Producto = {
+    id: "PROD-03",
+    id_base: "PROD-03",
+    nombre: "Raviolon de espinaca",
+    precio_venta: 13000,
+    activo: true,
+    receta_masa_unidad: [
+      { id: "RU-1", id_ingrediente: "ING-PREMEZCLA", cantidad: 0.01 },
+      { id: "RU-2", id_ingrediente: "ING-HARINA", cantidad: 0.005 },
+    ],
+    receta_relleno_unidad: [{ id: "RU-3", id_ingrediente: "ING-ESPINACA", cantidad: 0.05 }],
+  };
+  const venta: Producto = {
+    id: "PROD-09",
+    id_base: "PROD-03",
+    nombre: "Espinaca mayorista",
+    precio_venta: 10500,
+    activo: true,
+    unidades_por_paquete: 6,
+  };
+  data.productos = [base, venta];
+  // data.recetas queda vacío a propósito: un producto de venta migrado no tiene RecetaLinea
+  // de Ingrediente propia, así que sin el despacho a la receta derivada esto daría 0.
+
+  const masa = calcularComposicionGusto(data, "PROD-09", "masa");
+  assert.ok(Math.abs(masa.totalGramosPorCaja - 90) < 0.001); // (0,01+0,005 kg) × 6 unidades × 1000
+
+  const relleno = calcularComposicionGusto(data, "PROD-09", "relleno");
+  assert.ok(Math.abs(relleno.totalGramosPorCaja - 300) < 0.001); // 0,05kg × 6 × 1000
+  assert.equal(relleno.ingredientes.length, 1);
+  assert.equal(relleno.ingredientes[0].id_ingrediente, "ING-ESPINACA");
+});
+
+test("calcularComposicionGusto: producto NO migrado sigue leyendo RecetaLinea.componente aunque exista un Producto en data.productos", () => {
+  const data = emptyData();
+  data.ingredientes = ingredienteEspinaca();
+  data.recetas = recetaEspinacaClasificada();
+  data.productos = [{ id: "PROD-03", id_base: "PROD-03", nombre: "Raviolon de espinaca", precio_venta: 13000, activo: true }];
+
+  const composicion = calcularComposicionGusto(data, "PROD-03", "masa");
+  assert.equal(composicion.totalGramosPorCaja, 205);
+});
+
 test("reescalarLineasComponente: reescala solo las líneas del componente indicado", () => {
   const data = emptyData();
   data.ingredientes = ingredienteEspinaca();

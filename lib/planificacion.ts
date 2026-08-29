@@ -1,9 +1,13 @@
 // Lógica del módulo de Planificación de Producción. Vive separado de calc.ts a propósito:
 // nada de acá interviene en el costeo — calcCosto() sigue leyendo únicamente
-// tipo/concepto/cantidad de cada RecetaLinea, nunca el campo `componente`.
+// tipo/concepto/cantidad de cada RecetaLinea, nunca el campo `componente`. La única excepción es
+// de solo lectura: calcularComposicionGusto() sabe leer la receta derivada de un producto ya
+// migrado al modelo base/venta (ver estaMigrado/recetaDerivada en calc.ts) para no marcarlo como
+// "sin composición" apenas se migra — pero reescalarLineasComponente() (Bloque 3, que sí escribe)
+// sigue siendo exclusivamente para productos no migrados, con RecetaLinea.componente propia.
 
-import type { RicordoData, ComponenteReceta, Ingrediente, RecetaLinea } from "./types";
-import { gustosActivos, inPeriod, pvr } from "./calc";
+import type { RicordoData, ComponenteReceta, Ingrediente, RecetaLinea, Producto } from "./types";
+import { gustosActivos, inPeriod, pvr, estaMigrado, recetaDerivada } from "./calc";
 
 export const CAJAS_POR_SEMANA_DIVISOR = 4.33;
 
@@ -170,18 +174,39 @@ export interface ComposicionGusto {
   ingredientesSinPesoConfigurado: string[];
 }
 
+/** Líneas de ingrediente de un componente (masa/relleno) para un producto de venta — receta
+ * derivada si el producto ya está migrado al modelo base/venta, RecetaLinea.componente propia si
+ * no. Mismo despacho que calcCosto()/calcStockIngrediente(), pero de solo lectura. */
+function lineasIngredienteDelComponente(
+  data: RicordoData,
+  producto: Producto | undefined,
+  idProducto: string,
+  componente: "masa" | "relleno"
+): { id_ingrediente: string; cantidad: number }[] {
+  if (estaMigrado(data, producto)) {
+    return recetaDerivada(data, producto)
+      .filter((l) => l.tipo === "Ingrediente" && l.grupo === componente)
+      .map((l) => ({ id_ingrediente: l.concepto, cantidad: l.cantidad }));
+  }
+  return data.recetas
+    .filter((r) => r.id_producto === idProducto && r.tipo === "Ingrediente" && r.componente === componente)
+    .map((r) => ({ id_ingrediente: r.concepto, cantidad: r.cantidad }));
+}
+
 /** Deriva la composición % de masa o relleno de un gusto a partir de sus líneas de receta ya
- * clasificadas (RecetaLinea.componente). Pura — no lee ni escribe Producto.gramos_*_por_caja. */
+ * clasificadas (RecetaLinea.componente), o de la receta derivada si el producto está migrado.
+ * Pura — no lee ni escribe Producto.gramos_*_por_caja. */
 export function calcularComposicionGusto(
   data: RicordoData,
   idProducto: string,
   componente: "masa" | "relleno"
 ): ComposicionGusto {
-  const lineas = data.recetas.filter((r) => r.id_producto === idProducto && r.tipo === "Ingrediente" && r.componente === componente);
+  const producto = data.productos.find((p) => p.id === idProducto);
+  const lineas = lineasIngredienteDelComponente(data, producto, idProducto, componente);
   const detalle: { id_ingrediente: string; nombre: string; unidad: string; gramos: number }[] = [];
   const sinPeso: string[] = [];
   for (const linea of lineas) {
-    const ing = data.ingredientes.find((i) => i.id === linea.concepto);
+    const ing = data.ingredientes.find((i) => i.id === linea.id_ingrediente);
     if (!ing) continue;
     const { gramos, sinPeso: falta } = gramosEfectivos(ing, linea.cantidad);
     if (falta) sinPeso.push(ing.nombre);
