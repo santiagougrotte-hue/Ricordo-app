@@ -6,7 +6,7 @@ import { useEntityCrud } from "@/lib/useEntity";
 import { useToast } from "@/lib/toast";
 import { uid } from "@/lib/id";
 import { useStore } from "@/lib/store";
-import { comprasActivas, comparadorProveedores, fARS, fPct } from "@/lib/calc";
+import { comparadorProveedores, fichaProveedor, fARS, fPct } from "@/lib/calc";
 import {
   PageHeader,
   Button,
@@ -27,7 +27,15 @@ import { FileAttach } from "@/components/FileAttach";
 import type { Adjunto, Proveedor } from "@/lib/types";
 
 function emptyForm() {
-  return { nombre: "", contacto: "", telefono: "", email: "", notas: "", documento: undefined as Adjunto | undefined };
+  return {
+    nombre: "",
+    contacto: "",
+    telefono: "",
+    email: "",
+    direccion: "",
+    notas: "",
+    documento: undefined as Adjunto | undefined,
+  };
 }
 
 export function Proveedores() {
@@ -52,9 +60,6 @@ export function Proveedores() {
     toast("Proveedor reactivado");
   }
 
-  const totalCompras = (idProveedor: string) =>
-    comprasActivas(data).filter((c) => c.id_proveedor === idProveedor).reduce((acc, c) => acc + c.total, 0);
-
   const comparador = useMemo(() => comparadorProveedores(data), [data]);
 
   function openNew() {
@@ -69,6 +74,7 @@ export function Proveedores() {
       contacto: p.contacto ?? "",
       telefono: p.telefono ?? "",
       email: p.email ?? "",
+      direccion: p.direccion ?? "",
       notas: p.notas ?? "",
       documento: p.documento,
     });
@@ -109,12 +115,18 @@ export function Proveedores() {
                   <Th>Nombre</Th>
                   <Th>Contacto</Th>
                   <Th>Teléfono</Th>
-                  <Th>Total compras</Th>
+                  <Th>Dirección</Th>
+                  <Th>Compras</Th>
+                  <Th>Total comprado</Th>
+                  <Th>Precio promedio</Th>
+                  <Th title="Insumos con al menos una compra registrada a este proveedor">Insumos</Th>
                   <Th>Acciones</Th>
                 </tr>
               </thead>
               <tbody>
-                {visibles.map((p) => (
+                {visibles.map((p) => {
+                  const ficha = fichaProveedor(data, p.id);
+                  return (
                   <TrHover key={p.id} className={p.activo === false ? "opacity-50" : undefined}>
                     <Td main>
                       <div className="flex items-center gap-1.5">
@@ -133,7 +145,15 @@ export function Proveedores() {
                     </Td>
                     <Td>{p.contacto || "—"}</Td>
                     <Td>{p.telefono || "—"}</Td>
-                    <Td>{fARS(totalCompras(p.id))}</Td>
+                    <Td>{p.direccion || "—"}</Td>
+                    <Td>{ficha.cantidadCompras}</Td>
+                    <Td>{fARS(ficha.totalComprado)}</Td>
+                    <Td>{ficha.cantidadCompras > 0 ? fARS(ficha.precioPromedioCompra) : "—"}</Td>
+                    <Td>
+                      <span title={ficha.insumosSuministrados.join(", ")}>
+                        {ficha.insumosSuministrados.length > 0 ? ficha.insumosSuministrados.length : "—"}
+                      </span>
+                    </Td>
                     <Td>
                       <div className="flex gap-1.5">
                         <Button size="sm" variant="ghost" onClick={() => openEdit(p)}>
@@ -151,7 +171,8 @@ export function Proveedores() {
                       </div>
                     </Td>
                   </TrHover>
-                ))}
+                  );
+                })}
               </tbody>
             </table>
           </TableWrap>
@@ -230,6 +251,9 @@ export function Proveedores() {
           </Field>
           <Field label="Email" full>
             <Input value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} />
+          </Field>
+          <Field label="Dirección" full>
+            <Input value={form.direccion} onChange={(e) => setForm({ ...form, direccion: e.target.value })} />
           </Field>
           <Field label="Notas" full>
             <Textarea rows={2} value={form.notas} onChange={(e) => setForm({ ...form, notas: e.target.value })} />

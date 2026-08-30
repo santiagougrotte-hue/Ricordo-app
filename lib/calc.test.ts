@@ -36,6 +36,7 @@ import {
   montoRestanteAmortizacion,
   cantidadIngredienteEnProducto,
   impactoCostoIngrediente,
+  fichaProveedor,
 } from "./calc";
 import { emptyData } from "./types";
 import type { Pedido, Producto, Ingrediente, RecetaLinea, Produccion, Cliente, Amortizacion, CajaMovimiento } from "./types";
@@ -990,4 +991,67 @@ test("impactoCostoIngrediente: excluye productos inactivos", () => {
   data.productos = [{ id: "PROD-09", id_base: "PROD-09", nombre: "Calabaza sin salsa", precio_venta: 9000, activo: false }];
   data.recetas = [{ id: "R1", id_producto: "PROD-09", tipo: "Ingrediente", concepto: "ING-HARINA", cantidad: 0.05 }];
   assert.equal(impactoCostoIngrediente(data, "ING-HARINA", 10).length, 0);
+});
+
+// --- Ficha de proveedor (estadísticas derivadas, nunca cargadas a mano) -----------------------
+
+test("fichaProveedor: cantidad, total, precio promedio e insumos suministrados, derivados de comprasActivas", () => {
+  const data = emptyData();
+  data.ingredientes = [
+    { id: "ING-1", nombre: "Mozzarella", unidad: "kg", precio_ref: 9000, precio_vigente: null, seguimiento_stock: false },
+    { id: "ING-2", nombre: "Harina", unidad: "kg", precio_ref: 1000, precio_vigente: null, seguimiento_stock: false },
+  ];
+  data.proveedores = [{ id: "PRV-A", nombre: "Lácteos del Sur" }];
+  data.compras = [
+    {
+      id: "COM-1",
+      fecha: "2026-06-01",
+      id_proveedor: "PRV-A",
+      total: 9000,
+      total_manual: false,
+      registrar_caja: false,
+      lineas: [{ id_ingrediente: "ING-1", cantidad: 1, precio_unitario: 9000 }],
+      lineasPkg: [],
+    },
+    {
+      id: "COM-2",
+      fecha: "2026-07-01",
+      id_proveedor: "PRV-A",
+      total: 5000,
+      total_manual: false,
+      registrar_caja: false,
+      lineas: [
+        { id_ingrediente: "ING-1", cantidad: 0.3, precio_unitario: 9500 },
+        { id_ingrediente: "ING-2", cantidad: 2, precio_unitario: 1050 },
+      ],
+      lineasPkg: [],
+    },
+    {
+      id: "COM-3",
+      fecha: "2026-07-15",
+      id_proveedor: "PRV-A",
+      total: 1000,
+      total_manual: false,
+      registrar_caja: false,
+      anulada: true, // no debe contar
+      lineas: [{ id_ingrediente: "ING-2", cantidad: 1, precio_unitario: 1000 }],
+      lineasPkg: [],
+    },
+  ];
+
+  const ficha = fichaProveedor(data, "PRV-A");
+  assert.equal(ficha.cantidadCompras, 2, "la compra anulada no cuenta");
+  assert.equal(ficha.totalComprado, 14000);
+  assert.equal(ficha.precioPromedioCompra, 7000);
+  assert.deepEqual(ficha.insumosSuministrados, ["Harina", "Mozzarella"], "ordenados alfabéticamente, sin duplicados");
+});
+
+test("fichaProveedor: proveedor sin compras devuelve todo en cero, sin dividir por cero", () => {
+  const data = emptyData();
+  data.proveedores = [{ id: "PRV-A", nombre: "Nuevo" }];
+  const ficha = fichaProveedor(data, "PRV-A");
+  assert.equal(ficha.cantidadCompras, 0);
+  assert.equal(ficha.totalComprado, 0);
+  assert.equal(ficha.precioPromedioCompra, 0);
+  assert.deepEqual(ficha.insumosSuministrados, []);
 });

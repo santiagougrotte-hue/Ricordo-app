@@ -938,6 +938,33 @@ export function comparadorProveedores(data: RicordoData): ComparadorInsumo[] {
   return resultado.sort((a, b) => a.nombreIngrediente.localeCompare(b.nombreIngrediente, "es"));
 }
 
+export interface FichaProveedor {
+  cantidadCompras: number;
+  totalComprado: number;
+  precioPromedioCompra: number;
+  insumosSuministrados: string[];
+}
+
+/** Estadísticas de un proveedor derivadas de sus compras — nunca se cargan a mano, siempre se
+ * recalculan de comprasActivas para no duplicar datos que ya existen en Compras. */
+export function fichaProveedor(data: RicordoData, idProveedor: string): FichaProveedor {
+  const compras = comprasActivas(data).filter((c) => c.id_proveedor === idProveedor);
+  const totalComprado = compras.reduce((acc, c) => acc + c.total, 0);
+  const idsIngredientes = new Set<string>();
+  for (const c of compras) {
+    for (const l of c.lineas) idsIngredientes.add(l.id_ingrediente);
+  }
+  const insumosSuministrados = [...idsIngredientes]
+    .map((id) => data.ingredientes.find((i) => i.id === id)?.nombre ?? id)
+    .sort((a, b) => a.localeCompare(b, "es"));
+  return {
+    cantidadCompras: compras.length,
+    totalComprado,
+    precioPromedioCompra: compras.length > 0 ? totalComprado / compras.length : 0,
+    insumosSuministrados,
+  };
+}
+
 /** Compara, mes a mes, cuánto se compró de materia prima contra el costo de lo que
  * efectivamente se vendió — solo señala, no juzga: una diferencia positiva puede ser
  * stock intencional. Umbrales de amber/red configurables. */

@@ -266,6 +266,7 @@ export interface Proveedor {
   contacto?: string;
   telefono?: string;
   email?: string;
+  direccion?: string;
   notas?: string;
   documento?: Adjunto;
   /** Soft-delete: false = dado de baja. Ausente o true = activo. */
