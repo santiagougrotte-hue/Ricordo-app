@@ -4,7 +4,7 @@ import React, { useMemo, useState } from "react";
 import { useStore } from "@/lib/store";
 import { useToast } from "@/lib/toast";
 import { uid } from "@/lib/id";
-import { fARS, fPct, pvr } from "@/lib/calc";
+import { fARS, fPct, pvr, impactoCostoIngrediente } from "@/lib/calc";
 import {
   PageHeader,
   Button,
@@ -37,6 +37,67 @@ function emptyForm() {
   };
 }
 
+function ImpactoModal({ ingrediente, onClose }: { ingrediente: Ingrediente | null; onClose: () => void }) {
+  const { data } = useStore();
+  const [deltaPct, setDeltaPct] = useState(10);
+
+  const filas = useMemo(
+    () => (ingrediente ? impactoCostoIngrediente(data, ingrediente.id, deltaPct) : []),
+    [data, ingrediente, deltaPct]
+  );
+
+  return (
+    <Modal
+      open={!!ingrediente}
+      onClose={onClose}
+      title={ingrediente ? `Impacto del costo — ${ingrediente.nombre}` : ""}
+      footer={
+        <Button variant="ghost" onClick={onClose}>
+          Cerrar
+        </Button>
+      }
+    >
+      <Field label="Si el precio cambia (%)" full>
+        <Input type="number" value={deltaPct} onChange={(e) => setDeltaPct(Number(e.target.value))} placeholder="Ej: 10 = +10%, -15 = -15%" />
+      </Field>
+      <div className="mt-3.5">
+        {filas.length === 0 ? (
+          <EmptyState text="Ningún producto activo usa este insumo." />
+        ) : (
+          <TableWrap>
+            <table className="w-full">
+              <thead>
+                <tr>
+                  <Th>Producto</Th>
+                  <Th>Costo actual</Th>
+                  <Th>Costo nuevo</Th>
+                  <Th>Margen actual</Th>
+                  <Th>Margen nuevo</Th>
+                </tr>
+              </thead>
+              <tbody>
+                {filas.map((f) => (
+                  <TrHover key={f.producto.id}>
+                    <Td main>{f.producto.nombre}</Td>
+                    <Td>{fARS(f.costoActual)}</Td>
+                    <Td className={f.costoNuevo > f.costoActual ? "text-red" : f.costoNuevo < f.costoActual ? "text-green" : undefined}>
+                      {fARS(f.costoNuevo)}
+                    </Td>
+                    <Td>{fPct(f.margenActualPct)}</Td>
+                    <Td className={f.margenNuevoPct < f.margenActualPct ? "text-red" : f.margenNuevoPct > f.margenActualPct ? "text-green" : undefined}>
+                      {fPct(f.margenNuevoPct)}
+                    </Td>
+                  </TrHover>
+                ))}
+              </tbody>
+            </table>
+          </TableWrap>
+        )}
+      </div>
+    </Modal>
+  );
+}
+
 function IngredientesTab() {
   const { data, setData } = useStore();
   const { toast } = useToast();
@@ -44,6 +105,7 @@ function IngredientesTab() {
   const [modalOpen, setModalOpen] = useState(false);
   const [editing, setEditing] = useState<string | null>(null);
   const [form, setForm] = useState(emptyForm());
+  const [impactoDe, setImpactoDe] = useState<Ingrediente | null>(null);
 
   const filtrados = useMemo(
     () => data.ingredientes.filter((i) => !search || i.nombre.toLowerCase().includes(search.toLowerCase())),
@@ -179,6 +241,9 @@ function IngredientesTab() {
                       </Td>
                       <Td>
                         <div className="flex gap-1.5">
+                          <Button size="sm" variant="ghost" onClick={() => setImpactoDe(i)}>
+                            Impacto
+                          </Button>
                           <Button size="sm" variant="ghost" onClick={() => openEdit(i)}>
                             Editar
                           </Button>
@@ -195,6 +260,8 @@ function IngredientesTab() {
           </TableWrap>
         )}
       </Card>
+
+      <ImpactoModal ingrediente={impactoDe} onClose={() => setImpactoDe(null)} />
 
       {editing ? (
         <Modal

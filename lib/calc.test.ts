@@ -34,6 +34,8 @@ import {
   segmentacionClientes,
   cuotaMensualAmortizacion,
   montoRestanteAmortizacion,
+  cantidadIngredienteEnProducto,
+  impactoCostoIngrediente,
 } from "./calc";
 import { emptyData } from "./types";
 import type { Pedido, Producto, Ingrediente, RecetaLinea, Produccion, Cliente, Amortizacion, CajaMovimiento } from "./types";
@@ -929,4 +931,63 @@ test("rentabilidadPorCliente: agrupa por cliente y cuenta pedidos únicos, no l�
   assert.equal(fila.venta, 22000);
   assert.equal(fila.costo, 4000);
   assert.equal(fila.ganancia, 18000);
+});
+
+// --- Impacto del costo de un ingrediente sobre los productos que lo usan ----------------------
+
+test("cantidadIngredienteEnProducto: producto legacy lee directo de RecetaLinea", () => {
+  const data = emptyData();
+  data.ingredientes = [{ id: "ING-HARINA", nombre: "Harina", unidad: "kg", precio_ref: 2000, precio_vigente: null, seguimiento_stock: false }];
+  data.productos = [{ id: "PROD-09", id_base: "PROD-09", nombre: "Calabaza sin salsa", precio_venta: 9000, activo: true }];
+  data.recetas = [{ id: "R1", id_producto: "PROD-09", tipo: "Ingrediente", concepto: "ING-HARINA", cantidad: 0.05 }];
+  const producto = data.productos[0];
+  assert.equal(cantidadIngredienteEnProducto(data, producto, "ING-HARINA"), 0.05);
+  assert.equal(cantidadIngredienteEnProducto(data, producto, "ING-OTRO"), 0);
+});
+
+test("cantidadIngredienteEnProducto: producto migrado deriva de la receta base, escalada por unidades_por_paquete", () => {
+  const data = emptyData();
+  data.ingredientes = ingredientesCalabaza();
+  const base: Producto = {
+    id: "PROD-01",
+    id_base: "PROD-01",
+    nombre: "Ravioles de calabaza",
+    precio_venta: 13000,
+    activo: true,
+    receta_masa_unidad: [{ id: "RU-1", id_ingrediente: "ING-HARINA", cantidad: 0.003 }],
+  };
+  const migrado: Producto = { id: "PROD-08", id_base: "PROD-01", nombre: "Calabaza mayorista", precio_venta: 11000, activo: true, unidades_por_paquete: 10 };
+  data.productos = [base, migrado];
+  assert.equal(cantidadIngredienteEnProducto(data, migrado, "ING-HARINA"), 0.003 * 10);
+});
+
+test("impactoCostoIngrediente: simula el costo y margen nuevos ante un cambio de precio, sin persistir nada", () => {
+  const data = emptyData();
+  data.ingredientes = [{ id: "ING-HARINA", nombre: "Harina", unidad: "kg", precio_ref: 2000, precio_vigente: null, seguimiento_stock: false }];
+  data.productos = [
+    { id: "PROD-09", id_base: "PROD-09", nombre: "Calabaza sin salsa", precio_venta: 9000, activo: true },
+    { id: "PROD-10", id_base: "PROD-10", nombre: "Ricotta", precio_venta: 12000, activo: true }, // no usa harina
+  ];
+  data.recetas = [{ id: "R1", id_producto: "PROD-09", tipo: "Ingrediente", concepto: "ING-HARINA", cantidad: 0.05 }]; // costo actual = 100
+
+  const resultado = impactoCostoIngrediente(data, "ING-HARINA", 10); // +10%
+  assert.equal(resultado.length, 1, "solo lista productos que efectivamente usan el ingrediente");
+  const [fila] = resultado;
+  assert.equal(fila.producto.id, "PROD-09");
+  assert.equal(fila.cantidadUsada, 0.05);
+  assert.equal(fila.costoActual, 100);
+  assert.ok(Math.abs(fila.costoNuevo - 110) < 0.001, "0.05 × 2000 × 1.10 = 110");
+  assert.ok(Math.abs(fila.margenActualPct - ((9000 - 100) / 9000) * 100) < 0.001);
+  assert.ok(Math.abs(fila.margenNuevoPct - ((9000 - 110) / 9000) * 100) < 0.001);
+
+  // No modifica los datos originales
+  assert.equal(data.ingredientes[0].precio_ref, 2000);
+});
+
+test("impactoCostoIngrediente: excluye productos inactivos", () => {
+  const data = emptyData();
+  data.ingredientes = [{ id: "ING-HARINA", nombre: "Harina", unidad: "kg", precio_ref: 2000, precio_vigente: null, seguimiento_stock: false }];
+  data.productos = [{ id: "PROD-09", id_base: "PROD-09", nombre: "Calabaza sin salsa", precio_venta: 9000, activo: false }];
+  data.recetas = [{ id: "R1", id_producto: "PROD-09", tipo: "Ingrediente", concepto: "ING-HARINA", cantidad: 0.05 }];
+  assert.equal(impactoCostoIngrediente(data, "ING-HARINA", 10).length, 0);
 });

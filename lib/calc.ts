@@ -242,6 +242,53 @@ export function pesoTotalDerivado(data: RicordoData, lineas: LineaRecetaDerivada
     .reduce((acc, l) => acc + gramosDeLinea(data.ingredientes.find((i) => i.id === l.concepto), l.cantidad), 0);
 }
 
+/** Cuánto de un ingrediente entra en la receta de un producto de venta — despacha entre receta
+ * derivada (migrado) y RecetaLinea propia (legacy), mismo criterio que calcCosto. */
+export function cantidadIngredienteEnProducto(data: RicordoData, producto: Producto, idIngrediente: string): number {
+  // estaMigrado toma Producto | undefined | null; se le pasa una copia del tipo así tipado para
+  // que su type predicate no reduzca `producto` a `never` en la rama contraria (ya sabemos que
+  // producto siempre está definido acá).
+  const posible: Producto | undefined = producto;
+  if (estaMigrado(data, posible)) {
+    return recetaDerivada(data, producto)
+      .filter((l) => l.tipo === "Ingrediente" && l.concepto === idIngrediente)
+      .reduce((acc, l) => acc + l.cantidad, 0);
+  }
+  return data.recetas
+    .filter((r) => r.id_producto === producto.id && r.tipo === "Ingrediente" && r.concepto === idIngrediente)
+    .reduce((acc, r) => acc + r.cantidad, 0);
+}
+
+export interface ImpactoProductoIngrediente {
+  producto: Producto;
+  cantidadUsada: number;
+  costoActual: number;
+  costoNuevo: number;
+  margenActualPct: number;
+  margenNuevoPct: number;
+}
+
+/** Para un ingrediente, lista cada producto de venta activo que lo usa y simula el costo/margen
+ * resultante si su precio vigente sube (o baja) un `deltaPct`% — ej. 10 = +10%, -15 = -15%. Solo
+ * lectura, no persiste nada; sirve para responder "si sube la harina 10%, ¿qué productos se ven
+ * afectados y cuánto?" antes de cargar el aumento real en Insumos. */
+export function impactoCostoIngrediente(data: RicordoData, idIngrediente: string, deltaPct: number): ImpactoProductoIngrediente[] {
+  const ingrediente = data.ingredientes.find((i) => i.id === idIngrediente);
+  const precioActual = pvr(ingrediente);
+  const resultado: ImpactoProductoIngrediente[] = [];
+  for (const producto of data.productos) {
+    if (!producto.activo) continue;
+    const cantidadUsada = cantidadIngredienteEnProducto(data, producto, idIngrediente);
+    if (cantidadUsada <= 0) continue;
+    const costoActual = calcCosto(data, producto.id);
+    const costoNuevo = costoActual + cantidadUsada * precioActual * (deltaPct / 100);
+    const margenActualPct = producto.precio_venta > 0 ? ((producto.precio_venta - costoActual) / producto.precio_venta) * 100 : 0;
+    const margenNuevoPct = producto.precio_venta > 0 ? ((producto.precio_venta - costoNuevo) / producto.precio_venta) * 100 : 0;
+    resultado.push({ producto, cantidadUsada, costoActual, costoNuevo, margenActualPct, margenNuevoPct });
+  }
+  return resultado.sort((a, b) => b.costoActual - a.costoActual);
+}
+
 /** Todo producto donde id === id_base es candidato a "producto base" de una familia (así se
  * cargan hoy en el import — un producto autónomo o el primero de una familia). */
 export function productosBaseDisponibles(data: RicordoData): Producto[] {
