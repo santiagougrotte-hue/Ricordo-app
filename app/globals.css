@@ -54,12 +54,14 @@
   --mod-envios: #0ea5e9;
   --mod-reportes: #a855f7;
 
-  /* Colores de los 5 módulos del sidebar nuevo (Ventas, Productos y
-     Producción, Compras y Stock, Finanzas) — mismo uso que --mod-* arriba. */
-  --mod5-ventas: #2dd4a7;
-  --mod5-productos: #f97316;
-  --mod5-compras: #3b82f6;
-  --mod5-finanzas: #eab308;
+  /* Colores de los 6 módulos del sidebar (Pedidos, Productos, Producción,
+     Insumos, Compras, Finanzas) — mismo uso que --mod-* arriba. */
+  --mod6-pedidos: #2dd4a7;
+  --mod6-productos: #f97316;
+  --mod6-produccion: #ec4899;
+  --mod6-insumos: #06b6d4;
+  --mod6-compras: #3b82f6;
+  --mod6-finanzas: #eab308;
 }
 
 /* Tema claro — el default anterior, guardado para cuando se conecte un
@@ -120,10 +122,12 @@
   --color-mod-proveedores: var(--mod-proveedores);
   --color-mod-envios: var(--mod-envios);
   --color-mod-reportes: var(--mod-reportes);
-  --color-mod5-ventas: var(--mod5-ventas);
-  --color-mod5-productos: var(--mod5-productos);
-  --color-mod5-compras: var(--mod5-compras);
-  --color-mod5-finanzas: var(--mod5-finanzas);
+  --color-mod6-pedidos: var(--mod6-pedidos);
+  --color-mod6-productos: var(--mod6-productos);
+  --color-mod6-produccion: var(--mod6-produccion);
+  --color-mod6-insumos: var(--mod6-insumos);
+  --color-mod6-compras: var(--mod6-compras);
+  --color-mod6-finanzas: var(--mod6-finanzas);
   --font-sans: var(--font-inter);
 }
 

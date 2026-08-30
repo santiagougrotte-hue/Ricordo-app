@@ -1,4 +1,4 @@
-// Arquitectura de navegación: 5 módulos visibles (+ Inicio y Config aparte),
+// Arquitectura de navegación: 6 módulos visibles (+ Inicio y Config aparte),
 // cada uno con pestañas internas y, cuando hace falta agrupar varias páginas
 // viejas bajo una sola pestaña, subpestañas. Esto no mueve ni renombra
 // ninguna página existente — solo cambia cómo se llega a ellas, así que
@@ -6,11 +6,19 @@
 //
 // Un "page key" es el identificador de siempre (el mismo que usaba lib/nav.ts
 // y que sigue viviendo en el hash de la URL, ver lib/nav-context.tsx).
+//
+// Pedidos / Productos / Producción / Insumos / Compras / Finanzas: separa lo
+// que antes vivía junto bajo "Ventas" (pedidos + clientes + análisis) y bajo
+// "Productos y Producción" (catálogo + producción) y bajo "Compras y Stock"
+// (insumos + compras + proveedores), porque son flujos de trabajo distintos
+// aunque compartan datos.
 
 import {
   ShoppingCart,
   UtensilsCrossed,
+  Factory,
   Package,
+  ShoppingBag,
   Landmark,
   type LucideIcon,
 } from "lucide-react";
@@ -44,10 +52,10 @@ export interface ModuleDef {
 
 export const MODULES: ModuleDef[] = [
   {
-    key: "ventas",
-    label: "Ventas",
+    key: "pedidos",
+    label: "Pedidos",
     icon: ShoppingCart,
-    color: "var(--mod5-ventas)",
+    color: "var(--mod6-pedidos)",
     tabs: [
       {
         key: "pedidos",
@@ -66,21 +74,13 @@ export const MODULES: ModuleDef[] = [
           { key: "an-clientes", label: "Análisis", page: "an-clientes" },
         ],
       },
-      {
-        key: "analisis",
-        label: "Análisis",
-        subtabs: [
-          { key: "an-productos", label: "Productos", page: "an-productos" },
-          { key: "an-anual", label: "Anual", page: "an-anual" },
-        ],
-      },
     ],
   },
   {
-    key: "productos-produccion",
-    label: "Productos y Producción",
+    key: "productos",
+    label: "Productos",
     icon: UtensilsCrossed,
-    color: "var(--mod5-productos)",
+    color: "var(--mod6-productos)",
     tabs: [
       {
         key: "productos",
@@ -100,25 +100,43 @@ export const MODULES: ModuleDef[] = [
           { key: "informe-control", label: "Informe de Control", page: "informe-control" },
         ],
       },
+      {
+        key: "metricas",
+        label: "Métricas",
+        subtabs: [
+          { key: "an-productos", label: "Por producto", page: "an-productos" },
+          { key: "an-anual", label: "Anual", page: "an-anual" },
+        ],
+      },
+    ],
+  },
+  {
+    key: "produccion",
+    label: "Producción",
+    icon: Factory,
+    color: "var(--mod6-produccion)",
+    tabs: [
       { key: "produccion", label: "Producción", page: "produccion" },
       { key: "planificacion", label: "Planificación", page: "planificacion-produccion" },
     ],
   },
   {
-    key: "compras-stock",
-    label: "Compras y Stock",
+    key: "insumos",
+    label: "Insumos",
     icon: Package,
-    color: "var(--mod5-compras)",
+    color: "var(--mod6-insumos)",
     tabs: [
-      {
-        key: "stock",
-        label: "Stock",
-        subtabs: [
-          { key: "stock", label: "Stock", page: "stock" },
-          { key: "insumos", label: "Insumos", page: "insumos" },
-          { key: "historial-precios", label: "Historial de Precios", page: "historial-precios" },
-        ],
-      },
+      { key: "insumos", label: "Insumos", page: "insumos" },
+      { key: "stock", label: "Stock", page: "stock" },
+      { key: "historial-precios", label: "Historial de Precios", page: "historial-precios" },
+    ],
+  },
+  {
+    key: "compras",
+    label: "Compras",
+    icon: ShoppingBag,
+    color: "var(--mod6-compras)",
+    tabs: [
       { key: "compras", label: "Compras", page: "compras" },
       { key: "proveedores", label: "Proveedores", page: "proveedores" },
     ],
@@ -127,7 +145,7 @@ export const MODULES: ModuleDef[] = [
     key: "finanzas",
     label: "Finanzas",
     icon: Landmark,
-    color: "var(--mod5-finanzas)",
+    color: "var(--mod6-finanzas)",
     tabs: [
       {
         key: "resumen",
