@@ -7,7 +7,7 @@
 // sigue siendo exclusivamente para productos no migrados, con RecetaLinea.componente propia.
 
 import type { RicordoData, ComponenteReceta, Ingrediente, RecetaLinea, Producto } from "./types";
-import { gustosActivos, inPeriod, pvr, estaMigrado, recetaDerivada } from "./calc";
+import { gustosActivos, inPeriod, pvr, estaMigrado, recetaDerivada, costoLineaDerivada, calcStockIngrediente } from "./calc";
 
 export const CAJAS_POR_SEMANA_DIVISOR = 4.33;
 
@@ -402,4 +402,82 @@ export function calcularCuadroNecesidadPorGusto(
     }
   }
   return calcularCuadroNecesidad(data, componente, cajasPorVariante);
+}
+
+export interface FilaNecesidadCompleta {
+  tipo: "Ingrediente" | "Packaging" | "Subreceta";
+  concepto: string;
+  nombre: string;
+  unidad: string;
+  cantidad: number;
+  costoEstimado: number;
+  /** null = este tipo no trackea stock en el sistema (hoy solo Ingrediente lo hace). */
+  stockActual: number | null;
+  faltante: number | null;
+}
+
+export interface CuadroNecesidadCompleto {
+  filas: FilaNecesidadCompleta[];
+  costoTotal: number;
+}
+
+/** Modo "Producto completo" (a diferencia de Masa/Relleno por separado): consolida TODA la
+ * receta derivada de cada variante — masa, relleno, packaging propio y los insumos adicionales
+ * de su tipo de venta (excepciones, incluidas subrecetas) — escalada por las cajas planificadas
+ * de su gusto. Es lo único que responde "cuánta bolsa al vacío y salsa necesito esta semana",
+ * cosa que calcularCuadroNecesidad (solo masa o solo relleno) no puede. */
+export function calcularCuadroNecesidadCompletoPorGusto(
+  data: RicordoData,
+  cajasPorGustoBase: Map<string, number>,
+  hoy: Date = new Date()
+): CuadroNecesidadCompleto {
+  const cajasPorVariante = new Map<string, number>();
+  for (const [idBase, cajas] of cajasPorGustoBase) {
+    if (cajas <= 0) continue;
+    for (const [idProducto, cajasVariante] of distribuirCajasPorVariante(data, idBase, cajas, hoy)) {
+      cajasPorVariante.set(idProducto, (cajasPorVariante.get(idProducto) ?? 0) + cajasVariante);
+    }
+  }
+
+  const consolidado = new Map<string, FilaNecesidadCompleta>();
+  for (const [idProducto, cajas] of cajasPorVariante) {
+    const producto = data.productos.find((p) => p.id === idProducto);
+    if (!producto || cajas <= 0) continue;
+    for (const l of recetaDerivada(data, producto)) {
+      if (l.tipo === "CostoFijo") continue; // no es un insumo físico que se compre o produzca
+      const cantidad = l.cantidad * cajas;
+      const costo = costoLineaDerivada(data, { ...l, cantidad });
+      const key = `${l.tipo}:${l.concepto}`;
+      const existente = consolidado.get(key);
+      if (existente) {
+        existente.cantidad += cantidad;
+        existente.costoEstimado += costo;
+        continue;
+      }
+      let nombre = l.concepto;
+      let unidad = "";
+      let stockActual: number | null = null;
+      if (l.tipo === "Ingrediente") {
+        const ing = data.ingredientes.find((i) => i.id === l.concepto);
+        nombre = ing?.nombre ?? l.concepto;
+        unidad = ing?.unidad ?? "";
+        stockActual = calcStockIngrediente(data, l.concepto);
+      } else if (l.tipo === "Packaging") {
+        const pkg = data.packaging.find((p) => p.id === l.concepto);
+        nombre = pkg?.nombre ?? l.concepto;
+        unidad = pkg?.unidad ?? "";
+      } else {
+        const sub = data.subrecetas.find((s) => s.id === l.concepto);
+        nombre = sub?.nombre ?? l.concepto;
+        unidad = sub?.unidad ?? "";
+      }
+      consolidado.set(key, { tipo: l.tipo, concepto: l.concepto, nombre, unidad, cantidad, costoEstimado: costo, stockActual, faltante: null });
+    }
+  }
+
+  const filas = Array.from(consolidado.values())
+    .map((f) => ({ ...f, faltante: f.stockActual !== null ? Math.max(0, f.cantidad - f.stockActual) : null }))
+    .sort((a, b) => b.costoEstimado - a.costoEstimado);
+  const costoTotal = filas.reduce((acc, f) => acc + f.costoEstimado, 0);
+  return { filas, costoTotal };
 }

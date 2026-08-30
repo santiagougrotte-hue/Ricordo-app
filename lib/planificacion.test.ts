@@ -9,6 +9,7 @@ import {
   calcularCuadroNecesidad,
   distribuirCajasPorVariante,
   calcularCuadroNecesidadPorGusto,
+  calcularCuadroNecesidadCompletoPorGusto,
 } from "./planificacion";
 import { calcCosto } from "./calc";
 import { emptyData } from "./types";
@@ -410,4 +411,76 @@ test("calcularCuadroNecesidadPorGusto: cada variante usa su propia receta al exp
   const premezcla = cuadro.ingredientes.find((i) => i.id_ingrediente === "ING-PREMEZCLA");
   assert.ok(premezcla);
   assert.equal(premezcla!.cantidadNativa, 1.74); // 0.174kg × 10 cajas, con la receta de PROD-09
+});
+
+// --- Modo "Producto completo" (masa + relleno + packaging + insumos adicionales del tipo de venta) ---
+
+test("calcularCuadroNecesidadCompletoPorGusto: consolida ingredientes, packaging y subrecetas de la variante que realmente se produce", () => {
+  const data = emptyData();
+  const hoy = new Date("2026-08-15T12:00:00");
+  data.ingredientes = [
+    { id: "ING-HARINA", nombre: "Harina", unidad: "kg", precio_ref: 2000, precio_vigente: null, seguimiento_stock: false },
+    { id: "ING-TOMATE", nombre: "Tomate", unidad: "kg", precio_ref: 1000, precio_vigente: null, seguimiento_stock: false },
+  ];
+  data.packaging = [{ id: "PKG-1", nombre: "Bolsa al vacío", unidad: "unidad", precio_ref: 500, precio_vigente: null }];
+  data.subrecetas = [
+    {
+      id: "SUB-1",
+      nombre: "Salsa Pomodoro",
+      rendimiento: 1000,
+      unidad: "g",
+      receta: [{ id: "RU-1", id_ingrediente: "ING-TOMATE", cantidad: 1 }], // $1/g
+    },
+  ];
+  const base: Producto = {
+    id: "PROD-01",
+    id_base: "PROD-01",
+    nombre: "Ravioles de calabaza",
+    precio_venta: 13000,
+    activo: true,
+    receta_masa_unidad: [{ id: "RU-M1", id_ingrediente: "ING-HARINA", cantidad: 0.02 }], // 20g de harina por unidad
+  };
+  const vacioConSalsa: Producto = {
+    id: "PROD-12",
+    id_base: "PROD-01",
+    nombre: "Calabaza al vacío mayo",
+    precio_venta: 12000,
+    activo: true,
+    unidades_por_paquete: 10, // 10 unidades por caja
+    excepciones: [{ id: "EXC-1", grupo: "complementos", tipo: "Subreceta", concepto: "SUB-1", cantidad: 200 }], // 200g de salsa por caja
+  };
+  data.productos = [base, vacioConSalsa];
+  data.recetas = [{ id: "R-PKG", id_producto: "PROD-12", tipo: "Packaging", concepto: "PKG-1", cantidad: 1 }]; // 1 bolsa por caja
+  // Toda la venta histórica es de la variante "vacío con salsa" → toda la producción planificada
+  // del gusto se reparte ahí, y debe traer SU packaging y SU subreceta.
+  data.pedidos = [pedido({ id_detalle: "A", id_producto: "PROD-12", fecha: "2026-07-10", cantidad: 5 })];
+
+  const cuadro = calcularCuadroNecesidadCompletoPorGusto(data, new Map([["PROD-01", 10]]), hoy); // 10 cajas
+
+  const harina = cuadro.filas.find((f) => f.concepto === "ING-HARINA")!;
+  assert.equal(harina.tipo, "Ingrediente");
+  assert.ok(Math.abs(harina.cantidad - 0.02 * 10 * 10) < 0.0001, "20g × 10 unidades/caja × 10 cajas = 2kg");
+  assert.equal(harina.stockActual, 0, "Ingrediente sí trackea stock (aunque sea 0)");
+  assert.equal(harina.faltante, harina.cantidad, "sin stock, falta todo");
+
+  const bolsa = cuadro.filas.find((f) => f.concepto === "PKG-1")!;
+  assert.equal(bolsa.tipo, "Packaging");
+  assert.equal(bolsa.nombre, "Bolsa al vacío");
+  assert.equal(bolsa.cantidad, 10, "1 bolsa × 10 cajas");
+  assert.equal(bolsa.stockActual, null, "Packaging no trackea stock en este sistema");
+  assert.equal(bolsa.faltante, null);
+
+  const salsa = cuadro.filas.find((f) => f.concepto === "SUB-1")!;
+  assert.equal(salsa.tipo, "Subreceta");
+  assert.equal(salsa.nombre, "Salsa Pomodoro");
+  assert.equal(salsa.cantidad, 2000, "200g × 10 cajas");
+  assert.equal(salsa.costoEstimado, 2000 * 1, "2000g × $1/g");
+});
+
+test("calcularCuadroNecesidadCompletoPorGusto: sin cajas planificadas, no hay nada que consolidar", () => {
+  const data = emptyData();
+  data.productos = [producto()];
+  const cuadro = calcularCuadroNecesidadCompletoPorGusto(data, new Map());
+  assert.equal(cuadro.filas.length, 0);
+  assert.equal(cuadro.costoTotal, 0);
 });

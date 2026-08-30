@@ -15,6 +15,7 @@ import {
   calcularComposicionGusto,
   reescalarLineasComponente,
   calcularCuadroNecesidadPorGusto,
+  calcularCuadroNecesidadCompletoPorGusto,
   redondearArribaPractico,
   type ReferenciaVentasGusto,
   type TendenciaVentas,
@@ -708,6 +709,90 @@ function CuadroNecesidadTabla({
   );
 }
 
+/** Bloque 5 — "Producto completo": a diferencia de las tablas de masa/relleno (que solo miran
+ * la receta compartida del gusto), esta consolida TODA la receta derivada de cada variante que
+ * realmente se produce — masa, relleno, packaging propio e insumos adicionales del tipo de
+ * venta (excepciones, subrecetas incluidas) — escalada por las cajas planificadas del mes. */
+function CuadroNecesidadCompletoTabla({ cajasPorGusto }: { cajasPorGusto: Map<string, number> }) {
+  const { data, setData } = useStore();
+  const { go } = useRouter();
+  const { toast } = useToast();
+  const cuadro = useMemo(() => calcularCuadroNecesidadCompletoPorGusto(data, cajasPorGusto), [data, cajasPorGusto]);
+
+  function generarOrdenDeCompra() {
+    const lineas = cuadro.filas
+      .filter((f) => f.tipo === "Ingrediente" && (f.faltante ?? 0) > 0)
+      .map((f) => ({
+        id_ingrediente: f.concepto,
+        cantidad: redondearArribaPractico(f.faltante!),
+        precio_unitario: pvr(data.ingredientes.find((i) => i.id === f.concepto)),
+      }));
+    if (lineas.length === 0) {
+      toast("El stock actual ya cubre toda la necesidad de ingredientes — no hay nada que comprar", "info");
+      return;
+    }
+    setData((d) => ({
+      ...d,
+      borrador_compra_pendiente: { descripcion: "Orden generada desde Planificación — Producto completo", lineas },
+    }));
+    toast("Borrador de compra generado — revisalo y confirmalo en Compras");
+    go("compras");
+  }
+
+  return (
+    <Card title="Producto completo — por mes (masa + relleno + packaging + insumos adicionales)" className="mb-4">
+      {cuadro.filas.length === 0 ? (
+        <EmptyState text="Cargá el plan del mes para ver este cuadro." />
+      ) : (
+        <>
+          <TableWrap>
+            <table className="w-full">
+              <thead>
+                <tr>
+                  <Th>Tipo</Th>
+                  <Th>Concepto</Th>
+                  <Th>Cantidad</Th>
+                  <Th>Stock actual</Th>
+                  <Th>Falta</Th>
+                  <Th>Costo est.</Th>
+                </tr>
+              </thead>
+              <tbody>
+                {cuadro.filas.map((f) => (
+                  <TrHover key={`${f.tipo}:${f.concepto}`}>
+                    <Td>
+                      <Badge color={f.tipo === "Ingrediente" ? "blue" : f.tipo === "Packaging" ? "purple" : "gold"}>{f.tipo}</Badge>
+                    </Td>
+                    <Td main>{f.nombre}</Td>
+                    <Td>
+                      {fNum(f.cantidad, 2)} {f.unidad}
+                    </Td>
+                    <Td>{f.stockActual !== null ? `${fNum(f.stockActual, 2)} ${f.unidad}` : "—"}</Td>
+                    <Td>
+                      {f.faltante !== null ? (
+                        <Badge color={f.faltante > 0 ? "red" : "green"}>{f.faltante > 0 ? fNum(f.faltante, 2) : "Cubierto"}</Badge>
+                      ) : (
+                        "—"
+                      )}
+                    </Td>
+                    <Td>{fARS(f.costoEstimado)}</Td>
+                  </TrHover>
+                ))}
+              </tbody>
+            </table>
+          </TableWrap>
+          <div className="mt-3.5 flex flex-wrap items-center justify-between gap-2 border-t border-border pt-3">
+            <span className="text-[13px] font-semibold text-accent">Costo total estimado: {fARS(cuadro.costoTotal)}</span>
+            <Button size="sm" onClick={generarOrdenDeCompra}>
+              Generar orden de compra (faltantes de ingredientes)
+            </Button>
+          </div>
+        </>
+      )}
+    </Card>
+  );
+}
+
 export function PlanProduccion() {
   const { data } = useStore();
   const { mes, anio } = usePeriod();
@@ -748,6 +833,7 @@ export function PlanProduccion() {
         componente="relleno"
         cajasPorGusto={cajasMesPorGusto}
       />
+      <CuadroNecesidadCompletoTabla cajasPorGusto={cajasMesPorGusto} />
     </div>
   );
 }
