@@ -1,6 +1,11 @@
 // Canonical data model for ricordo_data (localStorage)
 
 export type Canal = "Minorista" | "Mayorista";
+/** Cómo se vende una variante dentro de su gusto (producto base) — reemplaza a `canal` como
+ * criterio de agrupación en Productos/Pedidos, que históricamente quedó mal cargado en varias
+ * variantes mayoristas. "SinClasificar" es el balde de "no adivinar": una variante cuyo nombre
+ * no matchea ningún patrón conocido queda ahí en vez de forzarla a un tipo incorrecto. */
+export type TipoVenta = "Minorista" | "Mayorista" | "VacioSinSalsa" | "VacioConSalsa" | "SinClasificar";
 export type EstadoPedido = "Confirmado" | "Produccion" | "Entregado" | "Cancelado";
 export type EstadoPago = "Pendiente" | "Parcial" | "Pagado" | "Reembolsado";
 export type TipoRecetaLinea = "Ingrediente" | "Packaging" | "CostoFijo";
@@ -59,6 +64,10 @@ export interface Producto {
    * la cantidad calculada de esa línea, nunca se suma. Deben verse marcados en la pantalla del
    * producto y listarse en el panel global de excepciones. */
   excepciones?: ExcepcionLinea[];
+  /** Override manual del tipo de venta — ausente = se deduce de (id_base, nombre) vía
+   * tipoVentaDeProducto(); cargarlo acá pisa esa deducción para corregir un caso puntual sin
+   * tener que renombrar el producto. */
+  tipo_venta?: TipoVenta;
 }
 
 export interface RecetaUnidadLinea {

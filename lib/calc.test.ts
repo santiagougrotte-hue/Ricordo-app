@@ -37,6 +37,8 @@ import {
   cantidadIngredienteEnProducto,
   impactoCostoIngrediente,
   fichaProveedor,
+  tipoVentaDeProducto,
+  gustosTodos,
 } from "./calc";
 import { emptyData } from "./types";
 import type { Pedido, Producto, Ingrediente, RecetaLinea, Produccion, Cliente, Amortizacion, CajaMovimiento } from "./types";
@@ -1054,4 +1056,50 @@ test("fichaProveedor: proveedor sin compras devuelve todo en cero, sin dividir p
   assert.equal(ficha.totalComprado, 0);
   assert.equal(ficha.precioPromedioCompra, 0);
   assert.deepEqual(ficha.insumosSuministrados, []);
+});
+
+// --- Tipo de venta (agrupación de gustos por Minorista/Mayorista/Vacío) ------------------------
+
+test("tipoVentaDeProducto: el producto base de su propia familia siempre es Minorista", () => {
+  const base: Producto = { id: "PROD-01", id_base: "PROD-01", nombre: "Ravioles de calabaza", precio_venta: 11000, activo: true };
+  assert.equal(tipoVentaDeProducto(base), "Minorista");
+});
+
+test("tipoVentaDeProducto: clasifica las variantes reales de Calabaza por nombre, ignorando el campo canal (que está mal cargado)", () => {
+  // Caso real de la auditoría: las 4 variantes de "Ravioles de calabaza", las 3 mayoristas con
+  // canal="Minorista" mal cargado en el backup original.
+  const mayorista: Producto = { id: "PROD-08", id_base: "PROD-01", nombre: "Calabaza mayorista", precio_venta: 9000, activo: true, canal: "Minorista" };
+  const vacioConSalsa: Producto = { id: "PROD-12", id_base: "PROD-01", nombre: "Calabaza al vacio mayo", precio_venta: 12000, activo: true, canal: "Minorista" };
+  const vacioSinSalsa: Producto = { id: "PROD-15", id_base: "PROD-01", nombre: "Calabaza mayorista sin salsa", precio_venta: 10000, activo: true, canal: "Minorista" };
+  assert.equal(tipoVentaDeProducto(mayorista), "Mayorista");
+  assert.equal(tipoVentaDeProducto(vacioConSalsa), "VacioConSalsa");
+  assert.equal(tipoVentaDeProducto(vacioSinSalsa), "VacioSinSalsa");
+});
+
+test("tipoVentaDeProducto: un nombre que no matchea ningún patrón cae en SinClasificar, no se adivina", () => {
+  const rara: Producto = { id: "PROD-99", id_base: "PROD-01", nombre: "Calabaza especial de temporada", precio_venta: 9000, activo: true };
+  assert.equal(tipoVentaDeProducto(rara), "SinClasificar");
+});
+
+test("tipoVentaDeProducto: tipo_venta cargado a mano pisa la deducción por nombre", () => {
+  const corregido: Producto = {
+    id: "PROD-99",
+    id_base: "PROD-01",
+    nombre: "Calabaza especial de temporada",
+    precio_venta: 9000,
+    activo: true,
+    tipo_venta: "Mayorista",
+  };
+  assert.equal(tipoVentaDeProducto(corregido), "Mayorista");
+});
+
+test("gustosTodos: agrupa por id_base incluyendo variantes inactivas (a diferencia de gustosActivos)", () => {
+  const data = emptyData();
+  data.productos = [
+    { id: "PROD-01", id_base: "PROD-01", nombre: "Ravioles de calabaza", precio_venta: 11000, activo: true },
+    { id: "PROD-08", id_base: "PROD-01", nombre: "Calabaza mayorista", precio_venta: 9000, activo: false },
+  ];
+  const gustos = gustosTodos(data);
+  assert.equal(gustos.length, 1);
+  assert.equal(gustos[0].variantes.length, 2, "incluye la variante inactiva");
 });

@@ -1,10 +1,22 @@
 "use client";
 
 import React, { useMemo, useState } from "react";
+import { ChevronDown, ChevronRight } from "lucide-react";
 import { useStore } from "@/lib/store";
 import { useToast } from "@/lib/toast";
 import { uid } from "@/lib/id";
-import { calcCosto, fARS, fPct, pvr } from "@/lib/calc";
+import {
+  calcCosto,
+  estaMigrado,
+  fARS,
+  fPct,
+  gustosTodos,
+  pvr,
+  tipoVentaDeProducto,
+  TIPO_VENTA_LABEL,
+  TIPO_VENTA_ORDEN,
+} from "@/lib/calc";
+import type { GustoBase } from "@/lib/calc";
 import {
   PageHeader,
   Button,
@@ -20,6 +32,7 @@ import {
   Select,
   Badge,
   InfoRow,
+  SearchInput,
 } from "@/components/ui";
 import { Modal } from "@/components/Modal";
 import { Wizard } from "@/components/Wizard";
@@ -27,7 +40,16 @@ import { FileAttach } from "@/components/FileAttach";
 import { ProductoBaseEditor } from "@/components/ProductoBaseEditor";
 import { ProductoVentaEditor } from "@/components/ProductoVentaEditor";
 import { Bar } from "@/components/ds";
-import type { Adjunto, Ingrediente, Packaging, CostoFijo, Producto, RecetaLinea, TipoRecetaLinea } from "@/lib/types";
+import type { Adjunto, Ingrediente, Packaging, CostoFijo, Producto, RecetaLinea, TipoRecetaLinea, TipoVenta } from "@/lib/types";
+import type { RicordoData } from "@/lib/types";
+
+const TIPO_VENTA_BADGE: Record<TipoVenta, "green" | "red" | "orange" | "blue" | "purple" | "gold"> = {
+  Minorista: "blue",
+  Mayorista: "purple",
+  VacioSinSalsa: "gold",
+  VacioConSalsa: "green",
+  SinClasificar: "red",
+};
 
 function emptyForm() {
   return { nombre: "", categoria: "", id_base: "", precio_venta: 0, activo: true, foto: undefined as Adjunto | undefined };
@@ -57,6 +79,10 @@ export function Productos() {
   const [draftForm, setDraftForm] = useState(emptyForm());
   const [draftLineas, setDraftLineas] = useState<DraftLinea[]>([]);
   const [draftLinea, setDraftLinea] = useState(emptyDraftLinea());
+
+  const [search, setSearch] = useState("");
+  const [mostrarInactivos, setMostrarInactivos] = useState(false);
+  const [expandido, setExpandido] = useState<Record<string, boolean>>({});
 
   function openNew() {
     setDraftForm(emptyForm());
@@ -88,9 +114,16 @@ export function Productos() {
     toast("Producto actualizado");
     setModalOpen(false);
   }
+  // Soft-delete: un producto de venta discontinuado se da de baja, nunca se borra — conserva
+  // su historial de pedidos, producción y costos intacto.
   function eliminar(id: string) {
-    setData((d) => ({ ...d, productos: d.productos.filter((p) => p.id !== id) }));
-    toast("Producto eliminado", "info");
+    if (!confirm("¿Dar de baja este producto? Se excluye de los gustos activos pero el registro queda para trazabilidad.")) return;
+    setData((d) => ({ ...d, productos: d.productos.map((p) => (p.id === id ? { ...p, activo: false } : p)) }));
+    toast("Producto dado de baja", "info");
+  }
+  function reactivar(id: string) {
+    setData((d) => ({ ...d, productos: d.productos.map((p) => (p.id === id ? { ...p, activo: true } : p)) }));
+    toast("Producto reactivado");
   }
 
   function nombreConceptoDraft(l: DraftLinea) {
@@ -132,30 +165,16 @@ export function Productos() {
     setWizardOpen(false);
   }
 
-  // Orden por sabor (producto base): agrupa alfabéticamente por el nombre del producto base,
-  // y adentro de cada grupo deja las variantes de canal (minorista, mayorista, …) una atrás de
-  // la otra, con el producto base primero.
-  const productosOrdenados = useMemo(() => {
-    const nombreBase = (idBase: string) => data.productos.find((p) => p.id === idBase)?.nombre ?? idBase;
-    const ordenCanal: Record<string, number> = { Minorista: 0, Mayorista: 1 };
-    return data.productos
-      .map((p) => {
-        const costo = calcCosto(data, p.id);
-        const margen = p.precio_venta > 0 ? ((p.precio_venta - costo) / p.precio_venta) * 100 : 0;
-        return { producto: p, costo, margen };
-      })
-      .sort((a, b) => {
-        const grupo = nombreBase(a.producto.id_base).localeCompare(nombreBase(b.producto.id_base), "es");
-        if (grupo !== 0) return grupo;
-        const esBaseA = a.producto.id === a.producto.id_base ? 0 : 1;
-        const esBaseB = b.producto.id === b.producto.id_base ? 0 : 1;
-        if (esBaseA !== esBaseB) return esBaseA - esBaseB;
-        const canalA = ordenCanal[a.producto.canal ?? ""] ?? 2;
-        const canalB = ordenCanal[b.producto.canal ?? ""] ?? 2;
-        if (canalA !== canalB) return canalA - canalB;
-        return a.producto.nombre.localeCompare(b.producto.nombre, "es");
-      });
-  }, [data]);
+  // Un gusto por producto base (id_base), con sus variantes (tipos de venta) agrupadas adentro
+  // — así cada gusto existe como un solo producto principal en la lista, en vez de una fila por
+  // cada Minorista/Mayorista/Vacío suelto.
+  const gustos = useMemo(() => {
+    const term = search.trim().toLowerCase();
+    return gustosTodos(data)
+      .filter((g) => (mostrarInactivos ? true : g.variantes.some((v) => v.activo)))
+      .filter((g) => !term || g.nombre.toLowerCase().includes(term))
+      .sort((a, b) => a.nombre.localeCompare(b.nombre, "es"));
+  }, [data, search, mostrarInactivos]);
 
   const prodReceta = verReceta ? data.productos.find((p) => p.id === verReceta) : null;
   const lineasReceta = verReceta ? data.recetas.filter((r) => r.id_producto === verReceta) : [];
@@ -165,84 +184,44 @@ export function Productos() {
 
   return (
     <div>
-      <PageHeader title="Productos" sub="Catálogo con recetas y costos" right={<Button onClick={openNew}>+ Nuevo</Button>} />
+      <PageHeader
+        title="Productos"
+        sub="Cada gusto es un solo producto principal, con sus tipos de venta (Minorista, Mayorista, Vacío) adentro"
+        right={
+          <>
+            <Button variant={mostrarInactivos ? "primary" : "ghost"} onClick={() => setMostrarInactivos((v) => !v)}>
+              {mostrarInactivos ? "Ocultar dados de baja" : "Mostrar dados de baja"}
+            </Button>
+            <Button onClick={openNew}>+ Nuevo</Button>
+          </>
+        }
+      />
 
-      <Card>
-        {data.productos.length === 0 ? (
-          <EmptyState text="Sin productos registrados." />
-        ) : (
-          <TableWrap>
-            <table className="w-full">
-              <thead>
-                <tr>
-                  <Th>Nombre</Th>
-                  <Th>Base</Th>
-                  <Th>Precio venta</Th>
-                  <Th>Costo</Th>
-                  <Th>Margen %</Th>
-                  <Th>Estado</Th>
-                  <Th>Acciones</Th>
-                </tr>
-              </thead>
-              <tbody>
-                {productosOrdenados.map(({ producto: p, costo, margen }) => {
-                  const base = data.productos.find((b) => b.id === p.id_base);
-                  return (
-                    <TrHover key={p.id}>
-                      <Td main>
-                        <div className="flex items-center gap-2.5">
-                          {p.foto && (
-                            // eslint-disable-next-line @next/next/no-img-element -- base64 data URL, not an optimizable remote asset
-                            <img src={p.foto.data} alt={p.nombre} className="h-8 w-8 shrink-0 rounded object-cover" />
-                          )}
-                          {p.nombre}
-                        </div>
-                      </Td>
-                      <Td>{p.id_base !== p.id && base ? base.nombre : "—"}</Td>
-                      <Td>{fARS(p.precio_venta)}</Td>
-                      <Td>{fARS(costo)}</Td>
-                      <Td>
-                        <div className="flex items-center gap-2">
-                          <div className="w-16">
-                            <Bar pct={Math.max(0, margen)} color={margen >= 60 ? "green" : "orange"} />
-                          </div>
-                          <span className={`text-[12px] font-medium ${margen >= 60 ? "text-green" : "text-orange"}`}>
-                            {fPct(margen)}
-                          </span>
-                        </div>
-                      </Td>
-                      <Td>
-                        <Badge color={p.activo ? "green" : "red"}>{p.activo ? "Activo" : "Inactivo"}</Badge>
-                      </Td>
-                      <Td>
-                        <div className="flex flex-wrap gap-1.5">
-                          <Button size="sm" variant="ghost" onClick={() => setVerReceta(p.id)}>
-                            Receta
-                          </Button>
-                          {p.id === p.id_base && (
-                            <Button size="sm" variant="ghost" onClick={() => setEditarBase(p.id)}>
-                              Base
-                            </Button>
-                          )}
-                          <Button size="sm" variant="ghost" onClick={() => setEditarVenta(p.id)}>
-                            Venta
-                          </Button>
-                          <Button size="sm" variant="ghost" onClick={() => openEdit(p)}>
-                            Editar
-                          </Button>
-                          <Button size="sm" variant="danger" onClick={() => eliminar(p.id)}>
-                            Eliminar
-                          </Button>
-                        </div>
-                      </Td>
-                    </TrHover>
-                  );
-                })}
-              </tbody>
-            </table>
-          </TableWrap>
-        )}
-      </Card>
+      <div className="mb-4 max-w-xs">
+        <SearchInput placeholder="Buscar gusto…" value={search} onChange={(e) => setSearch(e.target.value)} />
+      </div>
+
+      {gustos.length === 0 ? (
+        <Card>
+          <EmptyState text="Sin productos que coincidan." />
+        </Card>
+      ) : (
+        gustos.map((gusto) => (
+          <GustoCard
+            key={gusto.id_base}
+            gusto={gusto}
+            data={data}
+            expanded={!!expandido[gusto.id_base]}
+            onToggle={() => setExpandido((e) => ({ ...e, [gusto.id_base]: !e[gusto.id_base] }))}
+            onVerReceta={setVerReceta}
+            onEditarBase={setEditarBase}
+            onEditarVenta={setEditarVenta}
+            onEditar={openEdit}
+            onEliminar={eliminar}
+            onReactivar={reactivar}
+          />
+        ))
+      )}
 
       <Modal
         open={modalOpen}
@@ -504,5 +483,140 @@ export function Productos() {
         onClose={() => setEditarVenta(null)}
       />
     </div>
+  );
+}
+
+function GustoCard({
+  gusto,
+  data,
+  expanded,
+  onToggle,
+  onVerReceta,
+  onEditarBase,
+  onEditarVenta,
+  onEditar,
+  onEliminar,
+  onReactivar,
+}: {
+  gusto: GustoBase;
+  data: RicordoData;
+  expanded: boolean;
+  onToggle: () => void;
+  onVerReceta: (id: string) => void;
+  onEditarBase: (id: string) => void;
+  onEditarVenta: (id: string) => void;
+  onEditar: (p: Producto) => void;
+  onEliminar: (id: string) => void;
+  onReactivar: (id: string) => void;
+}) {
+  const base = data.productos.find((p) => p.id === gusto.id_base);
+  const costoBase = base ? calcCosto(data, base.id) : 0;
+  const variantesOrdenadas = [...gusto.variantes].sort(
+    (a, b) => TIPO_VENTA_ORDEN.indexOf(tipoVentaDeProducto(a)) - TIPO_VENTA_ORDEN.indexOf(tipoVentaDeProducto(b))
+  );
+  const activas = gusto.variantes.filter((v) => v.activo).length;
+
+  return (
+    <Card className="mb-3">
+      <div className="flex cursor-pointer items-center justify-between gap-2" onClick={onToggle}>
+        <div className="flex items-center gap-2.5">
+          {expanded ? <ChevronDown className="h-4 w-4 text-text3" /> : <ChevronRight className="h-4 w-4 text-text3" />}
+          {base?.foto && (
+            // eslint-disable-next-line @next/next/no-img-element -- base64 data URL, not an optimizable remote asset
+            <img src={base.foto.data} alt={gusto.nombre} className="h-8 w-8 shrink-0 rounded object-cover" />
+          )}
+          <span className="text-[14px] font-semibold text-text">{gusto.nombre}</span>
+          <Badge color="blue">
+            {gusto.variantes.length} {gusto.variantes.length === 1 ? "tipo" : "tipos"}
+          </Badge>
+          {activas < gusto.variantes.length && <Badge color="red">{gusto.variantes.length - activas} de baja</Badge>}
+        </div>
+        <span className="text-[12px] text-text3">Costo base: {fARS(costoBase)}</span>
+      </div>
+
+      {expanded && (
+        <div className="mt-3.5 border-t border-border pt-3.5">
+          <TableWrap>
+            <table className="w-full">
+              <thead>
+                <tr>
+                  <Th>Tipo de venta</Th>
+                  <Th>Origen actual</Th>
+                  <Th>Precio</Th>
+                  <Th>Costo</Th>
+                  <Th>Ganancia</Th>
+                  <Th>Margen</Th>
+                  <Th>Estado</Th>
+                  <Th>Acciones</Th>
+                </tr>
+              </thead>
+              <tbody>
+                {variantesOrdenadas.map((v) => {
+                  const tipo = tipoVentaDeProducto(v);
+                  const costo = calcCosto(data, v.id);
+                  const ganancia = v.precio_venta - costo;
+                  const margen = v.precio_venta > 0 ? (ganancia / v.precio_venta) * 100 : 0;
+                  const esBase = v.id === v.id_base;
+                  const posibleBase: Producto | undefined = v;
+                  const migrado = estaMigrado(data, posibleBase);
+                  return (
+                    <TrHover key={v.id} className={!v.activo ? "opacity-50" : undefined}>
+                      <Td>
+                        <Badge color={TIPO_VENTA_BADGE[tipo]}>{TIPO_VENTA_LABEL[tipo]}</Badge>
+                      </Td>
+                      <Td main>{v.nombre}</Td>
+                      <Td>{fARS(v.precio_venta)}</Td>
+                      <Td>{fARS(costo)}</Td>
+                      <Td className={ganancia >= 0 ? "text-green" : "text-red"}>{fARS(ganancia)}</Td>
+                      <Td>
+                        <div className="flex items-center gap-2">
+                          <div className="w-14">
+                            <Bar pct={Math.max(0, margen)} color={margen >= 60 ? "green" : "orange"} />
+                          </div>
+                          <span className={`text-[12px] font-medium ${margen >= 60 ? "text-green" : "text-orange"}`}>{fPct(margen)}</span>
+                        </div>
+                      </Td>
+                      <Td>
+                        <Badge color={v.activo ? "green" : "red"}>{v.activo ? "Activo" : "De baja"}</Badge>
+                      </Td>
+                      <Td>
+                        <div className="flex flex-wrap gap-1.5">
+                          {!migrado && (
+                            <Button size="sm" variant="ghost" onClick={() => onVerReceta(v.id)}>
+                              Receta
+                            </Button>
+                          )}
+                          {esBase ? (
+                            <Button size="sm" variant="ghost" onClick={() => onEditarBase(v.id)}>
+                              Base
+                            </Button>
+                          ) : (
+                            <Button size="sm" variant="ghost" onClick={() => onEditarVenta(v.id)}>
+                              Detalle
+                            </Button>
+                          )}
+                          <Button size="sm" variant="ghost" onClick={() => onEditar(v)}>
+                            Editar
+                          </Button>
+                          {v.activo ? (
+                            <Button size="sm" variant="danger" onClick={() => onEliminar(v.id)}>
+                              Dar de baja
+                            </Button>
+                          ) : (
+                            <Button size="sm" variant="green" onClick={() => onReactivar(v.id)}>
+                              Reactivar
+                            </Button>
+                          )}
+                        </div>
+                      </Td>
+                    </TrHover>
+                  );
+                })}
+              </tbody>
+            </table>
+          </TableWrap>
+        </div>
+      )}
+    </Card>
   );
 }

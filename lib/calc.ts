@@ -14,6 +14,7 @@ import type {
   TipoRecetaLinea,
   GrupoRecetaDerivada,
   ExcepcionLinea,
+  TipoVenta,
 } from "./types";
 import { uid } from "./id";
 
@@ -1186,6 +1187,43 @@ export function gustosActivos(data: RicordoData): GustoBase[] {
     const base = data.productos.find((p) => p.id === idBase) ?? variantes[0];
     return { id_base: idBase, nombre: base?.nombre ?? idBase, variantes };
   });
+}
+
+/** Igual que gustosActivos pero sin filtrar por activo — para el catálogo de Productos, donde
+ * el usuario tiene que poder ver y reactivar variantes dadas de baja. */
+export function gustosTodos(data: RicordoData): GustoBase[] {
+  const idsBase = [...new Set(data.productos.map((p) => p.id_base))];
+  return idsBase.map((idBase) => {
+    const variantes = data.productos.filter((p) => p.id_base === idBase);
+    const base = data.productos.find((p) => p.id === idBase) ?? variantes[0];
+    return { id_base: idBase, nombre: base?.nombre ?? idBase, variantes };
+  });
+}
+
+export const TIPO_VENTA_ORDEN: TipoVenta[] = ["Minorista", "Mayorista", "VacioSinSalsa", "VacioConSalsa", "SinClasificar"];
+
+export const TIPO_VENTA_LABEL: Record<TipoVenta, string> = {
+  Minorista: "Minorista",
+  Mayorista: "Mayorista",
+  VacioSinSalsa: "Vacío sin salsa",
+  VacioConSalsa: "Vacío con salsa",
+  SinClasificar: "Migración pendiente de revisar",
+};
+
+/** Deduce el tipo de venta de una variante a partir de (id_base, nombre) — nunca del campo
+ * `canal`, que históricamente quedó mal cargado en varias variantes mayoristas (ver auditoría).
+ * El producto base de su propia familia (id === id_base) siempre es "Minorista". Un
+ * `tipo_venta` cargado a mano pisa la deducción, para corregir a mano un caso puntual sin
+ * depender de que el nombre matchee un patrón. Lo que no matchea ningún patrón conocido cae en
+ * "SinClasificar" en vez de adivinar mal — nunca se pierde, solo queda marcado para revisar. */
+export function tipoVentaDeProducto(producto: Producto): TipoVenta {
+  if (producto.tipo_venta) return producto.tipo_venta;
+  if (producto.id === producto.id_base) return "Minorista";
+  const nombre = producto.nombre.toLowerCase();
+  if (nombre.includes("sin salsa")) return "VacioSinSalsa";
+  if (/vac[ií]o/.test(nombre)) return "VacioConSalsa";
+  if (nombre.includes("mayorista")) return "Mayorista";
+  return "SinClasificar";
 }
 
 export interface MovimientoStockGusto {
