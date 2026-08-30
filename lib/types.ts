@@ -2,6 +2,7 @@
 
 export type Canal = "Minorista" | "Mayorista";
 export type EstadoPedido = "Confirmado" | "Produccion" | "Entregado" | "Cancelado";
+export type EstadoPago = "Pendiente" | "Parcial" | "Pagado" | "Reembolsado";
 export type TipoRecetaLinea = "Ingrediente" | "Packaging" | "CostoFijo";
 export type TipoMovCaja = "ingreso" | "egreso";
 
@@ -89,6 +90,12 @@ export interface Cliente {
   direccion?: string;
   telefono?: string;
   email?: string;
+  notas?: string;
+  fecha_alta?: string;
+  /** Soft-delete: false = dado de baja, se excluye de las pantallas pero conserva su historial
+   * de pedidos intacto (nunca se borra físicamente un cliente con ventas asociadas). Ausente o
+   * true = activo, el estado de siempre. */
+  activo?: boolean;
 }
 
 export type ComponenteReceta = "masa" | "relleno" | "packaging";
@@ -125,11 +132,22 @@ export interface Pedido {
   descuento_monto: number;
   precio_neto: number;
   fecha: string;
+  /** Fecha comprometida de entrega — distinta de `fecha` (fecha del pedido). Opcional: muchos
+   * pedidos minoristas se entregan el mismo día. */
+  fecha_entrega?: string;
   estado: EstadoPedido;
   canal: Canal;
   km_envio: number;
   costo_envio: number;
   metodo_pago?: string;
+  /** Ausente = "Pagado" (compatibilidad con todo pedido histórico, que asumía cobro completo al
+   * entregar). Con "Parcial", `monto_pagado` indica cuánto se cobró; el resto es el saldo
+   * pendiente — ver saldoPedido()/montoPagadoPedido() en lib/calc.ts. */
+  estado_pago?: EstadoPago;
+  monto_pagado?: number;
+  /** Fecha límite de cobro (crédito a mayoristas) — usada para "días de atraso" en Cuentas por
+   * Cobrar. Sin cargar, esa columna queda vacía en vez de inventar un vencimiento. */
+  fecha_vencimiento?: string;
   notas?: string;
   adjunto?: Adjunto;
 }
@@ -167,6 +185,9 @@ export interface Compra {
   lineasPkg: CompraLineaPackaging[];
   registrar_caja: boolean;
   adjunto?: Adjunto;
+  /** Soft-delete: true = anulada, se excluye de Compras y de todo cálculo (stock, costo
+   * vigente, movimiento de caja), pero el registro se conserva para trazabilidad. */
+  anulada?: boolean;
 }
 
 export interface CostoFijo {
@@ -195,6 +216,9 @@ export interface Amortizacion {
   precio_total: number;
   fecha_inicio: string;
   meses_totales: number;
+  /** Valor estimado de reventa al cabo de la vida útil — ausente o 0 = se amortiza el 100% del
+   * precio (el comportamiento de siempre). */
+  valor_residual?: number;
 }
 
 export interface GastoOperativo {

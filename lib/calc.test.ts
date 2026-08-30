@@ -22,9 +22,17 @@ import {
   unidadesVendidasUltimosMeses,
   excepcionesActivas,
   calcStockIngrediente,
+  montoPagadoPedido,
+  saldoPedido,
+  cuentasPorCobrar,
+  sincronizarMovimientoCaja,
+  movimientoCajaDeseadoDePedido,
+  segmentacionClientes,
+  cuotaMensualAmortizacion,
+  montoRestanteAmortizacion,
 } from "./calc";
 import { emptyData } from "./types";
-import type { Pedido, Producto, Ingrediente, RecetaLinea, Produccion } from "./types";
+import type { Pedido, Producto, Ingrediente, RecetaLinea, Produccion, Cliente, Amortizacion, CajaMovimiento } from "./types";
 
 function pedidoBase(overrides: Partial<Pedido> = {}): Pedido {
   return {
@@ -540,4 +548,210 @@ test("calcStockIngrediente: descuenta el consumo de una producción de un produc
 
   assert.equal(estaMigrado(data, venta), true);
   assert.equal(calcStockIngrediente(data, "ING-CALABAZA"), 10 - 1, "mismo consumo que el caso legacy: 5 × 0,2kg");
+});
+
+// --- Cuentas por cobrar --------------------------------------------------------------------
+
+test("montoPagadoPedido: sin estado_pago cargado se trata como Pagado (compatibilidad con pedidos históricos)", () => {
+  const pedido = pedidoBase({ precio_neto: 22000 });
+  assert.equal(pedido.estado_pago, undefined);
+  assert.equal(montoPagadoPedido(pedido), 22000);
+  assert.equal(saldoPedido(pedido), 0);
+});
+
+test("montoPagadoPedido: Pendiente es 0 cobrado, todo el total es saldo", () => {
+  const pedido = pedidoBase({ precio_neto: 22000, estado_pago: "Pendiente" });
+  assert.equal(montoPagadoPedido(pedido), 0);
+  assert.equal(saldoPedido(pedido), 22000);
+});
+
+test("montoPagadoPedido: Parcial usa monto_pagado, nunca más que el total", () => {
+  const pedido = pedidoBase({ precio_neto: 22000, estado_pago: "Parcial", monto_pagado: 8000 });
+  assert.equal(montoPagadoPedido(pedido), 8000);
+  assert.equal(saldoPedido(pedido), 14000);
+
+  const sobrecargado = pedidoBase({ precio_neto: 22000, estado_pago: "Parcial", monto_pagado: 99000 });
+  assert.equal(montoPagadoPedido(sobrecargado), 22000, "nunca cobra más de lo que vale el pedido");
+  assert.equal(saldoPedido(sobrecargado), 0);
+});
+
+test("montoPagadoPedido: Reembolsado no genera saldo (no se le debe nada al cliente en el sistema)", () => {
+  const pedido = pedidoBase({ precio_neto: 22000, estado_pago: "Reembolsado" });
+  assert.equal(saldoPedido(pedido), 0);
+});
+
+test("saldoPedido: un pedido Cancelado nunca genera saldo aunque tenga estado_pago Pendiente", () => {
+  const pedido = pedidoBase({ precio_neto: 22000, estado: "Cancelado", estado_pago: "Pendiente" });
+  assert.equal(saldoPedido(pedido), 0);
+});
+
+test("cuentasPorCobrar: solo lista pedidos Entregados con saldo, con días de atraso cuando hay vencimiento cargado", () => {
+  const data = emptyData();
+  const hoy = new Date("2026-08-30");
+  data.clientes = [{ id: "CLI-01", nombre: "Distribuidora Sur", canal: "Mayorista" }];
+  data.pedidos = [
+    pedidoBase({ id_detalle: "A", precio_neto: 22000, estado: "Entregado", estado_pago: "Pagado" }), // sin saldo, no debe listarse
+    pedidoBase({
+      id_detalle: "B",
+      precio_neto: 30000,
+      estado: "Entregado",
+      estado_pago: "Parcial",
+      monto_pagado: 10000,
+      fecha_vencimiento: "2026-08-10",
+    }),
+    pedidoBase({ id_detalle: "C", precio_neto: 15000, estado: "Confirmado", estado_pago: "Pendiente" }), // no entregado, no debe listarse
+  ];
+
+  const cxc = cuentasPorCobrar(data, hoy);
+  assert.equal(cxc.length, 1);
+  assert.equal(cxc[0].pedido.id_detalle, "B");
+  assert.equal(cxc[0].pagado, 10000);
+  assert.equal(cxc[0].saldo, 20000);
+  assert.equal(cxc[0].cliente?.nombre, "Distribuidora Sur");
+  assert.equal(cxc[0].diasAtraso, 20); // 30/08 − 10/08
+});
+
+test("cuentasPorCobrar: sin fecha_vencimiento cargada, diasAtraso queda null en vez de inventar un vencimiento", () => {
+  const data = emptyData();
+  data.pedidos = [pedidoBase({ precio_neto: 10000, estado: "Entregado", estado_pago: "Pendiente" })];
+  const cxc = cuentasPorCobrar(data);
+  assert.equal(cxc[0].diasAtraso, null);
+});
+
+test("discrepanciasCaja: un pedido Parcial con el movimiento por el monto cobrado no es una discrepancia", () => {
+  const data = emptyData();
+  const pedido = pedidoBase({ precio_neto: 22000, estado_pago: "Parcial", monto_pagado: 8000 });
+  data.pedidos = [pedido];
+  data.caja_movimientos = [{ id: "CAJ-1", fecha: pedido.fecha, tipo: "ingreso", concepto: "x", monto: 8000, metodo: "Efectivo", ref: pedido.id_detalle }];
+  assert.equal(discrepanciasCaja(data).length, 0);
+});
+
+test("discrepanciasCaja: un pedido Pendiente sin ningún movimiento no es una discrepancia (todavía no se espera cobro)", () => {
+  const data = emptyData();
+  data.pedidos = [pedidoBase({ precio_neto: 22000, estado_pago: "Pendiente" })];
+  assert.equal(discrepanciasCaja(data).length, 0);
+});
+
+test("movimientoCajaDeseadoDePedido + sincronizarMovimientoCaja: cobrar el saldo de un Parcial actualiza el movimiento existente en vez de duplicarlo", () => {
+  let movimientos: CajaMovimiento[] = [];
+  const parcial = pedidoBase({ precio_neto: 22000, estado_pago: "Parcial", monto_pagado: 8000 });
+
+  movimientos = sincronizarMovimientoCaja(movimientos, parcial.id_detalle, movimientoCajaDeseadoDePedido(parcial));
+  assert.equal(movimientos.length, 1);
+  assert.equal(movimientos[0].monto, 8000);
+  const idOriginal = movimientos[0].id;
+
+  const cobrado = { ...parcial, estado_pago: "Pagado" as const };
+  movimientos = sincronizarMovimientoCaja(movimientos, cobrado.id_detalle, movimientoCajaDeseadoDePedido(cobrado));
+  assert.equal(movimientos.length, 1, "actualiza el movimiento existente, no agrega uno nuevo");
+  assert.equal(movimientos[0].monto, 22000);
+  assert.equal(movimientos[0].id, idOriginal, "conserva el id del movimiento original");
+});
+
+test("movimientoCajaDeseadoDePedido: null para Pendiente (nada que registrar todavía) y para no-Entregado", () => {
+  assert.equal(movimientoCajaDeseadoDePedido(pedidoBase({ estado_pago: "Pendiente" })), null);
+  assert.equal(movimientoCajaDeseadoDePedido(pedidoBase({ estado: "Confirmado" })), null);
+});
+
+test("sincronizarMovimientoCaja: deseado null quita el movimiento existente", () => {
+  const movs: CajaMovimiento[] = [{ id: "CAJ-1", fecha: "2026-08-01", tipo: "ingreso", concepto: "x", monto: 100, metodo: "Efectivo", ref: "PED-1-A" }];
+  const resultado = sincronizarMovimientoCaja(movs, "PED-1-A", null);
+  assert.equal(resultado.length, 0);
+});
+
+test("sincronizarMovimientoCaja: sin cambios reales devuelve la misma referencia de array (no dispara renders de más)", () => {
+  const pedido = pedidoBase();
+  const movs = [movimientoCajaDeseadoDePedido(pedido)!];
+  const resultado = sincronizarMovimientoCaja(movs, pedido.id_detalle, movimientoCajaDeseadoDePedido(pedido));
+  assert.equal(resultado, movs);
+});
+
+// --- Segmentación de clientes ---------------------------------------------------------------
+
+function clienteBase(overrides: Partial<Cliente> = {}): Cliente {
+  return { id: "CLI-01", nombre: "Juana Pérez", canal: "Minorista", ...overrides };
+}
+
+test("segmentacionClientes: sin pedidos es Nuevo", () => {
+  const data = emptyData();
+  data.clientes = [clienteBase()];
+  const [m] = segmentacionClientes(data);
+  assert.equal(m.segmento, "Nuevo");
+  assert.equal(m.cantidadPedidos, 0);
+});
+
+test("segmentacionClientes: más de 120 días sin comprar es Inactivo, aunque sea mayorista", () => {
+  const data = emptyData();
+  const hoy = new Date("2026-08-30");
+  data.clientes = [clienteBase({ id: "CLI-01", canal: "Mayorista" })];
+  data.pedidos = [pedidoBase({ id_cliente: "CLI-01", fecha: "2026-01-15" })];
+  const [m] = segmentacionClientes(data, hoy);
+  assert.equal(m.segmento, "Inactivo");
+});
+
+test("segmentacionClientes: entre 45 y 120 días sin comprar es En riesgo", () => {
+  const data = emptyData();
+  const hoy = new Date("2026-08-30");
+  data.clientes = [clienteBase()];
+  data.pedidos = [pedidoBase({ id_cliente: "CLI-01", fecha: "2026-07-01" })]; // 60 días antes
+  const [m] = segmentacionClientes(data, hoy);
+  assert.equal(m.segmento, "En riesgo");
+});
+
+test("segmentacionClientes: mayorista activo (compra reciente) es Mayorista", () => {
+  const data = emptyData();
+  const hoy = new Date("2026-08-30");
+  data.clientes = [clienteBase({ canal: "Mayorista" })];
+  data.pedidos = [pedidoBase({ id_cliente: "CLI-01", fecha: "2026-08-25" })];
+  const [m] = segmentacionClientes(data, hoy);
+  assert.equal(m.segmento, "Mayorista");
+});
+
+test("segmentacionClientes: minorista con 6+ pedidos activos es VIP, con 3-5 es Frecuente, menos es Activo", () => {
+  const data = emptyData();
+  const hoy = new Date("2026-08-30");
+  data.clientes = [
+    clienteBase({ id: "CLI-VIP" }),
+    clienteBase({ id: "CLI-FREC" }),
+    clienteBase({ id: "CLI-ACT" }),
+  ];
+  const pedido = (id_cliente: string, id_pedido: string) => pedidoBase({ id_cliente, id_pedido, id_detalle: id_pedido, fecha: "2026-08-20" });
+  data.pedidos = [
+    ...Array.from({ length: 6 }, (_, i) => pedido("CLI-VIP", `PED-VIP-${i}`)),
+    ...Array.from({ length: 3 }, (_, i) => pedido("CLI-FREC", `PED-FREC-${i}`)),
+    pedido("CLI-ACT", "PED-ACT-1"),
+  ];
+  const resultados = segmentacionClientes(data, hoy);
+  const segmentoDe = (id: string) => resultados.find((m) => m.cliente.id === id)?.segmento;
+  assert.equal(segmentoDe("CLI-VIP"), "VIP");
+  assert.equal(segmentoDe("CLI-FREC"), "Frecuente");
+  assert.equal(segmentoDe("CLI-ACT"), "Activo");
+});
+
+test("segmentacionClientes: excluye clientes dados de baja (activo === false)", () => {
+  const data = emptyData();
+  data.clientes = [clienteBase({ id: "CLI-01" }), clienteBase({ id: "CLI-02", activo: false })];
+  assert.equal(segmentacionClientes(data).length, 1);
+});
+
+// --- Amortización con valor residual ---------------------------------------------------------
+
+function amortizacionBase(overrides: Partial<Amortizacion> = {}): Amortizacion {
+  return { id: "AMORT-1", nombre: "Freezer", precio_total: 700000, fecha_inicio: "2026-01-01", meses_totales: 60, ...overrides };
+}
+
+test("cuotaMensualAmortizacion: sin valor_residual amortiza el 100% del precio (comportamiento de siempre)", () => {
+  const a = amortizacionBase();
+  assert.equal(cuotaMensualAmortizacion(a), 700000 / 60);
+});
+
+test("cuotaMensualAmortizacion: con valor_residual, la base amortizable lo excluye", () => {
+  const a = amortizacionBase({ valor_residual: 100000 });
+  assert.equal(cuotaMensualAmortizacion(a), (700000 - 100000) / 60);
+});
+
+test("montoRestanteAmortizacion: al terminar la vida útil, el valor contable restante converge al residual (no a 0)", () => {
+  const a = amortizacionBase({ valor_residual: 100000, meses_totales: 12 });
+  const finDeVida = new Date("2028-01-15"); // bastante después de los 12 meses
+  assert.equal(montoRestanteAmortizacion(a, finDeVida), 100000);
 });

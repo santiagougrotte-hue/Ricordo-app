@@ -422,8 +422,11 @@ function addMonths(date: Date, months: number): Date {
   return d;
 }
 
+/** Base amortizable = precio_total − valor_residual (lo que efectivamente se deprecia; el
+ * residual queda como valor contable al final de la vida útil, no se amortiza). */
 export function cuotaMensualAmortizacion(a: Amortizacion): number {
-  return a.meses_totales > 0 ? a.precio_total / a.meses_totales : 0;
+  const baseAmortizable = a.precio_total - (a.valor_residual ?? 0);
+  return a.meses_totales > 0 ? baseAmortizable / a.meses_totales : 0;
 }
 
 /** Fecha en la que termina de amortizarse (primer día en que ya no corre cuota) */
@@ -556,6 +559,100 @@ export function crearMovimientoCajaDesdePedido(pedido: Pedido): CajaMovimiento {
   };
 }
 
+// --- Cuentas por cobrar ---------------------------------------------------------------------
+// `estado_pago` ausente se trata como "Pagado": todo pedido histórico se cargaba ya cobrado (la
+// única semántica que existía antes de este campo), así que ningún dato viejo pasa a figurar
+// como deuda de la nada. Sólo un pedido marcado explícitamente Pendiente/Parcial genera saldo.
+
+/** Cuánto se cobró efectivamente de un pedido — no el total, si quedó parcial o pendiente. */
+export function montoPagadoPedido(pedido: Pedido): number {
+  switch (pedido.estado_pago) {
+    case "Pendiente":
+    case "Reembolsado":
+      return 0;
+    case "Parcial":
+      return Math.max(0, Math.min(pedido.monto_pagado ?? 0, pedido.precio_neto));
+    case "Pagado":
+    default:
+      return pedido.precio_neto;
+  }
+}
+
+/** Saldo pendiente de cobro de un pedido (0 si está pagado, cancelado o reembolsado — un
+ * reembolso anula la venta, no deja una deuda del cliente). */
+export function saldoPedido(pedido: Pedido): number {
+  if (pedido.estado === "Cancelado" || pedido.estado_pago === "Reembolsado") return 0;
+  return Math.max(0, pedido.precio_neto - montoPagadoPedido(pedido));
+}
+
+export interface CuentaPorCobrar {
+  pedido: Pedido;
+  cliente: Cliente | undefined;
+  total: number;
+  pagado: number;
+  saldo: number;
+  diasAtraso: number | null;
+}
+
+/** Una fila por línea de pedido entregada con saldo pendiente — pensado para mayoristas con
+ * crédito, pero cubre cualquier pedido marcado Pendiente/Parcial. `diasAtraso` es null si el
+ * pedido no tiene fecha_vencimiento cargada (no se inventa un vencimiento). */
+export function cuentasPorCobrar(data: RicordoData, hoy: Date = new Date()): CuentaPorCobrar[] {
+  return data.pedidos
+    .filter((p) => p.estado === "Entregado" && saldoPedido(p) > 0)
+    .map((p) => {
+      const vencimiento = p.fecha_vencimiento ? new Date(p.fecha_vencimiento) : null;
+      const diasAtraso = vencimiento ? Math.floor((hoy.getTime() - vencimiento.getTime()) / (1000 * 60 * 60 * 24)) : null;
+      return {
+        pedido: p,
+        cliente: data.clientes.find((c) => c.id === p.id_cliente),
+        total: p.precio_neto,
+        pagado: montoPagadoPedido(p),
+        saldo: saldoPedido(p),
+        diasAtraso,
+      };
+    })
+    .sort((a, b) => b.saldo - a.saldo);
+}
+
+export function totalCuentasPorCobrar(data: RicordoData): number {
+  return cuentasPorCobrar(data).reduce((acc, c) => acc + c.saldo, 0);
+}
+
+/** Upsert de un movimiento de caja por `ref` — actualiza in place si ya existe (conserva su id),
+ * lo agrega si no, y lo quita si `deseado` es null. Evita duplicar o dejar desactualizado un
+ * movimiento derivado de otra entidad (pedido cobrado, compra editada) sin volver a escribirlo
+ * a mano cada vez. Devuelve el mismo array si no hay ningún cambio real que hacer. */
+export function sincronizarMovimientoCaja(
+  movimientos: CajaMovimiento[],
+  ref: string,
+  deseado: CajaMovimiento | null
+): CajaMovimiento[] {
+  const existente = movimientos.find((m) => m.ref === ref);
+  if (!deseado) {
+    return existente ? movimientos.filter((m) => m.ref !== ref) : movimientos;
+  }
+  if (!existente) return [...movimientos, deseado];
+  const sinCambios =
+    existente.monto === deseado.monto &&
+    existente.fecha === deseado.fecha &&
+    existente.metodo === deseado.metodo &&
+    existente.concepto === deseado.concepto &&
+    existente.tipo === deseado.tipo;
+  if (sinCambios) return movimientos;
+  return movimientos.map((m) => (m.ref === ref ? { ...deseado, id: m.id } : m));
+}
+
+/** El movimiento de caja que debería existir para un pedido entregado, reflejando lo
+ * efectivamente cobrado — null si está Cancelado, no Entregado, o si todavía no se cobró nada
+ * (Pendiente). Pensado para usar con sincronizarMovimientoCaja() en vez de crear a mano. */
+export function movimientoCajaDeseadoDePedido(pedido: Pedido): CajaMovimiento | null {
+  if (pedido.estado !== "Entregado") return null;
+  const monto = montoPagadoPedido(pedido);
+  if (monto <= 0) return null;
+  return { ...crearMovimientoCajaDesdePedido(pedido), monto };
+}
+
 export interface ComprasVsConsumoMes {
   mes: number;
   anio: number;
@@ -641,19 +738,76 @@ export function recurrenciaMayorista(data: RicordoData, umbralDias: number, hoy:
     .sort((a, b) => (b.diasDesdeUltimo ?? -1) - (a.diasDesdeUltimo ?? -1));
 }
 
+export type SegmentoCliente = "Nuevo" | "Activo" | "Frecuente" | "VIP" | "Mayorista" | "En riesgo" | "Inactivo";
+
+export interface MetricasCliente {
+  cliente: Cliente;
+  cantidadPedidos: number;
+  totalComprado: number;
+  ticketPromedio: number;
+  fechaUltimaCompra: string | null;
+  diasDesdeUltimaCompra: number | null;
+  segmento: SegmentoCliente;
+}
+
+const DIAS_INACTIVO = 120;
+const DIAS_RIESGO = 45;
+const PEDIDOS_VIP = 6;
+const PEDIDOS_FRECUENTE = 3;
+
+/** Clasifica automáticamente a cada cliente activo según su actividad reciente y volumen —
+ * reglas simples y a la vista a propósito (nada de scoring oculto): estas cuatro constantes son
+ * todo el criterio. El orden de los `if` es la prioridad: "hace más de 120 días que no compra"
+ * pesa más que "es mayorista", por ejemplo — un mayorista inactivo aparece como Inactivo, no
+ * como Mayorista. Excluye clientes dados de baja (cliente.activo === false). */
+export function segmentacionClientes(data: RicordoData, hoy: Date = new Date()): MetricasCliente[] {
+  return data.clientes
+    .filter((c) => c.activo !== false)
+    .map((cliente) => {
+      const pedidos = data.pedidos.filter((p) => p.id_cliente === cliente.id && p.estado !== "Cancelado");
+      const idsUnicos = new Set(pedidos.map((p) => p.id_pedido));
+      const totalComprado = pedidos.reduce((acc, p) => acc + p.precio_neto, 0);
+      const fechas = pedidos.map((p) => p.fecha).sort();
+      const fechaUltimaCompra = fechas.length > 0 ? fechas[fechas.length - 1] : null;
+      const diasDesdeUltimaCompra = fechaUltimaCompra
+        ? Math.floor((hoy.getTime() - new Date(fechaUltimaCompra).getTime()) / (1000 * 60 * 60 * 24))
+        : null;
+      const cantidadPedidos = idsUnicos.size;
+      const ticketPromedio = cantidadPedidos > 0 ? totalComprado / cantidadPedidos : 0;
+
+      let segmento: SegmentoCliente;
+      if (cantidadPedidos === 0) segmento = "Nuevo";
+      else if (diasDesdeUltimaCompra !== null && diasDesdeUltimaCompra > DIAS_INACTIVO) segmento = "Inactivo";
+      else if (diasDesdeUltimaCompra !== null && diasDesdeUltimaCompra > DIAS_RIESGO) segmento = "En riesgo";
+      else if (cliente.canal === "Mayorista") segmento = "Mayorista";
+      else if (cantidadPedidos >= PEDIDOS_VIP) segmento = "VIP";
+      else if (cantidadPedidos >= PEDIDOS_FRECUENTE) segmento = "Frecuente";
+      else segmento = "Activo";
+
+      return { cliente, cantidadPedidos, totalComprado, ticketPromedio, fechaUltimaCompra, diasDesdeUltimaCompra, segmento };
+    })
+    .sort((a, b) => b.totalComprado - a.totalComprado);
+}
+
 export interface DiscrepanciaCaja {
   pedido: Pedido;
   movimiento: CajaMovimiento | null;
 }
 
-/** Pedidos entregados cuyo ingreso de caja no existe o no coincide con precio_neto,
- * excluyendo los que ya se revisaron y se confirmaron como intencionalmente sin cobrar. */
+/** Pedidos entregados cuyo ingreso de caja no existe o no coincide con lo efectivamente cobrado
+ * (montoPagadoPedido — el total si está Pagado, la parte cobrada si es Parcial), excluyendo los
+ * que ya se revisaron y se confirmaron como intencionalmente sin cobrar. Un pedido Pendiente
+ * (nada cobrado todavía) no es una discrepancia: ahí no se espera ningún movimiento. */
 export function discrepanciasCaja(data: RicordoData): DiscrepanciaCaja[] {
   const ignorados = new Set(data.conciliacion_ignorados ?? []);
   return data.pedidos
     .filter((p) => p.estado === "Entregado" && !ignorados.has(p.id_detalle))
     .map((p) => ({ pedido: p, movimiento: data.caja_movimientos.find((m) => m.ref === p.id_detalle) ?? null }))
-    .filter(({ pedido, movimiento }) => !movimiento || movimiento.monto !== pedido.precio_neto);
+    .filter(({ pedido, movimiento }) => {
+      const esperado = montoPagadoPedido(pedido);
+      if (esperado <= 0) return false;
+      return !movimiento || movimiento.monto !== esperado;
+    });
 }
 
 export function cmvAcumulado(data: RicordoData): number {
