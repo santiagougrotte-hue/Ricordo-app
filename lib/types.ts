@@ -157,6 +157,11 @@ export interface Pedido {
   /** Fecha límite de cobro (crédito a mayoristas) — usada para "días de atraso" en Cuentas por
    * Cobrar. Sin cargar, esa columna queda vacía en vez de inventar un vencimiento. */
   fecha_vencimiento?: string;
+  /** Snapshot del costo total de la línea (costo unitario × cantidad) en el momento en que se
+   * cargó o editó el pedido — así, si mañana sube el precio de un ingrediente, la rentabilidad
+   * de este pedido ya vendido no se recalcula sola. Ausente = pedido histórico de antes de este
+   * campo; se sigue calculando en vivo con calcCosto (ver cmvDePedido en lib/calc.ts). */
+  costo_snapshot?: number;
   notas?: string;
   adjunto?: Adjunto;
 }

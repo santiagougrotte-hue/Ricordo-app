@@ -444,7 +444,13 @@ export function calcStockIngrediente(data: RicordoData, idIngrediente: string): 
 
 export const ESTADOS_CMV: Pedido["estado"][] = ["Entregado"];
 
+/** Costo total de una línea de pedido — usa el snapshot congelado al momento de la venta
+ * cuando existe; si no (pedido histórico de antes de que existiera este campo), lo calcula en
+ * vivo con el costo actual del producto, como siempre. Punto único usado por CMV, EERR y toda
+ * la rentabilidad por canal/cliente/tipo de venta, para que ninguna quede desactualizada entre
+ * sí ni cambie sola cuando sube un ingrediente. */
 export function cmvDePedido(data: RicordoData, p: Pedido): number {
+  if (p.costo_snapshot !== undefined) return p.costo_snapshot;
   const costoUnit = calcCosto(data, p.id_producto);
   return costoUnit * p.cantidad;
 }
@@ -478,7 +484,7 @@ export function rentabilidadPorCanal(data: RicordoData, pedidos: Pedido[]): Rent
     const cur = map.get(p.canal) ?? { unidades: 0, venta: 0, costo: 0 };
     cur.unidades += p.cantidad;
     cur.venta += p.precio_neto;
-    cur.costo += calcCosto(data, p.id_producto) * p.cantidad;
+    cur.costo += cmvDePedido(data, p);
     map.set(p.canal, cur);
   }
   return Array.from(map.entries())
@@ -514,7 +520,7 @@ export function rentabilidadPorTipoVenta(data: RicordoData, pedidos: Pedido[]): 
     const cur = map.get(tipo) ?? { unidades: 0, venta: 0, costo: 0 };
     cur.unidades += p.cantidad;
     cur.venta += p.precio_neto;
-    cur.costo += calcCosto(data, p.id_producto) * p.cantidad;
+    cur.costo += cmvDePedido(data, p);
     map.set(tipo, cur);
   }
   return TIPO_VENTA_ORDEN.filter((tipo) => map.has(tipo)).map((tipo) => {
@@ -551,7 +557,7 @@ export function rentabilidadPorGustoEnTipoVenta(data: RicordoData, pedidos: Pedi
     const cur = map.get(producto.id_base) ?? { unidades: 0, venta: 0, costo: 0 };
     cur.unidades += p.cantidad;
     cur.venta += p.precio_neto;
-    cur.costo += calcCosto(data, p.id_producto) * p.cantidad;
+    cur.costo += cmvDePedido(data, p);
     map.set(producto.id_base, cur);
   }
   return Array.from(map.entries())
@@ -584,7 +590,7 @@ export function rentabilidadPorCliente(data: RicordoData, pedidos: Pedido[]): Re
     const cur = map.get(p.id_cliente) ?? { unidades: 0, venta: 0, costo: 0, pedidosUnicos: new Set<string>() };
     cur.unidades += p.cantidad;
     cur.venta += p.precio_neto;
-    cur.costo += calcCosto(data, p.id_producto) * p.cantidad;
+    cur.costo += cmvDePedido(data, p);
     cur.pedidosUnicos.add(p.id_pedido);
     map.set(p.id_cliente, cur);
   }

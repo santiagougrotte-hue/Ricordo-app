@@ -41,6 +41,7 @@ import {
   gustosTodos,
   rentabilidadPorTipoVenta,
   rentabilidadPorGustoEnTipoVenta,
+  cmvDePedido,
 } from "./calc";
 import { emptyData } from "./types";
 import type { Pedido, Producto, Ingrediente, RecetaLinea, Produccion, Cliente, Amortizacion, CajaMovimiento } from "./types";
@@ -1157,4 +1158,41 @@ test("rentabilidadPorGustoEnTipoVenta: rankea gustos dentro de un tipo de venta 
   assert.equal(filas[0].nombreGusto, "Ravioles de calabaza", "menos costo → más ganancia → primero");
   assert.equal(filas[0].ganancia, 8000);
   assert.equal(filas[1].ganancia, 6000);
+});
+
+// --- Snapshot histórico de costo (cmvDePedido) --------------------------------------------------
+
+test("cmvDePedido: sin snapshot, calcula el costo en vivo con el precio actual del insumo (comportamiento de siempre)", () => {
+  const data = emptyData();
+  data.ingredientes = [{ id: "ING-1", nombre: "Harina", unidad: "kg", precio_ref: 2000, precio_vigente: null, seguimiento_stock: false }];
+  data.productos = [{ id: "PROD-01", id_base: "PROD-01", nombre: "Ravioles", precio_venta: 11000, activo: true }];
+  data.recetas = [{ id: "R1", id_producto: "PROD-01", tipo: "Ingrediente", concepto: "ING-1", cantidad: 2 }];
+  const pedido = pedidoBase({ id_producto: "PROD-01", cantidad: 3 });
+  assert.equal(cmvDePedido(data, pedido), 2 * 2000 * 3);
+});
+
+test("cmvDePedido: con snapshot, usa el costo congelado sin importar el precio actual del insumo", () => {
+  const data = emptyData();
+  data.ingredientes = [{ id: "ING-1", nombre: "Harina", unidad: "kg", precio_ref: 2000, precio_vigente: null, seguimiento_stock: false }];
+  data.productos = [{ id: "PROD-01", id_base: "PROD-01", nombre: "Ravioles", precio_venta: 11000, activo: true }];
+  data.recetas = [{ id: "R1", id_producto: "PROD-01", tipo: "Ingrediente", concepto: "ING-1", cantidad: 2 }];
+  const pedido = pedidoBase({ id_producto: "PROD-01", cantidad: 3, costo_snapshot: 5000 });
+  assert.equal(cmvDePedido(data, pedido), 5000, "usa el snapshot, no 2×2000×3");
+});
+
+test("rentabilidadPorTipoVenta: un pedido con snapshot no cambia su rentabilidad histórica cuando sube el precio de un ingrediente", () => {
+  const data = emptyData();
+  data.ingredientes = [{ id: "ING-1", nombre: "Harina", unidad: "kg", precio_ref: 2000, precio_vigente: null, seguimiento_stock: false }];
+  data.productos = [{ id: "PROD-01", id_base: "PROD-01", nombre: "Ravioles", precio_venta: 11000, activo: true }];
+  data.recetas = [{ id: "R1", id_producto: "PROD-01", tipo: "Ingrediente", concepto: "ING-1", cantidad: 2 }];
+  const pedidoViejo = pedidoBase({ id_detalle: "A", id_producto: "PROD-01", cantidad: 1, precio_neto: 11000, costo_snapshot: 4000 });
+  data.pedidos = [pedidoViejo];
+
+  const antes = rentabilidadPorTipoVenta(data, [pedidoViejo]);
+  // Sube el precio de la harina hoy — no debería tocar la rentabilidad de un pedido ya vendido.
+  data.ingredientes[0].precio_ref = 50000;
+  const despues = rentabilidadPorTipoVenta(data, [pedidoViejo]);
+
+  assert.deepEqual(despues, antes);
+  assert.equal(despues[0].costo, 4000, "sigue siendo el costo congelado, no el recalculado con harina a $50.000");
 });

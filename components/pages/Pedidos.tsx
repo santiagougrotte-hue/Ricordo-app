@@ -33,6 +33,8 @@ import {
   sincronizarCajaDePedidos,
   saldoPedido,
   aplicarCobroAPedido,
+  calcCosto,
+  cmvDePedido,
   fARS,
   inPeriod,
   gustosActivos,
@@ -456,6 +458,9 @@ function PedidosTab() {
         precio_total: total,
         descuento_monto: l.descuento_monto,
         precio_neto: neto,
+        // Snapshot: el costo de venderlo hoy queda fijo, no se recalcula si mañana sube un
+        // ingrediente — ver cmvDePedido en lib/calc.ts.
+        costo_snapshot: calcCosto(data, l.id_producto) * l.cantidad,
         fecha: orderForm.fecha,
         fecha_entrega: orderForm.fecha_entrega || undefined,
         estado: orderForm.estado,
@@ -493,6 +498,9 @@ function PedidosTab() {
     }
     const total = editForm.precio_unitario * editForm.cantidad;
     const neto = total - editForm.descuento_monto;
+    // Editar re-confirma la línea: el snapshot de costo se recalcula con el producto y la
+    // cantidad actuales del formulario, igual que precio_total/precio_neto.
+    const costoSnapshot = calcCosto(data, editForm.id_producto) * editForm.cantidad;
     setData((d) => {
       const pedidos = d.pedidos.map((p) =>
         p.id_detalle === editing
@@ -505,6 +513,7 @@ function PedidosTab() {
               nombre_producto: producto?.nombre ?? p.nombre_producto,
               precio_total: total,
               precio_neto: neto,
+              costo_snapshot: costoSnapshot,
             }
           : p
       );
@@ -607,6 +616,7 @@ function PedidosTab() {
                   <Th>Producto</Th>
                   <Th>Cant.</Th>
                   <Th>Precio neto</Th>
+                  <Th title="Margen sobre el costo congelado al momento del pedido, no el costo actual">Margen</Th>
                   <Th>Estado</Th>
                   <Th>Acciones</Th>
                 </tr>
@@ -691,6 +701,13 @@ function PedidosTab() {
                           </Td>
                           <Td>{p.cantidad}</Td>
                           <Td main>{fARS(p.precio_neto)}</Td>
+                          <Td>
+                            {(() => {
+                              const costo = cmvDePedido(data, p);
+                              const margen = p.precio_neto > 0 ? ((p.precio_neto - costo) / p.precio_neto) * 100 : 0;
+                              return <span className={margen >= 0 ? "text-green" : "text-red"}>{margen.toFixed(1)}%</span>;
+                            })()}
+                          </Td>
                           <Td>
                             <div className="flex flex-wrap gap-1">
                               <Badge color={ESTADO_COLOR[p.estado]}>{p.estado}</Badge>

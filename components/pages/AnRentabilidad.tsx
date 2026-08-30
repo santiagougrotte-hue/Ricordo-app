@@ -5,7 +5,7 @@ import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContaine
 import { useStore } from "@/lib/store";
 import { usePeriod } from "@/lib/period";
 import {
-  calcCosto,
+  cmvDePedido,
   rentabilidadPorCanal,
   rentabilidadPorCliente,
   rentabilidadPorTipoVenta,
@@ -42,24 +42,23 @@ function PorProductoTab() {
   const pedidos = usePedidosPeriodo();
 
   const filas = useMemo(() => {
-    const map = new Map<string, { nombre: string; unidades: number; venta: number }>();
+    const map = new Map<string, { nombre: string; unidades: number; venta: number; costo: number }>();
     for (const p of pedidos) {
-      const cur = map.get(p.id_producto) ?? { nombre: p.nombre_producto, unidades: 0, venta: 0 };
+      const cur = map.get(p.id_producto) ?? { nombre: p.nombre_producto, unidades: 0, venta: 0, costo: 0 };
       cur.unidades += p.cantidad;
       cur.venta += p.precio_neto;
+      cur.costo += cmvDePedido(data, p);
       map.set(p.id_producto, cur);
     }
     return Array.from(map.entries())
       .map(([id, v]) => {
-        const costoUnit = calcCosto(data, id);
-        const costoTotal = costoUnit * v.unidades;
-        const ganancia = v.venta - costoTotal;
+        const ganancia = v.venta - v.costo;
         return {
           id,
           nombre: v.nombre,
           unidades: v.unidades,
           venta: v.venta,
-          costo: costoTotal,
+          costo: v.costo,
           ganancia,
           margen: v.venta > 0 ? (ganancia / v.venta) * 100 : 0,
         };
