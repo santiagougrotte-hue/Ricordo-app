@@ -8,7 +8,7 @@ export type Canal = "Minorista" | "Mayorista";
 export type TipoVenta = "Minorista" | "Mayorista" | "VacioSinSalsa" | "VacioConSalsa" | "SinClasificar";
 export type EstadoPedido = "Confirmado" | "Produccion" | "Entregado" | "Cancelado";
 export type EstadoPago = "Pendiente" | "Parcial" | "Pagado" | "Reembolsado";
-export type TipoRecetaLinea = "Ingrediente" | "Packaging" | "CostoFijo";
+export type TipoRecetaLinea = "Ingrediente" | "Packaging" | "CostoFijo" | "Subreceta";
 export type TipoMovCaja = "ingreso" | "egreso";
 
 export interface Ingrediente {
@@ -87,9 +87,26 @@ export type GrupoRecetaDerivada = "masa" | "relleno" | "complementos" | "packagi
 export interface ExcepcionLinea {
   id: string;
   grupo: GrupoRecetaDerivada;
-  tipo: "Ingrediente" | "Packaging";
+  tipo: "Ingrediente" | "Packaging" | "Subreceta";
   concepto: string;
   cantidad: number;
+}
+
+/** Componente elaborado con receta propia (ej. Salsa Pomodoro) que un producto puede usar como
+ * si fuera un ingrediente más — nunca se tipea su costo a mano, se deriva de sus propios
+ * ingredientes y de `rendimiento`. Si sube un ingrediente de la subreceta, sube la subreceta y
+ * automáticamente cualquier producto que la use (vía costoUnitarioSubreceta en lib/calc.ts). */
+export interface Subreceta {
+  id: string;
+  nombre: string;
+  categoria?: string;
+  /** Cuánto rinde la receta completa, en `unidad` — ej. 2500 (g) si la receta de arriba da 2,5kg
+   * de salsa. El costo por unidad de la subreceta es costoTotalIngredientes / rendimiento. */
+  rendimiento: number;
+  unidad: string;
+  receta: RecetaUnidadLinea[];
+  /** Soft-delete: false = dada de baja. Ausente o true = activa. */
+  activo?: boolean;
 }
 
 export interface Cliente {
@@ -425,6 +442,7 @@ export interface RicordoData {
   clientes: Cliente[];
   recetas: RecetaLinea[];
   packaging: Packaging[];
+  subrecetas: Subreceta[];
   pedidos: Pedido[];
   produccion: Produccion[];
   compras: Compra[];
@@ -476,6 +494,7 @@ export function emptyData(): RicordoData {
     clientes: [],
     recetas: [],
     packaging: [],
+    subrecetas: [],
     pedidos: [],
     produccion: [],
     compras: [],

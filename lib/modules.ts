@@ -95,6 +95,7 @@ export const MODULES: ModuleDef[] = [
         label: "Recetas y Costos",
         subtabs: [
           { key: "recetas", label: "Recetas", page: "recetas" },
+          { key: "subrecetas", label: "Subrecetas", page: "subrecetas" },
           { key: "costeo", label: "Costeo", page: "costeo" },
           { key: "simulador", label: "Simulador", page: "simulador" },
           { key: "informe-control", label: "Informe de Control", page: "informe-control" },
@@ -203,6 +204,7 @@ export const PAGE_LABELS: Record<string, string> = {
   clientes: "Clientes",
   productos: "Productos",
   recetas: "Recetas",
+  subrecetas: "Subrecetas",
   insumos: "Insumos",
   compras: "Compras",
   proveedores: "Proveedores",

@@ -42,6 +42,7 @@ import {
   rentabilidadPorTipoVenta,
   rentabilidadPorGustoEnTipoVenta,
   cmvDePedido,
+  costoUnitarioSubreceta,
 } from "./calc";
 import { emptyData } from "./types";
 import type { Pedido, Producto, Ingrediente, RecetaLinea, Produccion, Cliente, Amortizacion, CajaMovimiento } from "./types";
@@ -1195,4 +1196,69 @@ test("rentabilidadPorTipoVenta: un pedido con snapshot no cambia su rentabilidad
 
   assert.deepEqual(despues, antes);
   assert.equal(despues[0].costo, 4000, "sigue siendo el costo congelado, no el recalculado con harina a $50.000");
+});
+
+// --- Subrecetas (componentes elaborados con receta propia, ej. Salsa Pomodoro) -----------------
+
+test("costoUnitarioSubreceta: costo total de sus ingredientes dividido el rendimiento", () => {
+  const data = emptyData();
+  data.ingredientes = [
+    { id: "ING-TOMATE", nombre: "Tomate", unidad: "kg", precio_ref: 1000, precio_vigente: null, seguimiento_stock: false },
+    { id: "ING-AJO", nombre: "Ajo", unidad: "kg", precio_ref: 6000, precio_vigente: null, seguimiento_stock: false },
+  ];
+  data.subrecetas = [
+    {
+      id: "SUB-1",
+      nombre: "Salsa Pomodoro",
+      rendimiento: 2500, // gramos
+      unidad: "g",
+      receta: [
+        { id: "RU-1", id_ingrediente: "ING-TOMATE", cantidad: 2 }, // 2kg × 1000 = 2000
+        { id: "RU-2", id_ingrediente: "ING-AJO", cantidad: 0.1 }, // 0.1kg × 6000 = 600
+      ],
+    },
+  ];
+  // costo total = 2600, rendimiento = 2500g → costo por gramo = 1.04
+  assert.ok(Math.abs(costoUnitarioSubreceta(data, "SUB-1") - 2600 / 2500) < 0.0001);
+});
+
+test("costoUnitarioSubreceta: sin rendimiento o subreceta inexistente, devuelve 0 en vez de dividir por cero", () => {
+  const data = emptyData();
+  assert.equal(costoUnitarioSubreceta(data, "SUB-INEXISTENTE"), 0);
+  data.subrecetas = [{ id: "SUB-1", nombre: "Vacía", rendimiento: 0, unidad: "g", receta: [] }];
+  assert.equal(costoUnitarioSubreceta(data, "SUB-1"), 0);
+});
+
+test("costoLegacy: una línea tipo Subreceta suma cantidad × costo unitario de la subreceta", () => {
+  const data = emptyData();
+  data.ingredientes = [{ id: "ING-TOMATE", nombre: "Tomate", unidad: "kg", precio_ref: 1000, precio_vigente: null, seguimiento_stock: false }];
+  data.subrecetas = [
+    {
+      id: "SUB-1",
+      nombre: "Salsa Pomodoro",
+      rendimiento: 1000, // 1000g de salsa
+      unidad: "g",
+      receta: [{ id: "RU-1", id_ingrediente: "ING-TOMATE", cantidad: 1 }], // 1kg × 1000 = 1000 → $1/g
+    },
+  ];
+  data.productos = [{ id: "PROD-01", id_base: "PROD-01", nombre: "Vacío con salsa", precio_venta: 12000, activo: true }];
+  data.recetas = [{ id: "R1", id_producto: "PROD-01", tipo: "Subreceta", concepto: "SUB-1", cantidad: 200 }]; // 200g de salsa
+  assert.equal(costoLegacy(data, "PROD-01"), 200 * 1);
+});
+
+test("costoUnitarioSubreceta: si sube el precio de un ingrediente de la subreceta, sube la subreceta y todo lo que la usa", () => {
+  const data = emptyData();
+  data.ingredientes = [{ id: "ING-TOMATE", nombre: "Tomate", unidad: "kg", precio_ref: 1000, precio_vigente: null, seguimiento_stock: false }];
+  data.subrecetas = [
+    { id: "SUB-1", nombre: "Salsa Pomodoro", rendimiento: 1000, unidad: "g", receta: [{ id: "RU-1", id_ingrediente: "ING-TOMATE", cantidad: 1 }] },
+  ];
+  data.productos = [{ id: "PROD-01", id_base: "PROD-01", nombre: "Vacío con salsa", precio_venta: 12000, activo: true }];
+  data.recetas = [{ id: "R1", id_producto: "PROD-01", tipo: "Subreceta", concepto: "SUB-1", cantidad: 200 }];
+
+  const antes = calcCosto(data, "PROD-01");
+  data.ingredientes[0].precio_ref = 3000; // el tomate se triplica
+  const despues = calcCosto(data, "PROD-01");
+
+  assert.ok(despues > antes, "el costo del producto sube automáticamente sin tocar su receta");
+  assert.equal(despues, 3 * antes);
 });

@@ -60,6 +60,20 @@ export function pvr(item: ConPrecioRefYVigente | undefined | null): number {
   return item.precio_vigente || item.precio_ref || 0;
 }
 
+/** Costo por unidad (de `subreceta.unidad`, ej. por gramo si rendimiento está en gramos) de un
+ * componente elaborado — Σ sus propios ingredientes × precio vigente, dividido el rendimiento
+ * de la receta. Nunca se tipea a mano: si sube un ingrediente, sube la subreceta sola, y con
+ * ella cualquier producto que la use (ver "Subreceta" en costoLegacy/costoLineaDerivada). */
+export function costoUnitarioSubreceta(data: RicordoData, idSubreceta: string): number {
+  const subreceta = data.subrecetas.find((s) => s.id === idSubreceta);
+  if (!subreceta || subreceta.rendimiento <= 0) return 0;
+  const costoTotal = subreceta.receta.reduce((acc, l) => {
+    const ing = data.ingredientes.find((i) => i.id === l.id_ingrediente);
+    return acc + l.cantidad * pvr(ing);
+  }, 0);
+  return costoTotal / subreceta.rendimiento;
+}
+
 /** Costo de un producto = Σ receta × precio vigente (ingredientes y packaging); costos fijos de receta se suman en $ directo.
  * Si el producto está migrado al modelo de producto base/producto de venta (ver más abajo), el
  * costo se calcula desde la receta derivada en vez de leer sus RecetaLinea de Ingrediente
@@ -81,6 +95,8 @@ export function costoLegacy(data: RicordoData, idProducto: string): number {
     } else if (linea.tipo === "CostoFijo") {
       const cf = data.costos_fijos.find((c) => c.id === linea.concepto);
       total += linea.cantidad * (cf?.monto ?? 0);
+    } else if (linea.tipo === "Subreceta") {
+      total += linea.cantidad * costoUnitarioSubreceta(data, linea.concepto);
     }
   }
   return total;
@@ -195,6 +211,8 @@ export function costoLineaDerivada(data: RicordoData, l: LineaRecetaDerivada): n
   } else if (l.tipo === "CostoFijo") {
     const cf = data.costos_fijos.find((c) => c.id === l.concepto);
     return l.cantidad * (cf?.monto ?? 0);
+  } else if (l.tipo === "Subreceta") {
+    return l.cantidad * costoUnitarioSubreceta(data, l.concepto);
   }
   return 0;
 }

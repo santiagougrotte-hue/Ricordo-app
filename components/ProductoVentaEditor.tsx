@@ -48,7 +48,7 @@ export function ProductoVentaEditor({ producto, onClose }: Props) {
   const [draftComplementoCant, setDraftComplementoCant] = useState(0);
   const [excepciones, setExcepciones] = useState<ExcepcionLinea[]>([]);
   const [draftExcGrupo, setDraftExcGrupo] = useState<GrupoRecetaDerivada>("masa");
-  const [draftExcTipo, setDraftExcTipo] = useState<"Ingrediente" | "Packaging">("Ingrediente");
+  const [draftExcTipo, setDraftExcTipo] = useState<"Ingrediente" | "Packaging" | "Subreceta">("Ingrediente");
   const [draftExcConcepto, setDraftExcConcepto] = useState("");
   const [draftExcCantidad, setDraftExcCantidad] = useState(0);
   const [idCargado, setIdCargado] = useState<string | null>(null);
@@ -87,6 +87,7 @@ export function ProductoVentaEditor({ producto, onClose }: Props) {
   function nombreConcepto(l: LineaRecetaDerivada) {
     if (l.tipo === "Ingrediente") return data.ingredientes.find((i) => i.id === l.concepto)?.nombre ?? l.concepto;
     if (l.tipo === "Packaging") return data.packaging.find((p) => p.id === l.concepto)?.nombre ?? l.concepto;
+    if (l.tipo === "Subreceta") return data.subrecetas.find((s) => s.id === l.concepto)?.nombre ?? l.concepto;
     return data.costos_fijos.find((c) => c.id === l.concepto)?.descripcion ?? l.concepto;
   }
 
@@ -132,7 +133,13 @@ export function ProductoVentaEditor({ producto, onClose }: Props) {
       }
       return [
         ...es,
-        { id: uid("EXC"), grupo: l.grupo as GrupoRecetaDerivada, tipo: l.tipo as "Ingrediente" | "Packaging", concepto: l.concepto, cantidad },
+        {
+          id: uid("EXC"),
+          grupo: l.grupo as GrupoRecetaDerivada,
+          tipo: l.tipo as "Ingrediente" | "Packaging" | "Subreceta",
+          concepto: l.concepto,
+          cantidad,
+        },
       ];
     });
   }
@@ -269,16 +276,22 @@ export function ProductoVentaEditor({ producto, onClose }: Props) {
           <Select
             value={draftExcTipo}
             onChange={(e) => {
-              setDraftExcTipo(e.target.value as "Ingrediente" | "Packaging");
+              setDraftExcTipo(e.target.value as "Ingrediente" | "Packaging" | "Subreceta");
               setDraftExcConcepto("");
             }}
           >
             <option value="Ingrediente">Ingrediente</option>
             <option value="Packaging">Packaging</option>
+            <option value="Subreceta">Subreceta</option>
           </Select>
           <Select value={draftExcConcepto} onChange={(e) => setDraftExcConcepto(e.target.value)}>
             <option value="">Seleccionar…</option>
-            {(draftExcTipo === "Ingrediente" ? data.ingredientes : data.packaging).map((o) => (
+            {(draftExcTipo === "Ingrediente"
+              ? data.ingredientes
+              : draftExcTipo === "Packaging"
+              ? data.packaging
+              : data.subrecetas.filter((s) => s.activo !== false)
+            ).map((o) => (
               <option key={o.id} value={o.id}>
                 {o.nombre}
               </option>
@@ -309,7 +322,9 @@ export function ProductoVentaEditor({ producto, onClose }: Props) {
                     <Td main>
                       {e.tipo === "Ingrediente"
                         ? data.ingredientes.find((i) => i.id === e.concepto)?.nombre ?? e.concepto
-                        : data.packaging.find((p) => p.id === e.concepto)?.nombre ?? e.concepto}
+                        : e.tipo === "Packaging"
+                        ? data.packaging.find((p) => p.id === e.concepto)?.nombre ?? e.concepto
+                        : data.subrecetas.find((s) => s.id === e.concepto)?.nombre ?? e.concepto}
                     </Td>
                     <Td>{e.cantidad}</Td>
                     <Td>
