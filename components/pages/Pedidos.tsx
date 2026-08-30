@@ -29,8 +29,26 @@ import {
 import { Modal } from "@/components/Modal";
 import { Wizard } from "@/components/Wizard";
 import { FileAttach } from "@/components/FileAttach";
-import { sincronizarCajaDePedidos, saldoPedido, aplicarCobroAPedido, fARS, inPeriod } from "@/lib/calc";
-import type { Adjunto, Canal, EstadoPago, EstadoPedido, Pedido } from "@/lib/types";
+import {
+  sincronizarCajaDePedidos,
+  saldoPedido,
+  aplicarCobroAPedido,
+  fARS,
+  inPeriod,
+  gustosActivos,
+  tipoVentaDeProducto,
+  TIPO_VENTA_LABEL,
+  TIPO_VENTA_ORDEN,
+} from "@/lib/calc";
+import type { Adjunto, Canal, EstadoPago, EstadoPedido, Pedido, Producto, TipoVenta } from "@/lib/types";
+
+const TIPO_VENTA_BADGE: Record<TipoVenta, "green" | "red" | "orange" | "blue" | "purple" | "gold"> = {
+  Minorista: "blue",
+  Mayorista: "purple",
+  VacioSinSalsa: "gold",
+  VacioConSalsa: "green",
+  SinClasificar: "red",
+};
 
 type Confianza = "alta" | "media" | "baja";
 
@@ -374,11 +392,31 @@ function PedidosTab() {
     0
   );
 
-  // Un producto sin canal propio (todavía no migrado a variantes por canal) aparece en las dos
-  // listas; uno con canal cargado solo aparece en la del canal que le corresponde — así el
-  // precio que se autocompleta ya es el de la lista de precios correcta.
-  function productosDelCanal(canal: Canal) {
-    return data.productos.filter((p) => p.activo !== false && (!p.canal || p.canal === canal));
+  // Selector de dos pasos "Producto (gusto) → Tipo de venta": el gusto agrupa las variantes por
+  // id_base (igual que en Productos), y elegir el tipo resuelve el id_producto real — reemplaza
+  // el picker plano filtrado por `canal`, que quedó mal cargado en varias variantes mayoristas.
+  const gustosCatalogo = useMemo(() => [...gustosActivos(data)].sort((a, b) => a.nombre.localeCompare(b.nombre, "es")), [data]);
+
+  function idBaseDe(idProducto: string): string {
+    return data.productos.find((p) => p.id === idProducto)?.id_base ?? "";
+  }
+  function tipoDe(idProducto: string): TipoVenta | "" {
+    const p = data.productos.find((pr) => pr.id === idProducto);
+    return p ? tipoVentaDeProducto(p) : "";
+  }
+  function tiposDelGusto(idBase: string): { tipo: TipoVenta; producto: Producto }[] {
+    const gusto = gustosCatalogo.find((g) => g.id_base === idBase);
+    if (!gusto) return [];
+    return TIPO_VENTA_ORDEN.flatMap((tipo) => {
+      const producto = gusto.variantes.find((v) => tipoVentaDeProducto(v) === tipo);
+      return producto ? [{ tipo, producto }] : [];
+    });
+  }
+  /** Al elegir un gusto nuevo, preferí la variante del tipo que matchea el canal del pedido
+   * (Mayorista→Mayorista, si no Minorista), y si no existe esa combinación, la primera que haya. */
+  function variantePreferida(idBase: string, canal: Canal): Producto | undefined {
+    const tipos = tiposDelGusto(idBase);
+    return tipos.find((t) => t.tipo === (canal === "Mayorista" ? "Mayorista" : "Minorista"))?.producto ?? tipos[0]?.producto;
   }
 
   function guardarOrden() {
@@ -638,11 +676,18 @@ function PedidosTab() {
                           </div>
                         </Td>
                       </tr>
-                      {grupo.map((p) => (
+                      {grupo.map((p) => {
+                        const tipo = tipoDe(p.id_producto);
+                        return (
                         <TrHover key={p.id_detalle}>
                           <Td main>
-                            {p.nombre_producto}
-                            {p.gusto ? ` (${p.gusto})` : ""}
+                            <div className="flex items-center gap-1.5">
+                              <span>
+                                {p.nombre_producto}
+                                {p.gusto ? ` (${p.gusto})` : ""}
+                              </span>
+                              {tipo && <Badge color={TIPO_VENTA_BADGE[tipo]}>{TIPO_VENTA_LABEL[tipo]}</Badge>}
+                            </div>
                           </Td>
                           <Td>{p.cantidad}</Td>
                           <Td main>{fARS(p.precio_neto)}</Td>
@@ -665,7 +710,8 @@ function PedidosTab() {
                             </div>
                           </Td>
                         </TrHover>
-                      ))}
+                        );
+                      })}
                     </React.Fragment>
                   );
                 })}
@@ -756,28 +802,38 @@ function PedidosTab() {
                   const neto = l.precio_unitario * l.cantidad - l.descuento_monto;
                   return (
                     <div key={idx} className="mb-2 flex flex-wrap items-end gap-2 rounded-md border border-border bg-surface2/40 p-2.5 sm:flex-nowrap">
-                      <div className="w-full sm:w-auto sm:flex-[2]">
+                      <div className="w-full sm:w-auto sm:flex-[1.6]">
                         <Select
-                          value={l.id_producto}
+                          value={idBaseDe(l.id_producto)}
                           onChange={(e) => {
-                            const prod = data.productos.find((pr) => pr.id === e.target.value);
-                            actualizarLinea(idx, { id_producto: e.target.value, precio_unitario: prod?.precio_venta ?? 0 });
+                            const preferida = variantePreferida(e.target.value, orderForm.canal);
+                            actualizarLinea(idx, { id_producto: preferida?.id ?? "", precio_unitario: preferida?.precio_venta ?? 0 });
                           }}
                         >
                           <option value="">Producto…</option>
-                          {productosDelCanal(orderForm.canal).map((p) => (
-                            <option key={p.id} value={p.id}>
-                              {p.nombre}
+                          {gustosCatalogo.map((g) => (
+                            <option key={g.id_base} value={g.id_base}>
+                              {g.nombre}
                             </option>
                           ))}
                         </Select>
                       </div>
-                      <Input
-                        placeholder="Gusto"
-                        className="w-full sm:w-28"
-                        value={l.gusto}
-                        onChange={(e) => actualizarLinea(idx, { gusto: e.target.value })}
-                      />
+                      <div className="w-full sm:w-auto sm:flex-[1.2]">
+                        <Select
+                          value={tipoDe(l.id_producto)}
+                          disabled={!idBaseDe(l.id_producto)}
+                          onChange={(e) => {
+                            const encontrado = tiposDelGusto(idBaseDe(l.id_producto)).find((t) => t.tipo === e.target.value);
+                            if (encontrado) actualizarLinea(idx, { id_producto: encontrado.producto.id, precio_unitario: encontrado.producto.precio_venta });
+                          }}
+                        >
+                          {tiposDelGusto(idBaseDe(l.id_producto)).map((t) => (
+                            <option key={t.tipo} value={t.tipo}>
+                              {TIPO_VENTA_LABEL[t.tipo]}
+                            </option>
+                          ))}
+                        </Select>
+                      </div>
                       <Input
                         type="number"
                         placeholder="Cant."
@@ -944,21 +1000,37 @@ function PedidosTab() {
           </Field>
           <Field label="Producto">
             <Select
-              value={editForm.id_producto}
+              value={idBaseDe(editForm.id_producto)}
               onChange={(e) => {
-                const prod = data.productos.find((pr) => pr.id === e.target.value);
-                setEditForm({ ...editForm, id_producto: e.target.value, precio_unitario: prod?.precio_venta ?? 0 });
+                const preferida = variantePreferida(e.target.value, editForm.canal);
+                setEditForm({ ...editForm, id_producto: preferida?.id ?? "", precio_unitario: preferida?.precio_venta ?? 0 });
               }}
             >
               <option value="">Seleccionar…</option>
-              {productosDelCanal(editForm.canal).map((p) => (
-                <option key={p.id} value={p.id}>
-                  {p.nombre}
+              {gustosCatalogo.map((g) => (
+                <option key={g.id_base} value={g.id_base}>
+                  {g.nombre}
                 </option>
               ))}
             </Select>
           </Field>
-          <Field label="Gusto / Variante">
+          <Field label="Tipo de venta">
+            <Select
+              value={tipoDe(editForm.id_producto)}
+              disabled={!idBaseDe(editForm.id_producto)}
+              onChange={(e) => {
+                const encontrado = tiposDelGusto(idBaseDe(editForm.id_producto)).find((t) => t.tipo === e.target.value);
+                if (encontrado) setEditForm({ ...editForm, id_producto: encontrado.producto.id, precio_unitario: encontrado.producto.precio_venta });
+              }}
+            >
+              {tiposDelGusto(idBaseDe(editForm.id_producto)).map((t) => (
+                <option key={t.tipo} value={t.tipo}>
+                  {TIPO_VENTA_LABEL[t.tipo]}
+                </option>
+              ))}
+            </Select>
+          </Field>
+          <Field label="Nota de variante (opcional)">
             <Input value={editForm.gusto} onChange={(e) => setEditForm({ ...editForm, gusto: e.target.value })} />
           </Field>
           <Field label="Cantidad">
