@@ -32,7 +32,7 @@ function emptyForm() {
 }
 
 export function CostosFijos() {
-  const { items, add, update, remove } = useEntityCrud<CostoFijo>("costos_fijos");
+  const { items, add, update } = useEntityCrud<CostoFijo>("costos_fijos");
   const { data } = useStore();
   const { mes, anio } = usePeriod();
   const { toast } = useToast();
@@ -108,14 +108,9 @@ export function CostosFijos() {
                       </button>
                     </Td>
                     <Td>
-                      <div className="flex gap-1.5">
-                        <Button size="sm" variant="ghost" onClick={() => openEdit(c)}>
-                          Editar
-                        </Button>
-                        <Button size="sm" variant="danger" onClick={() => remove(c.id)}>
-                          Eliminar
-                        </Button>
-                      </div>
+                      <Button size="sm" variant="ghost" onClick={() => openEdit(c)}>
+                        Editar
+                      </Button>
                     </Td>
                   </TrHover>
                 ))}

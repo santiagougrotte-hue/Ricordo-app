@@ -1,12 +1,12 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useMemo, useState } from "react";
 import { Paperclip } from "lucide-react";
 import { useEntityCrud } from "@/lib/useEntity";
 import { useToast } from "@/lib/toast";
 import { uid } from "@/lib/id";
 import { useStore } from "@/lib/store";
-import { comprasActivas, fARS } from "@/lib/calc";
+import { comprasActivas, comparadorProveedores, fARS, fPct } from "@/lib/calc";
 import {
   PageHeader,
   Button,
@@ -20,6 +20,7 @@ import {
   Field,
   Input,
   Textarea,
+  Badge,
 } from "@/components/ui";
 import { Modal } from "@/components/Modal";
 import { FileAttach } from "@/components/FileAttach";
@@ -30,15 +31,31 @@ function emptyForm() {
 }
 
 export function Proveedores() {
-  const { items, add, update, remove } = useEntityCrud<Proveedor>("proveedores");
+  const { items, add, update } = useEntityCrud<Proveedor>("proveedores");
   const { data } = useStore();
   const { toast } = useToast();
   const [modalOpen, setModalOpen] = useState(false);
   const [editing, setEditing] = useState<string | null>(null);
   const [form, setForm] = useState(emptyForm());
+  const [mostrarBajas, setMostrarBajas] = useState(false);
+
+  const visibles = items.filter((p) => mostrarBajas || p.activo !== false);
+
+  // Soft-delete: un proveedor con historial de compras nunca se borra físicamente.
+  function eliminar(id: string) {
+    if (!confirm("¿Dar de baja este proveedor? Su historial de compras se conserva.")) return;
+    update(id, { activo: false });
+    toast("Proveedor dado de baja", "info");
+  }
+  function reactivar(id: string) {
+    update(id, { activo: true });
+    toast("Proveedor reactivado");
+  }
 
   const totalCompras = (idProveedor: string) =>
     comprasActivas(data).filter((c) => c.id_proveedor === idProveedor).reduce((acc, c) => acc + c.total, 0);
+
+  const comparador = useMemo(() => comparadorProveedores(data), [data]);
 
   function openNew() {
     setEditing(null);
@@ -70,9 +87,19 @@ export function Proveedores() {
 
   return (
     <div>
-      <PageHeader title="Proveedores" right={<Button onClick={openNew}>+ Nuevo</Button>} />
+      <PageHeader
+        title="Proveedores"
+        right={
+          <>
+            <Button variant={mostrarBajas ? "primary" : "ghost"} onClick={() => setMostrarBajas((v) => !v)}>
+              {mostrarBajas ? "Ocultar dados de baja" : "Mostrar dados de baja"}
+            </Button>
+            <Button onClick={openNew}>+ Nuevo</Button>
+          </>
+        }
+      />
       <Card color="blue">
-        {items.length === 0 ? (
+        {visibles.length === 0 ? (
           <EmptyState text="Sin proveedores registrados." />
         ) : (
           <TableWrap>
@@ -87,8 +114,8 @@ export function Proveedores() {
                 </tr>
               </thead>
               <tbody>
-                {items.map((p) => (
-                  <TrHover key={p.id}>
+                {visibles.map((p) => (
+                  <TrHover key={p.id} className={p.activo === false ? "opacity-50" : undefined}>
                     <Td main>
                       <div className="flex items-center gap-1.5">
                         {p.nombre}
@@ -112,9 +139,15 @@ export function Proveedores() {
                         <Button size="sm" variant="ghost" onClick={() => openEdit(p)}>
                           Editar
                         </Button>
-                        <Button size="sm" variant="danger" onClick={() => remove(p.id)}>
-                          Eliminar
-                        </Button>
+                        {p.activo === false ? (
+                          <Button size="sm" variant="green" onClick={() => reactivar(p.id)}>
+                            Reactivar
+                          </Button>
+                        ) : (
+                          <Button size="sm" variant="danger" onClick={() => eliminar(p.id)}>
+                            Dar de baja
+                          </Button>
+                        )}
                       </div>
                     </Td>
                   </TrHover>
@@ -124,6 +157,53 @@ export function Proveedores() {
           </TableWrap>
         )}
       </Card>
+
+      {comparador.length > 0 && (
+        <Card title="Comparador de proveedores" className="mt-4" color="orange">
+          <p className="mb-3 text-[12.5px] text-text3">
+            Insumos con compras registradas a más de un proveedor — solo tiene sentido comparar cuando hay opciones.
+          </p>
+          <div className="flex flex-col gap-4">
+            {comparador.map((c) => (
+              <div key={c.id_ingrediente}>
+                <div className="mb-1.5 text-[12.5px] font-semibold text-text">{c.nombreIngrediente}</div>
+                <TableWrap>
+                  <table className="w-full">
+                    <thead>
+                      <tr>
+                        <Th>Proveedor</Th>
+                        <Th>Último precio</Th>
+                        <Th>Fecha última compra</Th>
+                        <Th>Precio promedio</Th>
+                        <Th>Compras</Th>
+                        <Th>Diferencia</Th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {c.proveedores.map((p) => (
+                        <TrHover key={p.id_proveedor}>
+                          <Td main>{p.nombreProveedor}</Td>
+                          <Td>{fARS(p.ultimoPrecio)}</Td>
+                          <Td>{p.fechaUltimaCompra}</Td>
+                          <Td>{fARS(p.precioPromedio)}</Td>
+                          <Td>{p.cantidadCompras}</Td>
+                          <Td>
+                            {p.diferenciaPct === 0 ? (
+                              <Badge color="green">Más barato</Badge>
+                            ) : (
+                              <Badge color="red">+{fPct(p.diferenciaPct)}</Badge>
+                            )}
+                          </Td>
+                        </TrHover>
+                      ))}
+                    </tbody>
+                  </table>
+                </TableWrap>
+              </div>
+            ))}
+          </div>
+        </Card>
+      )}
 
       <Modal
         open={modalOpen}

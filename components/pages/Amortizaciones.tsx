@@ -88,7 +88,7 @@ function Stat({ label, value, className = "" }: { label: string; value: string; 
   );
 }
 
-function BienCard({ a, onDelete }: { a: Amortizacion; onDelete: () => void }) {
+function BienCard({ a, onDelete, onReactivar }: { a: Amortizacion; onDelete: () => void; onReactivar: () => void }) {
   const activa = amortizacionActiva(a);
   const cuota = cuotaMensualAmortizacion(a);
   const amortizado = montoAmortizado(a);
@@ -98,15 +98,25 @@ function BienCard({ a, onDelete }: { a: Amortizacion; onDelete: () => void }) {
   const pct = a.precio_total > 0 ? (amortizado / a.precio_total) * 100 : 0;
 
   return (
-    <Card className="mb-4">
+    <Card className={`mb-4 ${a.anulado ? "opacity-50" : ""}`}>
       <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
         <div className="flex items-center gap-2.5">
           <span className="text-[15px] font-semibold text-text">{a.nombre}</span>
-          <Badge color={activa ? "green" : "blue"}>{activa ? "Activo" : "Amortizado por completo"}</Badge>
+          {a.anulado ? (
+            <Badge color="red">Dado de baja</Badge>
+          ) : (
+            <Badge color={activa ? "green" : "blue"}>{activa ? "Activo" : "Amortizado por completo"}</Badge>
+          )}
         </div>
-        <Button size="sm" variant="danger" onClick={onDelete}>
-          Eliminar
-        </Button>
+        {a.anulado ? (
+          <Button size="sm" variant="green" onClick={onReactivar}>
+            Reactivar
+          </Button>
+        ) : (
+          <Button size="sm" variant="danger" onClick={onDelete}>
+            Dar de baja
+          </Button>
+        )}
       </div>
 
       <div className="mb-3 h-2 overflow-hidden rounded bg-surface3">
@@ -140,20 +150,22 @@ export function Amortizaciones() {
   const [modalOpen, setModalOpen] = useState(false);
   const [form, setForm] = useState(emptyForm());
   const [filtro, setFiltro] = useState("activos");
+  const [mostrarAnulados, setMostrarAnulados] = useState(false);
 
+  const noAnulados = useMemo(() => data.amortizaciones.filter((a) => !a.anulado), [data.amortizaciones]);
   const conEstado = useMemo(
-    () => data.amortizaciones.map((a) => ({ a, activa: amortizacionActiva(a) })),
-    [data.amortizaciones]
+    () => (mostrarAnulados ? data.amortizaciones : noAnulados).map((a) => ({ a, activa: amortizacionActiva(a) })),
+    [data.amortizaciones, noAnulados, mostrarAnulados]
   );
 
-  const filtrados = conEstado.filter(({ activa }) =>
-    filtro === "todos" ? true : filtro === "activos" ? activa : !activa
+  const filtrados = conEstado.filter(({ activa, a }) =>
+    filtro === "todos" ? true : filtro === "activos" ? activa && !a.anulado : !activa || a.anulado
   );
 
   const totalMensualActiva = totalAmortizacionMensualActiva(data);
-  const bienesActivos = conEstado.filter((c) => c.activa).length;
-  const bienesCompletados = conEstado.length - bienesActivos;
-  const invertidoTotal = data.amortizaciones.reduce((acc, a) => acc + a.precio_total, 0);
+  const bienesActivos = noAnulados.filter((a) => amortizacionActiva(a)).length;
+  const bienesCompletados = noAnulados.length - bienesActivos;
+  const invertidoTotal = noAnulados.reduce((acc, a) => acc + a.precio_total, 0);
 
   function guardar() {
     if (!form.nombre || form.precio_total <= 0 || form.duracion <= 0) {
@@ -175,9 +187,16 @@ export function Amortizaciones() {
     setForm(emptyForm());
   }
 
+  // Soft-delete: un bien de uso se da de baja (venta, rotura) en vez de borrarse — conserva su
+  // historial de amortización para trazabilidad.
   function eliminar(id: string) {
-    setData((d) => ({ ...d, amortizaciones: d.amortizaciones.filter((a) => a.id !== id) }));
-    toast("Bien eliminado", "info");
+    if (!confirm("¿Dar de baja este bien? Se excluye de Costos Fijos pero el registro queda para trazabilidad.")) return;
+    setData((d) => ({ ...d, amortizaciones: d.amortizaciones.map((a) => (a.id === id ? { ...a, anulado: true } : a)) }));
+    toast("Bien dado de baja", "info");
+  }
+  function reactivar(id: string) {
+    setData((d) => ({ ...d, amortizaciones: d.amortizaciones.map((a) => (a.id === id ? { ...a, anulado: false } : a)) }));
+    toast("Bien reactivado");
   }
 
   return (
@@ -185,7 +204,14 @@ export function Amortizaciones() {
       <PageHeader
         title="Amortizaciones"
         sub="Bienes de uso amortizándose — la cuota activa suma a Costos Fijos"
-        right={<Button onClick={() => setModalOpen(true)}>+ Nuevo Bien</Button>}
+        right={
+          <>
+            <Button variant={mostrarAnulados ? "primary" : "ghost"} onClick={() => setMostrarAnulados((v) => !v)}>
+              {mostrarAnulados ? "Ocultar dados de baja" : "Mostrar dados de baja"}
+            </Button>
+            <Button onClick={() => setModalOpen(true)}>+ Nuevo Bien</Button>
+          </>
+        }
       />
 
       <StatGrid>
@@ -212,7 +238,7 @@ export function Amortizaciones() {
       ) : (
         filtrados
           .sort((x, y) => new Date(y.a.fecha_inicio).getTime() - new Date(x.a.fecha_inicio).getTime())
-          .map(({ a }) => <BienCard key={a.id} a={a} onDelete={() => eliminar(a.id)} />)
+          .map(({ a }) => <BienCard key={a.id} a={a} onDelete={() => eliminar(a.id)} onReactivar={() => reactivar(a.id)} />)
       )}
 
       <Modal

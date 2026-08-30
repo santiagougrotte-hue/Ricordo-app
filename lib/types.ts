@@ -208,6 +208,8 @@ export interface CostoIndirecto {
   anio: number;
   categoria: string;
   tipo_costo: TipoCosto;
+  /** Soft-delete: true = anulado. Ausente o false = vigente. */
+  anulado?: boolean;
 }
 
 export interface Amortizacion {
@@ -219,6 +221,8 @@ export interface Amortizacion {
   /** Valor estimado de reventa al cabo de la vida útil — ausente o 0 = se amortiza el 100% del
    * precio (el comportamiento de siempre). */
   valor_residual?: number;
+  /** Soft-delete: true = dado de baja (venta, rotura, etc.). Ausente o false = vigente. */
+  anulado?: boolean;
 }
 
 export interface GastoOperativo {
@@ -264,6 +268,8 @@ export interface Proveedor {
   email?: string;
   notas?: string;
   documento?: Adjunto;
+  /** Soft-delete: false = dado de baja. Ausente o true = activo. */
+  activo?: boolean;
 }
 
 export interface HistorialPrecio {

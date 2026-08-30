@@ -484,7 +484,7 @@ export function totalCostosFijos(data: RicordoData): number {
 
 export function totalCostosIndirectos(data: RicordoData, mes: number, anio: number): number {
   return data.costos_indirectos
-    .filter((c) => c.mes === mes && c.anio === anio)
+    .filter((c) => !c.anulado && c.mes === mes && c.anio === anio)
     .reduce((acc, c) => acc + c.monto, 0);
 }
 
@@ -495,7 +495,7 @@ export function totalCostosIndirectosPorTipo(
   tipo: TipoCosto
 ): number {
   return data.costos_indirectos
-    .filter((c) => c.mes === mes && c.anio === anio && (c.tipo_costo ?? "Fijo") === tipo)
+    .filter((c) => !c.anulado && c.mes === mes && c.anio === anio && (c.tipo_costo ?? "Fijo") === tipo)
     .reduce((acc, c) => acc + c.monto, 0);
 }
 
@@ -562,12 +562,14 @@ export function cuotaAmortizacionEnPeriodo(a: Amortizacion, mes: number, anio: n
 }
 
 export function totalAmortizacionesPeriodo(data: RicordoData, mes: number, anio: number): number {
-  return data.amortizaciones.reduce((acc, a) => acc + cuotaAmortizacionEnPeriodo(a, mes, anio), 0);
+  return data.amortizaciones
+    .filter((a) => !a.anulado)
+    .reduce((acc, a) => acc + cuotaAmortizacionEnPeriodo(a, mes, anio), 0);
 }
 
 export function totalAmortizacionMensualActiva(data: RicordoData, hoy: Date = new Date()): number {
   return data.amortizaciones
-    .filter((a) => amortizacionActiva(a, hoy))
+    .filter((a) => !a.anulado && amortizacionActiva(a, hoy))
     .reduce((acc, a) => acc + cuotaMensualAmortizacion(a), 0);
 }
 
@@ -822,6 +824,71 @@ export interface ComprasVsConsumoMes {
   /** null cuando no hay consumo del período contra el cual comparar (no es 0%, es "sin base") */
   porcentaje: number | null;
   nivel: "green" | "orange" | "red";
+}
+
+export interface FilaComparadorProveedor {
+  id_proveedor: string;
+  nombreProveedor: string;
+  ultimoPrecio: number;
+  fechaUltimaCompra: string;
+  precioPromedio: number;
+  cantidadCompras: number;
+  /** % más caro que el proveedor más barato de la lista para este insumo (0 = es el más barato). */
+  diferenciaPct: number;
+}
+
+export interface ComparadorInsumo {
+  id_ingrediente: string;
+  nombreIngrediente: string;
+  proveedores: FilaComparadorProveedor[];
+}
+
+/** Compara precios entre proveedores, insumo por insumo — solo incluye insumos con compras
+ * (activas, con proveedor cargado) de más de un proveedor distinto; no tiene sentido "comparar"
+ * cuando solo hay uno. Ordenado del proveedor más barato al más caro dentro de cada insumo. */
+export function comparadorProveedores(data: RicordoData): ComparadorInsumo[] {
+  const porIngrediente = new Map<string, Map<string, { precios: number[]; fechas: string[] }>>();
+  for (const compra of comprasActivas(data)) {
+    if (!compra.id_proveedor) continue;
+    for (const linea of compra.lineas) {
+      let porProveedor = porIngrediente.get(linea.id_ingrediente);
+      if (!porProveedor) {
+        porProveedor = new Map();
+        porIngrediente.set(linea.id_ingrediente, porProveedor);
+      }
+      const entry = porProveedor.get(compra.id_proveedor) ?? { precios: [], fechas: [] };
+      entry.precios.push(linea.precio_unitario);
+      entry.fechas.push(compra.fecha);
+      porProveedor.set(compra.id_proveedor, entry);
+    }
+  }
+
+  const resultado: ComparadorInsumo[] = [];
+  for (const [idIngrediente, porProveedor] of porIngrediente) {
+    if (porProveedor.size < 2) continue;
+    const ingrediente = data.ingredientes.find((i) => i.id === idIngrediente);
+    const filas: FilaComparadorProveedor[] = [];
+    for (const [idProveedor, entry] of porProveedor) {
+      const proveedor = data.proveedores.find((p) => p.id === idProveedor);
+      const fechasOrdenadas = [...entry.fechas].sort();
+      const fechaUltimaCompra = fechasOrdenadas[fechasOrdenadas.length - 1];
+      const ultimoPrecio = entry.precios[entry.fechas.indexOf(fechaUltimaCompra)];
+      filas.push({
+        id_proveedor: idProveedor,
+        nombreProveedor: proveedor?.nombre ?? idProveedor,
+        ultimoPrecio,
+        fechaUltimaCompra,
+        precioPromedio: entry.precios.reduce((a, b) => a + b, 0) / entry.precios.length,
+        cantidadCompras: entry.precios.length,
+        diferenciaPct: 0,
+      });
+    }
+    const minimo = Math.min(...filas.map((f) => f.ultimoPrecio));
+    for (const f of filas) f.diferenciaPct = minimo > 0 ? ((f.ultimoPrecio - minimo) / minimo) * 100 : 0;
+    filas.sort((a, b) => a.ultimoPrecio - b.ultimoPrecio);
+    resultado.push({ id_ingrediente: idIngrediente, nombreIngrediente: ingrediente?.nombre ?? idIngrediente, proveedores: filas });
+  }
+  return resultado.sort((a, b) => a.nombreIngrediente.localeCompare(b.nombreIngrediente, "es"));
 }
 
 /** Compara, mes a mes, cuánto se compró de materia prima contra el costo de lo que

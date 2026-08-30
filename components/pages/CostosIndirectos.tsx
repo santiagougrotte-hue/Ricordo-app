@@ -37,14 +37,17 @@ export function CostosIndirectos() {
   const [modalOpen, setModalOpen] = useState(false);
   const [editing, setEditing] = useState<string | null>(null);
   const [form, setForm] = useState(emptyForm(mes, anio));
+  const [mostrarAnulados, setMostrarAnulados] = useState(false);
 
-  const delPeriodo = useMemo(
+  const delPeriodoTodos = useMemo(
     () => data.costos_indirectos.filter((c) => c.mes === mes && c.anio === anio),
     [data.costos_indirectos, mes, anio]
   );
-  const total = delPeriodo.reduce((a, c) => a + c.monto, 0);
-  const totalFijo = delPeriodo.filter((c) => (c.tipo_costo ?? "Fijo") === "Fijo").reduce((a, c) => a + c.monto, 0);
-  const totalVariable = delPeriodo.filter((c) => c.tipo_costo === "Variable").reduce((a, c) => a + c.monto, 0);
+  const delPeriodo = mostrarAnulados ? delPeriodoTodos : delPeriodoTodos.filter((c) => !c.anulado);
+  const activos = delPeriodoTodos.filter((c) => !c.anulado);
+  const total = activos.reduce((a, c) => a + c.monto, 0);
+  const totalFijo = activos.filter((c) => (c.tipo_costo ?? "Fijo") === "Fijo").reduce((a, c) => a + c.monto, 0);
+  const totalVariable = activos.filter((c) => c.tipo_costo === "Variable").reduce((a, c) => a + c.monto, 0);
 
   function openNew() {
     setEditing(null);
@@ -70,9 +73,16 @@ export function CostosIndirectos() {
     }
     setModalOpen(false);
   }
+  // Soft-delete: se anula en vez de borrarse — se excluye de los totales pero queda para
+  // trazabilidad, igual que el resto de los registros financieros.
   function eliminar(id: string) {
-    setData((d) => ({ ...d, costos_indirectos: d.costos_indirectos.filter((c) => c.id !== id) }));
-    toast("Costo eliminado", "info");
+    if (!confirm("¿Anular este costo indirecto? Se excluye de los totales pero el registro queda para trazabilidad.")) return;
+    setData((d) => ({ ...d, costos_indirectos: d.costos_indirectos.map((c) => (c.id === id ? { ...c, anulado: true } : c)) }));
+    toast("Costo anulado", "info");
+  }
+  function reactivar(id: string) {
+    setData((d) => ({ ...d, costos_indirectos: d.costos_indirectos.map((c) => (c.id === id ? { ...c, anulado: false } : c)) }));
+    toast("Costo reactivado");
   }
 
   return (
@@ -80,7 +90,14 @@ export function CostosIndirectos() {
       <PageHeader
         title="Costos Indirectos"
         sub="Costos del período — se clasifican como Fijo o Variable para el EERR y el punto de equilibrio"
-        right={<Button onClick={openNew}>+ Nuevo</Button>}
+        right={
+          <>
+            <Button variant={mostrarAnulados ? "primary" : "ghost"} onClick={() => setMostrarAnulados((v) => !v)}>
+              {mostrarAnulados ? "Ocultar anulados" : "Mostrar anulados"}
+            </Button>
+            <Button onClick={openNew}>+ Nuevo</Button>
+          </>
+        }
       />
 
       <StatGrid>
@@ -107,11 +124,14 @@ export function CostosIndirectos() {
               </thead>
               <tbody>
                 {delPeriodo.map((c) => (
-                  <TrHover key={c.id}>
+                  <TrHover key={c.id} className={c.anulado ? "opacity-50" : undefined}>
                     <Td main>{c.descripcion}</Td>
                     <Td>{c.categoria}</Td>
                     <Td>
-                      <Badge color={(c.tipo_costo ?? "Fijo") === "Variable" ? "red" : "blue"}>{c.tipo_costo ?? "Fijo"}</Badge>
+                      <div className="flex gap-1">
+                        <Badge color={(c.tipo_costo ?? "Fijo") === "Variable" ? "red" : "blue"}>{c.tipo_costo ?? "Fijo"}</Badge>
+                        {c.anulado && <Badge color="red">Anulado</Badge>}
+                      </div>
                     </Td>
                     <Td>{fARS(c.monto)}</Td>
                     <Td>
@@ -119,9 +139,15 @@ export function CostosIndirectos() {
                         <Button size="sm" variant="ghost" onClick={() => openEdit(c)}>
                           Editar
                         </Button>
-                        <Button size="sm" variant="danger" onClick={() => eliminar(c.id)}>
-                          Eliminar
-                        </Button>
+                        {c.anulado ? (
+                          <Button size="sm" variant="green" onClick={() => reactivar(c.id)}>
+                            Reactivar
+                          </Button>
+                        ) : (
+                          <Button size="sm" variant="danger" onClick={() => eliminar(c.id)}>
+                            Anular
+                          </Button>
+                        )}
                       </div>
                     </Td>
                   </TrHover>

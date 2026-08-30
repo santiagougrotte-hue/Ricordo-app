@@ -28,6 +28,7 @@ import {
   saldoPedido,
   cuentasPorCobrar,
   proyeccionCaja30Dias,
+  comparadorProveedores,
   sincronizarMovimientoCaja,
   movimientoCajaDeseadoDePedido,
   segmentacionClientes,
@@ -619,6 +620,111 @@ test("cuentasPorCobrar: sin fecha_vencimiento cargada, diasAtraso queda null en 
   data.pedidos = [pedidoBase({ precio_neto: 10000, estado: "Entregado", estado_pago: "Pendiente" })];
   const cxc = cuentasPorCobrar(data);
   assert.equal(cxc[0].diasAtraso, null);
+});
+
+test("comparadorProveedores: solo incluye insumos con más de un proveedor, ordenado del más barato al más caro", () => {
+  const data = emptyData();
+  data.ingredientes = [{ id: "ING-1", nombre: "Mozzarella", unidad: "kg", precio_ref: 9000, precio_vigente: null, seguimiento_stock: false }];
+  data.proveedores = [
+    { id: "PRV-A", nombre: "Lácteos del Sur" },
+    { id: "PRV-B", nombre: "Distribuidora Norte" },
+  ];
+  data.compras = [
+    {
+      id: "COM-1",
+      fecha: "2026-06-01",
+      id_proveedor: "PRV-A",
+      total: 9000,
+      total_manual: false,
+      registrar_caja: false,
+      lineas: [{ id_ingrediente: "ING-1", cantidad: 1, precio_unitario: 9500 }],
+      lineasPkg: [],
+    },
+    {
+      id: "COM-2",
+      fecha: "2026-07-01",
+      id_proveedor: "PRV-B",
+      total: 8000,
+      total_manual: false,
+      registrar_caja: false,
+      lineas: [{ id_ingrediente: "ING-1", cantidad: 1, precio_unitario: 8000 }],
+      lineasPkg: [],
+    },
+    {
+      id: "COM-3",
+      fecha: "2026-07-15",
+      id_proveedor: "PRV-A",
+      total: 9800,
+      total_manual: false,
+      registrar_caja: false,
+      lineas: [{ id_ingrediente: "ING-1", cantidad: 1, precio_unitario: 9800 }],
+      lineasPkg: [],
+    },
+  ];
+
+  const [comparador] = comparadorProveedores(data);
+  assert.equal(comparador.nombreIngrediente, "Mozzarella");
+  assert.equal(comparador.proveedores.length, 2);
+  assert.equal(comparador.proveedores[0].nombreProveedor, "Distribuidora Norte", "el más barato va primero");
+  assert.equal(comparador.proveedores[0].ultimoPrecio, 8000);
+  assert.equal(comparador.proveedores[0].diferenciaPct, 0);
+  const sur = comparador.proveedores.find((p) => p.nombreProveedor === "Lácteos del Sur")!;
+  assert.equal(sur.ultimoPrecio, 9800, "toma el precio de la compra más reciente (15/07), no la primera");
+  assert.equal(sur.precioPromedio, (9500 + 9800) / 2);
+  assert.equal(sur.cantidadCompras, 2);
+  assert.ok(Math.abs(sur.diferenciaPct - 22.5) < 0.01); // (9800-8000)/8000 * 100
+});
+
+test("comparadorProveedores: un insumo con un solo proveedor no aparece (nada que comparar)", () => {
+  const data = emptyData();
+  data.ingredientes = [{ id: "ING-1", nombre: "Harina", unidad: "kg", precio_ref: 1000, precio_vigente: null, seguimiento_stock: false }];
+  data.proveedores = [{ id: "PRV-A", nombre: "Molino" }];
+  data.compras = [
+    {
+      id: "COM-1",
+      fecha: "2026-06-01",
+      id_proveedor: "PRV-A",
+      total: 1000,
+      total_manual: false,
+      registrar_caja: false,
+      lineas: [{ id_ingrediente: "ING-1", cantidad: 1, precio_unitario: 1000 }],
+      lineasPkg: [],
+    },
+  ];
+  assert.equal(comparadorProveedores(data).length, 0);
+});
+
+test("comparadorProveedores: una compra anulada no cuenta", () => {
+  const data = emptyData();
+  data.ingredientes = [{ id: "ING-1", nombre: "Harina", unidad: "kg", precio_ref: 1000, precio_vigente: null, seguimiento_stock: false }];
+  data.proveedores = [
+    { id: "PRV-A", nombre: "Molino A" },
+    { id: "PRV-B", nombre: "Molino B" },
+  ];
+  data.compras = [
+    {
+      id: "COM-1",
+      fecha: "2026-06-01",
+      id_proveedor: "PRV-A",
+      total: 1000,
+      total_manual: false,
+      registrar_caja: false,
+      anulada: true,
+      lineas: [{ id_ingrediente: "ING-1", cantidad: 1, precio_unitario: 1000 }],
+      lineasPkg: [],
+    },
+    {
+      id: "COM-2",
+      fecha: "2026-06-01",
+      id_proveedor: "PRV-B",
+      total: 1100,
+      total_manual: false,
+      registrar_caja: false,
+      lineas: [{ id_ingrediente: "ING-1", cantidad: 1, precio_unitario: 1100 }],
+      lineasPkg: [],
+    },
+  ];
+  assert.equal(comparadorProveedores(data).length, 0, "solo queda un proveedor activo, no hay nada que comparar");
 });
 
 test("proyeccionCaja30Dias: suma caja + por cobrar + pedidos confirmados a entregar en la ventana, resta costos fijos previstos", () => {
