@@ -20,9 +20,23 @@ import { useStore } from "@/lib/store";
 import { usePeriod } from "@/lib/period";
 import { useRouter } from "@/lib/nav-context";
 import { useIaClient } from "@/lib/ia-client";
-import { Card, EmptyState } from "@/components/ui";
+import { Card, EmptyState, StatGrid, KpiCard, Alert } from "@/components/ui";
 import { Hero, ModuleRail, PulseCard, Row, type ModuleRailItem } from "@/components/ds";
-import { calcCosto, construirResumenPulso, fARS, fFechaCorta, fNum, gustosActivos, inPeriod, stockRealGusto } from "@/lib/calc";
+import {
+  calcCosto,
+  cmvPeriodo,
+  construirResumenPulso,
+  fARS,
+  fFechaCorta,
+  fNum,
+  fPct,
+  gustosActivos,
+  inPeriod,
+  rentabilidadPorGustoTotal,
+  rentabilidadPorGustoYCanal,
+  saldoCaja,
+  stockRealGusto,
+} from "@/lib/calc";
 import { CHART_COLORS } from "@/lib/chart-colors";
 import type { ObservacionPulso, SeveridadPulso } from "@/lib/types";
 
@@ -85,6 +99,70 @@ export function Dashboard() {
       .reduce((acc, p) => acc + p.precio_neto, 0);
   }, [data.pedidos, mesAnterior, anioMesAnterior]);
   const variacionVentas = ventasMesAnterior > 0 ? ((ventasMes - ventasMesAnterior) / ventasMesAnterior) * 100 : null;
+
+  const pedidosMesAnterior = useMemo(
+    () => data.pedidos.filter((p) => inPeriod(p.fecha, mesAnterior, anioMesAnterior) && p.estado !== "Cancelado"),
+    [data.pedidos, mesAnterior, anioMesAnterior]
+  );
+
+  // KPIs ejecutivos: ganancia y margen bruto del mes, caja disponible ahora mismo, pedidos que
+  // todavía no se entregaron.
+  const gananciaMes = ventasMes - cmvPeriodo(data, activos);
+  const margenBrutoPct = ventasMes > 0 ? (gananciaMes / ventasMes) * 100 : 0;
+  const cajaDisponible = saldoCaja(data);
+  const pedidosPendientesCount = useMemo(
+    () => data.pedidos.filter((p) => p.estado === "Confirmado" || p.estado === "Produccion").length,
+    [data.pedidos]
+  );
+
+  // Rankings del mes: top gusto, top por canal, y el gusto que más creció vs. el mes anterior
+  // (solo entre los que ya vendían algo el mes pasado, para no marcar "infinito %" a un gusto
+  // nuevo).
+  const gustoTotalMes = useMemo(() => rentabilidadPorGustoTotal(data, activos), [data, activos]);
+  const gustoTotalMesAnterior = useMemo(() => rentabilidadPorGustoTotal(data, pedidosMesAnterior), [data, pedidosMesAnterior]);
+  const topGusto = gustoTotalMes[0] ?? null;
+  const porCanalMes = useMemo(() => rentabilidadPorGustoYCanal(data, activos), [data, activos]);
+  const topMinorista = [...porCanalMes].sort((a, b) => b.minorista.venta - a.minorista.venta)[0] ?? null;
+  const topMayorista = [...porCanalMes].sort((a, b) => b.mayorista.venta - a.mayorista.venta)[0] ?? null;
+  const gustoMayorCrecimiento = useMemo(() => {
+    let mejor: { nombreGusto: string; crecimientoPct: number } | null = null;
+    for (const g of gustoTotalMes) {
+      const anterior = gustoTotalMesAnterior.find((a) => a.id_base === g.id_base);
+      if (!anterior || anterior.venta <= 0) continue;
+      const crecimientoPct = ((g.venta - anterior.venta) / anterior.venta) * 100;
+      if (!mejor || crecimientoPct > mejor.crecimientoPct) mejor = { nombreGusto: g.nombreGusto, crecimientoPct };
+    }
+    return mejor;
+  }, [gustoTotalMes, gustoTotalMesAnterior]);
+
+  // Alertas: solo señalan, no inventan datos que no existen — insumos con aumento de precio
+  // se mira en los últimos 30 días de historial_precios, producción necesaria compara lo
+  // comprometido en pedidos activos contra el stock terminado real de cada gusto.
+  const insumosConAumento = useMemo(() => {
+    const haceUnMes = new Date().getTime() - 30 * 24 * 60 * 60 * 1000;
+    const vistos = new Set<string>();
+    return data.historial_precios
+      .filter((h) => h.precio_nuevo > h.precio_anterior && new Date(h.fecha).getTime() >= haceUnMes)
+      .filter((h) => (vistos.has(h.id_insumo) ? false : (vistos.add(h.id_insumo), true)))
+      .slice(0, 5);
+  }, [data.historial_precios]);
+
+  const gustosStockBajo = useMemo(
+    () => gustosActivos(data).filter((g) => stockRealGusto(data, g) < data.umbral_stock_bajo_producto),
+    [data]
+  );
+
+  const gustosNecesitanProduccion = useMemo(() => {
+    const pendientesPorProducto = new Map<string, number>();
+    for (const p of data.pedidos) {
+      if (p.estado !== "Confirmado" && p.estado !== "Produccion") continue;
+      pendientesPorProducto.set(p.id_producto, (pendientesPorProducto.get(p.id_producto) ?? 0) + p.cantidad);
+    }
+    return gustosActivos(data).filter((g) => {
+      const comprometido = g.variantes.reduce((acc, v) => acc + (pendientesPorProducto.get(v.id) ?? 0), 0);
+      return comprometido > 0 && comprometido > stockRealGusto(data, g);
+    });
+  }, [data]);
 
   const ventasPorMes = useMemo(() => {
     const now = new Date();
@@ -163,6 +241,8 @@ export function Dashboard() {
     // eslint-disable-next-line react-hooks/exhaustive-deps -- solo debe dispararse una vez al montar
   }, []);
 
+  const compraPendiente = data.borrador_compra_pendiente !== null;
+
   return (
     <div>
       <div className="mb-4">
@@ -176,8 +256,94 @@ export function Dashboard() {
         />
       </div>
 
+      <StatGrid>
+        <KpiCard label="Ganancia estimada" value={fARS(gananciaMes)} color={gananciaMes >= 0 ? "green" : "red"} />
+        <KpiCard label="Margen bruto" value={fPct(margenBrutoPct)} color={margenBrutoPct >= 0 ? "green" : "red"} />
+        <KpiCard label="Caja disponible" value={fARS(cajaDisponible)} color="gold" />
+        <KpiCard label="Pedidos pendientes" value={fNum(pedidosPendientesCount, 0)} color={pedidosPendientesCount > 0 ? "orange" : "none"} />
+        <KpiCard label="Unidades vendidas" value={fNum(cajasVendidas, 0)} />
+      </StatGrid>
+
       <div className="mb-4">
         <ModuleRail items={MODULOS} active={page} onSelect={go} />
+      </div>
+
+      <div className="mb-4 grid grid-cols-1 gap-4 lg:grid-cols-2">
+        <Card title="Rankings del mes">
+          <div className="flex flex-col">
+            <Row
+              icon={UtensilsCrossed}
+              iconColor="var(--mod-productos)"
+              title={topGusto ? topGusto.nombreGusto : "Sin ventas todavía"}
+              subtitle="Top gusto del mes"
+              value={topGusto ? fARS(topGusto.venta) : undefined}
+            />
+            <Row
+              icon={Store}
+              iconColor="var(--mod-ventas)"
+              title={topMinorista && topMinorista.minorista.venta > 0 ? topMinorista.nombreGusto : "Sin ventas minoristas"}
+              subtitle="Top producto minorista"
+              value={topMinorista && topMinorista.minorista.venta > 0 ? fARS(topMinorista.minorista.venta) : undefined}
+            />
+            <Row
+              icon={ShoppingBag}
+              iconColor="var(--mod-compras)"
+              title={topMayorista && topMayorista.mayorista.venta > 0 ? topMayorista.nombreGusto : "Sin ventas mayoristas"}
+              subtitle="Top producto mayorista"
+              value={topMayorista && topMayorista.mayorista.venta > 0 ? fARS(topMayorista.mayorista.venta) : undefined}
+            />
+            <Row
+              icon={BarChart3}
+              iconColor="var(--green)"
+              title={gustoMayorCrecimiento ? gustoMayorCrecimiento.nombreGusto : "Sin datos comparables"}
+              subtitle="Gusto con mayor crecimiento"
+              value={gustoMayorCrecimiento ? `+${fNum(gustoMayorCrecimiento.crecimientoPct, 1)}%` : undefined}
+            />
+            <Row
+              icon={PieChartIcon}
+              iconColor={rentabilidad[0] && rentabilidad[0].margenPct >= 0 ? "var(--green)" : "var(--red)"}
+              title={rentabilidad[0] ? rentabilidad[0].producto.nombre : "Sin ventas todavía"}
+              subtitle="Producto con mayor margen"
+              value={rentabilidad[0] ? `${fNum(rentabilidad[0].margenPct, 1)}%` : undefined}
+            />
+          </div>
+        </Card>
+
+        <Card title="Alertas">
+          {gustosStockBajo.length === 0 &&
+          pedidosPendientesCount === 0 &&
+          insumosConAumento.length === 0 &&
+          gustosNecesitanProduccion.length === 0 &&
+          !compraPendiente ? (
+            <EmptyState text="Sin alertas activas." />
+          ) : (
+            <>
+              {gustosStockBajo.length > 0 && (
+                <Alert kind="danger">
+                  Stock bajo en {gustosStockBajo.length} gusto{gustosStockBajo.length > 1 ? "s" : ""}: {gustosStockBajo.map((g) => g.nombre).slice(0, 3).join(", ")}
+                  {gustosStockBajo.length > 3 ? "…" : ""}
+                </Alert>
+              )}
+              {pedidosPendientesCount > 0 && (
+                <Alert kind="info">
+                  {pedidosPendientesCount} pedido{pedidosPendientesCount > 1 ? "s" : ""} pendiente{pedidosPendientesCount > 1 ? "s" : ""} de entrega
+                </Alert>
+              )}
+              {compraPendiente && <Alert kind="warning">Hay una orden de compra generada esperando revisión en Compras.</Alert>}
+              {insumosConAumento.length > 0 && (
+                <Alert kind="warning">
+                  {insumosConAumento.length} insumo{insumosConAumento.length > 1 ? "s" : ""} subieron de precio en los últimos 30 días
+                </Alert>
+              )}
+              {gustosNecesitanProduccion.length > 0 && (
+                <Alert kind="warning">
+                  {gustosNecesitanProduccion.length} gusto{gustosNecesitanProduccion.length > 1 ? "s" : ""} necesitan producción: {gustosNecesitanProduccion.map((g) => g.nombre).slice(0, 3).join(", ")}
+                  {gustosNecesitanProduccion.length > 3 ? "…" : ""}
+                </Alert>
+              )}
+            </>
+          )}
+        </Card>
       </div>
 
       <div className="mb-4">
