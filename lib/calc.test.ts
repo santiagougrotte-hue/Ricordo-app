@@ -22,9 +22,12 @@ import {
   unidadesVendidasUltimosMeses,
   excepcionesActivas,
   calcStockIngrediente,
+  rentabilidadPorCanal,
+  rentabilidadPorCliente,
   montoPagadoPedido,
   saldoPedido,
   cuentasPorCobrar,
+  proyeccionCaja30Dias,
   sincronizarMovimientoCaja,
   movimientoCajaDeseadoDePedido,
   segmentacionClientes,
@@ -618,6 +621,28 @@ test("cuentasPorCobrar: sin fecha_vencimiento cargada, diasAtraso queda null en 
   assert.equal(cxc[0].diasAtraso, null);
 });
 
+test("proyeccionCaja30Dias: suma caja + por cobrar + pedidos confirmados a entregar en la ventana, resta costos fijos previstos", () => {
+  const data = emptyData();
+  const hoy = new Date("2026-08-01");
+  data.saldo_anterior_caja = { valor: 100000 };
+  data.costos_fijos = [{ id: "CF-1", descripcion: "Alquiler", monto: 30000, categoria: "Servicios", activo: true }];
+  data.pedidos = [
+    // Deuda ya generada (entregado, sin cobrar) — cuenta como "por cobrar"
+    pedidoBase({ id_detalle: "A", precio_neto: 20000, estado: "Entregado", estado_pago: "Pendiente" }),
+    // Confirmado, entrega dentro de los 30 días — cuenta como ingreso previsto
+    pedidoBase({ id_detalle: "B", precio_neto: 15000, estado: "Confirmado", fecha: "2026-08-01", fecha_entrega: "2026-08-10" }),
+    // Confirmado pero la entrega es recién en 60 días — fuera de la ventana, no debe sumar
+    pedidoBase({ id_detalle: "C", precio_neto: 99999, estado: "Confirmado", fecha: "2026-08-01", fecha_entrega: "2026-11-01" }),
+  ];
+
+  const p = proyeccionCaja30Dias(data, hoy);
+  assert.equal(p.cajaActual, 100000);
+  assert.equal(p.porCobrar, 20000);
+  assert.equal(p.pedidosPendientesDeEntregar, 15000);
+  assert.equal(p.costosRecurrentesPrevistos, 30000);
+  assert.equal(p.proyeccion30Dias, 100000 + 20000 + 15000 - 30000);
+});
+
 test("discrepanciasCaja: un pedido Parcial con el movimiento por el monto cobrado no es una discrepancia", () => {
   const data = emptyData();
   const pedido = pedidoBase({ precio_neto: 22000, estado_pago: "Parcial", monto_pagado: 8000 });
@@ -754,4 +779,48 @@ test("montoRestanteAmortizacion: al terminar la vida útil, el valor contable re
   const a = amortizacionBase({ valor_residual: 100000, meses_totales: 12 });
   const finDeVida = new Date("2028-01-15"); // bastante después de los 12 meses
   assert.equal(montoRestanteAmortizacion(a, finDeVida), 100000);
+});
+
+// --- Rentabilidad por canal y por cliente -----------------------------------------------------
+
+test("rentabilidadPorCanal: agrupa venta, costo y ganancia por canal", () => {
+  const data = emptyData();
+  data.ingredientes = [{ id: "ING-1", nombre: "Harina", unidad: "kg", precio_ref: 1000, precio_vigente: null, seguimiento_stock: false }];
+  data.productos = [{ id: "PROD-01", id_base: "PROD-01", nombre: "Ravioles", precio_venta: 11000, activo: true }];
+  data.recetas = [{ id: "R1", id_producto: "PROD-01", tipo: "Ingrediente", concepto: "ING-1", cantidad: 2 }]; // costo = $2.000/unidad
+  const pedidos = [
+    pedidoBase({ id_detalle: "A", id_producto: "PROD-01", cantidad: 2, precio_neto: 20000, canal: "Minorista" }),
+    pedidoBase({ id_detalle: "B", id_producto: "PROD-01", cantidad: 1, precio_neto: 9000, canal: "Mayorista" }),
+  ];
+  data.pedidos = pedidos;
+
+  const filas = rentabilidadPorCanal(data, pedidos);
+  const minorista = filas.find((f) => f.canal === "Minorista")!;
+  const mayorista = filas.find((f) => f.canal === "Mayorista")!;
+  assert.equal(minorista.venta, 20000);
+  assert.equal(minorista.costo, 4000);
+  assert.equal(minorista.ganancia, 16000);
+  assert.equal(mayorista.venta, 9000);
+  assert.equal(mayorista.costo, 2000);
+  assert.equal(mayorista.ganancia, 7000);
+});
+
+test("rentabilidadPorCliente: agrupa por cliente y cuenta pedidos únicos, no líneas", () => {
+  const data = emptyData();
+  data.ingredientes = [{ id: "ING-1", nombre: "Harina", unidad: "kg", precio_ref: 1000, precio_vigente: null, seguimiento_stock: false }];
+  data.productos = [{ id: "PROD-01", id_base: "PROD-01", nombre: "Ravioles", precio_venta: 11000, activo: true }];
+  data.recetas = [{ id: "R1", id_producto: "PROD-01", tipo: "Ingrediente", concepto: "ING-1", cantidad: 2 }];
+  data.clientes = [{ id: "CLI-01", nombre: "Ana", canal: "Minorista" }];
+  const pedidos = [
+    pedidoBase({ id_pedido: "PED-1", id_detalle: "PED-1-A", id_cliente: "CLI-01", id_producto: "PROD-01", cantidad: 1, precio_neto: 11000 }),
+    pedidoBase({ id_pedido: "PED-1", id_detalle: "PED-1-B", id_cliente: "CLI-01", id_producto: "PROD-01", cantidad: 1, precio_neto: 11000 }),
+  ];
+  data.pedidos = pedidos;
+
+  const [fila] = rentabilidadPorCliente(data, pedidos);
+  assert.equal(fila.cliente.nombre, "Ana");
+  assert.equal(fila.cantidadPedidos, 1, "dos líneas del mismo id_pedido cuentan como 1 pedido");
+  assert.equal(fila.venta, 22000);
+  assert.equal(fila.costo, 4000);
+  assert.equal(fila.ganancia, 18000);
 });

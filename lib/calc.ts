@@ -411,6 +411,73 @@ export function ventasNetas(pedidos: Pedido[]): number {
   return pedidos.reduce((acc, p) => acc + p.precio_neto, 0);
 }
 
+// --- Rentabilidad real (no solo facturación) ------------------------------------------------
+// AnRentabilidad ya calculaba esto por producto; estas dos hacen lo mismo agrupando por canal y
+// por cliente — mismo criterio (venta neta − costo de insumos del producto vendido).
+
+export interface RentabilidadCanal {
+  canal: Canal;
+  unidades: number;
+  venta: number;
+  costo: number;
+  ganancia: number;
+  margen: number;
+}
+
+export function rentabilidadPorCanal(data: RicordoData, pedidos: Pedido[]): RentabilidadCanal[] {
+  const map = new Map<Canal, { unidades: number; venta: number; costo: number }>();
+  for (const p of pedidos) {
+    const cur = map.get(p.canal) ?? { unidades: 0, venta: 0, costo: 0 };
+    cur.unidades += p.cantidad;
+    cur.venta += p.precio_neto;
+    cur.costo += calcCosto(data, p.id_producto) * p.cantidad;
+    map.set(p.canal, cur);
+  }
+  return Array.from(map.entries())
+    .map(([canal, v]) => ({
+      canal,
+      unidades: v.unidades,
+      venta: v.venta,
+      costo: v.costo,
+      ganancia: v.venta - v.costo,
+      margen: v.venta > 0 ? ((v.venta - v.costo) / v.venta) * 100 : 0,
+    }))
+    .sort((a, b) => b.venta - a.venta);
+}
+
+export interface RentabilidadCliente {
+  cliente: Cliente;
+  cantidadPedidos: number;
+  unidades: number;
+  venta: number;
+  costo: number;
+  ganancia: number;
+  margen: number;
+}
+
+export function rentabilidadPorCliente(data: RicordoData, pedidos: Pedido[]): RentabilidadCliente[] {
+  const map = new Map<string, { unidades: number; venta: number; costo: number; pedidosUnicos: Set<string> }>();
+  for (const p of pedidos) {
+    const cur = map.get(p.id_cliente) ?? { unidades: 0, venta: 0, costo: 0, pedidosUnicos: new Set<string>() };
+    cur.unidades += p.cantidad;
+    cur.venta += p.precio_neto;
+    cur.costo += calcCosto(data, p.id_producto) * p.cantidad;
+    cur.pedidosUnicos.add(p.id_pedido);
+    map.set(p.id_cliente, cur);
+  }
+  return Array.from(map.entries())
+    .map(([idCliente, v]) => ({
+      cliente: data.clientes.find((c) => c.id === idCliente) ?? { id: idCliente, nombre: "—", canal: "Minorista" as Canal },
+      cantidadPedidos: v.pedidosUnicos.size,
+      unidades: v.unidades,
+      venta: v.venta,
+      costo: v.costo,
+      ganancia: v.venta - v.costo,
+      margen: v.venta > 0 ? ((v.venta - v.costo) / v.venta) * 100 : 0,
+    }))
+    .sort((a, b) => b.ganancia - a.ganancia);
+}
+
 export function totalCostosFijos(data: RicordoData): number {
   return data.costos_fijos.filter((c) => c.activo).reduce((acc, c) => acc + c.monto, 0);
 }
@@ -642,6 +709,42 @@ export function cuentasPorCobrar(data: RicordoData, hoy: Date = new Date()): Cue
 
 export function totalCuentasPorCobrar(data: RicordoData): number {
   return cuentasPorCobrar(data).reduce((acc, c) => acc + c.saldo, 0);
+}
+
+export interface ProyeccionCaja30Dias {
+  cajaActual: number;
+  porCobrar: number;
+  pedidosPendientesDeEntregar: number;
+  costosRecurrentesPrevistos: number;
+  proyeccion30Dias: number;
+}
+
+/** Proyección de caja a 30 días: caja actual + cuentas por cobrar (deuda ya generada, se asume
+ * que se cobra) + pedidos Confirmado/Producción con entrega prevista dentro de la ventana (venta
+ * todavía no facturada como deuda porque no se entregó) − costos fijos/indirectos-fijos y
+ * amortización activa previstos para el próximo mes. No incluye compras previstas: hoy no existe
+ * ningún registro de "compra planificada" en el sistema (más allá de un borrador puntual) del
+ * que se pueda proyectar un monto sin inventarlo. */
+export function proyeccionCaja30Dias(data: RicordoData, hoy: Date = new Date()): ProyeccionCaja30Dias {
+  const cajaActual = saldoCaja(data);
+  const porCobrar = totalCuentasPorCobrar(data);
+
+  const en30Dias = new Date(hoy);
+  en30Dias.setDate(en30Dias.getDate() + 30);
+  const pedidosPendientesDeEntregar = data.pedidos
+    .filter((p) => p.estado === "Confirmado" || p.estado === "Produccion")
+    .filter((p) => {
+      const fecha = new Date(p.fecha_entrega ?? p.fecha);
+      return fecha >= hoy && fecha <= en30Dias;
+    })
+    .reduce((acc, p) => acc + p.precio_neto, 0);
+
+  const proximoMes = new Date(hoy.getFullYear(), hoy.getMonth() + 1, 1);
+  const costosRecurrentesPrevistos = costosFijosTotales(data, proximoMes.getMonth() + 1, proximoMes.getFullYear());
+
+  const proyeccion30Dias = cajaActual + porCobrar + pedidosPendientesDeEntregar - costosRecurrentesPrevistos;
+
+  return { cajaActual, porCobrar, pedidosPendientesDeEntregar, costosRecurrentesPrevistos, proyeccion30Dias };
 }
 
 /** Upsert de un movimiento de caja por `ref` — actualiza in place si ya existe (conserva su id),

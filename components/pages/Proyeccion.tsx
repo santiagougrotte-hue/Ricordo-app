@@ -2,12 +2,13 @@
 
 import React, { useMemo } from "react";
 import { useStore } from "@/lib/store";
-import { fARS } from "@/lib/calc";
+import { fARS, proyeccionCaja30Dias } from "@/lib/calc";
 import { MESES } from "@/lib/period";
-import { Card, EmptyState, PageHeader, TableWrap, Th, Td, TrHover, StatGrid, KpiCard } from "@/components/ui";
+import { Card, EmptyState, PageHeader, TableWrap, Th, Td, TrHover, StatGrid, KpiCard, InfoRow } from "@/components/ui";
 
 export function Proyeccion() {
   const { data } = useStore();
+  const p30 = useMemo(() => proyeccionCaja30Dias(data), [data]);
 
   const ultimos3 = useMemo(() => {
     const now = new Date();
@@ -49,8 +50,29 @@ export function Proyeccion() {
 
   return (
     <div>
-      <PageHeader title="Proyección" sub="Estimación basada en el promedio de los últimos 3 meses" />
+      <PageHeader title="Proyección" sub="Próximos 30 días con datos reales, y tendencia a 3 meses por promedio" />
 
+      <Card title="Próximos 30 días" className="mb-4" color="green">
+        <StatGrid>
+          <KpiCard label="Caja actual" value={fARS(p30.cajaActual)} />
+          <KpiCard label="+ Por cobrar" value={fARS(p30.porCobrar)} color="blue" />
+          <KpiCard label="+ Pedidos a entregar" value={fARS(p30.pedidosPendientesDeEntregar)} color="blue" />
+          <KpiCard label="− Costos fijos previstos" value={fARS(p30.costosRecurrentesPrevistos)} color="red" />
+          <KpiCard
+            label="Caja proyectada (30 días)"
+            value={fARS(p30.proyeccion30Dias)}
+            color={p30.proyeccion30Dias >= 0 ? "green" : "red"}
+          />
+        </StatGrid>
+        <div className="mt-2 border-t border-border pt-3">
+          <InfoRow
+            label="No incluye"
+            value="Compras previstas — no hay ninguna compra planificada cargada en el sistema para proyectar"
+          />
+        </div>
+      </Card>
+
+      <div className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-text3">Tendencia a 3 meses (promedio histórico)</div>
       <StatGrid>
         <KpiCard label="Ventas promedio (3m)" value={fARS(promVentas)} color="gold" />
         <KpiCard label="Egresos promedio (3m)" value={fARS(promEgresos)} color="red" />
