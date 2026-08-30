@@ -4,14 +4,99 @@ import React, { useMemo, useRef, useState } from "react";
 import { useStore } from "@/lib/store";
 import { useToast } from "@/lib/toast";
 import { STORAGE_KEY } from "@/lib/types";
-import { fNum } from "@/lib/calc";
-import { Card, PageHeader, Field, Input, Button, InfoRow, TableWrap, Th, Td, TrHover, EmptyState } from "@/components/ui";
+import type { Pedido, Cliente, Producto, Compra, Ingrediente, Proveedor } from "@/lib/types";
+import { fNum, pvr } from "@/lib/calc";
+import { toCSV, descargarCSV, type ColumnaCSV } from "@/lib/csv";
+import { Card, PageHeader, Field, Input, Button, InfoRow, TableWrap, Th, Td, TrHover, EmptyState, Select } from "@/components/ui";
+
+type EntidadExportable = "pedidos" | "clientes" | "productos" | "compras" | "ingredientes" | "proveedores";
+
+const COLUMNAS_PEDIDOS: ColumnaCSV<Pedido>[] = [
+  { header: "ID pedido", value: (r) => r.id_pedido },
+  { header: "Fecha", value: (r) => r.fecha },
+  { header: "Cliente", value: (r) => r.id_cliente },
+  { header: "Producto", value: (r) => r.nombre_producto },
+  { header: "Cantidad", value: (r) => r.cantidad },
+  { header: "Precio unitario", value: (r) => r.precio_unitario },
+  { header: "Descuento", value: (r) => r.descuento_monto },
+  { header: "Precio neto", value: (r) => r.precio_neto },
+  { header: "Estado", value: (r) => r.estado },
+  { header: "Canal", value: (r) => r.canal },
+  { header: "Estado de pago", value: (r) => r.estado_pago ?? "Pagado" },
+  { header: "Monto pagado", value: (r) => r.monto_pagado ?? "" },
+  { header: "Fecha entrega", value: (r) => r.fecha_entrega ?? "" },
+  { header: "Fecha vencimiento", value: (r) => r.fecha_vencimiento ?? "" },
+  { header: "Método de pago", value: (r) => r.metodo_pago ?? "" },
+  { header: "Notas", value: (r) => r.notas ?? "" },
+];
+
+const COLUMNAS_CLIENTES: ColumnaCSV<Cliente>[] = [
+  { header: "ID", value: (r) => r.id },
+  { header: "Nombre", value: (r) => r.nombre },
+  { header: "Canal", value: (r) => r.canal },
+  { header: "Dirección", value: (r) => r.direccion ?? "" },
+  { header: "Teléfono", value: (r) => r.telefono ?? "" },
+  { header: "Email", value: (r) => r.email ?? "" },
+  { header: "Fecha alta", value: (r) => r.fecha_alta ?? "" },
+  { header: "Activo", value: (r) => (r.activo === false ? "No" : "Sí") },
+  { header: "Notas", value: (r) => r.notas ?? "" },
+];
+
+const COLUMNAS_PRODUCTOS: ColumnaCSV<Producto>[] = [
+  { header: "ID", value: (r) => r.id },
+  { header: "Nombre", value: (r) => r.nombre },
+  { header: "Categoría", value: (r) => r.categoria ?? "" },
+  { header: "Canal", value: (r) => r.canal ?? "" },
+  { header: "Precio de venta", value: (r) => r.precio_venta },
+  { header: "Activo", value: (r) => (r.activo ? "Sí" : "No") },
+];
+
+const COLUMNAS_COMPRAS: ColumnaCSV<Compra>[] = [
+  { header: "ID", value: (r) => r.id },
+  { header: "Fecha", value: (r) => r.fecha },
+  { header: "Proveedor", value: (r) => r.id_proveedor },
+  { header: "Descripción", value: (r) => r.descripcion ?? "" },
+  { header: "Total", value: (r) => r.total },
+  { header: "Método de pago", value: (r) => r.metodo_pago ?? "" },
+  { header: "Anulada", value: (r) => (r.anulada ? "Sí" : "No") },
+  { header: "Notas", value: (r) => r.notas ?? "" },
+];
+
+const COLUMNAS_INGREDIENTES: ColumnaCSV<Ingrediente>[] = [
+  { header: "ID", value: (r) => r.id },
+  { header: "Nombre", value: (r) => r.nombre },
+  { header: "Unidad", value: (r) => r.unidad },
+  { header: "Categoría", value: (r) => r.categoria ?? "" },
+  { header: "Precio de referencia", value: (r) => r.precio_ref },
+  { header: "Precio vigente", value: (r) => pvr(r) },
+  { header: "Stock mínimo", value: (r) => r.stock_minimo ?? "" },
+];
+
+const COLUMNAS_PROVEEDORES: ColumnaCSV<Proveedor>[] = [
+  { header: "ID", value: (r) => r.id },
+  { header: "Nombre", value: (r) => r.nombre },
+  { header: "Contacto", value: (r) => r.contacto ?? "" },
+  { header: "Teléfono", value: (r) => r.telefono ?? "" },
+  { header: "Email", value: (r) => r.email ?? "" },
+  { header: "Activo", value: (r) => (r.activo === false ? "No" : "Sí") },
+  { header: "Notas", value: (r) => r.notas ?? "" },
+];
+
+const ENTIDADES_EXPORTABLES: { value: EntidadExportable; label: string }[] = [
+  { value: "pedidos", label: "Pedidos" },
+  { value: "clientes", label: "Clientes" },
+  { value: "productos", label: "Productos" },
+  { value: "compras", label: "Compras" },
+  { value: "ingredientes", label: "Ingredientes" },
+  { value: "proveedores", label: "Proveedores" },
+];
 
 export function Config() {
   const { data, setData, resetToEmpty, reloadSeed } = useStore();
   const { toast } = useToast();
   const [valor, setValor] = useState(data.tipo_cambio.valor);
   const [fuente, setFuente] = useState(data.tipo_cambio.fuente);
+  const [entidadCSV, setEntidadCSV] = useState<EntidadExportable>("pedidos");
   const fileRef = useRef<HTMLInputElement>(null);
 
   const totalTokensIa = useMemo(
@@ -34,6 +119,33 @@ export function Config() {
     a.click();
     URL.revokeObjectURL(url);
     toast("Backup exportado");
+  }
+
+  function exportarCSV() {
+    const hoy = new Date().toISOString().slice(0, 10);
+    let csv: string;
+    switch (entidadCSV) {
+      case "pedidos":
+        csv = toCSV(data.pedidos, COLUMNAS_PEDIDOS);
+        break;
+      case "clientes":
+        csv = toCSV(data.clientes, COLUMNAS_CLIENTES);
+        break;
+      case "productos":
+        csv = toCSV(data.productos, COLUMNAS_PRODUCTOS);
+        break;
+      case "compras":
+        csv = toCSV(data.compras, COLUMNAS_COMPRAS);
+        break;
+      case "ingredientes":
+        csv = toCSV(data.ingredientes, COLUMNAS_INGREDIENTES);
+        break;
+      case "proveedores":
+        csv = toCSV(data.proveedores, COLUMNAS_PROVEEDORES);
+        break;
+    }
+    descargarCSV(`ricordo_${entidadCSV}_${hoy}.csv`, csv);
+    toast("CSV exportado");
   }
 
   function importar(e: React.ChangeEvent<HTMLInputElement>) {
@@ -112,6 +224,21 @@ export function Config() {
             </div>
           </>
         )}
+      </Card>
+
+      <Card title="Exportar a CSV / Excel" className="mb-4">
+        <div className="flex flex-wrap items-end gap-3">
+          <Field label="Datos a exportar">
+            <Select value={entidadCSV} onChange={(e) => setEntidadCSV(e.target.value as EntidadExportable)}>
+              {ENTIDADES_EXPORTABLES.map((e) => (
+                <option key={e.value} value={e.value}>
+                  {e.label}
+                </option>
+              ))}
+            </Select>
+          </Field>
+          <Button onClick={exportarCSV}>📊 Exportar CSV</Button>
+        </div>
       </Card>
 
       <Card title="Copia de seguridad">
