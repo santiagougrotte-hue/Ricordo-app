@@ -4,9 +4,29 @@ import React, { useMemo, useState } from "react";
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell } from "recharts";
 import { useStore } from "@/lib/store";
 import { usePeriod } from "@/lib/period";
-import { calcCosto, rentabilidadPorCanal, rentabilidadPorCliente, fARS, fNum, fPct, inPeriod } from "@/lib/calc";
+import {
+  calcCosto,
+  rentabilidadPorCanal,
+  rentabilidadPorCliente,
+  rentabilidadPorTipoVenta,
+  rentabilidadPorGustoEnTipoVenta,
+  TIPO_VENTA_LABEL,
+  fARS,
+  fNum,
+  fPct,
+  inPeriod,
+} from "@/lib/calc";
+import type { TipoVenta } from "@/lib/types";
 import { Card, PageHeader, TableWrap, Th, Td, TrHover, EmptyState, FilterTabs, Badge } from "@/components/ui";
 import { CHART_COLORS } from "@/lib/chart-colors";
+
+const TIPO_VENTA_BADGE: Record<TipoVenta, "green" | "red" | "orange" | "blue" | "purple" | "gold"> = {
+  Minorista: "blue",
+  Mayorista: "purple",
+  VacioSinSalsa: "gold",
+  VacioConSalsa: "green",
+  SinClasificar: "red",
+};
 
 function usePedidosPeriodo() {
   const { data } = useStore();
@@ -186,6 +206,90 @@ function PorCanalTab() {
   );
 }
 
+function PorTipoVentaTab() {
+  const { data } = useStore();
+  const pedidos = usePedidosPeriodo();
+  const filas = useMemo(() => rentabilidadPorTipoVenta(data, pedidos), [data, pedidos]);
+  const [tipoElegido, setTipoElegido] = useState<TipoVenta | null>(null);
+  const tipoActivo = tipoElegido && filas.some((f) => f.tipo === tipoElegido) ? tipoElegido : filas[0]?.tipo ?? null;
+  const filasGusto = useMemo(
+    () => (tipoActivo ? rentabilidadPorGustoEnTipoVenta(data, pedidos, tipoActivo) : []),
+    [data, pedidos, tipoActivo]
+  );
+
+  return (
+    <>
+      <Card className="mb-4">
+        {filas.length === 0 ? (
+          <EmptyState text="Sin ventas en el período." />
+        ) : (
+          <TableWrap>
+            <table className="w-full">
+              <thead>
+                <tr>
+                  <Th>Tipo de venta</Th>
+                  <Th>Unidades</Th>
+                  <Th>Venta total</Th>
+                  <Th>Costo insumos</Th>
+                  <Th>Ganancia</Th>
+                  <Th>Margen %</Th>
+                </tr>
+              </thead>
+              <tbody>
+                {filas.map((f) => (
+                  <TrHover key={f.tipo} className="cursor-pointer" onClick={() => setTipoElegido(f.tipo)}>
+                    <Td main>
+                      <Badge color={TIPO_VENTA_BADGE[f.tipo]}>{TIPO_VENTA_LABEL[f.tipo]}</Badge>
+                    </Td>
+                    <Td>{fNum(f.unidades, 0)}</Td>
+                    <Td>{fARS(f.venta)}</Td>
+                    <Td>{fARS(f.costo)}</Td>
+                    <Td className={f.ganancia >= 0 ? "text-green" : "text-red"}>{fARS(f.ganancia)}</Td>
+                    <Td>{fPct(f.margen)}</Td>
+                  </TrHover>
+                ))}
+              </tbody>
+            </table>
+          </TableWrap>
+        )}
+      </Card>
+
+      {tipoActivo && (
+        <Card title={`Gustos más rentables en ${TIPO_VENTA_LABEL[tipoActivo]}`}>
+          {filasGusto.length === 0 ? (
+            <EmptyState text="Sin ventas de este tipo en el período." />
+          ) : (
+            <TableWrap>
+              <table className="w-full">
+                <thead>
+                  <tr>
+                    <Th>Gusto</Th>
+                    <Th>Unidades</Th>
+                    <Th>Venta total</Th>
+                    <Th>Ganancia</Th>
+                    <Th>Margen %</Th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {filasGusto.map((f) => (
+                    <TrHover key={f.id_base}>
+                      <Td main>{f.nombreGusto}</Td>
+                      <Td>{fNum(f.unidades, 0)}</Td>
+                      <Td>{fARS(f.venta)}</Td>
+                      <Td className={f.ganancia >= 0 ? "text-green" : "text-red"}>{fARS(f.ganancia)}</Td>
+                      <Td>{fPct(f.margen)}</Td>
+                    </TrHover>
+                  ))}
+                </tbody>
+              </table>
+            </TableWrap>
+          )}
+        </Card>
+      )}
+    </>
+  );
+}
+
 function PorClienteTab() {
   const { data } = useStore();
   const pedidos = usePedidosPeriodo();
@@ -244,10 +348,19 @@ export function AnRentabilidad() {
         options={[
           { value: "producto", label: "Por producto" },
           { value: "canal", label: "Por canal" },
+          { value: "tipo_venta", label: "Por tipo de venta" },
           { value: "cliente", label: "Por cliente" },
         ]}
       />
-      {tab === "producto" ? <PorProductoTab /> : tab === "canal" ? <PorCanalTab /> : <PorClienteTab />}
+      {tab === "producto" ? (
+        <PorProductoTab />
+      ) : tab === "canal" ? (
+        <PorCanalTab />
+      ) : tab === "tipo_venta" ? (
+        <PorTipoVentaTab />
+      ) : (
+        <PorClienteTab />
+      )}
     </div>
   );
 }

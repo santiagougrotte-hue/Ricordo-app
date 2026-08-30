@@ -39,6 +39,8 @@ import {
   fichaProveedor,
   tipoVentaDeProducto,
   gustosTodos,
+  rentabilidadPorTipoVenta,
+  rentabilidadPorGustoEnTipoVenta,
 } from "./calc";
 import { emptyData } from "./types";
 import type { Pedido, Producto, Ingrediente, RecetaLinea, Produccion, Cliente, Amortizacion, CajaMovimiento } from "./types";
@@ -1102,4 +1104,57 @@ test("gustosTodos: agrupa por id_base incluyendo variantes inactivas (a diferenc
   const gustos = gustosTodos(data);
   assert.equal(gustos.length, 1);
   assert.equal(gustos[0].variantes.length, 2, "incluye la variante inactiva");
+});
+
+test("rentabilidadPorTipoVenta: agrupa venta/costo/ganancia por tipo de venta del producto vendido, no por el canal del pedido", () => {
+  const data = emptyData();
+  data.ingredientes = [{ id: "ING-1", nombre: "Harina", unidad: "kg", precio_ref: 1000, precio_vigente: null, seguimiento_stock: false }];
+  data.productos = [
+    { id: "PROD-01", id_base: "PROD-01", nombre: "Ravioles de calabaza", precio_venta: 11000, activo: true },
+    { id: "PROD-08", id_base: "PROD-01", nombre: "Calabaza mayorista", precio_venta: 9000, activo: true },
+  ];
+  data.recetas = [
+    { id: "R1", id_producto: "PROD-01", tipo: "Ingrediente", concepto: "ING-1", cantidad: 2 },
+    { id: "R2", id_producto: "PROD-08", tipo: "Ingrediente", concepto: "ING-1", cantidad: 1 },
+  ];
+  const pedidos = [
+    // Canal Mayorista en el pedido, pero comprando la variante Minorista — debe caer en Minorista.
+    pedidoBase({ id_detalle: "A", id_producto: "PROD-01", cantidad: 1, precio_neto: 11000, canal: "Mayorista" }),
+    pedidoBase({ id_detalle: "B", id_producto: "PROD-08", cantidad: 2, precio_neto: 18000, canal: "Mayorista" }),
+  ];
+  data.pedidos = pedidos;
+
+  const filas = rentabilidadPorTipoVenta(data, pedidos);
+  const minorista = filas.find((f) => f.tipo === "Minorista")!;
+  const mayorista = filas.find((f) => f.tipo === "Mayorista")!;
+  assert.equal(minorista.venta, 11000);
+  assert.equal(minorista.costo, 2000);
+  assert.equal(mayorista.venta, 18000);
+  assert.equal(mayorista.costo, 2000);
+});
+
+test("rentabilidadPorGustoEnTipoVenta: rankea gustos dentro de un tipo de venta filtrado", () => {
+  const data = emptyData();
+  data.ingredientes = [{ id: "ING-1", nombre: "Harina", unidad: "kg", precio_ref: 1000, precio_vigente: null, seguimiento_stock: false }];
+  data.productos = [
+    { id: "PROD-01", id_base: "PROD-01", nombre: "Ravioles de calabaza", precio_venta: 13000, activo: true },
+    { id: "PROD-08", id_base: "PROD-01", nombre: "Calabaza mayorista", precio_venta: 9000, activo: true },
+    { id: "PROD-05", id_base: "PROD-05", nombre: "Raviol de jamon y queso", precio_venta: 13000, activo: true },
+    { id: "PROD-07", id_base: "PROD-05", nombre: "Jamon y queso mayorista", precio_venta: 9000, activo: true },
+  ];
+  data.recetas = [
+    { id: "R1", id_producto: "PROD-08", tipo: "Ingrediente", concepto: "ING-1", cantidad: 1 },
+    { id: "R2", id_producto: "PROD-07", tipo: "Ingrediente", concepto: "ING-1", cantidad: 3 },
+  ];
+  const pedidos = [
+    pedidoBase({ id_detalle: "A", id_producto: "PROD-08", cantidad: 1, precio_neto: 9000, canal: "Mayorista" }),
+    pedidoBase({ id_detalle: "B", id_producto: "PROD-07", cantidad: 1, precio_neto: 9000, canal: "Mayorista" }),
+  ];
+  data.pedidos = pedidos;
+
+  const filas = rentabilidadPorGustoEnTipoVenta(data, pedidos, "Mayorista");
+  assert.equal(filas.length, 2);
+  assert.equal(filas[0].nombreGusto, "Ravioles de calabaza", "menos costo → más ganancia → primero");
+  assert.equal(filas[0].ganancia, 8000);
+  assert.equal(filas[1].ganancia, 6000);
 });

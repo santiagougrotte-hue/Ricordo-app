@@ -493,6 +493,81 @@ export function rentabilidadPorCanal(data: RicordoData, pedidos: Pedido[]): Rent
     .sort((a, b) => b.venta - a.venta);
 }
 
+export interface RentabilidadTipoVenta {
+  tipo: TipoVenta;
+  unidades: number;
+  venta: number;
+  costo: number;
+  ganancia: number;
+  margen: number;
+}
+
+/** Igual que rentabilidadPorCanal pero agrupando por tipo de venta del producto vendido
+ * (Minorista/Mayorista/Vacío…), no por el canal cargado en el pedido — que es del cliente, no
+ * de la presentación vendida, y puede no coincidir (ej. un cliente Mayorista comprando una
+ * unidad suelta Minorista). */
+export function rentabilidadPorTipoVenta(data: RicordoData, pedidos: Pedido[]): RentabilidadTipoVenta[] {
+  const map = new Map<TipoVenta, { unidades: number; venta: number; costo: number }>();
+  for (const p of pedidos) {
+    const producto = data.productos.find((pr) => pr.id === p.id_producto);
+    const tipo = producto ? tipoVentaDeProducto(producto) : "SinClasificar";
+    const cur = map.get(tipo) ?? { unidades: 0, venta: 0, costo: 0 };
+    cur.unidades += p.cantidad;
+    cur.venta += p.precio_neto;
+    cur.costo += calcCosto(data, p.id_producto) * p.cantidad;
+    map.set(tipo, cur);
+  }
+  return TIPO_VENTA_ORDEN.filter((tipo) => map.has(tipo)).map((tipo) => {
+    const v = map.get(tipo)!;
+    return {
+      tipo,
+      unidades: v.unidades,
+      venta: v.venta,
+      costo: v.costo,
+      ganancia: v.venta - v.costo,
+      margen: v.venta > 0 ? ((v.venta - v.costo) / v.venta) * 100 : 0,
+    };
+  });
+}
+
+export interface RentabilidadGustoPorTipo {
+  id_base: string;
+  nombreGusto: string;
+  tipo: TipoVenta;
+  unidades: number;
+  venta: number;
+  costo: number;
+  ganancia: number;
+  margen: number;
+}
+
+/** Rentabilidad por gusto DENTRO de un tipo de venta — responde "¿qué producto es más rentable
+ * en Mayorista?" filtrando pedidos por tipo antes de agrupar por id_base. */
+export function rentabilidadPorGustoEnTipoVenta(data: RicordoData, pedidos: Pedido[], tipo: TipoVenta): RentabilidadGustoPorTipo[] {
+  const map = new Map<string, { unidades: number; venta: number; costo: number }>();
+  for (const p of pedidos) {
+    const producto = data.productos.find((pr) => pr.id === p.id_producto);
+    if (!producto || tipoVentaDeProducto(producto) !== tipo) continue;
+    const cur = map.get(producto.id_base) ?? { unidades: 0, venta: 0, costo: 0 };
+    cur.unidades += p.cantidad;
+    cur.venta += p.precio_neto;
+    cur.costo += calcCosto(data, p.id_producto) * p.cantidad;
+    map.set(producto.id_base, cur);
+  }
+  return Array.from(map.entries())
+    .map(([idBase, v]) => ({
+      id_base: idBase,
+      nombreGusto: data.productos.find((pr) => pr.id === idBase)?.nombre ?? idBase,
+      tipo,
+      unidades: v.unidades,
+      venta: v.venta,
+      costo: v.costo,
+      ganancia: v.venta - v.costo,
+      margen: v.venta > 0 ? ((v.venta - v.costo) / v.venta) * 100 : 0,
+    }))
+    .sort((a, b) => b.ganancia - a.ganancia);
+}
+
 export interface RentabilidadCliente {
   cliente: Cliente;
   cantidadPedidos: number;
