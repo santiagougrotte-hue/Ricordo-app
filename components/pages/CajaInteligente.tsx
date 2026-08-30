@@ -4,7 +4,7 @@ import React, { useState } from "react";
 import { useStore } from "@/lib/store";
 import { useToast } from "@/lib/toast";
 import { uid } from "@/lib/id";
-import { fARS } from "@/lib/calc";
+import { fARS, fPct, saldoCaja } from "@/lib/calc";
 import {
   PageHeader,
   Card,
@@ -18,32 +18,25 @@ import {
   Td,
   TrHover,
   EmptyState,
+  InfoRow,
 } from "@/components/ui";
 
 export function CajaInteligente() {
   const { data, setData } = useStore();
   const { toast } = useToast();
   const ci = data.caja_inteligente;
-  const [pctReinversion, setPctReinversion] = useState(ci.porcentaje_reinversion);
-  const [pctSeguridad, setPctSeguridad] = useState(ci.porcentaje_seguridad);
   const [usoConcepto, setUsoConcepto] = useState("");
   const [usoMonto, setUsoMonto] = useState(0);
 
-  const totalIngresos = data.caja_movimientos.filter((m) => m.tipo === "ingreso").reduce((a, m) => a + m.monto, 0);
-  const fondoReinversion = totalIngresos * (pctReinversion / 100);
-  const fondoSeguridad = totalIngresos * (pctSeguridad / 100);
+  // La distribución se calcula sobre la caja disponible HOY, no sobre el ingreso histórico
+  // acumulado — reparte lo que realmente hay para repartir en este momento.
+  const cajaDisponible = saldoCaja(data);
+  const fondoReinversion = cajaDisponible * (ci.porcentaje_reinversion / 100);
+  const fondoSeguridad = cajaDisponible * (ci.porcentaje_seguridad / 100);
   const usadoReinversion = ci.usos_reinversion.reduce((a, u) => a + u.monto, 0);
   const usadoSeguridad = ci.usos_seguridad.reduce((a, u) => a + u.monto, 0);
   const disponibleReinversion = fondoReinversion - usadoReinversion;
   const disponibleSeguridad = fondoSeguridad - usadoSeguridad;
-
-  function guardarPorcentajes() {
-    setData((d) => ({
-      ...d,
-      caja_inteligente: { ...d.caja_inteligente, porcentaje_reinversion: pctReinversion, porcentaje_seguridad: pctSeguridad },
-    }));
-    toast("Porcentajes guardados");
-  }
 
   function registrarUso(fondo: "reinversion" | "seguridad") {
     if (!usoConcepto || usoMonto <= 0) {
@@ -66,24 +59,18 @@ export function CajaInteligente() {
 
   return (
     <div>
-      <PageHeader title="Caja Inteligente" sub="Distribución de ingresos entre reinversión y seguridad" />
+      <PageHeader title="Distribución de fondos" sub="Reparte la caja disponible entre reinversión y reserva de seguridad" />
 
       <StatGrid>
-        <KpiCard label="Ingresos totales" value={fARS(totalIngresos)} color="gold" />
+        <KpiCard label="Caja disponible" value={fARS(cajaDisponible)} color="gold" />
         <KpiCard label="Fondo reinversión" value={fARS(disponibleReinversion)} sub={`de ${fARS(fondoReinversion)}`} color="blue" />
         <KpiCard label="Fondo seguridad" value={fARS(disponibleSeguridad)} sub={`de ${fARS(fondoSeguridad)}`} color="purple" />
       </StatGrid>
 
-      <Card title="Configuración de porcentajes" className="mb-4">
-        <div className="flex flex-wrap items-end gap-3">
-          <Field label="% Reinversión">
-            <Input type="number" value={pctReinversion} onChange={(e) => setPctReinversion(Number(e.target.value))} />
-          </Field>
-          <Field label="% Seguridad">
-            <Input type="number" value={pctSeguridad} onChange={(e) => setPctSeguridad(Number(e.target.value))} />
-          </Field>
-          <Button onClick={guardarPorcentajes}>Guardar</Button>
-        </div>
+      <Card title="Porcentajes de distribución" className="mb-4">
+        <InfoRow label="% Reinversión" value={fPct(ci.porcentaje_reinversion, 0)} color="blue" />
+        <InfoRow label="% Seguridad" value={fPct(ci.porcentaje_seguridad, 0)} color="purple" />
+        <p className="mt-3 text-[11.5px] text-text3">Se cambian desde Configuración.</p>
       </Card>
 
       <Card title="Registrar uso de fondo" className="mb-4">

@@ -168,7 +168,7 @@ export const MODULES: ModuleDef[] = [
           { key: "posicion", label: "Posición", page: "posicion" },
           { key: "flujo", label: "Flujo", page: "flujo" },
           { key: "proyeccion", label: "Proyección", page: "proyeccion" },
-          { key: "caja-inteligente", label: "Caja Inteligente", page: "caja-inteligente" },
+          { key: "caja-inteligente", label: "Distribución de fondos", page: "caja-inteligente" },
         ],
       },
       {
@@ -219,7 +219,7 @@ export const PAGE_LABELS: Record<string, string> = {
   posicion: "Posición",
   flujo: "Flujo",
   proyeccion: "Proyección",
-  "caja-inteligente": "Caja Inteligente",
+  "caja-inteligente": "Distribución de fondos",
   transferencias: "Transferencias",
   eerr: "EERR",
   "costos-fijos": "Costos Fijos",

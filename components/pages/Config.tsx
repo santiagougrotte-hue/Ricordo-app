@@ -96,6 +96,8 @@ export function Config() {
   const { toast } = useToast();
   const [valor, setValor] = useState(data.tipo_cambio.valor);
   const [fuente, setFuente] = useState(data.tipo_cambio.fuente);
+  const [pctReinversion, setPctReinversion] = useState(data.caja_inteligente.porcentaje_reinversion);
+  const [pctSeguridad, setPctSeguridad] = useState(data.caja_inteligente.porcentaje_seguridad);
   const [entidadCSV, setEntidadCSV] = useState<EntidadExportable>("pedidos");
   const fileRef = useRef<HTMLInputElement>(null);
 
@@ -108,6 +110,18 @@ export function Config() {
   function guardarTipoCambio() {
     setData((d) => ({ ...d, tipo_cambio: { valor, fuente } }));
     toast("Tipo de cambio actualizado");
+  }
+
+  function guardarDistribucion() {
+    if (pctReinversion + pctSeguridad > 100) {
+      toast("La suma de los porcentajes no puede superar 100%", "error");
+      return;
+    }
+    setData((d) => ({
+      ...d,
+      caja_inteligente: { ...d.caja_inteligente, porcentaje_reinversion: pctReinversion, porcentaje_seguridad: pctSeguridad },
+    }));
+    toast("Distribución de fondos actualizada");
   }
 
   function exportar() {
@@ -180,6 +194,23 @@ export function Config() {
         </div>
         <div className="mt-4 flex justify-end">
           <Button onClick={guardarTipoCambio}>Guardar</Button>
+        </div>
+      </Card>
+
+      <Card title="Distribución de fondos" className="mb-4">
+        <p className="mb-3 text-[12.5px] text-text3">
+          Porcentajes de la caja disponible que se reservan para reinversión y seguridad — ver Finanzas → Distribución de fondos.
+        </p>
+        <div className="grid grid-cols-1 gap-3.5 sm:grid-cols-2">
+          <Field label="% Reinversión">
+            <Input type="number" min={0} max={100} value={pctReinversion} onChange={(e) => setPctReinversion(Number(e.target.value))} />
+          </Field>
+          <Field label="% Seguridad">
+            <Input type="number" min={0} max={100} value={pctSeguridad} onChange={(e) => setPctSeguridad(Number(e.target.value))} />
+          </Field>
+        </div>
+        <div className="mt-4 flex justify-end">
+          <Button onClick={guardarDistribucion}>Guardar</Button>
         </div>
       </Card>
 
