@@ -43,6 +43,8 @@ import {
   rentabilidadPorGustoEnTipoVenta,
   cmvDePedido,
   costoUnitarioSubreceta,
+  rentabilidadPorGustoTotal,
+  rentabilidadPorGustoYCanal,
 } from "./calc";
 import { emptyData } from "./types";
 import type { Pedido, Producto, Ingrediente, RecetaLinea, Produccion, Cliente, Amortizacion, CajaMovimiento } from "./types";
@@ -1261,4 +1263,73 @@ test("costoUnitarioSubreceta: si sube el precio de un ingrediente de la subrecet
 
   assert.ok(despues > antes, "el costo del producto sube automáticamente sin tocar su receta");
   assert.equal(despues, 3 * antes);
+});
+
+// --- Rentabilidad por gusto total (sin diferenciar canal) y Minorista vs Mayorista -------------
+
+function datosDosGustos() {
+  const data = emptyData();
+  data.ingredientes = [{ id: "ING-1", nombre: "Harina", unidad: "kg", precio_ref: 1000, precio_vigente: null, seguimiento_stock: false }];
+  data.productos = [
+    { id: "PROD-01", id_base: "PROD-01", nombre: "Ravioles de calabaza", precio_venta: 13000, activo: true },
+    { id: "PROD-08", id_base: "PROD-01", nombre: "Calabaza mayorista", precio_venta: 9000, activo: true },
+    { id: "PROD-05", id_base: "PROD-05", nombre: "Raviol de jamon y queso", precio_venta: 13000, activo: true },
+  ];
+  data.recetas = [
+    { id: "R1", id_producto: "PROD-01", tipo: "Ingrediente", concepto: "ING-1", cantidad: 1 }, // costo $1000
+    { id: "R2", id_producto: "PROD-08", tipo: "Ingrediente", concepto: "ING-1", cantidad: 1 },
+    { id: "R3", id_producto: "PROD-05", tipo: "Ingrediente", concepto: "ING-1", cantidad: 2 }, // costo $2000
+  ];
+  return data;
+}
+
+test("rentabilidadPorGustoTotal: suma todas las variantes de un gusto (minorista + mayorista) en una sola fila, con mix de ventas", () => {
+  const data = datosDosGustos();
+  const pedidos = [
+    pedidoBase({ id_pedido: "PED-1", id_detalle: "A", id_producto: "PROD-01", cantidad: 1, precio_neto: 11000, canal: "Minorista" }),
+    pedidoBase({ id_pedido: "PED-2", id_detalle: "B", id_producto: "PROD-08", cantidad: 1, precio_neto: 9000, canal: "Mayorista" }),
+    pedidoBase({ id_pedido: "PED-3", id_detalle: "C", id_producto: "PROD-05", cantidad: 1, precio_neto: 10000, canal: "Minorista" }),
+  ];
+  data.pedidos = pedidos;
+
+  const filas = rentabilidadPorGustoTotal(data, pedidos);
+  const calabaza = filas.find((f) => f.id_base === "PROD-01")!;
+  const jyq = filas.find((f) => f.id_base === "PROD-05")!;
+
+  assert.equal(calabaza.nombreGusto, "Ravioles de calabaza");
+  assert.equal(calabaza.venta, 20000, "11000 (minorista) + 9000 (mayorista) sumados");
+  assert.equal(calabaza.costo, 2000, "1000 + 1000");
+  assert.equal(calabaza.unidades, 2);
+  assert.equal(calabaza.cantidadPedidos, 2);
+
+  const ventaTotal = 20000 + 10000;
+  assert.ok(Math.abs(calabaza.participacionPct - (20000 / ventaTotal) * 100) < 0.001);
+  assert.ok(Math.abs(jyq.participacionPct - (10000 / ventaTotal) * 100) < 0.001);
+  assert.ok(Math.abs(calabaza.participacionPct + jyq.participacionPct - 100) < 0.001, "el mix suma 100%");
+});
+
+test("rentabilidadPorGustoYCanal: arma minorista y mayorista lado a lado para el mismo gusto", () => {
+  const data = datosDosGustos();
+  const pedidos = [
+    pedidoBase({ id_detalle: "A", id_producto: "PROD-01", cantidad: 1, precio_neto: 11000, canal: "Minorista" }),
+    pedidoBase({ id_detalle: "B", id_producto: "PROD-08", cantidad: 2, precio_neto: 18000, canal: "Mayorista" }),
+  ];
+  data.pedidos = pedidos;
+
+  const [fila] = rentabilidadPorGustoYCanal(data, pedidos);
+  assert.equal(fila.id_base, "PROD-01");
+  assert.equal(fila.minorista.venta, 11000);
+  assert.equal(fila.minorista.unidades, 1);
+  assert.equal(fila.mayorista.venta, 18000);
+  assert.equal(fila.mayorista.unidades, 2);
+  assert.equal(fila.mayorista.costo, 2000, "2 unidades × $1000 de costo cada una");
+});
+
+test("rentabilidadPorGustoYCanal: un gusto sin ventas mayoristas todavía queda en cero, no se omite", () => {
+  const data = datosDosGustos();
+  const pedidos = [pedidoBase({ id_detalle: "A", id_producto: "PROD-01", cantidad: 1, precio_neto: 11000, canal: "Minorista" })];
+  data.pedidos = pedidos;
+  const [fila] = rentabilidadPorGustoYCanal(data, pedidos);
+  assert.equal(fila.mayorista.venta, 0);
+  assert.equal(fila.mayorista.margen, 0, "sin ventas, margen no debe ser NaN/Infinity");
 });

@@ -592,6 +592,104 @@ export function rentabilidadPorGustoEnTipoVenta(data: RicordoData, pedidos: Pedi
     .sort((a, b) => b.ganancia - a.ganancia);
 }
 
+export interface RentabilidadGustoTotal {
+  id_base: string;
+  nombreGusto: string;
+  unidades: number;
+  venta: number;
+  costo: number;
+  ganancia: number;
+  margen: number;
+  cantidadPedidos: number;
+  /** % que representa la venta de este gusto sobre el total del período — "mix de ventas". */
+  participacionPct: number;
+}
+
+/** Rentabilidad por gusto SIN diferenciar tipo de venta ni canal — suma Minorista + Mayorista +
+ * Vacío sin salsa + Vacío con salsa de un mismo gusto en una sola fila. Responde "¿cuánto vendí
+ * de Calabaza en total?" y de paso da el mix de ventas (participacionPct de cada gusto). */
+export function rentabilidadPorGustoTotal(data: RicordoData, pedidos: Pedido[]): RentabilidadGustoTotal[] {
+  const map = new Map<string, { unidades: number; venta: number; costo: number; pedidosUnicos: Set<string> }>();
+  for (const p of pedidos) {
+    const producto = data.productos.find((pr) => pr.id === p.id_producto);
+    const idBase = producto?.id_base ?? p.id_producto;
+    const cur = map.get(idBase) ?? { unidades: 0, venta: 0, costo: 0, pedidosUnicos: new Set<string>() };
+    cur.unidades += p.cantidad;
+    cur.venta += p.precio_neto;
+    cur.costo += cmvDePedido(data, p);
+    cur.pedidosUnicos.add(p.id_pedido);
+    map.set(idBase, cur);
+  }
+  const ventaTotal = Array.from(map.values()).reduce((acc, v) => acc + v.venta, 0);
+  return Array.from(map.entries())
+    .map(([idBase, v]) => ({
+      id_base: idBase,
+      nombreGusto: data.productos.find((pr) => pr.id === idBase)?.nombre ?? idBase,
+      unidades: v.unidades,
+      venta: v.venta,
+      costo: v.costo,
+      ganancia: v.venta - v.costo,
+      margen: v.venta > 0 ? ((v.venta - v.costo) / v.venta) * 100 : 0,
+      cantidadPedidos: v.pedidosUnicos.size,
+      participacionPct: ventaTotal > 0 ? (v.venta / ventaTotal) * 100 : 0,
+    }))
+    .sort((a, b) => b.venta - a.venta);
+}
+
+interface LadoCanal {
+  unidades: number;
+  venta: number;
+  costo: number;
+  ganancia: number;
+  margen: number;
+  cantidadPedidos: number;
+}
+
+export interface RentabilidadGustoCanal {
+  id_base: string;
+  nombreGusto: string;
+  minorista: LadoCanal;
+  mayorista: LadoCanal;
+}
+
+/** Rentabilidad por gusto comparando Minorista vs Mayorista lado a lado — a diferencia de
+ * rentabilidadPorTipoVenta (que compara los 4 tipos de venta entre sí, sumando todos los
+ * gustos), esta arma una fila por gusto con sus dos canales uno al lado del otro. Usa el canal
+ * del pedido (quién compró), no el tipo de venta del producto — es la pregunta "¿este gusto lo
+ * compran más los minoristas o los mayoristas?", no "qué presentación se vendió". */
+export function rentabilidadPorGustoYCanal(data: RicordoData, pedidos: Pedido[]): RentabilidadGustoCanal[] {
+  const vacio = () => ({ unidades: 0, venta: 0, costo: 0, pedidosUnicos: new Set<string>() });
+  const map = new Map<string, { nombreGusto: string; minorista: ReturnType<typeof vacio>; mayorista: ReturnType<typeof vacio> }>();
+  for (const p of pedidos) {
+    const producto = data.productos.find((pr) => pr.id === p.id_producto);
+    const idBase = producto?.id_base ?? p.id_producto;
+    const nombreGusto = data.productos.find((pr) => pr.id === idBase)?.nombre ?? p.nombre_producto;
+    const cur = map.get(idBase) ?? { nombreGusto, minorista: vacio(), mayorista: vacio() };
+    const lado = p.canal === "Mayorista" ? cur.mayorista : cur.minorista;
+    lado.unidades += p.cantidad;
+    lado.venta += p.precio_neto;
+    lado.costo += cmvDePedido(data, p);
+    lado.pedidosUnicos.add(p.id_pedido);
+    map.set(idBase, cur);
+  }
+  const finalizar = (l: ReturnType<typeof vacio>): LadoCanal => ({
+    unidades: l.unidades,
+    venta: l.venta,
+    costo: l.costo,
+    ganancia: l.venta - l.costo,
+    margen: l.venta > 0 ? ((l.venta - l.costo) / l.venta) * 100 : 0,
+    cantidadPedidos: l.pedidosUnicos.size,
+  });
+  return Array.from(map.entries())
+    .map(([idBase, v]) => ({
+      id_base: idBase,
+      nombreGusto: v.nombreGusto,
+      minorista: finalizar(v.minorista),
+      mayorista: finalizar(v.mayorista),
+    }))
+    .sort((a, b) => b.minorista.venta + b.mayorista.venta - (a.minorista.venta + a.mayorista.venta));
+}
+
 export interface RentabilidadCliente {
   cliente: Cliente;
   cantidadPedidos: number;

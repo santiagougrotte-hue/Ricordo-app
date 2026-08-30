@@ -19,6 +19,7 @@ const PERIOD_PAGES = new Set([
   "an-rentabilidad",
   "an-productos",
   "an-clientes",
+  "an-anual",
   "pe-vivo",
   "costeo",
   "roi",

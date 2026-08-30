@@ -3,114 +3,152 @@
 import React, { useMemo, useState } from "react";
 import { useStore } from "@/lib/store";
 import { usePeriod } from "@/lib/period";
-import { fARS, fNum, inPeriod } from "@/lib/calc";
-import { Card, PageHeader, TableWrap, Th, Td, TrHover, EmptyState, Select, FilterTabs } from "@/components/ui";
+import { fARS, fNum, fPct, inPeriod, rentabilidadPorGustoTotal, rentabilidadPorGustoYCanal } from "@/lib/calc";
+import { Card, PageHeader, TableWrap, Th, Td, TrHover, EmptyState, FilterTabs } from "@/components/ui";
 import type { EstadoPedido } from "@/lib/types";
 
 const ACTIVOS: EstadoPedido[] = ["Confirmado", "Produccion", "Entregado"];
 
-export function AnProductos() {
+type Orden = "venta" | "unidades" | "ganancia" | "margen";
+
+function usePedidosActivos() {
   const { data } = useStore();
   const { mes, anio } = usePeriod();
-  const [canal, setCanal] = useState("");
-  const [estado, setEstado] = useState("activos");
+  return useMemo(
+    () => data.pedidos.filter((p) => inPeriod(p.fecha, mes, anio) && ACTIVOS.includes(p.estado)),
+    [data.pedidos, mes, anio]
+  );
+}
 
-  const grupos = useMemo(() => {
-    const pedidos = data.pedidos.filter((p) => {
-      if (!inPeriod(p.fecha, mes, anio)) return false;
-      if (canal && p.canal !== canal) return false;
-      if (estado === "activos") return ACTIVOS.includes(p.estado);
-      return p.estado === estado;
-    });
+/** "¿Cuánto vendí de Calabaza en total?" — suma Minorista + Mayorista + Vacío sin salsa + Vacío
+ * con salsa de cada gusto en una sola fila, con el mix de ventas (% de participación) al lado. */
+function GustoTotalTab() {
+  const { data } = useStore();
+  const pedidos = usePedidosActivos();
+  const [orden, setOrden] = useState<Orden>("venta");
+  const filas = useMemo(() => {
+    const base = rentabilidadPorGustoTotal(data, pedidos);
+    return [...base].sort((a, b) => b[orden] - a[orden]);
+  }, [data, pedidos, orden]);
 
-    const porBase = new Map<string, { nombre: string; variantes: Map<string, { nombre: string; cantidad: number; monto: number; canales: Set<string> }> }>();
-    for (const p of pedidos) {
-      const prod = data.productos.find((pr) => pr.id === p.id_producto);
-      const idBase = prod?.id_base ?? p.id_producto;
-      const nombreBase = data.productos.find((pr) => pr.id === idBase)?.nombre ?? p.nombre_producto;
-      const grupo = porBase.get(idBase) ?? { nombre: nombreBase, variantes: new Map() };
-      const v = grupo.variantes.get(p.id_producto) ?? { nombre: p.nombre_producto, cantidad: 0, monto: 0, canales: new Set<string>() };
-      v.cantidad += p.cantidad;
-      v.monto += p.precio_neto;
-      v.canales.add(p.canal);
-      grupo.variantes.set(p.id_producto, v);
-      porBase.set(idBase, grupo);
-    }
-    return Array.from(porBase.values()).sort((a, b) => {
-      const totalA = Array.from(a.variantes.values()).reduce((acc, v) => acc + v.monto, 0);
-      const totalB = Array.from(b.variantes.values()).reduce((acc, v) => acc + v.monto, 0);
-      return totalB - totalA;
-    });
-  }, [data, mes, anio, canal, estado]);
+  return (
+    <Card>
+      <div className="mb-3.5 flex flex-wrap items-center justify-between gap-2">
+        <span className="text-[11.5px] text-text3">Ordenar por:</span>
+        <FilterTabs
+          value={orden}
+          onChange={(v) => setOrden(v as Orden)}
+          options={[
+            { value: "venta", label: "Más facturación" },
+            { value: "unidades", label: "Más vendido" },
+            { value: "ganancia", label: "Más ganancia" },
+            { value: "margen", label: "Mejor margen" },
+          ]}
+        />
+      </div>
+      {filas.length === 0 ? (
+        <EmptyState text="Sin ventas en el período." />
+      ) : (
+        <TableWrap>
+          <table className="w-full">
+            <thead>
+              <tr>
+                <Th>Gusto</Th>
+                <Th>Unidades</Th>
+                <Th>Pedidos</Th>
+                <Th>Facturación</Th>
+                <Th>Ganancia</Th>
+                <Th>Margen %</Th>
+                <Th title="Participación de este gusto sobre la facturación total del período">Mix de ventas</Th>
+              </tr>
+            </thead>
+            <tbody>
+              {filas.map((f) => (
+                <TrHover key={f.id_base}>
+                  <Td main>{f.nombreGusto}</Td>
+                  <Td>{fNum(f.unidades, 0)}</Td>
+                  <Td>{f.cantidadPedidos}</Td>
+                  <Td>{fARS(f.venta)}</Td>
+                  <Td className={f.ganancia >= 0 ? "text-green" : "text-red"}>{fARS(f.ganancia)}</Td>
+                  <Td>{fPct(f.margen)}</Td>
+                  <Td className="min-w-[140px]">
+                    <div className="flex items-center gap-2">
+                      <div className="h-[7px] flex-1 overflow-hidden rounded bg-surface3">
+                        <div className="h-full rounded bg-accent" style={{ width: `${Math.min(100, f.participacionPct)}%` }} />
+                      </div>
+                      <span className="w-12 shrink-0 text-right text-[11.5px] text-text2">{fPct(f.participacionPct)}</span>
+                    </div>
+                  </Td>
+                </TrHover>
+              ))}
+            </tbody>
+          </table>
+        </TableWrap>
+      )}
+    </Card>
+  );
+}
+
+/** "¿Este gusto lo compran más los minoristas o los mayoristas?" — cada gusto con sus dos
+ * canales lado a lado, en vez de tener que filtrar por canal y comparar dos pantallas. */
+function MinoristaMayoristaTab() {
+  const { data } = useStore();
+  const pedidos = usePedidosActivos();
+  const filas = useMemo(() => rentabilidadPorGustoYCanal(data, pedidos), [data, pedidos]);
+
+  return (
+    <Card>
+      {filas.length === 0 ? (
+        <EmptyState text="Sin ventas en el período." />
+      ) : (
+        <TableWrap>
+          <table className="w-full">
+            <thead>
+              <tr>
+                <Th>Gusto</Th>
+                <Th title="Minorista — unidades">Unid. (Min.)</Th>
+                <Th title="Minorista — facturación">Facturación (Min.)</Th>
+                <Th title="Minorista — margen">Margen % (Min.)</Th>
+                <Th title="Mayorista — unidades">Unid. (May.)</Th>
+                <Th title="Mayorista — facturación">Facturación (May.)</Th>
+                <Th title="Mayorista — margen">Margen % (May.)</Th>
+              </tr>
+            </thead>
+            <tbody>
+              {filas.map((f) => (
+                <TrHover key={f.id_base}>
+                  <Td main>{f.nombreGusto}</Td>
+                  <Td>{fNum(f.minorista.unidades, 0)}</Td>
+                  <Td>{fARS(f.minorista.venta)}</Td>
+                  <Td>{f.minorista.venta > 0 ? fPct(f.minorista.margen) : "—"}</Td>
+                  <Td>{fNum(f.mayorista.unidades, 0)}</Td>
+                  <Td>{fARS(f.mayorista.venta)}</Td>
+                  <Td>{f.mayorista.venta > 0 ? fPct(f.mayorista.margen) : "—"}</Td>
+                </TrHover>
+              ))}
+            </tbody>
+          </table>
+        </TableWrap>
+      )}
+    </Card>
+  );
+}
+
+export function AnProductos() {
+  const [tab, setTab] = useState("total");
 
   return (
     <div>
-      <PageHeader title="Análisis de Productos" sub="Ventas agrupadas por producto base y variantes" />
-
+      <PageHeader title="Análisis de Productos" sub="Rentabilidad por gusto — total y comparado entre canales" />
       <FilterTabs
-        value={estado}
-        onChange={setEstado}
+        value={tab}
+        onChange={setTab}
         options={[
-          { value: "activos", label: "Confirmado + Producción + Entregado" },
-          { value: "Confirmado", label: "Confirmados" },
-          { value: "Produccion", label: "Producción" },
-          { value: "Entregado", label: "Entregados" },
-          { value: "Cancelado", label: "Cancelados" },
+          { value: "total", label: "Gusto total" },
+          { value: "canal", label: "Minorista vs Mayorista" },
         ]}
       />
-
-      <div className="mb-4 max-w-[200px]">
-        <Select value={canal} onChange={(e) => setCanal(e.target.value)}>
-          <option value="">Todos los canales</option>
-          <option value="Minorista">Minorista</option>
-          <option value="Mayorista">Mayorista</option>
-        </Select>
-      </div>
-
-      <Card>
-        {grupos.length === 0 ? (
-          <EmptyState text="Sin datos para este período/filtro." />
-        ) : (
-          <TableWrap>
-            <table className="w-full">
-              <thead>
-                <tr>
-                  <Th>Producto / Variante</Th>
-                  <Th>Cantidad</Th>
-                  <Th>Monto</Th>
-                  <Th>Canales</Th>
-                </tr>
-              </thead>
-              <tbody>
-                {grupos.map((g, gi) => {
-                  const variantes = Array.from(g.variantes.values());
-                  const totalCant = variantes.reduce((a, v) => a + v.cantidad, 0);
-                  const totalMonto = variantes.reduce((a, v) => a + v.monto, 0);
-                  return (
-                    <React.Fragment key={gi}>
-                      <TrHover className="bg-surface2/40">
-                        <Td main>{g.nombre}</Td>
-                        <Td main>{fNum(totalCant, 0)}</Td>
-                        <Td main>{fARS(totalMonto)}</Td>
-                        <Td>{" "}</Td>
-                      </TrHover>
-                      {variantes.length > 1 &&
-                        variantes.map((v, vi) => (
-                          <TrHover key={vi}>
-                            <Td className="pl-6">↳ {v.nombre}</Td>
-                            <Td>{fNum(v.cantidad, 0)}</Td>
-                            <Td>{fARS(v.monto)}</Td>
-                            <Td>{Array.from(v.canales).join(", ")}</Td>
-                          </TrHover>
-                        ))}
-                    </React.Fragment>
-                  );
-                })}
-              </tbody>
-            </table>
-          </TableWrap>
-        )}
-      </Card>
+      {tab === "total" ? <GustoTotalTab /> : <MinoristaMayoristaTab />}
     </div>
   );
 }
