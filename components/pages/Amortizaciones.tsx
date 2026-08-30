@@ -45,6 +45,7 @@ function emptyForm() {
   return {
     nombre: "",
     precio_total: 0,
+    valor_residual: 0,
     fecha_inicio: new Date().toISOString().slice(0, 10),
     duracion: 12,
     unidad: "Meses" as "Meses" | "Años",
@@ -120,6 +121,7 @@ function BienCard({ a, onDelete }: { a: Amortizacion; onDelete: () => void }) {
         <Stat label="Cuota mensual" value={fARS(cuota)} className="text-accent" />
         <Stat label="Amortizado" value={fARS(amortizado)} className="text-green" />
         <Stat label="Restante" value={fARS(restante)} className={restante > 0 ? "text-orange" : "text-green"} />
+        {!!a.valor_residual && <Stat label="Valor residual" value={fARS(a.valor_residual)} />}
         <Stat label="Cuotas restantes" value={String(mesesRestantes)} />
         <Stat label="Fin estimado" value={fin.toLocaleDateString("es-AR", { month: "short", year: "numeric" })} />
       </div>
@@ -163,6 +165,7 @@ export function Amortizaciones() {
       id: uid("AMORT"),
       nombre: form.nombre,
       precio_total: form.precio_total,
+      valor_residual: form.valor_residual || undefined,
       fecha_inicio: form.fecha_inicio,
       meses_totales,
     };
@@ -236,6 +239,14 @@ export function Amortizaciones() {
               onChange={(e) => setForm({ ...form, precio_total: Number(e.target.value) })}
             />
           </Field>
+          <Field label="Valor residual (opcional)">
+            <Input
+              type="number"
+              value={form.valor_residual}
+              onChange={(e) => setForm({ ...form, valor_residual: Number(e.target.value) })}
+              placeholder="Valor de reventa al final de la vida útil"
+            />
+          </Field>
           <Field label="Fecha de inicio">
             <Input type="date" value={form.fecha_inicio} onChange={(e) => setForm({ ...form, fecha_inicio: e.target.value })} />
           </Field>
@@ -253,7 +264,8 @@ export function Amortizaciones() {
           <InfoRow
             label="Cuota mensual estimada"
             value={fARS(
-              form.precio_total / Math.max(1, form.unidad === "Años" ? form.duracion * 12 : form.duracion)
+              (form.precio_total - form.valor_residual) /
+                Math.max(1, form.unidad === "Años" ? form.duracion * 12 : form.duracion)
             )}
             color="gold"
           />
