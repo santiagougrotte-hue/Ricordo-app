@@ -2,6 +2,7 @@ import type {
   RicordoData,
   Ingrediente,
   Pedido,
+  EstadoPago,
   TipoCosto,
   Amortizacion,
   CajaMovimiento,
@@ -651,6 +652,38 @@ export function movimientoCajaDeseadoDePedido(pedido: Pedido): CajaMovimiento | 
   const monto = montoPagadoPedido(pedido);
   if (monto <= 0) return null;
   return { ...crearMovimientoCajaDesdePedido(pedido), monto };
+}
+
+/** Aplica un cobro a las líneas de un pedido, en orden (waterfall): llena la primera línea con
+ * saldo antes de tocar la siguiente, sumando a lo que cada una ya tenía cobrado — así "cobrar
+ * $5.000 más" sobre un Parcial funciona igual que el primer cobro. Una línea que llega a cubrir
+ * su precio_neto pasa a Pagado sola. Pura — no toca caja_movimientos, para eso ver
+ * sincronizarCajaDePedidos() sobre el resultado. */
+export function aplicarCobroAPedido(pedidos: Pedido[], idPedido: string, monto: number): Pedido[] {
+  let restante = monto;
+  return pedidos.map((p) => {
+    if (p.id_pedido !== idPedido || restante <= 0) return p;
+    const saldo = saldoPedido(p);
+    if (saldo <= 0) return p;
+    const aplicar = Math.min(saldo, restante);
+    restante -= aplicar;
+    const nuevoPagado = montoPagadoPedido(p) + aplicar;
+    const estado_pago: EstadoPago = nuevoPagado >= p.precio_neto ? "Pagado" : "Parcial";
+    return { ...p, estado_pago, monto_pagado: estado_pago === "Parcial" ? nuevoPagado : undefined };
+  });
+}
+
+/** Upsert del movimiento de caja de cada línea Entregada de una tanda de pedidos (crear, o
+ * actualizar el existente si cambió cuánto se cobró) — para usar tras crear/editar un pedido o
+ * cambiar su estado de pago. A propósito NO quita el movimiento de un pedido que deja de estar
+ * Entregado: ese caso se revisa a mano en Caja, nunca se borra solo. */
+export function sincronizarCajaDePedidos(caja_movimientos: CajaMovimiento[], pedidos: Pedido[]): CajaMovimiento[] {
+  let result = caja_movimientos;
+  for (const p of pedidos) {
+    if (p.estado !== "Entregado") continue;
+    result = sincronizarMovimientoCaja(result, p.id_detalle, movimientoCajaDeseadoDePedido(p));
+  }
+  return result;
 }
 
 export interface ComprasVsConsumoMes {

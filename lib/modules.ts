@@ -54,6 +54,7 @@ export const MODULES: ModuleDef[] = [
         label: "Pedidos",
         subtabs: [
           { key: "pedidos", label: "Pedidos", page: "pedidos" },
+          { key: "cuentas-por-cobrar", label: "Por cobrar", page: "cuentas-por-cobrar" },
           { key: "envios", label: "Envíos", page: "envios" },
         ],
       },
@@ -188,6 +189,7 @@ export const PAGE_LABELS: Record<string, string> = {
   compras: "Compras",
   proveedores: "Proveedores",
   "informe-control": "Informe de Control",
+  "cuentas-por-cobrar": "Cuentas por Cobrar",
   familias: "Familias",
   stock: "Stock",
   produccion: "Producción",

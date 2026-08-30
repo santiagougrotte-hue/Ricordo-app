@@ -3,6 +3,7 @@ import { ALL_PAGE_KEYS } from "@/lib/modules";
 import { Placeholder } from "./Placeholder";
 import { Dashboard } from "./Dashboard";
 import { Pedidos } from "./Pedidos";
+import { CuentasPorCobrar } from "./CuentasPorCobrar";
 import { Clientes } from "./Clientes";
 import { Productos } from "./Productos";
 import { Recetas } from "./Recetas";
@@ -47,6 +48,7 @@ export const PAGES: Record<string, React.ComponentType> = Object.fromEntries(
 
 PAGES.dashboard = Dashboard;
 PAGES.pedidos = Pedidos;
+PAGES["cuentas-por-cobrar"] = CuentasPorCobrar;
 PAGES.clientes = Clientes;
 PAGES.productos = Productos;
 PAGES.recetas = Recetas;

@@ -29,8 +29,8 @@ import {
 import { Modal } from "@/components/Modal";
 import { Wizard } from "@/components/Wizard";
 import { FileAttach } from "@/components/FileAttach";
-import { crearMovimientoCajaDesdePedido, fARS, inPeriod } from "@/lib/calc";
-import type { Adjunto, Canal, EstadoPedido, Pedido } from "@/lib/types";
+import { sincronizarCajaDePedidos, saldoPedido, aplicarCobroAPedido, fARS, inPeriod } from "@/lib/calc";
+import type { Adjunto, Canal, EstadoPago, EstadoPedido, Pedido } from "@/lib/types";
 
 type Confianza = "alta" | "media" | "baja";
 
@@ -58,6 +58,13 @@ const ESTADO_COLOR: Record<EstadoPedido, "blue" | "orange" | "green" | "red"> = 
   Entregado: "green",
   Cancelado: "red",
 };
+const ESTADOS_PAGO: EstadoPago[] = ["Pagado", "Parcial", "Pendiente", "Reembolsado"];
+const ESTADO_PAGO_COLOR: Record<EstadoPago, "blue" | "orange" | "green" | "red"> = {
+  Pagado: "green",
+  Parcial: "orange",
+  Pendiente: "red",
+  Reembolsado: "blue",
+};
 const LETRAS = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
 
 interface LineaPedido {
@@ -76,11 +83,15 @@ function emptyOrderForm() {
   return {
     id_cliente: "",
     fecha: new Date().toISOString().slice(0, 10),
+    fecha_entrega: "",
     estado: "Confirmado" as EstadoPedido,
     canal: "Minorista" as Canal,
     km_envio: 0,
     costo_envio: 0,
     metodo_pago: "",
+    estado_pago: "Pagado" as EstadoPago,
+    monto_pagado: 0,
+    fecha_vencimiento: "",
     notas: "",
     lineas: [emptyLinea()],
     adjunto: undefined as Adjunto | undefined,
@@ -96,10 +107,14 @@ function emptyEditForm() {
     precio_unitario: 0,
     descuento_monto: 0,
     fecha: new Date().toISOString().slice(0, 10),
+    fecha_entrega: "",
     canal: "Minorista" as Canal,
     km_envio: 0,
     costo_envio: 0,
     metodo_pago: "",
+    estado_pago: "Pagado" as EstadoPago,
+    monto_pagado: 0,
+    fecha_vencimiento: "",
     notas: "",
     adjunto: undefined as Adjunto | undefined,
   };
@@ -199,6 +214,7 @@ function PedidosTab() {
 
   const [estadoFiltro, setEstadoFiltro] = useState("todos");
   const [canalFiltro, setCanalFiltro] = useState("");
+  const [soloSinCobrar, setSoloSinCobrar] = useState(false);
   const [search, setSearch] = useState("");
 
   const [orderModalOpen, setOrderModalOpen] = useState(false);
@@ -221,6 +237,7 @@ function PedidosTab() {
       .filter((p) => inPeriod(p.fecha, mes, anio))
       .filter((p) => estadoFiltro === "todos" || p.estado === estadoFiltro)
       .filter((p) => !canalFiltro || p.canal === canalFiltro)
+      .filter((p) => !soloSinCobrar || saldoPedido(p) > 0)
       .filter((p) => {
         if (!search) return true;
         const s = search.toLowerCase();
@@ -228,7 +245,7 @@ function PedidosTab() {
         return p.nombre_producto.toLowerCase().includes(s) || nombreCliente.toLowerCase().includes(s);
       })
       .sort((a, b) => new Date(b.fecha).getTime() - new Date(a.fecha).getTime());
-  }, [data.pedidos, data.clientes, mes, anio, estadoFiltro, canalFiltro, search]);
+  }, [data.pedidos, data.clientes, mes, anio, estadoFiltro, canalFiltro, soloSinCobrar, search]);
 
   // Agrupa las líneas por pedido para mostrar cada orden junta, aunque tenga varios productos.
   const agrupados = useMemo(() => {
@@ -300,7 +317,7 @@ function PedidosTab() {
       ...emptyOrderForm(),
       id_cliente: pasteResultado.cliente.id ?? "",
       canal: pasteResultado.canal ?? "Minorista",
-      fecha: pasteResultado.fecha_entrega ?? new Date().toISOString().slice(0, 10),
+      fecha_entrega: pasteResultado.fecha_entrega ?? "",
       notas: pasteResultado.notas || "",
       lineas: lineasDesdeItems.length > 0 ? lineasDesdeItems : [emptyLinea()],
     });
@@ -328,10 +345,14 @@ function PedidosTab() {
       precio_unitario: p.precio_unitario,
       descuento_monto: p.descuento_monto,
       fecha: p.fecha,
+      fecha_entrega: p.fecha_entrega ?? "",
       canal: p.canal,
       km_envio: p.km_envio,
       costo_envio: p.costo_envio,
       metodo_pago: p.metodo_pago ?? "",
+      estado_pago: p.estado_pago ?? "Pagado",
+      monto_pagado: p.monto_pagado ?? p.precio_neto,
+      fecha_vencimiento: p.fecha_vencimiento ?? "",
       notas: p.notas ?? "",
       adjunto: p.adjunto,
     });
@@ -352,6 +373,13 @@ function PedidosTab() {
     (acc, l) => acc + (l.precio_unitario * l.cantidad - l.descuento_monto),
     0
   );
+
+  // Un producto sin canal propio (todavía no migrado a variantes por canal) aparece en las dos
+  // listas; uno con canal cargado solo aparece en la del canal que le corresponde — así el
+  // precio que se autocompleta ya es el de la lista de precios correcta.
+  function productosDelCanal(canal: Canal) {
+    return data.productos.filter((p) => p.activo !== false && (!p.canal || p.canal === canal));
+  }
 
   function guardarOrden() {
     if (!orderForm.id_cliente) {
@@ -391,26 +419,25 @@ function PedidosTab() {
         descuento_monto: l.descuento_monto,
         precio_neto: neto,
         fecha: orderForm.fecha,
+        fecha_entrega: orderForm.fecha_entrega || undefined,
         estado: orderForm.estado,
         canal: orderForm.canal,
         km_envio: orderForm.km_envio,
         costo_envio: orderForm.costo_envio,
         metodo_pago: orderForm.metodo_pago,
+        estado_pago: orderForm.estado_pago,
+        monto_pagado: orderForm.estado_pago === "Parcial" ? orderForm.monto_pagado : undefined,
+        fecha_vencimiento: orderForm.fecha_vencimiento || undefined,
         notas: orderForm.notas,
         adjunto: orderForm.adjunto,
       };
     });
 
-    setData((d) => {
-      let caja_movimientos = d.caja_movimientos;
-      if (orderForm.estado === "Entregado") {
-        const nuevosMovs = nuevos
-          .filter((p) => !caja_movimientos.some((m) => m.ref === p.id_detalle))
-          .map((p) => crearMovimientoCajaDesdePedido(p));
-        caja_movimientos = [...caja_movimientos, ...nuevosMovs];
-      }
-      return { ...d, pedidos: [...d.pedidos, ...nuevos], caja_movimientos };
-    });
+    setData((d) => ({
+      ...d,
+      pedidos: [...d.pedidos, ...nuevos],
+      caja_movimientos: sincronizarCajaDePedidos(d.caja_movimientos, nuevos),
+    }));
     toast(lineasValidas.length > 1 ? `Pedido creado con ${lineasValidas.length} productos` : "Pedido creado");
     setOrderModalOpen(false);
   }
@@ -428,41 +455,72 @@ function PedidosTab() {
     }
     const total = editForm.precio_unitario * editForm.cantidad;
     const neto = total - editForm.descuento_monto;
-    setData((d) => ({
-      ...d,
-      pedidos: d.pedidos.map((p) =>
+    setData((d) => {
+      const pedidos = d.pedidos.map((p) =>
         p.id_detalle === editing
-          ? { ...p, ...editForm, nombre_producto: producto?.nombre ?? p.nombre_producto, precio_total: total, precio_neto: neto }
+          ? {
+              ...p,
+              ...editForm,
+              fecha_entrega: editForm.fecha_entrega || undefined,
+              monto_pagado: editForm.estado_pago === "Parcial" ? editForm.monto_pagado : undefined,
+              fecha_vencimiento: editForm.fecha_vencimiento || undefined,
+              nombre_producto: producto?.nombre ?? p.nombre_producto,
+              precio_total: total,
+              precio_neto: neto,
+            }
           : p
-      ),
-    }));
+      );
+      const editado = pedidos.find((p) => p.id_detalle === editing)!;
+      return { ...d, pedidos, caja_movimientos: sincronizarCajaDePedidos(d.caja_movimientos, [editado]) };
+    });
     toast("Pedido actualizado");
     setEditModalOpen(false);
   }
 
   // El estado es del pedido entero, no de cada línea de producto — cambiar uno cambia todas
-  // las líneas de ese id_pedido a la vez. Al marcar "Entregado" se crea automáticamente el
-  // ingreso en Caja de cada línea (idempotente por ref = id_detalle). Si un pedido sale de
-  // "Entregado" los movimientos ya creados no se tocan — quedan para revisar en Caja.
+  // las líneas de ese id_pedido a la vez. Al marcar "Entregado" se crea/actualiza automáticamente
+  // el ingreso en Caja de cada línea según lo efectivamente cobrado (idempotente por ref =
+  // id_detalle). Si un pedido sale de "Entregado" los movimientos ya creados no se tocan —
+  // quedan para revisar en Caja.
   function cambiarEstadoPedido(idPedido: string, estado: EstadoPedido) {
     setData((d) => {
       const pedidos = d.pedidos.map((p) => (p.id_pedido === idPedido ? { ...p, estado } : p));
-      let caja_movimientos = d.caja_movimientos;
-      if (estado === "Entregado") {
-        const lineasDelPedido = pedidos.filter((p) => p.id_pedido === idPedido);
-        const nuevosMovs = lineasDelPedido
-          .filter((p) => !caja_movimientos.some((m) => m.ref === p.id_detalle))
-          .map((p) => crearMovimientoCajaDesdePedido(p));
-        caja_movimientos = [...caja_movimientos, ...nuevosMovs];
-      }
-      return { ...d, pedidos, caja_movimientos };
+      const lineasDelPedido = pedidos.filter((p) => p.id_pedido === idPedido);
+      return { ...d, pedidos, caja_movimientos: sincronizarCajaDePedidos(d.caja_movimientos, lineasDelPedido) };
     });
     toast(`Estado → ${estado}`);
   }
 
+  const [cobrarModalOpen, setCobrarModalOpen] = useState(false);
+  const [cobrarPedidoId, setCobrarPedidoId] = useState<string | null>(null);
+  const [cobrarMonto, setCobrarMonto] = useState(0);
+
+  function abrirCobrar(idPedido: string, saldoActual: number) {
+    setCobrarPedidoId(idPedido);
+    setCobrarMonto(saldoActual);
+    setCobrarModalOpen(true);
+  }
+
+  function confirmarCobro() {
+    if (!cobrarPedidoId || cobrarMonto <= 0) {
+      toast("Ingresá un monto mayor a 0", "error");
+      return;
+    }
+    setData((d) => {
+      const pedidos = aplicarCobroAPedido(d.pedidos, cobrarPedidoId, cobrarMonto);
+      const lineasDelPedido = pedidos.filter((p) => p.id_pedido === cobrarPedidoId);
+      return { ...d, pedidos, caja_movimientos: sincronizarCajaDePedidos(d.caja_movimientos, lineasDelPedido) };
+    });
+    toast("Cobro registrado");
+    setCobrarModalOpen(false);
+  }
+
+  // Soft-delete: un pedido nunca se borra físicamente (afecta caja/CMV/rentabilidad histórica) —
+  // se anula pasándolo a "Cancelado", el mismo estado que ya libera reservas y se excluye de CMV.
   function eliminar(idDetalle: string) {
-    setData((d) => ({ ...d, pedidos: d.pedidos.filter((p) => p.id_detalle !== idDetalle) }));
-    toast("Pedido eliminado", "info");
+    if (!confirm("¿Cancelar este pedido? Queda anulado pero no se borra — se puede consultar en el filtro \"Cancelados\".")) return;
+    setData((d) => ({ ...d, pedidos: d.pedidos.map((p) => (p.id_detalle === idDetalle ? { ...p, estado: "Cancelado" as EstadoPedido } : p)) }));
+    toast("Pedido cancelado", "info");
   }
 
   return (
@@ -495,6 +553,9 @@ function PedidosTab() {
           <option value="Minorista">Minorista</option>
           <option value="Mayorista">Mayorista</option>
         </Select>
+        <Button variant={soloSinCobrar ? "primary" : "ghost"} onClick={() => setSoloSinCobrar((v) => !v)}>
+          Sin cobrar
+        </Button>
       </div>
 
       <Card>
@@ -516,6 +577,7 @@ function PedidosTab() {
                 {agrupados.map((grupo) => {
                   const primero = grupo[0];
                   const totalOrden = grupo.reduce((acc, p) => acc + p.precio_neto, 0);
+                  const saldoGrupo = grupo.reduce((acc, p) => acc + saldoPedido(p), 0);
                   return (
                     <React.Fragment key={primero.id_pedido}>
                       <tr className="bg-surface2/60">
@@ -549,6 +611,17 @@ function PedidosTab() {
                                 <span className="text-text3">Total pedido:&nbsp;</span>
                                 <span className="font-semibold text-accent">{fARS(totalOrden)}</span>
                               </span>
+                              {saldoGrupo > 0 && (
+                                <>
+                                  <span className="text-[12.5px]">
+                                    <span className="text-text3">Saldo:&nbsp;</span>
+                                    <span className="font-semibold text-red">{fARS(saldoGrupo)}</span>
+                                  </span>
+                                  <Button size="sm" onClick={() => abrirCobrar(primero.id_pedido, saldoGrupo)}>
+                                    Cobrar
+                                  </Button>
+                                </>
+                              )}
                               <Badge color={ESTADO_COLOR[primero.estado]}>{primero.estado}</Badge>
                               <Select
                                 value={primero.estado}
@@ -574,7 +647,12 @@ function PedidosTab() {
                           <Td>{p.cantidad}</Td>
                           <Td main>{fARS(p.precio_neto)}</Td>
                           <Td>
-                            <Badge color={ESTADO_COLOR[p.estado]}>{p.estado}</Badge>
+                            <div className="flex flex-wrap gap-1">
+                              <Badge color={ESTADO_COLOR[p.estado]}>{p.estado}</Badge>
+                              {(p.estado_pago ?? "Pagado") !== "Pagado" && (
+                                <Badge color={ESTADO_PAGO_COLOR[p.estado_pago ?? "Pagado"]}>{p.estado_pago}</Badge>
+                              )}
+                            </div>
                           </Td>
                           <Td>
                             <div className="flex gap-1.5">
@@ -582,7 +660,7 @@ function PedidosTab() {
                                 Editar
                               </Button>
                               <Button size="sm" variant="danger" onClick={() => eliminar(p.id_detalle)}>
-                                Eliminar
+                                Cancelar
                               </Button>
                             </div>
                           </Td>
@@ -612,17 +690,32 @@ function PedidosTab() {
             content: (
               <div className="grid grid-cols-1 gap-3.5 sm:grid-cols-2">
                 <Field label="Cliente" full>
-                  <Select value={orderForm.id_cliente} onChange={(e) => setOrderForm({ ...orderForm, id_cliente: e.target.value })}>
+                  <Select
+                    value={orderForm.id_cliente}
+                    onChange={(e) => {
+                      const cliente = data.clientes.find((c) => c.id === e.target.value);
+                      setOrderForm({ ...orderForm, id_cliente: e.target.value, canal: cliente?.canal ?? orderForm.canal });
+                    }}
+                  >
                     <option value="">Seleccionar…</option>
-                    {data.clientes.map((c) => (
-                      <option key={c.id} value={c.id}>
-                        {c.nombre}
-                      </option>
-                    ))}
+                    {data.clientes
+                      .filter((c) => c.activo !== false)
+                      .map((c) => (
+                        <option key={c.id} value={c.id}>
+                          {c.nombre}
+                        </option>
+                      ))}
                   </Select>
                 </Field>
                 <Field label="Fecha">
                   <Input type="date" value={orderForm.fecha} onChange={(e) => setOrderForm({ ...orderForm, fecha: e.target.value })} />
+                </Field>
+                <Field label="Fecha de entrega">
+                  <Input
+                    type="date"
+                    value={orderForm.fecha_entrega}
+                    onChange={(e) => setOrderForm({ ...orderForm, fecha_entrega: e.target.value })}
+                  />
                 </Field>
                 <Field label="Canal">
                   <Select value={orderForm.canal} onChange={(e) => setOrderForm({ ...orderForm, canal: e.target.value as Canal })}>
@@ -672,7 +765,7 @@ function PedidosTab() {
                           }}
                         >
                           <option value="">Producto…</option>
-                          {data.productos.map((p) => (
+                          {productosDelCanal(orderForm.canal).map((p) => (
                             <option key={p.id} value={p.id}>
                               {p.nombre}
                             </option>
@@ -749,6 +842,43 @@ function PedidosTab() {
                   <Field label="Método de pago">
                     <Input value={orderForm.metodo_pago} onChange={(e) => setOrderForm({ ...orderForm, metodo_pago: e.target.value })} />
                   </Field>
+                  <Field label="Estado de pago">
+                    <Select
+                      value={orderForm.estado_pago}
+                      onChange={(e) => {
+                        const estado_pago = e.target.value as EstadoPago;
+                        setOrderForm({
+                          ...orderForm,
+                          estado_pago,
+                          monto_pagado: estado_pago === "Parcial" && orderForm.monto_pagado === 0 ? totalOrden : orderForm.monto_pagado,
+                        });
+                      }}
+                    >
+                      {ESTADOS_PAGO.map((e) => (
+                        <option key={e} value={e}>
+                          {e}
+                        </option>
+                      ))}
+                    </Select>
+                  </Field>
+                  {orderForm.estado_pago === "Parcial" && (
+                    <Field label="Monto pagado">
+                      <Input
+                        type="number"
+                        value={orderForm.monto_pagado}
+                        onChange={(e) => setOrderForm({ ...orderForm, monto_pagado: Number(e.target.value) })}
+                      />
+                    </Field>
+                  )}
+                  {orderForm.estado_pago !== "Pagado" && (
+                    <Field label="Fecha de vencimiento">
+                      <Input
+                        type="date"
+                        value={orderForm.fecha_vencimiento}
+                        onChange={(e) => setOrderForm({ ...orderForm, fecha_vencimiento: e.target.value })}
+                      />
+                    </Field>
+                  )}
                   <Field label="Notas" full>
                     <Textarea rows={2} value={orderForm.notas} onChange={(e) => setOrderForm({ ...orderForm, notas: e.target.value })} />
                   </Field>
@@ -803,11 +933,13 @@ function PedidosTab() {
           <Field label="Cliente">
             <Select value={editForm.id_cliente} onChange={(e) => setEditForm({ ...editForm, id_cliente: e.target.value })}>
               <option value="">Seleccionar…</option>
-              {data.clientes.map((c) => (
-                <option key={c.id} value={c.id}>
-                  {c.nombre}
-                </option>
-              ))}
+              {data.clientes
+                .filter((c) => c.activo !== false || c.id === editForm.id_cliente)
+                .map((c) => (
+                  <option key={c.id} value={c.id}>
+                    {c.nombre}
+                  </option>
+                ))}
             </Select>
           </Field>
           <Field label="Producto">
@@ -819,7 +951,7 @@ function PedidosTab() {
               }}
             >
               <option value="">Seleccionar…</option>
-              {data.productos.map((p) => (
+              {productosDelCanal(editForm.canal).map((p) => (
                 <option key={p.id} value={p.id}>
                   {p.nombre}
                 </option>
@@ -879,6 +1011,38 @@ function PedidosTab() {
           <Field label="Método de pago">
             <Input value={editForm.metodo_pago} onChange={(e) => setEditForm({ ...editForm, metodo_pago: e.target.value })} />
           </Field>
+          <Field label="Estado de pago">
+            <Select
+              value={editForm.estado_pago}
+              onChange={(e) => {
+                const estado_pago = e.target.value as EstadoPago;
+                setEditForm({
+                  ...editForm,
+                  estado_pago,
+                  monto_pagado: estado_pago === "Parcial" && editForm.monto_pagado === 0 ? editForm.precio_unitario * editForm.cantidad : editForm.monto_pagado,
+                });
+              }}
+            >
+              {ESTADOS_PAGO.map((e) => (
+                <option key={e} value={e}>
+                  {e}
+                </option>
+              ))}
+            </Select>
+          </Field>
+          {editForm.estado_pago === "Parcial" && (
+            <Field label="Monto pagado">
+              <Input type="number" value={editForm.monto_pagado} onChange={(e) => setEditForm({ ...editForm, monto_pagado: Number(e.target.value) })} />
+            </Field>
+          )}
+          {editForm.estado_pago !== "Pagado" && (
+            <Field label="Fecha de vencimiento">
+              <Input type="date" value={editForm.fecha_vencimiento} onChange={(e) => setEditForm({ ...editForm, fecha_vencimiento: e.target.value })} />
+            </Field>
+          )}
+          <Field label="Fecha de entrega">
+            <Input type="date" value={editForm.fecha_entrega} onChange={(e) => setEditForm({ ...editForm, fecha_entrega: e.target.value })} />
+          </Field>
           <Field label="Notas" full>
             <Textarea rows={2} value={editForm.notas} onChange={(e) => setEditForm({ ...editForm, notas: e.target.value })} />
           </Field>
@@ -886,6 +1050,26 @@ function PedidosTab() {
             <FileAttach value={editForm.adjunto} onChange={(adjunto) => setEditForm({ ...editForm, adjunto })} />
           </Field>
         </FormGrid>
+      </Modal>
+
+      {/* Cobrar pedido: registra el pago (parcial o total) en pocos clics — no hace falta pasar
+          por el modal de edición completo. */}
+      <Modal
+        open={cobrarModalOpen}
+        onClose={() => setCobrarModalOpen(false)}
+        title="Cobrar pedido"
+        footer={
+          <>
+            <Button variant="ghost" onClick={() => setCobrarModalOpen(false)}>
+              Cancelar
+            </Button>
+            <Button onClick={confirmarCobro}>Registrar cobro</Button>
+          </>
+        }
+      >
+        <Field label="Monto cobrado ahora">
+          <Input type="number" value={cobrarMonto} onChange={(e) => setCobrarMonto(Number(e.target.value))} />
+        </Field>
       </Modal>
 
       {/* Pegar de WhatsApp: la IA propone, el usuario confirma — nunca guarda nada directo. */}
