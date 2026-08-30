@@ -7,7 +7,15 @@ import { useToast } from "@/lib/toast";
 import { uid } from "@/lib/id";
 import { useIaClient } from "@/lib/ia-client";
 import { compressImageFile } from "@/lib/image-compress";
-import { comprasVsConsumoUltimosMeses, fARS, fPct, pvr } from "@/lib/calc";
+import {
+  comprasVsConsumoUltimosMeses,
+  comprasActivas,
+  movimientoCajaDeseadoDeCompra,
+  sincronizarMovimientoCaja,
+  fARS,
+  fPct,
+  pvr,
+} from "@/lib/calc";
 import {
   PageHeader,
   Button,
@@ -75,14 +83,17 @@ export function Compras() {
   const [modalOpen, setModalOpen] = useState(false);
   const [editing, setEditing] = useState<string | null>(null);
   const [form, setForm] = useState(emptyForm());
+  const [mostrarAnuladas, setMostrarAnuladas] = useState(false);
+
+  const comprasVisibles = mostrarAnuladas ? data.compras : comprasActivas(data);
 
   const now = new Date();
-  const comprasMes = data.compras.filter((c) => {
+  const comprasMes = comprasActivas(data).filter((c) => {
     const d = new Date(c.fecha);
     return d.getMonth() === now.getMonth() && d.getFullYear() === now.getFullYear();
   });
   const totalMes = comprasMes.reduce((acc, c) => acc + c.total, 0);
-  const totalHistorico = data.compras.reduce((acc, c) => acc + c.total, 0);
+  const totalHistorico = comprasActivas(data).reduce((acc, c) => acc + c.total, 0);
 
   const totalCalculado = useMemo(
     () =>
@@ -215,7 +226,7 @@ export function Compras() {
       metodo_pago: c.metodo_pago ?? "",
       total_manual: c.total_manual,
       total: c.total,
-      registrar_caja: false,
+      registrar_caja: c.registrar_caja,
       lineas: c.lineas,
       lineasPkg: c.lineasPkg,
       adjunto: c.adjunto,
@@ -244,7 +255,7 @@ export function Compras() {
       total,
       lineas: form.lineas.filter((l) => l.id_ingrediente),
       lineasPkg: form.lineasPkg.filter((l) => l.id_packaging),
-      registrar_caja: false,
+      registrar_caja: form.registrar_caja,
       adjunto: form.adjunto,
     };
 
@@ -292,21 +303,14 @@ export function Compras() {
         ? d.compras.map((c) => (c.id === editing ? compraGuardada : c))
         : [...d.compras, compraGuardada];
 
-      const caja_movimientos =
-        !editing && form.registrar_caja
-          ? [
-              ...d.caja_movimientos,
-              {
-                id: uid("CAJ"),
-                fecha: form.fecha,
-                tipo: "egreso" as const,
-                concepto: `Compra${proveedor ? " — " + proveedor.nombre : ""}${form.descripcion ? ": " + form.descripcion : ""}`,
-                monto: total,
-                metodo: form.metodo_pago || "Efectivo",
-                ref: compraGuardada.id,
-              },
-            ]
-          : d.caja_movimientos;
+      // Upsert (no solo "crear si falta"): editar una compra ya guardada — cambiar el monto, el
+      // método de pago, o tildar/destildar "Registrar en caja" — actualiza su egreso en Caja en
+      // vez de dejarlo desactualizado, algo que antes solo pasaba al crearla por primera vez.
+      const caja_movimientos = sincronizarMovimientoCaja(
+        d.caja_movimientos,
+        compraGuardada.id,
+        movimientoCajaDeseadoDeCompra(compraGuardada, proveedor?.nombre)
+      );
 
       return { ...d, ingredientes, packaging, historial_precios: historial, compras, caja_movimientos };
     });
@@ -315,9 +319,30 @@ export function Compras() {
     setModalOpen(false);
   }
 
+  // Soft-delete: una compra nunca se borra físicamente (afecta stock, costo vigente y caja
+  // históricos) — se anula, lo que además retira su egreso de Caja si tenía uno.
   function eliminar(id: string) {
-    setData((d) => ({ ...d, compras: d.compras.filter((c) => c.id !== id) }));
-    toast("Compra eliminada", "info");
+    if (!confirm("¿Anular esta compra? Se excluye de stock, costos y caja, pero el registro queda para trazabilidad.")) return;
+    setData((d) => {
+      const compras = d.compras.map((c) => (c.id === id ? { ...c, anulada: true } : c));
+      const anulada = compras.find((c) => c.id === id)!;
+      return { ...d, compras, caja_movimientos: sincronizarMovimientoCaja(d.caja_movimientos, id, movimientoCajaDeseadoDeCompra(anulada)) };
+    });
+    toast("Compra anulada", "info");
+  }
+
+  function reactivar(id: string) {
+    setData((d) => {
+      const compras = d.compras.map((c) => (c.id === id ? { ...c, anulada: false } : c));
+      const reactivada = compras.find((c) => c.id === id)!;
+      const proveedor = data.proveedores.find((p) => p.id === reactivada.id_proveedor);
+      return {
+        ...d,
+        compras,
+        caja_movimientos: sincronizarMovimientoCaja(d.caja_movimientos, id, movimientoCajaDeseadoDeCompra(reactivada, proveedor?.nombre)),
+      };
+    });
+    toast("Compra reactivada");
   }
 
   return (
@@ -327,6 +352,9 @@ export function Compras() {
         sub="Historial con actualización automática de precios"
         right={
           <>
+            <Button variant={mostrarAnuladas ? "primary" : "ghost"} onClick={() => setMostrarAnuladas((v) => !v)}>
+              {mostrarAnuladas ? "Ocultar anuladas" : "Mostrar anuladas"}
+            </Button>
             <Button variant="ghost" onClick={abrirTicketModal}>
               <ScanLine className="h-3.5 w-3.5" /> Escanear ticket
             </Button>
@@ -338,7 +366,7 @@ export function Compras() {
       <StatGrid>
         <KpiCard label="Compras del mes" value={fARS(totalMes)} color="gold" />
         <KpiCard label="Total histórico" value={fARS(totalHistorico)} color="blue" />
-        <KpiCard label="Registros" value={data.compras.length} color="purple" />
+        <KpiCard label="Registros" value={comprasActivas(data).length} color="purple" />
       </StatGrid>
 
       <Card title="Compras vs. consumo real (últimos 3 meses)" className="mb-4" color="orange">
@@ -386,7 +414,7 @@ export function Compras() {
       </Card>
 
       <Card color="orange">
-        {data.compras.length === 0 ? (
+        {comprasVisibles.length === 0 ? (
           <EmptyState text="Sin compras registradas." />
         ) : (
           <TableWrap>
@@ -402,15 +430,16 @@ export function Compras() {
                 </tr>
               </thead>
               <tbody>
-                {[...data.compras]
+                {[...comprasVisibles]
                   .sort((a, b) => new Date(b.fecha).getTime() - new Date(a.fecha).getTime())
                   .map((c) => (
-                    <TrHover key={c.id}>
+                    <TrHover key={c.id} className={c.anulada ? "opacity-50" : undefined}>
                       <Td>{c.fecha}</Td>
                       <Td>{data.proveedores.find((p) => p.id === c.id_proveedor)?.nombre ?? "—"}</Td>
                       <Td main>
                         <div className="flex items-center gap-1.5">
                           {c.descripcion || "—"}
+                          {c.anulada && <Badge color="red">Anulada</Badge>}
                           {c.adjunto && (
                             <a href={c.adjunto.data} download={c.adjunto.nombre} title={c.adjunto.nombre} className="text-text3 hover:text-accent">
                               <Paperclip className="h-3.5 w-3.5" />
@@ -425,9 +454,15 @@ export function Compras() {
                           <Button size="sm" variant="ghost" onClick={() => openEdit(c)}>
                             Editar
                           </Button>
-                          <Button size="sm" variant="danger" onClick={() => eliminar(c.id)}>
-                            Eliminar
-                          </Button>
+                          {c.anulada ? (
+                            <Button size="sm" variant="green" onClick={() => reactivar(c.id)}>
+                              Reactivar
+                            </Button>
+                          ) : (
+                            <Button size="sm" variant="danger" onClick={() => eliminar(c.id)}>
+                              Anular
+                            </Button>
+                          )}
                         </div>
                       </Td>
                     </TrHover>

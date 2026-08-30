@@ -6,7 +6,7 @@ import { useEntityCrud } from "@/lib/useEntity";
 import { useToast } from "@/lib/toast";
 import { uid } from "@/lib/id";
 import { useStore } from "@/lib/store";
-import { fARS } from "@/lib/calc";
+import { comprasActivas, fARS } from "@/lib/calc";
 import {
   PageHeader,
   Button,
@@ -38,7 +38,7 @@ export function Proveedores() {
   const [form, setForm] = useState(emptyForm());
 
   const totalCompras = (idProveedor: string) =>
-    data.compras.filter((c) => c.id_proveedor === idProveedor).reduce((acc, c) => acc + c.total, 0);
+    comprasActivas(data).filter((c) => c.id_proveedor === idProveedor).reduce((acc, c) => acc + c.total, 0);
 
   function openNew() {
     setEditing(null);

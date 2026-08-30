@@ -9,6 +9,7 @@ import {
   calcStockIngrediente,
   cmvAcumulado,
   comprasAcumuladas,
+  comprasActivas,
   fARS,
   fFechaCorta,
   fNum,
@@ -287,7 +288,7 @@ function MateriasPrimasTab() {
       return acc + costoUnit * p.cantidad;
     }, 0);
 
-  const comprasMes = data.compras.filter((c) => inPeriod(c.fecha, mes, anio)).reduce((acc, c) => acc + c.total, 0);
+  const comprasMes = comprasActivas(data).filter((c) => inPeriod(c.fecha, mes, anio)).reduce((acc, c) => acc + c.total, 0);
 
   function guardarSaldos() {
     setData((d) => ({

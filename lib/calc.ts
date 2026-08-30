@@ -3,6 +3,7 @@ import type {
   Ingrediente,
   Pedido,
   EstadoPago,
+  Compra,
   TipoCosto,
   Amortizacion,
   CajaMovimiento,
@@ -345,6 +346,29 @@ function consumoIngredienteEnProduccion(data: RicordoData, prod: Produccion, idI
   return cantidadPorPaquete * prod.cantidad;
 }
 
+/** Compras no anuladas — la fuente para cualquier total, costo o stock derivado de compras.
+ * Una compra anulada (soft-delete) se conserva en data.compras para trazabilidad, pero no debe
+ * contar en ningún cálculo: ver Compra.anulada en lib/types.ts. */
+export function comprasActivas(data: RicordoData): Compra[] {
+  return data.compras.filter((c) => !c.anulada);
+}
+
+/** El movimiento de egreso que debería existir en caja para una compra — null si está anulada o
+ * si el usuario no marcó "Registrar en caja". Usar con sincronizarMovimientoCaja() para crear o
+ * actualizar (nunca duplicar) tanto al guardar como al editar una compra. */
+export function movimientoCajaDeseadoDeCompra(compra: Compra, nombreProveedor?: string): CajaMovimiento | null {
+  if (compra.anulada || !compra.registrar_caja) return null;
+  return {
+    id: uid("CAJ"),
+    fecha: compra.fecha,
+    tipo: "egreso",
+    concepto: `Compra${nombreProveedor ? " — " + nombreProveedor : ""}${compra.descripcion ? ": " + compra.descripcion : ""}`,
+    monto: compra.total,
+    metodo: compra.metodo_pago || "Efectivo",
+    ref: compra.id,
+  };
+}
+
 export function calcStockIngrediente(data: RicordoData, idIngrediente: string): number {
   const conteos = data.conteos_ingredientes
     .filter((c) => c.id_ingrediente === idIngrediente)
@@ -354,7 +378,7 @@ export function calcStockIngrediente(data: RicordoData, idIngrediente: string): 
   const fechaBase = ultimo?.fecha ?? null;
 
   let compradoPost = 0;
-  for (const compra of data.compras) {
+  for (const compra of comprasActivas(data)) {
     if (fechaBase && new Date(compra.fecha) <= new Date(fechaBase)) continue;
     for (const linea of compra.lineas) {
       if (linea.id_ingrediente === idIngrediente) compradoPost += linea.cantidad;
@@ -712,7 +736,7 @@ export function comprasVsConsumoUltimosMeses(
     const d = new Date(hoy.getFullYear(), hoy.getMonth() - i, 1);
     const mes = d.getMonth() + 1;
     const anio = d.getFullYear();
-    const compras = data.compras.filter((c) => inPeriod(c.fecha, mes, anio)).reduce((acc, c) => acc + c.total, 0);
+    const compras = comprasActivas(data).filter((c) => inPeriod(c.fecha, mes, anio)).reduce((acc, c) => acc + c.total, 0);
     const pedidosMes = data.pedidos.filter((p) => p.estado === "Entregado" && inPeriod(p.fecha, mes, anio));
     const consumoVendido = cmvPeriodo(data, pedidosMes);
     const diferencia = compras - consumoVendido;
@@ -851,7 +875,7 @@ export function cmvAcumulado(data: RicordoData): number {
 }
 
 export function comprasAcumuladas(data: RicordoData): number {
-  const post = data.compras.filter((c) => isAfter(c.fecha, data.fecha_corte_compras));
+  const post = comprasActivas(data).filter((c) => isAfter(c.fecha, data.fecha_corte_compras));
   return (data.saldo_compras_anterior ?? 0) + post.reduce((acc, c) => acc + c.total, 0);
 }
 

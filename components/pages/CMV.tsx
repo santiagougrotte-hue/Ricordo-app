@@ -4,7 +4,7 @@ import React, { useState } from "react";
 import { useStore } from "@/lib/store";
 import { useToast } from "@/lib/toast";
 import { usePeriod } from "@/lib/period";
-import { cmvAcumulado, cmvPeriodo, comprasAcumuladas, fARS, inPeriod } from "@/lib/calc";
+import { cmvAcumulado, cmvPeriodo, comprasAcumuladas, comprasActivas, fARS, inPeriod } from "@/lib/calc";
 import { Card, PageHeader, StatGrid, KpiCard, Field, Input, Button, InfoRow } from "@/components/ui";
 
 export function CMV() {
@@ -22,7 +22,7 @@ export function CMV() {
 
   const pedidosMes = data.pedidos.filter((p) => p.estado === "Entregado" && inPeriod(p.fecha, mes, anio));
   const cmvMes = cmvPeriodo(data, pedidosMes);
-  const comprasMes = data.compras.filter((c) => inPeriod(c.fecha, mes, anio)).reduce((a, c) => a + c.total, 0);
+  const comprasMes = comprasActivas(data).filter((c) => inPeriod(c.fecha, mes, anio)).reduce((a, c) => a + c.total, 0);
 
   function guardar() {
     setData((d) => ({

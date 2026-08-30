@@ -245,9 +245,10 @@ function cantidadNativaDeGramos(unidad: string, gramos: number): number {
   return gramos; // g/ml/unidad — se muestra tal cual (unidad tiene su propia conversión aparte)
 }
 
-function redondearArribaPractico(cantidad: number): number {
-  // redondea a 3 decimales antes de aplicar ceil, para no llevar un 2.9999999 de punto
-  // flotante a 3 cuando en realidad son exactamente 3.
+/** Redondea a 3 decimales antes de aplicar ceil, para no llevar un 2,9999999 de punto flotante
+ * a 3 cuando en realidad son exactamente 3 — "para arriba" porque siempre es mejor comprar de
+ * más que quedarse corto en un ingrediente. */
+export function redondearArribaPractico(cantidad: number): number {
   return Math.ceil(Math.round(cantidad * 1000) / 1000);
 }
 

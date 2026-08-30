@@ -15,6 +15,7 @@ import {
   calcularComposicionGusto,
   reescalarLineasComponente,
   calcularCuadroNecesidadPorGusto,
+  redondearArribaPractico,
   type ReferenciaVentasGusto,
   type TendenciaVentas,
 } from "@/lib/planificacion";
@@ -582,12 +583,25 @@ function CuadroNecesidadTabla({
     return i.unidadesConversion !== undefined ? i.unidadesConversion : i.cantidadNativa;
   }
 
+  // Descuenta el stock actual antes de armar el borrador — pedir la necesidad total sin restar
+  // lo que ya hay hace comprar de más cada vez que queda stock parcial cubierto.
   function generarOrdenDeCompra() {
-    const lineas = cuadro.ingredientes.map((i) => ({
-      id_ingrediente: i.id_ingrediente,
-      cantidad: i.unidadesConversion !== undefined ? i.unidadesConversion : i.cantidadNativaRedondeada,
-      precio_unitario: pvr(data.ingredientes.find((ing) => ing.id === i.id_ingrediente)),
-    }));
+    const lineas = cuadro.ingredientes
+      .map((i) => {
+        const stockActual = calcStockIngrediente(data, i.id_ingrediente);
+        const faltaExacta = Math.max(0, cantidadParaComparar(i) - stockActual);
+        const cantidad = i.unidadesConversion !== undefined ? Math.ceil(faltaExacta) : redondearArribaPractico(faltaExacta);
+        return {
+          id_ingrediente: i.id_ingrediente,
+          cantidad,
+          precio_unitario: pvr(data.ingredientes.find((ing) => ing.id === i.id_ingrediente)),
+        };
+      })
+      .filter((l) => l.cantidad > 0);
+    if (lineas.length === 0) {
+      toast("El stock actual ya cubre toda la necesidad — no hay nada que comprar", "info");
+      return;
+    }
     setData((d) => ({
       ...d,
       borrador_compra_pendiente: {
