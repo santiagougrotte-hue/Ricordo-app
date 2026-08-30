@@ -739,7 +739,7 @@ export interface RecurrenciaMayorista {
  * En riesgo = recurrente pero sin comprar hace más de `umbralDias`. */
 export function recurrenciaMayorista(data: RicordoData, umbralDias: number, hoy: Date = new Date()): RecurrenciaMayorista[] {
   return data.clientes
-    .filter((c) => c.canal === "Mayorista")
+    .filter((c) => c.canal === "Mayorista" && c.activo !== false)
     .map((cliente) => {
       const pedidos = data.pedidos.filter((p) => p.id_cliente === cliente.id && p.estado !== "Cancelado");
       const idsUnicos = new Set(pedidos.map((p) => p.id_pedido));

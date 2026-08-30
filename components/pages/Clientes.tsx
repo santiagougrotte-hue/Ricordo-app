@@ -18,17 +18,36 @@ import {
   Field,
   Input,
   Select,
+  Textarea,
   StatGrid,
   KpiCard,
   FilterTabs,
 } from "@/components/ui";
 import { Modal } from "@/components/Modal";
-import { fARS, fNum, recurrenciaMayorista } from "@/lib/calc";
+import { fARS, fNum, recurrenciaMayorista, segmentacionClientes, type SegmentoCliente } from "@/lib/calc";
 import type { Canal, Cliente } from "@/lib/types";
 
 function emptyForm() {
-  return { nombre: "", canal: "Minorista" as Canal, direccion: "", telefono: "", email: "" };
+  return {
+    nombre: "",
+    canal: "Minorista" as Canal,
+    direccion: "",
+    telefono: "",
+    email: "",
+    notas: "",
+    fecha_alta: new Date().toISOString().slice(0, 10),
+  };
 }
+
+const SEGMENTO_COLOR: Record<SegmentoCliente, "green" | "blue" | "red" | "purple" | "orange" | "gold"> = {
+  Nuevo: "blue",
+  Activo: "green",
+  Frecuente: "gold",
+  VIP: "purple",
+  Mayorista: "purple",
+  "En riesgo": "orange",
+  Inactivo: "red",
+};
 
 const ESTADO_RECURRENCIA_COLOR: Record<string, "green" | "blue" | "red"> = {
   Recurrente: "green",
@@ -106,23 +125,31 @@ function TodosTab() {
   const [editing, setEditing] = useState<string | null>(null);
   const [form, setForm] = useState(emptyForm());
   const [historialCliente, setHistorialCliente] = useState<string | null>(null);
+  const [mostrarBajas, setMostrarBajas] = useState(false);
+
+  const segmentos = useMemo(() => segmentacionClientes(data), [data]);
 
   const stats = useMemo(() => {
-    return data.clientes.map((c) => {
-      const pedidos = data.pedidos.filter((p) => p.id_cliente === c.id && p.estado !== "Cancelado");
-      const idsUnicos = new Set(pedidos.map((p) => p.id_pedido));
-      const total = pedidos.reduce((acc, p) => acc + p.precio_neto, 0);
-      return {
-        cliente: c,
-        totalGastado: total,
-        cantidadPedidos: idsUnicos.size,
-        ticketPromedio: idsUnicos.size > 0 ? total / idsUnicos.size : 0,
-      };
-    });
-  }, [data.clientes, data.pedidos]);
+    return data.clientes
+      .filter((c) => mostrarBajas || c.activo !== false)
+      .map((c) => {
+        const pedidos = data.pedidos.filter((p) => p.id_cliente === c.id && p.estado !== "Cancelado");
+        const idsUnicos = new Set(pedidos.map((p) => p.id_pedido));
+        const total = pedidos.reduce((acc, p) => acc + p.precio_neto, 0);
+        const segmento = segmentos.find((s) => s.cliente.id === c.id)?.segmento;
+        return {
+          cliente: c,
+          totalGastado: total,
+          cantidadPedidos: idsUnicos.size,
+          ticketPromedio: idsUnicos.size > 0 ? total / idsUnicos.size : 0,
+          segmento,
+        };
+      });
+  }, [data.clientes, data.pedidos, segmentos, mostrarBajas]);
 
-  const totalClientes = data.clientes.length;
-  const mayoristas = data.clientes.filter((c) => c.canal === "Mayorista").length;
+  const activos = data.clientes.filter((c) => c.activo !== false);
+  const totalClientes = activos.length;
+  const mayoristas = activos.filter((c) => c.canal === "Mayorista").length;
   const totalFacturado = stats.reduce((acc, s) => acc + s.totalGastado, 0);
 
   function openNew() {
@@ -139,6 +166,8 @@ function TodosTab() {
       direccion: c.direccion ?? "",
       telefono: c.telefono ?? "",
       email: c.email ?? "",
+      notas: c.notas ?? "",
+      fecha_alta: c.fecha_alta ?? "",
     });
     setModalOpen(true);
   }
@@ -155,15 +184,23 @@ function TodosTab() {
       }));
       toast("Cliente actualizado");
     } else {
-      setData((d) => ({ ...d, clientes: [...d.clientes, { id: uid("CLI"), ...form }] }));
+      setData((d) => ({ ...d, clientes: [...d.clientes, { id: uid("CLI"), activo: true, ...form }] }));
       toast("Cliente creado");
     }
     setModalOpen(false);
   }
 
+  // Soft-delete: un cliente con historial de pedidos nunca se borra físicamente — se da de baja
+  // (activo: false), se excluye de las pantallas por defecto pero conserva sus ventas intactas.
   function eliminar(id: string) {
-    setData((d) => ({ ...d, clientes: d.clientes.filter((c) => c.id !== id) }));
-    toast("Cliente eliminado", "info");
+    if (!confirm("¿Dar de baja este cliente? Su historial de pedidos se conserva.")) return;
+    setData((d) => ({ ...d, clientes: d.clientes.map((c) => (c.id === id ? { ...c, activo: false } : c)) }));
+    toast("Cliente dado de baja", "info");
+  }
+
+  function reactivar(id: string) {
+    setData((d) => ({ ...d, clientes: d.clientes.map((c) => (c.id === id ? { ...c, activo: true } : c)) }));
+    toast("Cliente reactivado");
   }
 
   const historial = historialCliente
@@ -175,7 +212,10 @@ function TodosTab() {
 
   return (
     <div>
-      <div className="mb-4 flex justify-end">
+      <div className="mb-4 flex justify-end gap-2">
+        <Button variant={mostrarBajas ? "primary" : "ghost"} onClick={() => setMostrarBajas((v) => !v)}>
+          {mostrarBajas ? "Ocultar dados de baja" : "Mostrar dados de baja"}
+        </Button>
         <Button onClick={openNew}>+ Nuevo</Button>
       </div>
 
@@ -195,6 +235,7 @@ function TodosTab() {
                 <tr>
                   <Th>Nombre</Th>
                   <Th>Canal</Th>
+                  <Th>Segmento</Th>
                   <Th>Teléfono</Th>
                   <Th>Total gastado</Th>
                   <Th>Pedidos</Th>
@@ -203,12 +244,13 @@ function TodosTab() {
                 </tr>
               </thead>
               <tbody>
-                {stats.map(({ cliente: c, totalGastado, cantidadPedidos, ticketPromedio }) => (
-                  <TrHover key={c.id}>
+                {stats.map(({ cliente: c, totalGastado, cantidadPedidos, ticketPromedio, segmento }) => (
+                  <TrHover key={c.id} className={c.activo === false ? "opacity-50" : undefined}>
                     <Td main>{c.nombre}</Td>
                     <Td>
                       <Badge color={c.canal === "Mayorista" ? "purple" : "blue"}>{c.canal}</Badge>
                     </Td>
+                    <Td>{segmento && <Badge color={SEGMENTO_COLOR[segmento]}>{segmento}</Badge>}</Td>
                     <Td>{c.telefono || "—"}</Td>
                     <Td>{fARS(totalGastado)}</Td>
                     <Td>{cantidadPedidos}</Td>
@@ -221,9 +263,15 @@ function TodosTab() {
                         <Button size="sm" variant="ghost" onClick={() => openEdit(c)}>
                           Editar
                         </Button>
-                        <Button size="sm" variant="danger" onClick={() => eliminar(c.id)}>
-                          Eliminar
-                        </Button>
+                        {c.activo === false ? (
+                          <Button size="sm" variant="green" onClick={() => reactivar(c.id)}>
+                            Reactivar
+                          </Button>
+                        ) : (
+                          <Button size="sm" variant="danger" onClick={() => eliminar(c.id)}>
+                            Dar de baja
+                          </Button>
+                        )}
                       </div>
                     </Td>
                   </TrHover>
@@ -263,8 +311,14 @@ function TodosTab() {
           <Field label="Email">
             <Input value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} />
           </Field>
+          <Field label="Fecha de alta">
+            <Input type="date" value={form.fecha_alta} onChange={(e) => setForm({ ...form, fecha_alta: e.target.value })} />
+          </Field>
           <Field label="Dirección" full>
             <Input value={form.direccion} onChange={(e) => setForm({ ...form, direccion: e.target.value })} />
+          </Field>
+          <Field label="Notas" full>
+            <Textarea rows={2} value={form.notas} onChange={(e) => setForm({ ...form, notas: e.target.value })} />
           </Field>
         </FormGrid>
       </Modal>
