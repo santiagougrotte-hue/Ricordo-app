@@ -5,7 +5,8 @@ import { useStore } from "@/lib/store";
 import { useToast } from "@/lib/toast";
 import { STORAGE_KEY } from "@/lib/types";
 import { fNum } from "@/lib/calc";
-import { Card, PageHeader, Field, Input, Button, InfoRow, TableWrap, Th, Td, TrHover, EmptyState } from "@/components/ui";
+import { migrarAV2, type ReporteMigracion } from "@/lib/migration/v2";
+import { Card, PageHeader, Field, Input, Button, InfoRow, TableWrap, Th, Td, TrHover, EmptyState, Badge } from "@/components/ui";
 
 export function Config() {
   const { data, setData, resetToEmpty, reloadSeed } = useStore();
@@ -13,6 +14,12 @@ export function Config() {
   const [valor, setValor] = useState(data.tipo_cambio.valor);
   const [fuente, setFuente] = useState(data.tipo_cambio.fuente);
   const fileRef = useRef<HTMLInputElement>(null);
+  const [reporteV2, setReporteV2] = useState<ReporteMigracion | null>(null);
+
+  function generarReporteV2() {
+    const { reporte } = migrarAV2(data);
+    setReporteV2(reporte);
+  }
 
   const totalTokensIa = useMemo(
     () => data.ia_log.reduce((acc, l) => acc + l.tokens_entrada + l.tokens_salida, 0),
@@ -114,6 +121,18 @@ export function Config() {
         )}
       </Card>
 
+      <Card title="Migración a esquema V2" className="mb-4">
+        <p className="mb-3 text-[12.5px] text-text3">
+          Genera una vista previa de cómo quedarían tus datos con el esquema nuevo (productos con
+          variantes, un solo libro de inventario, finanzas unificadas). No guarda nada — corre
+          sobre los datos actuales y solo muestra el resultado.
+        </p>
+        <div className="mb-3">
+          <Button onClick={generarReporteV2}>Generar reporte de migración</Button>
+        </div>
+        {reporteV2 && <ReporteMigracionVista reporte={reporteV2} />}
+      </Card>
+
       <Card title="Copia de seguridad">
         <div className="flex flex-wrap gap-3">
           <Button onClick={exportar}>💾 Exportar datos</Button>
@@ -145,6 +164,68 @@ export function Config() {
           </Button>
         </div>
       </Card>
+    </div>
+  );
+}
+
+function ReporteMigracionVista({ reporte }: { reporte: ReporteMigracion }) {
+  const secciones = Object.entries(reporte.conteos);
+  return (
+    <div>
+      <TableWrap>
+        <table className="w-full">
+          <thead>
+            <tr>
+              <Th>Sección</Th>
+              <Th>Migrados</Th>
+              <Th>Fusionados</Th>
+            </tr>
+          </thead>
+          <tbody>
+            {secciones.map(([seccion, { migrados, fusionados }]) => (
+              <TrHover key={seccion}>
+                <Td main>{seccion}</Td>
+                <Td>{fNum(migrados, 0)}</Td>
+                <Td>{fusionados > 0 ? fNum(fusionados, 0) : "—"}</Td>
+              </TrHover>
+            ))}
+          </tbody>
+        </table>
+      </TableWrap>
+
+      <ListaRevision titulo="Conflictos (dos fuentes no coinciden)" color="red" items={reporte.conflictos} />
+      <ListaRevision titulo="Referencias faltantes" color="orange" items={reporte.referencias_faltantes} />
+      <ListaRevision titulo="Revisión manual" color="purple" items={reporte.revision_manual} />
+    </div>
+  );
+}
+
+function ListaRevision({
+  titulo,
+  color,
+  items,
+}: {
+  titulo: string;
+  color: "red" | "orange" | "purple";
+  items: ReporteMigracion["conflictos"];
+}) {
+  return (
+    <div className="mt-4">
+      <div className="mb-2 flex items-center gap-2">
+        <span className="text-[13px] font-semibold text-text2">{titulo}</span>
+        <Badge color={items.length === 0 ? "green" : color}>{items.length}</Badge>
+      </div>
+      {items.length === 0 ? (
+        <EmptyState text="Sin casos." />
+      ) : (
+        <ul className="flex flex-col gap-2">
+          {items.map((item) => (
+            <li key={item.id} className="rounded-md border border-border bg-surface2/40 p-2.5 text-[12.5px] text-text2">
+              {item.motivo}
+            </li>
+          ))}
+        </ul>
+      )}
     </div>
   );
 }
