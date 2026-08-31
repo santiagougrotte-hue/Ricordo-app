@@ -341,20 +341,44 @@ function migrarRecetas(
       receta_items.push({ id: uid("RECI"), receta_id: recetaId, insumo_id: linea.id_ingrediente, etapa: "relleno", cantidad: linea.cantidad });
     }
 
-    // Variantes de esta familia que además tienen RecetaLinea propia (modelo viejo) — si el costo
-    // que daba esa fuente vieja difiere del que da la receta derivada nueva, no se elige una: se
-    // registra el conflicto (mismo criterio que ya usaba informeControl() en la app vieja).
+    // Variantes de esta familia: su RecetaLinea propia (modelo viejo) se trata distinto según el
+    // tipo. Packaging (y Costo Fijo) siempre fueron propios de cada variante en la app vieja —
+    // ni siquiera "conflictan", el modelo derivado nunca los incluía — así que se migran directo.
+    // Ingrediente sí es la fuente vieja que la receta derivada reemplaza: si la variante ya está
+    // migrada al modelo base/venta (tiene unidades_por_paquete), esas líneas son historial que
+    // contradice la fuente nueva y se registra como conflicto en vez de fusionarlas a ciegas.
     const variantesDeEstaFamilia = data.productos.filter((p) => p.id_base === productoV2.id);
     for (const variante of variantesDeEstaFamilia) {
       const lineasViejas = data.recetas.filter((r) => r.id_producto === variante.id);
       if (lineasViejas.length === 0) continue;
       const estaMigrada = variante.unidades_por_paquete != null;
-      if (estaMigrada) {
+      const lineasIngrediente = lineasViejas.filter((l) => l.tipo === "Ingrediente");
+      const lineasPackaging = lineasViejas.filter((l) => l.tipo === "Packaging");
+      const lineasCostoFijo = lineasViejas.filter((l) => l.tipo === "CostoFijo");
+
+      if (estaMigrada && lineasIngrediente.length > 0) {
         agregar("conflictos", {
           seccion: "recetas",
           entidad_id: variante.id,
-          motivo: `"${variante.nombre}" tiene recetas por las dos vías: la derivada del producto base y ${lineasViejas.length} línea(s) de receta propia (modelo viejo). Se adoptó la receta derivada como la vigente en el esquema nuevo — revisar si las líneas viejas representan un ajuste real (cargarlo como ajuste_receta_variante) o son solo historial que ya no aplica.`,
-          detalle: { lineas_viejas: lineasViejas.map((l) => ({ tipo: l.tipo, concepto: l.concepto, cantidad: l.cantidad })) },
+          motivo: `"${variante.nombre}" tiene recetas de ingredientes por las dos vías: la derivada del producto base y ${lineasIngrediente.length} línea(s) de receta propia (modelo viejo). Se adoptó la receta derivada como la vigente en el esquema nuevo — revisar si las líneas viejas representan un ajuste real (cargarlo como ajuste_receta_variante) o son solo historial que ya no aplica.`,
+          detalle: { lineas_viejas: lineasIngrediente.map((l) => ({ tipo: l.tipo, concepto: l.concepto, cantidad: l.cantidad })) },
+        });
+      }
+      for (const linea of lineasPackaging) {
+        if (!insumoIds.has(linea.concepto)) {
+          agregar("referencias_faltantes", {
+            seccion: "ajustes_receta_variante",
+            entidad_id: linea.id,
+            motivo: `Línea de packaging propia de "${variante.nombre}" apunta a "${linea.concepto}", que no existe en el catálogo actual.`,
+          });
+        }
+        ajustes_receta_variante.push({ id: uid("AJR"), variante_id: variante.id, insumo_id: linea.concepto, operacion: "sumar", cantidad: linea.cantidad, etapa: "packaging" });
+      }
+      for (const linea of lineasCostoFijo) {
+        agregar("revision_manual", {
+          seccion: "receta_items",
+          entidad_id: linea.id,
+          motivo: `Línea de receta de "${variante.nombre}" es de tipo CostoFijo (${linea.concepto}) — el esquema nuevo no tiene un lugar directo para un costo fijo dentro de una receta; no se migró. Cargar manualmente como categoría en Finanzas si sigue aplicando.`,
         });
       }
     }
