@@ -799,6 +799,7 @@ const State = {
     if(!this.data.sessionHistory) this.data.sessionHistory = [];
     if(!this.data.exerciseSwaps) this.data.exerciseSwaps = {};
     if(!this.data.sessionLog) this.data.sessionLog = {};
+    if(!this.data.sessionMeta) this.data.sessionMeta = {};
     return this.data;
   },
   save(){ localStorage.setItem(STORE_KEY, JSON.stringify(this.data)); },
@@ -815,7 +816,8 @@ const State = {
       progressionLogs:{}, // exerciseId -> { w1:{peso,series,reps,rpe,obs}, ... w6:{...} }
       sessionHistory:[], // [{week, day, dayLabel, dayType, phase, date, exercisesTotal, exercisesDone, complete}]
       exerciseSwaps:{}, // key: `${week}-${day}-${origExId}` -> newExId
-      sessionLog:{} // key: `${week}-${day}-${exId}` -> [{peso,reps,rir}, ...]
+      sessionLog:{}, // key: `${week}-${day}-${exId}` -> [{peso,reps,rir,...}, ...]
+      sessionMeta:{} // key: `${week}-${day}-${exId}` -> {rodilla,calidad,obs}
     };
   }
 };
@@ -1093,9 +1095,52 @@ const EX = {
   power_snatch:{name:'Power Snatch (Avanzado)', cat:'Potencia', muscles:'Cadena posterior completa, core, hombros', goal:'Potencia total y coordinación olímpica avanzada',
     desc:'Derivado olímpico avanzado. Extensión triple explosiva y recepción directa sobre la cabeza con codos bloqueados. Solo para atletas con experiencia previa.',
     errors:['Recibir sin bloquear los codos','No completar la extensión triple antes de recibir'], progreg:'Solo introducir cuando hang high pull y hang power clean estén dominados (semana 5+).', video:'power snatch technique olympic lifting'},
-  bounds:{name:'Bounds (Zancadas Pliométricas)', cat:'Pliometría', muscles:'Cadena extensora, glúteos, isquiotibiales', goal:'Potencia horizontal y zancada pliométrica',
-    desc:'Zancadas exageradas hacia adelante con impulso explosivo en cada paso, maximizando la distancia horizontal y la altura de la zancada.',
-    errors:['Aterrizaje rígido sin absorción','Torso excesivamente inclinado hacia adelante'], progreg:'Progresión: bounds dobles o con carga.', video:'bounding plyometric stride power'}
+  // ===== Gimnasio específico fútbol =====
+  adductor_rock_back:{name:'Adductor Rock Back', cat:'Movilidad', muscles:'Aductores, cadera medial', goal:'Movilidad de aductores y apertura de cadera',
+    desc:'En cuadrupedia, desplazar el peso hacia el costado abriendo la cadera sin que el tronco rote. Volver lento.',
+    errors:['Compensar con el tronco','Perder la columna neutra'], progreg:'Progresión: mayor rango de movimiento.', video:'adductor rockback hip mobility'},
+  glute_bridge_bw:{name:'Puente de Glúteos', cat:'Movilidad', muscles:'Glúteo mayor, isquiotibiales', goal:'Activación de cadena posterior',
+    desc:'Boca arriba, pies apoyados. Empujar la cadera hacia arriba apretando los glúteos al tope. Bajar controlado.',
+    errors:['Hiperextender la zona lumbar','No llegar a extensión completa'], progreg:'Progresión: unipodal.', video:'glute bridge activation bodyweight'},
+  trap_bar_dl:{name:'Trap Bar Deadlift', cat:'Fuerza', muscles:'Cuádriceps, glúteos, isquiotibiales, erectores', goal:'Fuerza de tren inferior con menor estrés lumbar',
+    desc:'Dentro de la trap bar, agarre neutro. Extender caderas y rodillas simultáneamente. Concéntrica explosiva, excéntrica controlada.',
+    errors:['Redondar la espalda','Levantar caderas antes que hombros'], progreg:'Progresión: aumentar carga manteniendo técnica.', video:'trap bar deadlift technique hex bar'},
+  lat_pulldown:{name:'Jalón al Pecho', cat:'Fuerza', muscles:'Dorsal ancho, bíceps, romboides', goal:'Fuerza de tracción vertical',
+    desc:'Sentado en la máquina, jalar la barra hasta el pecho con escápulas hacia abajo y hacia adentro.',
+    errors:['Tirar hacia la nuca','Usar impulso del tronco'], progreg:'Progresión: aumentar carga.', video:'lat pulldown technique form'},
+  intermittent_circuit:{name:'Circuito Intermitente Lateral', cat:'Resistencia', muscles:'Aductores, abductores, tren inferior, sistema cardiovascular', goal:'Resistencia intermitente en espacio reducido 2×2m',
+    desc:'Centro → 2 pasos laterales rápidos derecha → centro → 2 pasos izquierda → centro → 2 pasos adelante → retroceso. Repetir 20s. Descanso 20s. Postura atlética, rodillas levemente flexionadas, NO cruzar los pies. Intensidad ~8/10.',
+    errors:['Cruzar los pies en desplazamiento lateral','Perder la postura atlética por fatiga','Centro de gravedad demasiado alto'], progreg:'Sem 1: 2×6 rondas · Sem 2: 2×7 · Sem 3-4: 2×8 · Sem 5+: 2×9. NO superar 2 bloques.', video:'lateral shuffle agility drill intermittent conditioning'},
+  cossack_squat:{name:'Cossack Squat', cat:'Movilidad', muscles:'Aductores, cadera, isquiotibiales', goal:'Movilidad de cadera y tobillo',
+    desc:'De pie, flexionar una rodilla lateralmente mientras la otra pierna se extiende. Pie plano en el suelo.',
+    errors:['Despegar el talón','Caer hacia adelante con el tronco'], progreg:'Progresión: mayor profundidad.', video:'cossack squat mobility hip'},
+  leg_swings:{name:'Leg Swings', cat:'Movilidad', muscles:'Flexores de cadera, isquiotibiales', goal:'Movilidad dinámica de cadera',
+    desc:'Apoyado en la pared, balancear la pierna hacia adelante y atrás aumentando gradualmente el rango.',
+    errors:['Forzar el rango','No controlar el tronco'], progreg:'Variante lateral para aductores/abductores.', video:'leg swings dynamic hip mobility'},
+  a_skip:{name:'A-Skip', cat:'Coordinación', muscles:'Flexores de cadera, pantorrillas, core', goal:'Mecánica de carrera — frecuencia y posición de rodilla',
+    desc:'Salto suave alternando rodillas en alto. Pie de apoyo activo. Torso erguido, brazos activos.',
+    errors:['Rodilla no llega a la cadera','Pie de apoyo pasivo'], progreg:'Progresión: A-run a mayor velocidad.', video:'a skip drill running mechanics'},
+  sprint_20:{name:'Sprint 20 metros', cat:'Velocidad', muscles:'Tren inferior completo, glúteos', goal:'Velocidad máxima — aceleración completa',
+    desc:'Sprint 95-100% durante 20m desde posición estática. Inclinación hacia adelante los primeros metros, postura vertical al final. Brazos activos.',
+    errors:['Frenar antes de terminar','Torso muy erguido al inicio','Zancadas largas en los primeros metros'], progreg:'Progresión: resistencia (trineo liviano).', video:'20 meter sprint technique acceleration'},
+  single_leg_hop_fwd:{name:'Salto Unipodal Adelante + Estabilización', cat:'Pliometría', muscles:'Cuádriceps, glúteos, pantorrillas (unilateral)', goal:'Potencia unilateral, estabilidad de rodilla y control de aterrizaje',
+    desc:'Saltar hacia adelante desde un pie, aterrizar sobre el mismo. Estabilizar 1-2s antes del siguiente. Rodilla alineada con el pie.',
+    errors:['Rodilla colapsando hacia adentro','No estabilizar antes de reiniciar','Aterrizaje rígido'], progreg:'Progresión: encadenar saltos sin pausa.', video:'single leg hop forward landing stability'},
+  lateral_hop_uni:{name:'Saltos Laterales Unipodales', cat:'Pliometría', muscles:'Glúteo medio, aductores, cuádriceps (unilateral)', goal:'Potencia lateral y estabilidad en cambio de dirección',
+    desc:'Salto lateral desde un pie, aterrizar sobre el mismo con control. Rodilla sin colapsar. Luego saltar hacia el otro lado.',
+    errors:['Rodilla colapsando hacia adentro','Aterrizaje inestable'], progreg:'Progresión: mayor distancia lateral.', video:'lateral hop single leg plyometric stability'},
+  lateral_jump_to_vertical:{name:'Salto Lateral + Salto Vertical', cat:'Pliometría', muscles:'Cadena extensora completa, aductores', goal:'Absorber fuerza lateral y convertirla en fuerza vertical',
+    desc:'Salto lateral → estabilización breve → inmediatamente salto vertical máximo. Transición rápida entre los dos planos.',
+    errors:['Pausa demasiado larga entre saltos','Aterrizaje lateral inestable'], progreg:'Progresión: reducir la pausa hasta hacerlos reactivos.', video:'lateral jump to vertical jump plyometric transition'},
+  mini_hurdle_sprint:{name:'Mini Valla + Aterrizaje + Salida', cat:'Pliometría', muscles:'Cuádriceps, glúteos, pantorrillas, flexores de cadera', goal:'Transición entre aterrizaje y aceleración',
+    desc:'Superar una mini valla baja, aterrizar controlado y reaccionar inmediatamente con una salida de 3-5m. Altura baja al principio.',
+    errors:['Aterrizaje rígido','Perder equilibrio al aterrizar','Salida lenta'], progreg:'Progresión: aumentar la altura de la valla.', video:'mini hurdle landing acceleration sprint'},
+  step_up_explosive:{name:'Step-Up Explosivo con Mancuernas', cat:'Potencia', muscles:'Cuádriceps, glúteos (unilateral)', goal:'Potencia unilateral — transferencia a aceleración',
+    desc:'Apoyar completamente el pie sobre el banco. Impulsar fuerte con la pierna de arriba. Bajar controlado. Evitar impulso excesivo de la pierna trasera.',
+    errors:['Empujar demasiado con la pierna trasera','Bajar sin control','Inclinarse excesivamente'], progreg:'Progresión: mayor carga o altura del banco.', video:'explosive step up dumbbell power unilateral'},
+  jump_squat:{name:'Jump Squat con Carga', cat:'Potencia', muscles:'Cuádriceps, glúteos, pantorrillas', goal:'Potencia vertical explosiva — conversión fuerza → velocidad',
+    desc:'Con carga liviana, salto vertical máximo. Aterrizar controlado. Detener la serie si cae la altura del salto.',
+    errors:['Sobrecargar perdiendo velocidad','Aterrizaje rígido','No llegar a extensión completa'], progreg:'Progresión: aumentar carga levemente sin perder altura.', video:'jump squat loaded power plyometric'}
 };
 
 /* ---------- Categorías funcionales (independiente de cat de biblioteca) ---------- */
@@ -1138,6 +1183,16 @@ const FUNC_CAT = {
   med_ball_slam:'POTENCIA', db_high_pull:'POTENCIA', power_snatch:'POTENCIA',
   ab_wheel:'CORE', cable_chop:'CORE', v_up:'CORE', knee_raise:'CORE',
   hip_thrust:'FUERZA',
+  // Gimnasio fútbol — Miércoles + Viernes
+  adductor_rock_back:'MOVILIDAD', glute_bridge_bw:'MOVILIDAD',
+  cossack_squat:'MOVILIDAD', leg_swings:'MOVILIDAD',
+  trap_bar_dl:'FUERZA', lat_pulldown:'FUERZA',
+  intermittent_circuit:'RESISTENCIA',
+  a_skip:'COORDINACIÓN',
+  sprint_20:'VELOCIDAD',
+  single_leg_hop_fwd:'PLIOMETRÍA', lateral_hop_uni:'PLIOMETRÍA',
+  lateral_jump_to_vertical:'PLIOMETRÍA', mini_hurdle_sprint:'PLIOMETRÍA',
+  step_up_explosive:'POTENCIA', jump_squat:'POTENCIA',
 };
 
 /* ---------- Generador de programa 12 semanas ---------- */
@@ -1180,100 +1235,116 @@ const Program = {
     if(deload){ load -= 10; }
     return { sets: deload?2:3, reps:'3-5', rpe:'3-5', load:Math.round(load) };
   },
-  // día 0=Piernas A (Lun), 1=Tren Superior (Mié), 2=Piernas B (Vie)
-  dayLabel(d){ return ['Lunes','Miércoles','Viernes'][d]; },
-  dayType(d){ return ['Piernas A','Tren Superior','Piernas B'][d]; },
-  sessionFocus(d){ return ['Piernas A — Explosividad + único CoD de la semana','Tren Superior — Potencia + único bloque de resistencia','Piernas B — Cadena posterior + pliometría distinta'][d]; },
+  // día 0=Miércoles (Fuerza+Hiper+Resistencia), 1=Viernes (Velocidad+Plyo+Potencia)
+  dayLabel(d){ return ['Miércoles','Viernes'][d]; },
+  dayType(d){ return ['Fuerza + Hipertrofia + Resistencia','Velocidad + Pliometría + Potencia'][d]; },
+  sessionFocus(d){ return ['Fuerza + Hipertrofia + Resistencia Intermitente — 55-60 min','Velocidad + Pliometría + Potencia — 50-60 min (calidad neuromuscular)'][d]; },
 
   buildDay(week, day){
-    const phase = this.phaseOf(week);
-    const routine = this.routineOf(week); // 'A' (semanas impares) o 'B' (semanas pares)
-    const principal = this.strengthPrincipal(week);
-    const secondary = this.strengthSecondary(week);
-    const power = this.powerScheme(week);
+    const routine = this.routineOf(week); // 'A' semanas impares, 'B' semanas pares
     const deload = this.isDeload(week);
     const mkEx = (id, sets, reps, rest, rpe, load, sup=null) => ({id, sets, reps, rest, rpe, load, sup});
 
-    const mobilityCycles = [
-      ['band_walk','hip_openers','glute_activation'],
-      ['shoulder_dislocates','worlds_greatest','ankle_mobility'],
-      ['ankle_mobility','worlds_greatest','glute_activation']
-    ];
-    const resistanceSelect = (pool)=> pool[(phase.id-1) % pool.length];
-    const aerobicPool = ['assault_bike','row_erg','aerobic_intervals','ski_erg'];
-    const rpe7 = deload?'6':'7', rpe8 = deload?'6':'8';
+    // Fuerza progression: 4 series normales, 3 en descarga
+    const strSets = deload ? 3 : 4;
+    const strReps = deload ? '4' : '4-5';
+    const rpe78 = deload ? '6-7' : '7-8';
+
+    // Intermittent circuit progression by week
+    const icRounds = week <= 2 ? '2×6' : week <= 4 ? '2×7' : week <= 6 ? '2×8' : '2×9';
 
     let blocks = [];
 
     if(day===0){
-      // ===== LUNES (Piernas) — estructura idéntica A/B, ejercicios distintos =====
-      const oly = routine==='B' ? 'hang_power_clean' : 'hang_high_pull';
-      const mainLift = phase.id===3 ? 'front_squat' : 'back_squat';
-      const plyoItems = routine==='B'
-        ? [mkEx('cmj','3','4-5','90-120s','—','peso corporal'), mkEx('lateral_bound','3','4-5 c/lado','90-120s','—','peso corporal')]
-        : [mkEx('box_jump','3','4-5','90-120s','—','peso corporal'), mkEx('broad_jump','3','4-5','90-120s','—','peso corporal')];
-      const coreItems = routine==='B'
-        ? [mkEx('cable_chop','2','10-12 c/lado','45s', rpe7,'libre'), mkEx('ab_wheel','2','8-10','45s', rpe7,'—'), mkEx('v_up','2','10-12','45s', rpe7,'—')]
-        : [mkEx('pallof_press','2','10-12 c/lado','45s', rpe7,'libre'), mkEx('dead_bug','2','8-10 c/lado','45s', rpe7,'—'), mkEx('cable_crunch','2','12-15','45s', rpe8,'libre')];
+      // ===== MIÉRCOLES: Fuerza + Hipertrofia + Resistencia Intermitente =====
+      const mainLift = routine==='A' ? 'back_squat' : 'trap_bar_dl';
+      const mainLiftName = routine==='A' ? 'Sentadilla' : 'Trap Bar Deadlift';
       blocks = [
-        { n:1, name:'Activación + Coordinación', dur:'10 min', goal:'Preparar articulaciones, activar cadena inferior y mecánica de desplazamiento',
-          items: [...mobilityCycles[0].map(id=>mkEx(id,'2','8-10 c/lado','30s','—','—')), mkEx('wall_drill','2','6 c/pierna','45s','—','—'), mkEx('lateral_shuffle','2','20s','60s','—','—')] },
-        { n:2, name:'Pliometría', dur:'10 min', goal:`Potencia ${routine==='B'?'vertical reactiva + lateral':'vertical y horizontal'} — antes del derivado olímpico`,
-          items: plyoItems },
-        { n:3, name:'Potencia', dur:'8 min', goal:'Potencia explosiva de tren inferior — derivado olímpico',
-          items: [mkEx(oly, power.sets, power.reps, '2-3 min', power.rpe, power.load+'%')] },
-        { n:4, name:'Fuerza', dur:'20 min', goal:'Fuerza máxima — patrón de sentadilla', trackProgression:true,
-          items: [mkEx(mainLift, principal.sets, principal.reps, '3-4 min', principal.rpe, principal.load+'%'), mkEx('bulgarian_split_squat', secondary.sets, secondary.reps, '90s', secondary.rpe, secondary.load+'%')] },
-        { n:5, name:'Core + Accesorios', dur:'10 min', goal:'Control de tronco y prevención de rodilla y gastrocnemio', trackProgression:true,
-          items: [...coreItems, mkEx('leg_extension','2','10-12','60s','6','libre'), mkEx('calf_raise','2','12-15','60s','6','libre')] },
-        { n:6, name:'Cambios de Dirección', dur:'6 min', goal:'Único estímulo de CoD de la semana — frenado y reaceleración',
-          items: [mkEx('test_505','2','2-3','3 min','8','—')] }
-      ];
-    } else if(day===1){
-      // ===== MIÉRCOLES (Tren Superior) =====
-      const potItems = routine==='B'
-        ? [mkEx('med_ball_slam','3','5-6','90s', rpe7,'—'), mkEx('med_ball_rotational_throw','3','5-6 c/lado','90s', rpe7,'—')]
-        : [mkEx('med_ball_chest_pass','3','5-6','90s', rpe7,'—'), mkEx('med_ball_rotational_throw','3','5-6 c/lado','90s', rpe7,'—')];
-      const coreItems = routine==='B'
-        ? [mkEx('knee_raise','2','10-12','45s', rpe7,'—'), mkEx('suitcase_carry','2','20-30m c/lado','60s', rpe7,'libre'), mkEx('cable_rotation','2','8-12 c/lado','45s', rpe7,'libre')]
-        : [mkEx('bird_dog','2','8-10 c/lado','45s', rpe7,'—'), mkEx('suitcase_carry','2','20-30m c/lado','60s', rpe7,'libre'), mkEx('cable_rotation','2','8-12 c/lado','45s', rpe7,'libre')];
-      const accItems = routine==='B'
-        ? [mkEx('rear_delt_fly','2','12-15','—','6','libre','A1'), mkEx('face_pull','2','12-15','60-90s','6','libre','A2'), mkEx('biceps_curl','2','10-12','—','6','libre','B1'), mkEx('triceps_pushdown','2','10-12','60-90s','6','libre','B2'), mkEx('copenhagen_plank','2','20-30s c/lado','45s','6','—',null)]
-        : [mkEx('lateral_raise','2','12-15','—','6','libre','A1'), mkEx('face_pull','2','12-15','60-90s','6','libre','A2'), mkEx('hammer_curl','2','10-12','—','6','libre','B1'), mkEx('triceps_pushdown','2','10-12','60-90s','6','libre','B2'), mkEx('copenhagen_plank','2','20-30s c/lado','45s','6','—',null)];
-      blocks = [
-        { n:1, name:'Activación + Coordinación', dur:'10 min', goal:'Movilidad de hombro, torácica y coordinación de pies',
-          items: [...mobilityCycles[1].map(id=>mkEx(id,'2','8-10 c/lado','30s','—','—')), mkEx('fast_feet','2','15s','45s','—','—'), mkEx('escalera_drill','2','15-20s','60s','—','—')] },
-        { n:2, name:'Potencia', dur:'10 min', goal:`Potencia de tren superior ${routine==='B'?'(slam + rotacional)':'(pase + rotacional)'} — sin impacto en piernas`,
-          items: potItems },
-        { n:3, name:'Fuerza', dur:'20 min', goal:'Fuerza máxima — empuje y tracción horizontal', trackProgression:true,
-          items: [mkEx('bench_press', principal.sets, principal.reps, '3-4 min', principal.rpe, principal.load+'%'), mkEx('pull_up', secondary.sets, secondary.reps, '90s', secondary.rpe, secondary.load+'%')] },
-        { n:4, name:'Core — Rotación · Anti-inclinación', dur:'6 min', goal:'Estabilidad global + anti-inclinación lateral + rotación estable',
-          items: coreItems },
-        { n:5, name:'Accesorios + Preventivos', dur:'12 min', goal:'Salud de hombro y codo — superseries de volumen bajo', trackProgression:true,
-          items: accItems },
-        { n:6, name:'Resistencia / Condicionamiento', dur:'7 min', goal:'Único bloque de acondicionamiento metabólico de la semana',
-          items: [mkEx(resistanceSelect(aerobicPool), '1', 'protocolo completo (6-8 min)', '—', '7', '—')] }
+        { n:1, name:'Calentamiento + Movilidad', dur:'6 min', goal:'Preparar articulaciones y activar cadena inferior',
+          items: [
+            mkEx('ankle_mobility','2','10','30s','—','—'),
+            mkEx('hip_openers','2','8 c/lado','30s','—','—'),
+            mkEx('adductor_rock_back','2','8 c/lado','30s','—','—'),
+            mkEx('glute_bridge_bw','2','10','30s','—','—'),
+            mkEx(mainLift,'2','5 progresivo','60s','—','peso corporal'),
+          ]
+        },
+        { n:2, name:'Fuerza Principal', dur:'12 min', goal:`Fuerza máxima — ${mainLiftName} · Rutina ${routine}`, trackProgression:true,
+          items: [mkEx(mainLift, strSets, strReps, '2:30 min', rpe78, 'libre')]
+        },
+        { n:3, name:'Fuerza Unilateral', dur:'8 min', goal:'Fuerza unilateral — control pélvico y rodilla', trackProgression:true,
+          items: [mkEx('bulgarian_split_squat','3','6 c/pierna','90s', rpe78,'libre')]
+        },
+        { n:4, name:'Cadena Posterior', dur:'7 min', goal:'Isquiotibiales y cadena posterior — protección de rodilla', trackProgression:true,
+          items: [mkEx('rdl','3','6-8','90s', rpe78,'libre')]
+        },
+        { n:5, name:'Cuádriceps Específico', dur:'5 min', goal:'Refuerzo de cuádriceps — RIR 1-2, sin llegar al fallo',
+          items: [mkEx('leg_extension','3','10-15','60s','RIR 1-2','libre')]
+        },
+        { n:6, name:'Tren Superior Superserie', dur:'8 min', goal:'Empuje + tracción — Superserie A1/A2', trackProgression:true,
+          items: [
+            mkEx('bench_press','3','6-8','—', rpe78,'libre','A1'),
+            mkEx('lat_pulldown','3','6-10','90s', rpe78,'libre','A2'),
+          ]
+        },
+        { n:7, name:'Brazos Superserie', dur:'4 min', goal:'Volumen de bíceps y tríceps — accesorio',
+          items: [
+            mkEx('biceps_curl','2','10-15','—','RIR 1-2','libre','A1'),
+            mkEx('triceps_pushdown','2','10-15','60s','RIR 1-2','libre','A2'),
+          ]
+        },
+        { n:8, name:'Resistencia Intermitente', dur:'8 min', goal:`Condicionamiento con balón — 20s on/20s off · Sem${week}: ${icRounds} bloques`,
+          items: [mkEx('intermittent_circuit','1',`${icRounds} rondas · 20s on/20s off`,'2 min entre bloques','7','—')]
+        },
       ];
     } else {
-      // ===== VIERNES (Piernas B) =====
-      const oly2 = routine==='B' ? 'push_press' : 'mid_thigh_pull';
-      const plyo2 = routine==='B' ? (week > 8 ? 'depth_jump' : 'skater_jump') : 'lateral_bound';
-      const coreItems = routine==='B'
-        ? [mkEx('ab_wheel','2','8-10','45s', rpe7,'—'), mkEx('v_up','2','10-12','45s', rpe7,'—')]
-        : [mkEx('plank_long','2','30-40s','45s', rpe7,'—'), mkEx('cable_crunch','2','12-15','45s', rpe8,'libre')];
+      // ===== VIERNES: Velocidad + Pliometría + Potencia =====
+      const powerV = routine==='A' ? 'trap_bar_jump' : 'jump_squat';
+      const powerVName = routine==='A' ? 'Trap Bar Jump' : 'Jump Squat';
+      const powerR = routine==='A' ? 'med_ball_rotational_throw' : 'cable_chop';
+      const powerRName = routine==='A' ? 'Med Ball Throw' : 'Cable Chop';
       blocks = [
-        { n:1, name:'Activación + Coordinación', dur:'10 min', goal:'Preparar articulaciones, activar cadena inferior y coordinación neuromuscular',
-          items: [...mobilityCycles[2].map(id=>mkEx(id,'2','8-10 c/lado','30s','—','—')), mkEx('escalera_drill','2','20s','60s','—','—'), mkEx('fast_feet','2','15s','45s','—','—')] },
-        { n:2, name:'Pliometría', dur:'8 min', goal:`Potencia ${routine==='B'?'lateral reactiva':'lateral'} — antes del derivado olímpico`,
-          items: [mkEx(plyo2,'3','4-5 c/lado','90-120s','—','peso corporal')] },
-        { n:3, name:'Potencia', dur:'8 min', goal:'Potencia de cadera — derivado olímpico',
-          items: [mkEx(oly2, power.sets, power.reps, '2-3 min', power.rpe, power.load+'%')] },
-        { n:4, name:'Fuerza', dur:'20 min', goal:'Fuerza máxima — isquiotibiales y patrón unilateral', trackProgression:true,
-          items: [mkEx('nordic_curl', principal.sets, principal.reps, '3-4 min', principal.rpe, 'libre'), mkEx('bulgarian_split_squat', secondary.sets, secondary.reps, '90s', secondary.rpe, secondary.load+'%')] },
-        { n:5, name:'Core — Anti-extensión · Flexión', dur:'6 min', goal:'Anti-extensión + flexión de tronco',
-          items: coreItems },
-        { n:6, name:'Accesorios + Preventivos', dur:'8 min', goal:'Sóleo, tibial anterior y extensores de rodilla', trackProgression:true,
-          items: [mkEx('seated_calf_raise','2','12-15','—','6','libre','A1'), mkEx('tibialis_raise','2','12-15','60s','6','—','A2'), mkEx('leg_extension','2','10-12','60s','6','libre',null)] }
+        { n:1, name:'Calentamiento', dur:'8 min', goal:'Activación neuromuscular progresiva — preparar el sistema nervioso',
+          items: [
+            mkEx('ankle_mobility','1','10','30s','—','—'),
+            mkEx('hip_openers','1','8 c/lado','30s','—','—'),
+            mkEx('cossack_squat','1','5 c/lado','30s','—','—'),
+            mkEx('leg_swings','1','10 c/lado','30s','—','—'),
+            mkEx('a_skip','2','20m','45s','—','—'),
+            mkEx('pogo_jump','1','10 contactos suave','45s','—','—'),
+            mkEx('accel_10','2','10m progresivo','90s','—','—'),
+          ]
+        },
+        { n:2, name:'Aceleración', dur:'10 min', goal:'Velocidad máxima — 95-100% · Calidad sobre cantidad', trackProgression:true,
+          items: [
+            mkEx('accel_10','3','10m','90s','95-100%','—'),
+            mkEx('sprint_20','2','20m','2 min','95-100%','—'),
+          ]
+        },
+        { n:3, name:'Pliometría Reactiva', dur:'5 min', goal:'Ciclo de estiramiento-acortamiento — contacto rápido con el suelo',
+          items: [mkEx('pogo_jump','2','10-15 contactos','60s','—','—')]
+        },
+        { n:4, name:'Pliometría Unilateral', dur:'6 min', goal:'Potencia unilateral — aterrizaje con control de rodilla', trackProgression:true,
+          items: [mkEx('single_leg_hop_fwd','3','3 c/pierna + estabilizar','75s','—','—')]
+        },
+        { n:5, name:'Pliometría Lateral', dur:'6 min', goal:'Potencia y estabilidad lateral — patrón de cambio de dirección', trackProgression:true,
+          items: [mkEx('lateral_hop_uni','3','4 saltos c/lado','60s','—','—')]
+        },
+        { n:6, name:'Pliometría Multidireccional', dur:'6 min', goal:'Absorber fuerza lateral y convertirla en potencia vertical', trackProgression:true,
+          items: [mkEx('lateral_jump_to_vertical','2','3 rep c/lado','75s','—','—')]
+        },
+        { n:7, name:'Salto + Aceleración', dur:'7 min', goal:'Transición aterrizaje → sprint — patrón específico de fútbol', trackProgression:true,
+          items: [mkEx('mini_hurdle_sprint','3','3 rep c/pierna','90s','—','—')]
+        },
+        { n:8, name:'Potencia Unilateral', dur:'7 min', goal:'Potencia explosiva unilateral — transferencia a aceleración', trackProgression:true,
+          items: [mkEx('step_up_explosive','3','5 c/pierna','90s','—','libre')]
+        },
+        { n:9, name:`Potencia Vertical`, dur:'6 min', goal:`${powerVName} · Rutina ${routine}`, trackProgression:true,
+          items: [mkEx(powerV,'3','3','90s','—', routine==='A'?'libre':'—')]
+        },
+        { n:10, name:`Potencia Rotacional`, dur:'5 min', goal:`${powerRName} · Rutina ${routine}`, trackProgression:true,
+          items: [mkEx(powerR,'3','4-6 c/lado','60s','—', routine==='A'?'—':'libre')]
+        },
       ];
     }
 
@@ -1417,36 +1488,65 @@ const SeriesLog = {
     const numSets = this._parseSets(it.sets);
     const hasLoad = this._hasLoad(it.load);
     const isTimed = this._isTimed(it.reps);
+    const isPlyo = ['PLIOMETRÍA','Pliometría'].includes(cat);
+    const isVel = ['VELOCIDAD','Velocidad'].includes(cat);
     const showRIR = !['Pliometría','Movilidad','Coordinación','Velocidad','PLIOMETRÍA','MOVILIDAD','COORDINACIÓN','VELOCIDAD'].includes(cat);
     const log = (State.data.sessionLog || {})[key] || [];
     const lastLog = this._getLastLog(key);
+    const meta = ((State.data.sessionMeta || {})[key]) || {};
 
     let prefillHint = '';
     if(lastLog && lastLog[0]){
       const l = lastLog[0];
       const pts = [];
       if(l.peso) pts.push(l.peso + ' kg');
-      if(l.reps) pts.push(l.reps + (isTimed ? 's' : ' reps'));
+      if(l.reps) pts.push(l.reps + (isTimed ? 's' : (isVel ? 's' : ' reps')));
       if(showRIR && l.rir !== undefined && l.rir !== '') pts.push('RIR ' + l.rir);
+      if(isPlyo && l.explos) pts.push('Explos. ' + l.explos);
       if(pts.length) prefillHint = `<div class="series-prefill">📋 Ref. última S1: <span>${pts.join(' · ')}</span></div>`;
     }
 
-    const headers = `<tr>
-      <th>S</th>
-      ${hasLoad ? '<th>Peso (kg)</th>' : ''}
-      <th>${isTimed ? 'Tiempo' : 'Reps'}</th>
-      ${showRIR ? '<th>RIR</th>' : ''}
-    </tr>`;
-
-    const rows = Array.from({length: numSets}, (_,i) => {
-      const e = log[i] || {};
-      return `<tr>
-        <td style="font-family:var(--font-mono); color:var(--text-faint); font-size:12px;">${i+1}</td>
-        ${hasLoad ? `<td><input type="number" inputmode="decimal" placeholder="kg" value="${e.peso||''}" onchange="SeriesLog.save('${key}',${i},'peso',this.value)"></td>` : ''}
-        <td><input type="number" inputmode="numeric" placeholder="${isTimed?'seg':'reps'}" value="${e.reps||''}" onchange="SeriesLog.save('${key}',${i},'reps',this.value)"></td>
-        ${showRIR ? `<td><input type="number" inputmode="numeric" placeholder="0-5" value="${e.rir||''}" onchange="SeriesLog.save('${key}',${i},'rir',this.value)" min="0" max="5"></td>` : ''}
+    let headers, rows;
+    if(isVel){
+      // Velocidad: Dist + Tiempo (s)
+      headers = `<tr><th>S</th><th>Dist</th><th>Tiempo (s)</th></tr>`;
+      rows = Array.from({length: numSets}, (_,i) => {
+        const e = log[i] || {};
+        return `<tr>
+          <td style="font-family:var(--font-mono); color:var(--text-faint); font-size:12px;">${i+1}</td>
+          <td><input type="text" inputmode="text" placeholder="10m" value="${e.dist||''}" onchange="SeriesLog.save('${key}',${i},'dist',this.value)" style="width:52px"></td>
+          <td><input type="number" inputmode="decimal" placeholder="seg" value="${e.reps||''}" step="0.01" onchange="SeriesLog.save('${key}',${i},'reps',this.value)"></td>
+        </tr>`;
+      }).join('');
+    } else if(isPlyo){
+      // Pliometría: Explos. (1-5) + Aterrizaje (1-5)
+      headers = `<tr><th>S</th><th>Reps</th><th>Explos.</th><th>Aterriz.</th></tr>`;
+      rows = Array.from({length: numSets}, (_,i) => {
+        const e = log[i] || {};
+        return `<tr>
+          <td style="font-family:var(--font-mono); color:var(--text-faint); font-size:12px;">${i+1}</td>
+          <td><input type="number" inputmode="numeric" placeholder="reps" value="${e.reps||''}" onchange="SeriesLog.save('${key}',${i},'reps',this.value)"></td>
+          <td><input type="number" inputmode="numeric" placeholder="1-5" value="${e.explos||''}" min="1" max="5" onchange="SeriesLog.save('${key}',${i},'explos',this.value)"></td>
+          <td><input type="number" inputmode="numeric" placeholder="1-5" value="${e.aterriz||''}" min="1" max="5" onchange="SeriesLog.save('${key}',${i},'aterriz',this.value)"></td>
+        </tr>`;
+      }).join('');
+    } else {
+      headers = `<tr>
+        <th>S</th>
+        ${hasLoad ? '<th>Peso (kg)</th>' : ''}
+        <th>${isTimed ? 'Tiempo' : 'Reps'}</th>
+        ${showRIR ? '<th>RIR</th>' : ''}
       </tr>`;
-    }).join('');
+      rows = Array.from({length: numSets}, (_,i) => {
+        const e = log[i] || {};
+        return `<tr>
+          <td style="font-family:var(--font-mono); color:var(--text-faint); font-size:12px;">${i+1}</td>
+          ${hasLoad ? `<td><input type="number" inputmode="decimal" placeholder="kg" value="${e.peso||''}" onchange="SeriesLog.save('${key}',${i},'peso',this.value)"></td>` : ''}
+          <td><input type="number" inputmode="numeric" placeholder="${isTimed?'seg':'reps'}" value="${e.reps||''}" onchange="SeriesLog.save('${key}',${i},'reps',this.value)"></td>
+          ${showRIR ? `<td><input type="number" inputmode="numeric" placeholder="0-5" value="${e.rir||''}" onchange="SeriesLog.save('${key}',${i},'rir',this.value)" min="0" max="5"></td>` : ''}
+        </tr>`;
+      }).join('');
+    }
 
     const to = timerOpts || {};
     const isSupFirst = to.sup && to.sup.endsWith('1');
@@ -1461,6 +1561,21 @@ const SeriesLog = {
       }
     }
 
+    const metaFields = `<div class="ex-meta-fields" style="margin-top:10px; display:grid; grid-template-columns:1fr 1fr; gap:8px;">
+      <label style="font-size:11px; color:var(--text-muted); display:flex; flex-direction:column; gap:3px;">
+        Dolor rodilla (0-10)
+        <input type="number" inputmode="numeric" min="0" max="10" placeholder="0" value="${meta.rodilla||''}" onchange="SeriesLog.saveMeta('${key}','rodilla',this.value)" style="font-size:14px; padding:5px 8px; background:var(--surface); border:1px solid var(--border); border-radius:8px; color:var(--text); width:100%; box-sizing:border-box;">
+      </label>
+      <label style="font-size:11px; color:var(--text-muted); display:flex; flex-direction:column; gap:3px;">
+        Calidad técnica (1-5)
+        <input type="number" inputmode="numeric" min="1" max="5" placeholder="3" value="${meta.calidad||''}" onchange="SeriesLog.saveMeta('${key}','calidad',this.value)" style="font-size:14px; padding:5px 8px; background:var(--surface); border:1px solid var(--border); border-radius:8px; color:var(--text); width:100%; box-sizing:border-box;">
+      </label>
+      <label style="font-size:11px; color:var(--text-muted); display:flex; flex-direction:column; gap:3px; grid-column:1/-1;">
+        Observaciones
+        <input type="text" inputmode="text" placeholder="Notas del ejercicio..." value="${(meta.obs||'').replace(/"/g,'&quot;')}" onchange="SeriesLog.saveMeta('${key}','obs',this.value)" style="font-size:13px; padding:5px 8px; background:var(--surface); border:1px solid var(--border); border-radius:8px; color:var(--text); width:100%; box-sizing:border-box;">
+      </label>
+    </div>`;
+
     return `<div class="session-log">
       <div class="session-log-title">Registro de series — hoy</div>
       ${prefillHint}
@@ -1469,6 +1584,7 @@ const SeriesLog = {
         <tbody>${rows}</tbody>
       </table>
       ${actionBtn}
+      ${metaFields}
     </div>`;
   },
 
@@ -1478,6 +1594,14 @@ const SeriesLog = {
     if(!s.sessionLog[key]) s.sessionLog[key] = [];
     while(s.sessionLog[key].length <= idx) s.sessionLog[key].push({});
     s.sessionLog[key][idx][field] = value;
+    State.save();
+  },
+
+  saveMeta(key, field, value){
+    const s = State.data;
+    if(!s.sessionMeta) s.sessionMeta = {};
+    if(!s.sessionMeta[key]) s.sessionMeta[key] = {};
+    s.sessionMeta[key][field] = value;
     State.save();
   }
 };
@@ -1510,8 +1634,8 @@ const Dashboard = {
     const todayBlocks = Program.buildDay(week, day);
     const totalMin = todayBlocks.reduce((a,bl)=>a+(parseInt(bl.dur)||0),0);
     document.getElementById('hero-sub').textContent = `${todayBlocks.length} bloques · ~${totalMin} min · ${Program.dayType(day)}`;
-    const days=['Lunes','Miércoles','Viernes'];
-    document.getElementById('hero-next').textContent = days[(day+1)%3];
+    const days=['Miércoles','Viernes'];
+    document.getElementById('hero-next').textContent = days[(day+1)%2];
 
     const strength = Program.strengthPrincipal(week);
     document.getElementById('hero-load').textContent = strength.load+'% 1RM';
@@ -1608,7 +1732,7 @@ const Plan = {
     // day tabs
     const dayTabs = document.getElementById('day-tabs');
     dayTabs.innerHTML='';
-    ['Lunes','Miércoles','Viernes'].forEach((label,i)=>{
+    ['Miércoles','Viernes'].forEach((label,i)=>{
       const el = document.createElement('div');
       el.className='day-tab'+(i===s.currentDay?' active':'');
       el.innerHTML = `${label}<div style="font-size:10px; font-weight:400; opacity:.7; margin-top:1px;">${Program.dayType(i)}</div>`;
