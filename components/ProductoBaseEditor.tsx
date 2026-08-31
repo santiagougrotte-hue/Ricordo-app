@@ -6,7 +6,7 @@ import { useToast } from "@/lib/toast";
 import { uid } from "@/lib/id";
 import { costoUnidadBase, gramosUnidadBase, impactoCambioBase, fARS, fNum, fPct } from "@/lib/calc";
 import { Modal } from "@/components/Modal";
-import { Button, Select, Input, TableWrap, Th, Td, TrHover, EmptyState, InfoRow } from "@/components/ui";
+import { Button, Field, Select, Input, TableWrap, Th, Td, TrHover, EmptyState, InfoRow } from "@/components/ui";
 import type { Producto, RecetaUnidadLinea } from "@/lib/types";
 
 interface Props {
@@ -112,6 +112,7 @@ export function ProductoBaseEditor({ producto, onClose }: Props) {
   const { toast } = useToast();
   const [masa, setMasa] = useState<RecetaUnidadLinea[]>([]);
   const [relleno, setRelleno] = useState<RecetaUnidadLinea[]>([]);
+  const [unidadesPorCaja, setUnidadesPorCaja] = useState<number>(0);
   const [paso, setPaso] = useState<"editar" | "confirmar">("editar");
   const [impacto, setImpacto] = useState<ReturnType<typeof impactoCambioBase>>([]);
   const [idCargado, setIdCargado] = useState<string | null>(null);
@@ -122,13 +123,19 @@ export function ProductoBaseEditor({ producto, onClose }: Props) {
     setIdCargado(producto.id);
     setMasa(draftDe(producto.receta_masa_unidad));
     setRelleno(draftDe(producto.receta_relleno_unidad));
+    setUnidadesPorCaja(producto.unidades_por_paquete ?? 0);
     setPaso("editar");
     setImpacto([]);
   }
 
   if (!producto) return null;
 
-  const draftProducto: Producto = { ...producto, receta_masa_unidad: masa, receta_relleno_unidad: relleno };
+  const draftProducto: Producto = {
+    ...producto,
+    receta_masa_unidad: masa,
+    receta_relleno_unidad: relleno,
+    unidades_por_paquete: unidadesPorCaja > 0 ? unidadesPorCaja : undefined,
+  };
   const costo = costoUnidadBase(data, draftProducto);
   const gramos = gramosUnidadBase(data, draftProducto);
   const ingredientesDisponibles = data.ingredientes.map((i) => ({ id: i.id, nombre: i.nombre }));
@@ -148,7 +155,14 @@ export function ProductoBaseEditor({ producto, onClose }: Props) {
     setData((d) => ({
       ...d,
       productos: d.productos.map((p) =>
-        p.id === producto!.id ? { ...p, receta_masa_unidad: masa, receta_relleno_unidad: relleno } : p
+        p.id === producto!.id
+          ? {
+              ...p,
+              receta_masa_unidad: masa,
+              receta_relleno_unidad: relleno,
+              unidades_por_paquete: unidadesPorCaja > 0 ? unidadesPorCaja : undefined,
+            }
+          : p
       ),
     }));
     toast("Receta base guardada");
@@ -181,6 +195,15 @@ export function ProductoBaseEditor({ producto, onClose }: Props) {
     >
       {paso === "editar" ? (
         <div>
+          <div className="mb-4 max-w-[220px]">
+            <Field label="Unidades por caja">
+              <Input
+                type="number"
+                value={unidadesPorCaja}
+                onChange={(e) => setUnidadesPorCaja(Number(e.target.value))}
+              />
+            </Field>
+          </div>
           <EditorComponente
             titulo="Receta de masa (por unidad)"
             lineas={masa}
@@ -199,6 +222,7 @@ export function ProductoBaseEditor({ producto, onClose }: Props) {
             <InfoRow label="Costo por unidad" value={fARS(costo)} color="gold" />
             <InfoRow label="Gramos de masa por unidad" value={fNum(gramos.masa, 1)} />
             <InfoRow label="Gramos de relleno por unidad" value={fNum(gramos.relleno, 1)} />
+            {unidadesPorCaja > 0 && <InfoRow label="Costo por caja" value={fARS(costo * unidadesPorCaja)} color="gold" />}
           </div>
         </div>
       ) : (
