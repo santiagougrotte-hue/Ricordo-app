@@ -16,6 +16,10 @@ import {
   valorStockInsumos,
   calcularEerr,
   calcularComprasCmvInventario,
+  calcularMargenPorItem,
+  agruparMargen,
+  compararCanalesPorSabor,
+  alertasMargen,
 } from "./calc-v2";
 
 function fixture(): RicordoData {
@@ -225,4 +229,72 @@ test("calcularComprasCmvInventario: mermas y ajustes de conteo se valorizan al p
   assert.equal(r.inventario_insumos_inicial, 0);
   assert.equal(r.inventario_insumos_final, 4000);
   assert.equal(r.dias_desde_ultimo_conteo, 11);
+});
+
+test("calcularMargenPorItem + agruparMargen: coincide con el CMV/ventas ya probados y agrupa por sabor vía id", () => {
+  const { documento } = migrarAV2(fixture());
+  const items = calcularMargenPorItem(documento.data, "2026-08-01", "2026-08-31");
+  assert.equal(items.length, 1);
+  assert.equal(items[0].ventas_brutas, 8000);
+  assert.equal(items[0].cmv, 1300);
+  assert.equal(items[0].margen_contribucion, 6700);
+  assert.ok(items[0].margen_pct !== null && Math.abs(items[0].margen_pct - 83.75) < 0.01);
+
+  const porSabor = agruparMargen(items, "sabor");
+  assert.equal(porSabor.length, 1);
+  assert.equal(porSabor[0].etiqueta, "Calabaza");
+  assert.equal(porSabor[0].unidades, 2);
+  assert.equal(porSabor[0].margen_contribucion, 6700);
+
+  const comparacion = compararCanalesPorSabor(items);
+  assert.equal(comparacion.length, 1);
+  assert.equal(comparacion[0].margen_mayorista, 6700);
+  assert.equal(comparacion[0].margen_minorista, 0);
+  assert.equal(comparacion[0].margen_pct_minorista, null); // sin ventas minoristas, no 0% engañoso
+});
+
+test("alertasMargen: dispara la alerta de margen mínimo solo cuando el umbral la supera", () => {
+  const { documento } = migrarAV2(fixture());
+  const items = calcularMargenPorItem(documento.data, "2026-08-01", "2026-08-31");
+  const sinAlerta = alertasMargen(documento.data, items, 50); // margen real ~83.75%, no dispara
+  assert.ok(!sinAlerta.some((a) => a.mensaje.includes("Calabaza") && a.mensaje.includes("margen de")));
+  const conAlerta = alertasMargen(documento.data, items, 90); // 90% > 83.75%, sí dispara
+  assert.ok(conAlerta.some((a) => a.mensaje.includes("Calabaza") && a.mensaje.includes("margen de")));
+});
+
+test("calcularMargenPorItem: reparte el descuento del pedido proporcional a ventas, no lo duplica en cada línea", () => {
+  const data = emptyDataV2();
+  data.productos = [{ id: "P1", nombre: "Sabor A", activo: true }];
+  data.producto_variantes = [
+    { id: "V1", producto_id: "P1", nombre: "A chica", precio_venta: 100, activo: true },
+    { id: "V2", producto_id: "P1", nombre: "A grande", precio_venta: 300, activo: true },
+  ];
+  data.pedidos = [{ id: "PED-1", fecha: "2026-01-01", cliente_id: "C1", estado: "Entregado", canal: "Minorista", descuento: 40, costo_envio: 0, total: 360 }];
+  // Línea 1: $100 (25% del bruto de $400) → le toca 25% del descuento de $40 = $10.
+  // Línea 2: $300 (75% del bruto) → le toca 75% del descuento = $30. $10 + $30 = $40, no $40 + $40.
+  data.pedido_items = [
+    { id: "I1", pedido_id: "PED-1", producto_variante_id: "V1", nombre_historico: "A chica", cantidad: 1, precio_unitario: 100, descuento: 0, subtotal: 100 },
+    { id: "I2", pedido_id: "PED-1", producto_variante_id: "V2", nombre_historico: "A grande", cantidad: 1, precio_unitario: 300, descuento: 0, subtotal: 300 },
+  ];
+  const items = calcularMargenPorItem(data, "2026-01-01", "2026-01-31");
+  const i1 = items.find((i) => i.item_id === "I1")!;
+  const i2 = items.find((i) => i.item_id === "I2")!;
+  assert.equal(i1.descuento, 10);
+  assert.equal(i2.descuento, 30);
+  assert.equal(i1.descuento + i2.descuento, 40); // nunca $40 + $40
+});
+
+test("alertasMargen: bajo margen $0 en envío (costo real = cobrado), en cambio detecta cuando el envío pesa demasiado sobre la venta bruta", () => {
+  const data = emptyDataV2();
+  data.productos = [{ id: "P1", nombre: "Sabor A", activo: true }];
+  data.producto_variantes = [{ id: "V1", producto_id: "P1", nombre: "A", precio_venta: 100, activo: true }];
+  data.pedidos = [{ id: "PED-1", fecha: "2026-01-01", cliente_id: "C1", estado: "Entregado", canal: "Minorista", descuento: 0, costo_envio: 60, total: 160 }];
+  data.pedido_items = [{ id: "I1", pedido_id: "PED-1", producto_variante_id: "V1", nombre_historico: "A", cantidad: 1, precio_unitario: 100, descuento: 0, subtotal: 100 }];
+  const items = calcularMargenPorItem(data, "2026-01-01", "2026-01-31");
+  // Sin receta cargada, CMV = 0: el margen de contribución da igual a la venta bruta (100) —
+  // el envío nunca lo cambia, porque entra como ingreso y sale como costo por el mismo importe.
+  assert.equal(items[0].margen_contribucion, 100);
+  const alertas = alertasMargen(data, items, 15);
+  // $60 de envío sobre $100 de venta bruta = 60% > 30% → dispara la alerta de envío desproporcionado.
+  assert.ok(alertas.some((a) => a.mensaje.includes("representa más del 30%")));
 });

@@ -37,13 +37,17 @@ import {
   totalAmortizacionesPeriodo,
   calcularEerr,
   calcularComprasCmvInventario,
+  calcularMargenPorItem,
+  agruparMargen,
+  compararCanalesPorSabor,
+  alertasMargen,
   mesesEnRango,
   primerDiaMes,
   ultimoDiaMes,
   mesAnterior,
   sumarDias,
 } from "@/lib/calc-v2";
-import type { EerrLinea } from "@/lib/calc-v2";
+import type { EerrLinea, CriterioEnvioPedido, VistaMargen } from "@/lib/calc-v2";
 import type { Activo } from "@/lib/types-v2";
 
 function nombreCategoria(data: ReturnType<typeof useStoreV2>["data"], id: string | undefined) {
@@ -1087,6 +1091,336 @@ function ComprasCmvInventarioVista() {
   );
 }
 
+const RANKING_LABEL: Record<string, string> = {
+  mayor_total: "Mayor margen total",
+  mayor_pct: "Mayor margen %",
+  menor: "Menor margen",
+  negativo: "Ventas con margen negativo",
+};
+
+function MargenSaborCanalVista() {
+  const { data } = useStoreV2();
+  const { mes, anio } = usePeriod();
+
+  const [modo, setModo] = useState<ModoPeriodoInventario>("mes");
+  const [desdeManual, setDesdeManual] = useState(primerDiaMes(mes, anio));
+  const [hastaManual, setHastaManual] = useState(ultimoDiaMes(mes, anio));
+  const [canal, setCanal] = useState<"todos" | "Minorista" | "Mayorista">("todos");
+  const [saborFiltro, setSaborFiltro] = useState("todos");
+  const [presentacionFiltro, setPresentacionFiltro] = useState("todas");
+  const [criterioEnvio, setCriterioEnvio] = useState<CriterioEnvioPedido>("ventas");
+  const [margenMinimo, setMargenMinimo] = useState(15);
+  const [vista, setVista] = useState<VistaMargen>("sabor");
+  const [expandido, setExpandido] = useState<string | null>(null);
+
+  const { desde, hasta } = useMemo(() => resolverRangoInventario(modo, mes, anio, desdeManual, hastaManual), [modo, mes, anio, desdeManual, hastaManual]);
+  const canalFiltro = canal === "todos" ? undefined : canal;
+
+  const itemsTodos = useMemo(() => calcularMargenPorItem(data, desde, hasta, canalFiltro, criterioEnvio), [data, desde, hasta, canalFiltro, criterioEnvio]);
+  const presentacionesDisponibles = useMemo(() => [...new Set(itemsTodos.map((i) => i.presentacion))].sort(), [itemsTodos]);
+  const items = useMemo(
+    () =>
+      itemsTodos
+        .filter((i) => saborFiltro === "todos" || i.producto_id === saborFiltro)
+        .filter((i) => presentacionFiltro === "todas" || i.presentacion === presentacionFiltro),
+    [itemsTodos, saborFiltro, presentacionFiltro]
+  );
+
+  const agrupado = useMemo(() => agruparMargen(items, vista), [items, vista]);
+  const porSaborTodos = useMemo(() => agruparMargen(itemsTodos, "sabor"), [itemsTodos]);
+  const comparacionCanales = useMemo(() => compararCanalesPorSabor(itemsTodos), [itemsTodos]);
+  const alertas = useMemo(() => alertasMargen(data, itemsTodos, margenMinimo), [data, itemsTodos, margenMinimo]);
+
+  const rankings = useMemo(() => {
+    const conVentas = porSaborTodos.filter((s) => s.ventas_netas > 0);
+    return {
+      mayor_total: [...porSaborTodos].sort((a, b) => b.margen_contribucion - a.margen_contribucion).slice(0, 5),
+      mayor_pct: [...conVentas].filter((s) => s.margen_pct != null).sort((a, b) => (b.margen_pct ?? 0) - (a.margen_pct ?? 0)).slice(0, 5),
+      menor: [...porSaborTodos].sort((a, b) => a.margen_contribucion - b.margen_contribucion).slice(0, 5),
+      negativo: porSaborTodos.filter((s) => s.margen_contribucion < 0),
+    };
+  }, [porSaborTodos]);
+
+  const grupoExpandido = agrupado.find((g) => g.clave === expandido);
+  const evolucionMensual = useMemo(() => {
+    if (!grupoExpandido || vista !== "sabor" || grupoExpandido.clave === "sin-producto") return [];
+    const inicio = restarMeses(mes, anio, 5);
+    return mesesEnRango(primerDiaMes(inicio.mes, inicio.anio), ultimoDiaMes(mes, anio)).map((m) => {
+      const d0 = primerDiaMes(m.mes, m.anio);
+      const d1 = ultimoDiaMes(m.mes, m.anio);
+      const itemsMes = calcularMargenPorItem(data, d0, d1, undefined, criterioEnvio).filter((i) => i.producto_id === grupoExpandido.clave);
+      const grupo = agruparMargen(itemsMes, "sabor")[0];
+      return { label: `${MESES[m.mes - 1].slice(0, 3)} ${m.anio}`, ventas_netas: grupo?.ventas_netas ?? 0, margen_contribucion: grupo?.margen_contribucion ?? 0 };
+    });
+  }, [grupoExpandido, vista, mes, anio, data, criterioEnvio]);
+
+  return (
+    <div>
+      <Card title="Margen por sabor y canal" className="mb-4">
+        <p className="mb-3 text-[12.5px] text-text3">
+          Ventas netas − CMV − costo real de envío − comisiones − otros costos variables = Margen de contribución. No
+          resta costos fijos ni amortización (eso se ve en el Estado de Resultados). Comisiones del medio de pago y
+          otros costos variables quedan en $0 — no hay ninguna fuente de datos para eso todavía.
+        </p>
+        <div className="flex flex-wrap items-end gap-3">
+          <FilterTabs
+            value={modo}
+            onChange={(v) => setModo(v as ModoPeriodoInventario)}
+            options={[
+              { value: "mes", label: `Mes actual (${MESES[mes - 1]})` },
+              { value: "3m", label: "Últimos 3 meses" },
+              { value: "6m", label: "Últimos 6 meses" },
+              { value: "12m", label: "Últimos 12 meses" },
+              { value: "anio", label: `Año ${anio}` },
+              { value: "rango", label: "Rango personalizado" },
+            ]}
+          />
+          {modo === "rango" && (
+            <>
+              <Field label="Desde">
+                <Input type="date" value={desdeManual} onChange={(e) => setDesdeManual(e.target.value)} />
+              </Field>
+              <Field label="Hasta">
+                <Input type="date" value={hastaManual} onChange={(e) => setHastaManual(e.target.value)} />
+              </Field>
+            </>
+          )}
+          <Field label="Canal">
+            <Select value={canal} onChange={(e) => setCanal(e.target.value as typeof canal)} style={{ width: 130 }}>
+              <option value="todos">Todos</option>
+              <option value="Minorista">Minorista</option>
+              <option value="Mayorista">Mayorista</option>
+            </Select>
+          </Field>
+          <Field label="Sabor">
+            <Select value={saborFiltro} onChange={(e) => setSaborFiltro(e.target.value)} style={{ width: 160 }}>
+              <option value="todos">Todos</option>
+              {data.productos.map((p) => (
+                <option key={p.id} value={p.id}>
+                  {p.nombre}
+                </option>
+              ))}
+            </Select>
+          </Field>
+          <Field label="Presentación">
+            <Select value={presentacionFiltro} onChange={(e) => setPresentacionFiltro(e.target.value)} style={{ width: 160 }}>
+              <option value="todas">Todas</option>
+              {presentacionesDisponibles.map((p) => (
+                <option key={p} value={p}>
+                  {p}
+                </option>
+              ))}
+            </Select>
+          </Field>
+          <Field label="Margen mínimo %">
+            <Input type="number" value={margenMinimo} onChange={(e) => setMargenMinimo(Number(e.target.value))} style={{ width: 90 }} />
+          </Field>
+          <Field label="Repartir envío entre líneas">
+            <Select value={criterioEnvio} onChange={(e) => setCriterioEnvio(e.target.value as CriterioEnvioPedido)} style={{ width: 190 }}>
+              <option value="ventas">Proporcional a ventas</option>
+              <option value="unidades">Proporcional a unidades</option>
+            </Select>
+          </Field>
+        </div>
+      </Card>
+
+      {alertas.length > 0 && (
+        <Card title="Alertas">
+          <ul className="flex flex-col gap-2">
+            {alertas.map((a, i) => (
+              <li key={i} className="flex items-start gap-2 text-[12.5px]">
+                <Badge color={a.severidad === "alta" ? "red" : "orange"}>{a.severidad}</Badge>
+                <span className="text-text2">{a.mensaje}</span>
+              </li>
+            ))}
+          </ul>
+        </Card>
+      )}
+
+      <FilterTabs
+        value={vista}
+        onChange={(v) => {
+          setVista(v as VistaMargen);
+          setExpandido(null);
+        }}
+        options={[
+          { value: "sabor", label: "Por sabor" },
+          { value: "canal", label: "Por canal" },
+          { value: "presentacion", label: "Por presentación" },
+          { value: "pedido", label: "Por pedido" },
+        ]}
+      />
+
+      <Card>
+        {agrupado.length === 0 ? (
+          <EmptyState text="No hay ventas en este período con los filtros actuales." />
+        ) : (
+          <TableWrap>
+            <table className="w-full">
+              <thead>
+                <tr>
+                  <Th>{vista === "sabor" ? "Sabor" : vista === "canal" ? "Canal" : vista === "presentacion" ? "Presentación" : "Pedido"}</Th>
+                  <Th>Unidades</Th>
+                  <Th>Ventas brutas</Th>
+                  <Th>Descuentos</Th>
+                  <Th>Ventas netas</Th>
+                  <Th>CMV</Th>
+                  <Th>Costo de envío</Th>
+                  <Th>Comisiones</Th>
+                  <Th>Margen de contribución</Th>
+                  <Th>Margen %</Th>
+                </tr>
+              </thead>
+              <tbody>
+                {agrupado.map((g) => (
+                  <React.Fragment key={g.clave}>
+                    <TrHover
+                      className={vista === "sabor" ? "cursor-pointer" : ""}
+                      onClick={vista === "sabor" ? () => setExpandido(expandido === g.clave ? null : g.clave) : undefined}
+                    >
+                      <Td main>
+                        {vista === "sabor" && <span className="mr-1.5 text-text3">{expandido === g.clave ? "▾" : "▸"}</span>}
+                        {g.etiqueta}
+                      </Td>
+                      <Td>{fNum(g.unidades, 0)}</Td>
+                      <Td>{fARS2(g.ventas_brutas)}</Td>
+                      <Td>{fARS2(g.descuentos)}</Td>
+                      <Td>{fARS2(g.ventas_netas)}</Td>
+                      <Td>{fARS2(g.cmv)}</Td>
+                      <Td>{fARS2(g.costo_envio)}</Td>
+                      <Td>{fARS2(g.comisiones)}</Td>
+                      <Td className={g.margen_contribucion >= 0 ? "text-green" : "text-red"}>{fARS2(g.margen_contribucion)}</Td>
+                      <Td className={g.margen_contribucion >= 0 ? "text-green" : "text-red"}>{fPct2(g.margen_pct)}</Td>
+                    </TrHover>
+                    {vista === "sabor" && expandido === g.clave && (
+                      <tr>
+                        <Td colSpan={10}>
+                          <div className="rounded-md border border-border bg-surface2/40 p-3">
+                            <div className="mb-3 grid grid-cols-2 gap-3 sm:grid-cols-4">
+                              <div>
+                                <div className="text-[11px] text-text3">Precio promedio</div>
+                                <div className="font-semibold text-text">{fARS2(g.unidades > 0 ? g.ventas_netas / g.unidades : 0)}</div>
+                              </div>
+                              <div>
+                                <div className="text-[11px] text-text3">CMV unitario</div>
+                                <div className="font-semibold text-text">{fARS2(g.unidades > 0 ? g.cmv / g.unidades : 0)}</div>
+                              </div>
+                              <div>
+                                <div className="text-[11px] text-text3">Margen unitario</div>
+                                <div className="font-semibold text-text">{fARS2(g.unidades > 0 ? g.margen_contribucion / g.unidades : 0)}</div>
+                              </div>
+                              <div>
+                                <div className="text-[11px] text-text3">Margen %</div>
+                                <div className="font-semibold text-text">{fPct2(g.margen_pct)}</div>
+                              </div>
+                            </div>
+                            <div className="mb-1 text-[11px] font-semibold uppercase tracking-wide text-text3">Minorista vs. mayorista</div>
+                            {(() => {
+                              const comp = comparacionCanales.find((c) => c.producto_id === g.clave);
+                              return comp ? (
+                                <table className="mb-3 w-full text-[12px]">
+                                  <tbody>
+                                    <tr>
+                                      <td className="pr-3 text-text3">Margen minorista</td>
+                                      <td className="pr-3 text-text">{fARS2(comp.margen_minorista)}</td>
+                                      <td className="text-text2">{fPct2(comp.margen_pct_minorista)}</td>
+                                    </tr>
+                                    <tr>
+                                      <td className="pr-3 text-text3">Margen mayorista</td>
+                                      <td className="pr-3 text-text">{fARS2(comp.margen_mayorista)}</td>
+                                      <td className="text-text2">{fPct2(comp.margen_pct_mayorista)}</td>
+                                    </tr>
+                                    <tr>
+                                      <td className="pr-3 text-text3">Diferencia (mayorista − minorista)</td>
+                                      <td colSpan={2} className={comp.diferencia >= 0 ? "text-green" : "text-red"}>
+                                        {fARS2(comp.diferencia)}
+                                      </td>
+                                    </tr>
+                                  </tbody>
+                                </table>
+                              ) : null;
+                            })()}
+                            <div className="mb-1 text-[11px] font-semibold uppercase tracking-wide text-text3">Evolución mensual (últimos 6 meses)</div>
+                            <table className="w-full text-[12px]">
+                              <tbody>
+                                {evolucionMensual.map((m, i) => (
+                                  <tr key={i}>
+                                    <td className="py-0.5 pr-3 text-text3">{m.label}</td>
+                                    <td className="py-0.5 pr-3 text-text2">Ventas netas: {fARS2(m.ventas_netas)}</td>
+                                    <td className={`py-0.5 ${m.margen_contribucion >= 0 ? "text-green" : "text-red"}`}>Margen: {fARS2(m.margen_contribucion)}</td>
+                                  </tr>
+                                ))}
+                              </tbody>
+                            </table>
+                          </div>
+                        </Td>
+                      </tr>
+                    )}
+                  </React.Fragment>
+                ))}
+              </tbody>
+            </table>
+          </TableWrap>
+        )}
+      </Card>
+
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+        {(Object.keys(rankings) as (keyof typeof rankings)[]).map((key) => (
+          <Card key={key} title={RANKING_LABEL[key]}>
+            {rankings[key].length === 0 ? (
+              <EmptyState text="Sin datos." />
+            ) : (
+              <ul className="flex flex-col gap-1.5 text-[12.5px]">
+                {rankings[key].map((s) => (
+                  <li key={s.clave} className="flex items-center justify-between">
+                    <span className="text-text2">{s.etiqueta}</span>
+                    <span className={s.margen_contribucion >= 0 ? "text-green" : "text-red"}>
+                      {fARS2(s.margen_contribucion)} ({fPct2(s.margen_pct)})
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </Card>
+        ))}
+      </div>
+
+      <Card title="Comparación de canales por sabor">
+        {comparacionCanales.length === 0 ? (
+          <EmptyState text="Sin datos." />
+        ) : (
+          <TableWrap>
+            <table className="w-full">
+              <thead>
+                <tr>
+                  <Th>Sabor</Th>
+                  <Th>Margen minorista</Th>
+                  <Th>Margen mayorista</Th>
+                  <Th>Diferencia</Th>
+                </tr>
+              </thead>
+              <tbody>
+                {comparacionCanales.map((c) => (
+                  <TrHover key={c.producto_id}>
+                    <Td main>{c.producto_nombre}</Td>
+                    <Td>
+                      {fARS2(c.margen_minorista)} ({fPct2(c.margen_pct_minorista)})
+                    </Td>
+                    <Td>
+                      {fARS2(c.margen_mayorista)} ({fPct2(c.margen_pct_mayorista)})
+                    </Td>
+                    <Td className={c.diferencia >= 0 ? "text-green" : "text-red"}>{fARS2(c.diferencia)}</Td>
+                  </TrHover>
+                ))}
+              </tbody>
+            </table>
+          </TableWrap>
+        )}
+      </Card>
+    </div>
+  );
+}
+
 function RentabilidadTab() {
   const [subtab, setSubtab] = useState("eerr");
   return (
@@ -1097,10 +1431,12 @@ function RentabilidadTab() {
         options={[
           { value: "eerr", label: "Estado de Resultados" },
           { value: "compras-cmv-inventario", label: "Compras, CMV e Inventario" },
+          { value: "margen-sabor-canal", label: "Margen por sabor y canal" },
         ]}
       />
       {subtab === "eerr" && <EstadoResultadosVista />}
       {subtab === "compras-cmv-inventario" && <ComprasCmvInventarioVista />}
+      {subtab === "margen-sabor-canal" && <MargenSaborCanalVista />}
     </div>
   );
 }

@@ -735,3 +735,250 @@ export function calcularComprasCmvInventario(data: RicordoDataV2, desde: string,
     dias_desde_ultimo_conteo,
   };
 }
+
+// --- Margen por sabor y canal ---------------------------------------------------------------------
+// Identifica qué sabores/canales/presentaciones dejan más ganancia, no solo cuáles venden más.
+// Agrupa siempre por producto_id (relación real por id — nunca por texto del nombre). El margen de
+// contribución de acá NUNCA resta costos fijos ni amortización (eso se muestra en el EERR) — es
+// puramente ventas netas − CMV − costo real de envío − comisiones − otros costos variables.
+// "Comisiones del medio de pago" y "otros costos variables" no tienen ninguna fuente de datos en el
+// esquema todavía: quedan siempre en $0, igual que Otros ingresos/gastos e Impuestos en el EERR —
+// nunca se inventa un valor.
+
+export type CriterioEnvioPedido = "ventas" | "unidades";
+
+export interface MargenItemDetalle {
+  pedido_id: string;
+  item_id: string;
+  fecha: string;
+  producto_id: string | null;
+  producto_nombre: string;
+  variante_id: string | null;
+  variante_nombre: string;
+  canal: Canal;
+  presentacion: string;
+  cantidad: number;
+  ventas_brutas: number;
+  descuento: number;
+  costo_envio: number;
+  comisiones: number;
+  cmv: number;
+  ventas_netas: number;
+  margen_contribucion: number;
+  margen_pct: number | null;
+}
+
+/** Costo real de envío = mismo monto cobrado al cliente (misma convención que calcularEerr). Si un
+ * pedido tiene varias líneas, ese único monto se reparte entre ellas según `criterioEnvio`
+ * (proporcional a ventas netas de cada línea, o a sus unidades) — un solo criterio, documentado
+ * acá, no dos números distintos según quién mire. Los descuentos generales del pedido (no los de
+ * línea) se reparten siempre proporcional a ventas, para no descontar el mismo importe en cada
+ * producto. */
+export function calcularMargenPorItem(data: RicordoDataV2, desde: string, hasta: string, canal?: Canal, criterioEnvio: CriterioEnvioPedido = "ventas"): MargenItemDetalle[] {
+  const pedidosPeriodo = data.pedidos.filter((p) => p.estado === "Entregado" && p.fecha >= desde && p.fecha <= hasta && (!canal || p.canal === canal));
+  const resultado: MargenItemDetalle[] = [];
+
+  for (const pedido of pedidosPeriodo) {
+    const items = data.pedido_items.filter((i) => i.pedido_id === pedido.id);
+    if (items.length === 0) continue;
+    const totalBruto = items.reduce((acc, i) => acc + i.precio_unitario * i.cantidad, 0);
+    const totalUnidades = items.reduce((acc, i) => acc + i.cantidad, 0);
+
+    for (const item of items) {
+      const bruto = item.precio_unitario * item.cantidad;
+      const shareVentas = totalBruto > 0 ? bruto / totalBruto : 1 / items.length;
+      const shareUnidades = totalUnidades > 0 ? item.cantidad / totalUnidades : 1 / items.length;
+      const share = criterioEnvio === "ventas" ? shareVentas : shareUnidades;
+      const descuento = Math.round(item.descuento + pedido.descuento * shareVentas);
+      const costoEnvio = Math.round(pedido.costo_envio * share);
+      const variante = item.producto_variante_id ? data.producto_variantes.find((v) => v.id === item.producto_variante_id) : undefined;
+      const producto = variante ? data.productos.find((p) => p.id === variante.producto_id) : undefined;
+      const cmv = costoPedidoItem(data, item);
+      const ventasNetas = Math.round(bruto - descuento + costoEnvio);
+      // Costo real de envío = mismo monto cobrado (política ya definida en calcularEerr) — entra
+      // como ingreso arriba y sale acá como costo, dejando margen $0 en el envío por defecto.
+      const margenContribucion = Math.round(ventasNetas - cmv - costoEnvio);
+
+      resultado.push({
+        pedido_id: pedido.id,
+        item_id: item.id,
+        fecha: pedido.fecha,
+        producto_id: variante?.producto_id ?? null,
+        producto_nombre: producto?.nombre ?? item.nombre_historico,
+        variante_id: item.producto_variante_id,
+        variante_nombre: variante?.nombre ?? item.nombre_historico,
+        canal: pedido.canal,
+        presentacion: variante?.presentacion || variante?.nombre || item.nombre_historico,
+        cantidad: item.cantidad,
+        ventas_brutas: Math.round(bruto),
+        descuento,
+        costo_envio: costoEnvio,
+        comisiones: 0,
+        cmv: Math.round(cmv),
+        ventas_netas: ventasNetas,
+        margen_contribucion: margenContribucion,
+        margen_pct: ventasNetas > 0 ? (margenContribucion / ventasNetas) * 100 : null,
+      });
+    }
+  }
+  return resultado;
+}
+
+export type VistaMargen = "sabor" | "canal" | "presentacion" | "pedido";
+
+export interface MargenAgrupado {
+  clave: string;
+  etiqueta: string;
+  unidades: number;
+  ventas_brutas: number;
+  descuentos: number;
+  ventas_netas: number;
+  cmv: number;
+  costo_envio: number;
+  comisiones: number;
+  margen_contribucion: number;
+  margen_pct: number | null;
+  items: MargenItemDetalle[];
+}
+
+export function agruparMargen(items: MargenItemDetalle[], vista: VistaMargen): MargenAgrupado[] {
+  const grupos = new Map<string, MargenItemDetalle[]>();
+  for (const it of items) {
+    const clave = vista === "sabor" ? (it.producto_id ?? "sin-producto") : vista === "canal" ? it.canal : vista === "presentacion" ? it.presentacion : it.pedido_id;
+    const lista = grupos.get(clave) ?? [];
+    lista.push(it);
+    grupos.set(clave, lista);
+  }
+  return [...grupos.entries()]
+    .map(([clave, its]) => {
+      const etiqueta = vista === "sabor" ? its[0].producto_nombre : vista === "pedido" ? `Pedido ${clave} — ${its[0].fecha}` : clave;
+      const ventas_netas = its.reduce((acc, i) => acc + i.ventas_netas, 0);
+      const margen_contribucion = its.reduce((acc, i) => acc + i.margen_contribucion, 0);
+      return {
+        clave,
+        etiqueta,
+        unidades: its.reduce((acc, i) => acc + i.cantidad, 0),
+        ventas_brutas: its.reduce((acc, i) => acc + i.ventas_brutas, 0),
+        descuentos: its.reduce((acc, i) => acc + i.descuento, 0),
+        ventas_netas,
+        cmv: its.reduce((acc, i) => acc + i.cmv, 0),
+        costo_envio: its.reduce((acc, i) => acc + i.costo_envio, 0),
+        comisiones: 0,
+        margen_contribucion,
+        margen_pct: ventas_netas > 0 ? (margen_contribucion / ventas_netas) * 100 : null,
+        items: its,
+      };
+    })
+    .sort((a, b) => b.margen_contribucion - a.margen_contribucion);
+}
+
+export interface ComparacionCanalSabor {
+  producto_id: string;
+  producto_nombre: string;
+  margen_minorista: number;
+  margen_mayorista: number;
+  diferencia: number;
+  margen_pct_minorista: number | null;
+  margen_pct_mayorista: number | null;
+}
+
+export function compararCanalesPorSabor(items: MargenItemDetalle[]): ComparacionCanalSabor[] {
+  const porProducto = new Map<string, MargenItemDetalle[]>();
+  for (const it of items) {
+    const key = it.producto_id ?? "sin-producto";
+    const lista = porProducto.get(key) ?? [];
+    lista.push(it);
+    porProducto.set(key, lista);
+  }
+  return [...porProducto.entries()].map(([key, its]) => {
+    const minorista = its.filter((i) => i.canal === "Minorista");
+    const mayorista = its.filter((i) => i.canal === "Mayorista");
+    const sum = (arr: MargenItemDetalle[], campo: "margen_contribucion" | "ventas_netas") => arr.reduce((acc, i) => acc + i[campo], 0);
+    const margenMinorista = sum(minorista, "margen_contribucion");
+    const margenMayorista = sum(mayorista, "margen_contribucion");
+    const ventasMinorista = sum(minorista, "ventas_netas");
+    const ventasMayorista = sum(mayorista, "ventas_netas");
+    return {
+      producto_id: key,
+      producto_nombre: its[0].producto_nombre,
+      margen_minorista: margenMinorista,
+      margen_mayorista: margenMayorista,
+      diferencia: margenMayorista - margenMinorista,
+      margen_pct_minorista: ventasMinorista > 0 ? (margenMinorista / ventasMinorista) * 100 : null,
+      margen_pct_mayorista: ventasMayorista > 0 ? (margenMayorista / ventasMayorista) * 100 : null,
+    };
+  });
+}
+
+export interface AlertaMargen {
+  severidad: "alta" | "media";
+  mensaje: string;
+}
+
+/** margenMinimoPct: umbral configurable (lo trae la pantalla) para la alerta de "margen inferior
+ * al mínimo" — no hay un valor de negocio único correcto, queda a criterio de quien lo mira. */
+export function alertasMargen(data: RicordoDataV2, items: MargenItemDetalle[], margenMinimoPct: number): AlertaMargen[] {
+  const alertas: AlertaMargen[] = [];
+  const porPedido = agruparMargen(items, "pedido");
+  const porSabor = agruparMargen(items, "sabor");
+
+  for (const p of porPedido) {
+    if (p.margen_contribucion < 0) {
+      alertas.push({ severidad: "alta", mensaje: `${p.etiqueta} tiene margen de contribución negativo (${p.margen_contribucion}).` });
+    }
+    // Bajo la política de costo real de envío = mismo monto cobrado, el envío entra como ingreso y
+    // sale como costo por el mismo importe: nunca puede "eliminar" una ganancia (se cancela solo,
+    // margen $0 en el envío). Lo que sí se puede detectar es que el envío represente una porción
+    // muy grande de la venta bruta del pedido — una señal de riesgo real para cuando exista un
+    // costo de envío distinto al cobrado.
+    if (p.ventas_brutas > 0 && p.costo_envio / p.ventas_brutas > 0.3) {
+      alertas.push({
+        severidad: "media",
+        mensaje: `${p.etiqueta}: el envío (${p.costo_envio}) representa más del 30% de la venta bruta (${p.ventas_brutas}) — revisar si conviene cobrarlo aparte o ajustar el precio.`,
+      });
+    }
+  }
+  for (const s of porSabor) {
+    if (s.margen_pct != null && s.margen_pct < margenMinimoPct) {
+      alertas.push({ severidad: "media", mensaje: `"${s.etiqueta}" tiene margen de ${s.margen_pct.toFixed(1)}%, por debajo del mínimo configurado (${margenMinimoPct}%).` });
+    }
+  }
+
+  for (const i of data.insumos) {
+    if (i.activo && i.precio_actual <= 0) alertas.push({ severidad: "alta", mensaje: `El insumo "${i.nombre}" no tiene precio cargado.` });
+  }
+  for (const p of data.productos.filter((prod) => prod.activo)) {
+    if (!data.recetas.some((r) => r.producto_id === p.id)) alertas.push({ severidad: "alta", mensaje: `El producto "${p.nombre}" no tiene ninguna receta cargada.` });
+  }
+  for (const v of data.producto_variantes.filter((variante) => variante.activo)) {
+    const compartida = data.recetas.find((r) => r.producto_id === v.producto_id);
+    if (compartida && v.unidades_por_paquete == null) {
+      alertas.push({
+        severidad: "media",
+        mensaje: `"${v.nombre}" no tiene "unidades por paquete" cargado — su receta hereda un factor de conversión de 0, el costo de esta presentación va a dar mal.`,
+      });
+    }
+  }
+
+  // Precio mayorista igual o demasiado cercano al minorista (comparando precio POR UNIDAD, no el
+  // precio del paquete completo) — sin una justificación visible en los datos.
+  for (const producto of data.productos) {
+    const variantes = data.producto_variantes.filter((v) => v.producto_id === producto.id && v.activo);
+    const minoristas = variantes.filter((v) => v.canal === "Minorista");
+    const mayoristas = variantes.filter((v) => v.canal === "Mayorista");
+    for (const min of minoristas) {
+      const precioUnitMin = min.precio_venta / (min.unidades_por_paquete ?? 1);
+      for (const may of mayoristas) {
+        const precioUnitMay = may.precio_venta / (may.unidades_por_paquete ?? 1);
+        if (precioUnitMin > 0 && precioUnitMay >= precioUnitMin * 0.9) {
+          alertas.push({
+            severidad: "media",
+            mensaje: `En "${producto.nombre}": el precio mayorista por unidad (${precioUnitMay.toFixed(0)}) no es significativamente más barato que el minorista (${precioUnitMin.toFixed(0)}).`,
+          });
+        }
+      }
+    }
+  }
+
+  return alertas;
+}
