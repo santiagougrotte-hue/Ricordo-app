@@ -137,6 +137,9 @@ function FichaProducto({ productoId }: { productoId: string }) {
   function quitarRecetaItem(id: string) {
     setData((d) => ({ ...d, receta_items: d.receta_items.filter((i) => i.id !== id) }));
   }
+  function actualizarCantidadRecetaItem(id: string, cantidad: number) {
+    setData((d) => ({ ...d, receta_items: d.receta_items.map((i) => (i.id === id ? { ...i, cantidad } : i)) }));
+  }
 
   function agregarAjuste() {
     if (!varianteSeleccionadaAjustes || !nuevoAjuste.insumo_id) {
@@ -295,7 +298,14 @@ function FichaProducto({ productoId }: { productoId: string }) {
                   <TrHover key={i.id}>
                     <Td main>{insumoNombre(i.insumo_id)}</Td>
                     <Td>{i.etapa}</Td>
-                    <Td>{fNum(i.cantidad, 3)}</Td>
+                    <Td>
+                      <Input
+                        type="number"
+                        className="w-24"
+                        value={i.cantidad}
+                        onChange={(e) => actualizarCantidadRecetaItem(i.id, Number(e.target.value))}
+                      />
+                    </Td>
                     <Td>
                       <Button size="sm" variant="danger" onClick={() => quitarRecetaItem(i.id)}>
                         Quitar

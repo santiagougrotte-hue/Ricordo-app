@@ -398,8 +398,8 @@ export function emptyDataV2(): RicordoDataV2 {
       efectivo_en_mano: 0,
       conciliacion_ignorados: [],
       caja_inteligente: {
-        porcentaje_reinversion: 70,
-        porcentaje_seguridad: 30,
+        porcentaje_reinversion: 60,
+        porcentaje_seguridad: 40,
         asignaciones: [],
         usos_reinversion: [],
         usos_seguridad: [],

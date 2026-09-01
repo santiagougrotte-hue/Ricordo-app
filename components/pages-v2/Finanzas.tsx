@@ -532,11 +532,173 @@ function RentabilidadTab() {
   );
 }
 
+function ReinversionTab() {
+  const { data, setData } = useStoreV2();
+  const { toast } = useToast();
+  const ci = data.configuracion.caja_inteligente;
+
+  const [pctReinversion, setPctReinversion] = useState(ci.porcentaje_reinversion);
+  const [pctSeguridad, setPctSeguridad] = useState(ci.porcentaje_seguridad);
+  const [form, setForm] = useState({ fecha: new Date().toISOString().slice(0, 10), monto: 0 });
+
+  const totalAportado = ci.asignaciones.reduce((acc, a) => acc + a.monto, 0);
+  const totalReinversion = Math.round((totalAportado * ci.porcentaje_reinversion) / 100);
+  const totalSeguridad = totalAportado - totalReinversion;
+
+  const aportesOrdenados = useMemo(() => [...ci.asignaciones].sort((a, b) => b.fecha.localeCompare(a.fecha)), [ci.asignaciones]);
+
+  function guardarPorcentajes() {
+    if (pctReinversion + pctSeguridad !== 100) {
+      toast("Los porcentajes tienen que sumar 100", "error");
+      return;
+    }
+    setData((d) => ({
+      ...d,
+      configuracion: { ...d.configuracion, caja_inteligente: { ...d.configuracion.caja_inteligente, porcentaje_reinversion: pctReinversion, porcentaje_seguridad: pctSeguridad } },
+    }));
+    toast("Reparto actualizado");
+  }
+
+  function agregarAporte() {
+    if (form.monto <= 0) {
+      toast("Ingresá un monto mayor a 0", "error");
+      return;
+    }
+    setData((d) => ({
+      ...d,
+      configuracion: {
+        ...d.configuracion,
+        caja_inteligente: {
+          ...d.configuracion.caja_inteligente,
+          asignaciones: [...d.configuracion.caja_inteligente.asignaciones, { id: uid("CI"), fecha: form.fecha, monto: form.monto }],
+        },
+      },
+    }));
+    toast("Aporte registrado");
+    setForm({ fecha: new Date().toISOString().slice(0, 10), monto: 0 });
+  }
+
+  function eliminarAporte(id: string) {
+    setData((d) => ({
+      ...d,
+      configuracion: {
+        ...d.configuracion,
+        caja_inteligente: { ...d.configuracion.caja_inteligente, asignaciones: d.configuracion.caja_inteligente.asignaciones.filter((a) => a.id !== id) },
+      },
+    }));
+  }
+
+  const previewReinversion = Math.round((form.monto * ci.porcentaje_reinversion) / 100);
+  const previewSeguridad = form.monto - previewReinversion;
+
+  return (
+    <div>
+      <StatGrid>
+        <KpiCard label="Total aportado" value={fARS(totalAportado)} color="gold" />
+        <KpiCard label="Destinado a reinversión" value={fARS(totalReinversion)} color="green" />
+        <KpiCard label="Destinado a margen de seguridad" value={fARS(totalSeguridad)} color="blue" />
+      </StatGrid>
+
+      <Card title="Cómo se reparte cada aporte">
+        <div className="grid grid-cols-1 gap-3.5 sm:grid-cols-2">
+          <Field label="% Reinversión (maquinaria)">
+            <Input
+              type="number"
+              value={pctReinversion}
+              onChange={(e) => {
+                const v = Number(e.target.value);
+                setPctReinversion(v);
+                setPctSeguridad(100 - v);
+              }}
+            />
+          </Field>
+          <Field label="% Margen de seguridad">
+            <Input
+              type="number"
+              value={pctSeguridad}
+              onChange={(e) => {
+                const v = Number(e.target.value);
+                setPctSeguridad(v);
+                setPctReinversion(100 - v);
+              }}
+            />
+          </Field>
+        </div>
+        <div className="mt-4 flex justify-end">
+          <Button onClick={guardarPorcentajes}>Guardar reparto</Button>
+        </div>
+      </Card>
+
+      <Card title="Registrar aporte mensual">
+        <p className="mb-3 text-[12.5px] text-text3">
+          Elegí el mes al que corresponde el monto — podés cargar meses anteriores, no hace falta que sea el mes actual.
+        </p>
+        <FormGrid>
+          <Field label="Mes (fecha de referencia)">
+            <Input type="date" value={form.fecha} onChange={(e) => setForm({ ...form, fecha: e.target.value })} />
+          </Field>
+          <Field label="Monto total del mes">
+            <Input type="number" value={form.monto} onChange={(e) => setForm({ ...form, monto: Number(e.target.value) })} />
+          </Field>
+        </FormGrid>
+        {form.monto > 0 && (
+          <p className="mt-2 text-[12.5px] text-text2">
+            Se reparte: <span className="font-medium text-green">{fARS(previewReinversion)}</span> a reinversión y{" "}
+            <span className="font-medium text-blue">{fARS(previewSeguridad)}</span> a margen de seguridad.
+          </p>
+        )}
+        <div className="mt-3 flex justify-end">
+          <Button onClick={agregarAporte}>+ Agregar aporte</Button>
+        </div>
+      </Card>
+
+      <Card title="Historial de aportes">
+        {aportesOrdenados.length === 0 ? (
+          <EmptyState text="Todavía no cargaste ningún aporte." />
+        ) : (
+          <TableWrap>
+            <table className="w-full">
+              <thead>
+                <tr>
+                  <Th>Mes</Th>
+                  <Th>Monto total</Th>
+                  <Th>Reinversión</Th>
+                  <Th>Margen de seguridad</Th>
+                  <Th></Th>
+                </tr>
+              </thead>
+              <tbody>
+                {aportesOrdenados.map((a) => {
+                  const reinv = Math.round((a.monto * ci.porcentaje_reinversion) / 100);
+                  const seg = a.monto - reinv;
+                  return (
+                    <TrHover key={a.id}>
+                      <Td main>{a.fecha}</Td>
+                      <Td>{fARS(a.monto)}</Td>
+                      <Td className="text-green">{fARS(reinv)}</Td>
+                      <Td className="text-blue">{fARS(seg)}</Td>
+                      <Td>
+                        <Button size="sm" variant="danger" onClick={() => eliminarAporte(a.id)}>
+                          Eliminar
+                        </Button>
+                      </Td>
+                    </TrHover>
+                  );
+                })}
+              </tbody>
+            </table>
+          </TableWrap>
+        )}
+      </Card>
+    </div>
+  );
+}
+
 export function Finanzas() {
   const [tab, setTab] = useState("caja");
   return (
     <div>
-      <PageHeader title="Finanzas" sub="Caja, ingresos y egresos, gastos, activos y rentabilidad" />
+      <PageHeader title="Finanzas" sub="Caja, ingresos y egresos, gastos, activos, reinversión y rentabilidad" />
       <FilterTabs
         value={tab}
         onChange={setTab}
@@ -545,6 +707,7 @@ export function Finanzas() {
           { value: "movimientos", label: "Ingresos y egresos" },
           { value: "gastos", label: "Gastos" },
           { value: "activos", label: "Activos e inversiones" },
+          { value: "reinversion", label: "Reinversión" },
           { value: "rentabilidad", label: "Rentabilidad" },
         ]}
       />
@@ -552,6 +715,7 @@ export function Finanzas() {
       {tab === "movimientos" && <IngresosEgresosTab />}
       {tab === "gastos" && <GastosTab />}
       {tab === "activos" && <ActivosTab />}
+      {tab === "reinversion" && <ReinversionTab />}
       {tab === "rentabilidad" && <RentabilidadTab />}
     </div>
   );
