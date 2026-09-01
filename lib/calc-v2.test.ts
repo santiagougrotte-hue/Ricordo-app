@@ -2,6 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { emptyData } from "./types";
 import type { RicordoData } from "./types";
+import { emptyDataV2 } from "./types-v2";
 import { migrarAV2 } from "./migration/v2";
 import {
   costoVariante,
@@ -14,6 +15,7 @@ import {
   puntoEquilibrio,
   valorStockInsumos,
   calcularEerr,
+  calcularComprasCmvInventario,
 } from "./calc-v2";
 
 function fixture(): RicordoData {
@@ -180,4 +182,47 @@ test("calcularEerr: un mes sin ningún dato da todo en cero, sin dividir por cer
   assert.equal(eerr.costos_fijos.total, 100000);
   assert.equal(eerr.resultado_operativo, -100000);
   assert.equal(eerr.margen_neto_pct, null);
+});
+
+test("calcularComprasCmvInventario: compras/CMV/inventario no se confunden, y la conciliación cierra en el fixture", () => {
+  const { documento } = migrarAV2(fixture());
+  const r = calcularComprasCmvInventario(documento.data, "2026-08-01", "2026-08-31");
+  // Compras (COM-1: 2kg × $500) nunca se toman como CMV — son conceptos distintos.
+  assert.equal(r.compras.total, 1000);
+  assert.equal(r.cmv.total, 1300); // mismo valor que ya prueba calcularEerr/cmvPeriodo
+  assert.notEqual(r.compras.total, r.cmv.total);
+  assert.equal(r.consumo.total, 0); // el fixture no tiene producción, no hay movimientos de consumo
+  assert.equal(r.produccion.total, 0);
+  // Inventario de insumos: 10 (conteo de julio) × $500 antes del período, +2 (compra) después.
+  assert.equal(r.inventario_insumos_inicial, 5000);
+  assert.equal(r.inventario_insumos_final, 6000);
+  assert.equal(r.variacion_inventario_insumos, 1000);
+  assert.equal(r.ajustes_conteo.total, 0); // el único conteo del fixture es de julio, fuera del rango
+  assert.equal(r.mermas.total, 0);
+  // Se vendieron 2 unidades sin haber producción registrada: el stock de productos queda en -2
+  // (estimado a costo de receta vigente, $650) — por eso también dispara la alerta de stock negativo.
+  assert.equal(r.inventario_productos_final, -1300);
+  // La conciliación del CMV (inicial + producción − final de productos) debe coincidir con el CMV real.
+  assert.equal(r.cmv_conciliado_estimado, r.cmv.total);
+  // La conciliación de insumos también cierra en cero en este fixture (no hay diferencia sin explicar).
+  assert.equal(r.diferencia_no_explicada, 0);
+  assert.ok(r.alertas.some((a) => a.mensaje.includes("Stock negativo") && a.mensaje.includes("Calabaza mayorista")));
+  assert.ok(r.alertas.some((a) => a.mensaje.includes("último conteo")));
+});
+
+test("calcularComprasCmvInventario: mermas y ajustes de conteo se valorizan al precio del insumo", () => {
+  const data = emptyDataV2();
+  data.insumos = [{ id: "INS-1", nombre: "Harina", tipo: "ingrediente", unidad: "kg", precio_actual: 100, controla_stock: true, activo: true }];
+  data.inventario_movimientos = [
+    { id: "M1", fecha: "2026-01-01", tipo: "compra", item_tipo: "insumo", item_id: "INS-1", cantidad: 50 },
+    { id: "M2", fecha: "2026-01-10", tipo: "merma", item_tipo: "insumo", item_id: "INS-1", cantidad: -5 },
+    // Calculado antes de este conteo: 50 − 5 = 45; se contaron 40 → diferencia de −5.
+    { id: "M3", fecha: "2026-01-20", tipo: "conteo", item_tipo: "insumo", item_id: "INS-1", cantidad: 40 },
+  ];
+  const r = calcularComprasCmvInventario(data, "2026-01-01", "2026-01-31");
+  assert.equal(r.mermas.total, 500);
+  assert.equal(r.ajustes_conteo.total, -500);
+  assert.equal(r.inventario_insumos_inicial, 0);
+  assert.equal(r.inventario_insumos_final, 4000);
+  assert.equal(r.dias_desde_ultimo_conteo, 11);
 });

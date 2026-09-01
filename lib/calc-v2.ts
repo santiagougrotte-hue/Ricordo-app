@@ -129,10 +129,18 @@ export function calcularStock(
   return base + posteriores.reduce((acc, m) => acc + m.cantidad, 0);
 }
 
-export function valorStockInsumos(data: RicordoDataV2): number {
+export function valorStockInsumos(data: RicordoDataV2, hastaFecha?: string): number {
   return data.insumos
     .filter((i) => i.controla_stock)
-    .reduce((acc, i) => acc + calcularStock(data, "insumo", i.id) * i.precio_actual, 0);
+    .reduce((acc, i) => acc + calcularStock(data, "insumo", i.id, hastaFecha) * i.precio_actual, 0);
+}
+
+/** Valorización ESTIMADA del inventario de productos terminados: usa el costo de receta vigente
+ * (costoVariante, precios actuales), no un costo histórico congelado al momento de producir —
+ * el esquema no guarda ese dato por movimiento. Ver `calcularComprasCmvInventario`, que expone
+ * esta limitación explícitamente en vez de esconderla. */
+export function valorStockProductos(data: RicordoDataV2, hastaFecha?: string): number {
+  return data.producto_variantes.reduce((acc, v) => acc + calcularStock(data, "producto_variante", v.id, hastaFecha) * costoVariante(data, v.id), 0);
 }
 
 // --- Finanzas -----------------------------------------------------------------------------------
@@ -367,7 +375,7 @@ export interface Eerr {
 /** Meses (mes/año) que un rango de fechas toca, aunque sea parcialmente — un costo fijo recurrente
  * o una amortización se cuentan una vez por cada mes que el rango pisa, sin prorratear por día
  * (el esquema no guarda desde/hasta exacto de un costo fijo, ver migrarFinanzas). */
-function mesesEnRango(desde: string, hasta: string): { mes: number; anio: number }[] {
+export function mesesEnRango(desde: string, hasta: string): { mes: number; anio: number }[] {
   const inicio = new Date(`${desde}T00:00:00`);
   const fin = new Date(`${hasta}T00:00:00`);
   const meses: { mes: number; anio: number }[] = [];
@@ -378,6 +386,26 @@ function mesesEnRango(desde: string, hasta: string): { mes: number; anio: number
     cursor = new Date(cursor.getFullYear(), cursor.getMonth() + 1, 1);
   }
   return meses;
+}
+
+// --- Utilidades de fecha compartidas por las vistas de Finanzas basadas en rango ------------------
+
+export function pad2(n: number): string {
+  return String(n).padStart(2, "0");
+}
+export function primerDiaMes(mes: number, anio: number): string {
+  return `${anio}-${pad2(mes)}-01`;
+}
+export function ultimoDiaMes(mes: number, anio: number): string {
+  return `${anio}-${pad2(mes)}-${pad2(new Date(anio, mes, 0).getDate())}`;
+}
+export function mesAnterior(mes: number, anio: number): { mes: number; anio: number } {
+  return mes === 1 ? { mes: 12, anio: anio - 1 } : { mes: mes - 1, anio };
+}
+export function sumarDias(fechaIso: string, dias: number): string {
+  const d = new Date(`${fechaIso}T00:00:00`);
+  d.setDate(d.getDate() + dias);
+  return d.toISOString().slice(0, 10);
 }
 
 /** null en vez de 0 cuando no hay ventas netas — evita mostrar un margen que parece un dato real
@@ -489,5 +517,221 @@ export function calcularEerr(data: RicordoDataV2, desde: string, hasta: string, 
     impuestos,
     resultado_neto,
     margen_neto_pct,
+  };
+}
+
+// --- Compras, CMV e Inventario (conciliación) -----------------------------------------------------
+// Explica la diferencia entre "cuánto se compró" y "cuánto costaron los productos vendidos" a
+// través del libro único de inventario — una compra nunca se toma directamente como CMV (alimenta
+// el stock; el CMV sale de lo efectivamente vendido, igual que en calcularEerr). La valorización
+// de inventario de productos terminados usa el costo de receta VIGENTE (costoVariante con precios
+// actuales), no un costo histórico congelado al momento de producir — el esquema no guarda ese
+// dato por movimiento — por eso se marca "estimado" en toda esta sección, tal como se acordó.
+
+export interface AlertaInventario {
+  severidad: "alta" | "media";
+  mensaje: string;
+}
+
+export interface ComprasCmvInventario {
+  compras: EerrLinea;
+  consumo: EerrLinea;
+  cmv: EerrLinea;
+  produccion: EerrLinea;
+  inventario_insumos_inicial: number;
+  inventario_insumos_final: number;
+  variacion_inventario_insumos: number;
+  inventario_productos_inicial: number;
+  inventario_productos_final: number;
+  variacion_inventario_productos: number;
+  ajustes_conteo: EerrLinea;
+  mermas: EerrLinea;
+  consumo_teorico: number;
+  diferencia_no_explicada: number;
+  cmv_conciliado_estimado: number;
+  alertas: AlertaInventario[];
+  dias_desde_ultimo_conteo: number | null;
+}
+
+/** Cuánto difería el stock calculado (con todo lo anterior a esa fecha, sin este conteo) del
+ * valor realmente contado. Simplificación: compara contra el día anterior — el esquema no guarda
+ * hora, solo fecha, así que dos movimientos el mismo día no se pueden ordenar entre sí. */
+function diferenciaConteo(data: RicordoDataV2, movimiento: RicordoDataV2["inventario_movimientos"][number]): number {
+  const stockAntes = calcularStock(data, movimiento.item_tipo, movimiento.item_id, sumarDias(movimiento.fecha, -1));
+  return movimiento.cantidad - stockAntes;
+}
+
+function valorMovimiento(data: RicordoDataV2, m: RicordoDataV2["inventario_movimientos"][number]): number {
+  if (m.item_tipo === "insumo") {
+    const insumo = data.insumos.find((i) => i.id === m.item_id);
+    return Math.abs(m.cantidad) * (insumo?.precio_actual ?? 0);
+  }
+  return Math.abs(m.cantidad) * costoVariante(data, m.item_id);
+}
+
+function nombreItemMovimiento(data: RicordoDataV2, m: RicordoDataV2["inventario_movimientos"][number]): string {
+  if (m.item_tipo === "insumo") return data.insumos.find((i) => i.id === m.item_id)?.nombre ?? "(insumo eliminado)";
+  return data.producto_variantes.find((v) => v.id === m.item_id)?.nombre ?? "(producto eliminado)";
+}
+
+export function calcularComprasCmvInventario(data: RicordoDataV2, desde: string, hasta: string): ComprasCmvInventario {
+  const diaAnterior = sumarDias(desde, -1);
+
+  const comprasPeriodo = data.compras.filter((c) => c.fecha >= desde && c.fecha <= hasta);
+  const idsComprasPeriodo = new Set(comprasPeriodo.map((c) => c.id));
+  const itemsComprasPeriodo = data.compra_items.filter((i) => idsComprasPeriodo.has(i.compra_id));
+  const compras: EerrLinea = {
+    total: Math.round(itemsComprasPeriodo.reduce((acc, i) => acc + i.subtotal, 0)),
+    registros: itemsComprasPeriodo.map((i) => {
+      const compra = comprasPeriodo.find((c) => c.id === i.compra_id);
+      const insumo = data.insumos.find((ins) => ins.id === i.insumo_id);
+      return { fecha: compra?.fecha ?? "", concepto: `Compra — ${insumo?.nombre ?? "(insumo eliminado)"}`, monto: i.subtotal };
+    }),
+  };
+
+  const movsConsumo = data.inventario_movimientos.filter((m) => m.tipo === "consumo" && m.item_tipo === "insumo" && m.fecha >= desde && m.fecha <= hasta);
+  const consumo: EerrLinea = {
+    total: Math.round(movsConsumo.reduce((acc, m) => acc + valorMovimiento(data, m), 0)),
+    registros: movsConsumo.map((m) => ({ fecha: m.fecha, concepto: `Consumo — ${nombreItemMovimiento(data, m)}`, monto: valorMovimiento(data, m) })),
+  };
+
+  // Mismo cálculo que calcularEerr — una sola fuente de verdad para el CMV, nunca se duplica.
+  const cmv = calcularEerr(data, desde, hasta).cmv;
+
+  const produccionPeriodo = data.produccion.filter((p) => p.fecha >= desde && p.fecha <= hasta);
+  const produccion: EerrLinea = {
+    total: Math.round(produccionPeriodo.reduce((acc, p) => acc + costoVariante(data, p.producto_variante_id) * p.cantidad, 0)),
+    registros: produccionPeriodo.map((p) => ({
+      fecha: p.fecha,
+      concepto: `Producción — ${data.producto_variantes.find((v) => v.id === p.producto_variante_id)?.nombre ?? "(producto eliminado)"}`,
+      monto: costoVariante(data, p.producto_variante_id) * p.cantidad,
+    })),
+  };
+
+  const inventario_insumos_inicial = Math.round(valorStockInsumos(data, diaAnterior));
+  const inventario_insumos_final = Math.round(valorStockInsumos(data, hasta));
+  const inventario_productos_inicial = Math.round(valorStockProductos(data, diaAnterior));
+  const inventario_productos_final = Math.round(valorStockProductos(data, hasta));
+  const variacion_inventario_insumos = inventario_insumos_final - inventario_insumos_inicial;
+  const variacion_inventario_productos = inventario_productos_final - inventario_productos_inicial;
+
+  const movsConteo = data.inventario_movimientos.filter((m) => m.tipo === "conteo" && m.fecha >= desde && m.fecha <= hasta);
+  const ajustes_conteo: EerrLinea = {
+    total: Math.round(
+      movsConteo.reduce((acc, m) => {
+        const diff = diferenciaConteo(data, m);
+        const precio = m.item_tipo === "insumo" ? (data.insumos.find((i) => i.id === m.item_id)?.precio_actual ?? 0) : costoVariante(data, m.item_id);
+        return acc + diff * precio;
+      }, 0)
+    ),
+    registros: movsConteo.map((m) => {
+      const diff = diferenciaConteo(data, m);
+      const precio = m.item_tipo === "insumo" ? (data.insumos.find((i) => i.id === m.item_id)?.precio_actual ?? 0) : costoVariante(data, m.item_id);
+      return {
+        fecha: m.fecha,
+        concepto: `Conteo — ${nombreItemMovimiento(data, m)} (contado ${m.cantidad}, diferencia ${diff >= 0 ? "+" : ""}${diff.toFixed(2)})`,
+        monto: diff * precio,
+      };
+    }),
+  };
+
+  const movsMerma = data.inventario_movimientos.filter((m) => m.tipo === "merma" && m.fecha >= desde && m.fecha <= hasta);
+  const mermas: EerrLinea = {
+    total: Math.round(movsMerma.reduce((acc, m) => acc + valorMovimiento(data, m), 0)),
+    registros: movsMerma.map((m) => ({ fecha: m.fecha, concepto: `Merma — ${nombreItemMovimiento(data, m)}`, monto: valorMovimiento(data, m) })),
+  };
+
+  // Conciliación de insumos: inicial + compras − final = consumo teórico del período. El consumo
+  // teórico debería explicarse por lo vendido (CMV) + lo que quedó en stock de productos
+  // (variación) + mermas + ajustes de conteo; lo que sobra queda como diferencia sin explicar.
+  const consumo_teorico = Math.round(inventario_insumos_inicial + compras.total - inventario_insumos_final);
+  const mermasInsumos = Math.round(movsMerma.filter((m) => m.item_tipo === "insumo").reduce((acc, m) => acc + valorMovimiento(data, m), 0));
+  const diferencia_no_explicada = Math.round(consumo_teorico - cmv.total - variacion_inventario_productos - mermasInsumos - ajustes_conteo.total);
+
+  // Conciliación del CMV: inicial de productos + costo de producción − final de productos = CMV
+  // (estimado, ver comentario de arriba sobre la valorización con costo vigente).
+  const cmv_conciliado_estimado = Math.round(inventario_productos_inicial + produccion.total - inventario_productos_final);
+
+  const alertas: AlertaInventario[] = [];
+  if (cmv.total > 0 && compras.total > cmv.total * 2) {
+    alertas.push({
+      severidad: "media",
+      mensaje: `Las compras del período (${compras.total}) más que duplican al CMV (${cmv.total}) — puede ser acumulación de inventario, compra anticipada o un cambio de precios, no necesariamente un error.`,
+    });
+  }
+  if (compras.total > 0 && cmv.total > compras.total * 1.5) {
+    alertas.push({
+      severidad: "media",
+      mensaje: `El CMV del período (${cmv.total}) supera ampliamente a las compras (${compras.total}) — puede estar consumiéndose stock acumulado de períodos anteriores.`,
+    });
+  }
+  for (const i of data.insumos) {
+    if (i.activo && i.precio_actual <= 0) alertas.push({ severidad: "alta", mensaje: `El insumo "${i.nombre}" no tiene precio cargado.` });
+  }
+  for (const p of data.productos.filter((prod) => prod.activo)) {
+    if (!data.recetas.some((r) => r.producto_id === p.id)) {
+      alertas.push({ severidad: "alta", mensaje: `El producto "${p.nombre}" no tiene ninguna receta cargada.` });
+    }
+  }
+  for (const v of data.producto_variantes.filter((variante) => variante.activo)) {
+    if (recetaEfectivaVariante(data, v).length === 0) {
+      alertas.push({ severidad: "media", mensaje: `La variante "${v.nombre}" no resuelve ninguna receta (ni propia ni heredada del producto base).` });
+    }
+  }
+  for (const i of data.insumos.filter((ins) => ins.controla_stock)) {
+    if (calcularStock(data, "insumo", i.id, hasta) < 0) alertas.push({ severidad: "alta", mensaje: `Stock negativo en el insumo "${i.nombre}".` });
+  }
+  for (const v of data.producto_variantes) {
+    if (calcularStock(data, "producto_variante", v.id, hasta) < 0) alertas.push({ severidad: "alta", mensaje: `Stock negativo en "${v.nombre}".` });
+  }
+  for (const ci of itemsComprasPeriodo) {
+    const insumo = data.insumos.find((i) => i.id === ci.insumo_id);
+    if (ci.unidad && insumo && ci.unidad !== insumo.unidad) {
+      alertas.push({
+        severidad: "media",
+        mensaje: `Una compra de "${insumo.nombre}" usa la unidad "${ci.unidad}" pero el insumo está cargado en "${insumo.unidad}".`,
+      });
+    }
+  }
+  for (const m of movsConteo) {
+    const diff = diferenciaConteo(data, m);
+    const stockAntes = calcularStock(data, m.item_tipo, m.item_id, sumarDias(m.fecha, -1));
+    if (stockAntes !== 0 && Math.abs(diff) / Math.abs(stockAntes) > 0.2) {
+      alertas.push({
+        severidad: "media",
+        mensaje: `Diferencia grande en el conteo de "${nombreItemMovimiento(data, m)}" del ${m.fecha}: contado ${m.cantidad}, calculado ${stockAntes.toFixed(2)} — puede ser merma, consumo no registrado o un error de conteo.`,
+      });
+    }
+  }
+  if (Math.abs(diferencia_no_explicada) > Math.max(1000, Math.abs(consumo_teorico) * 0.1)) {
+    alertas.push({ severidad: "media", mensaje: `Queda una diferencia sin explicar de ${diferencia_no_explicada} en la conciliación de insumos del período.` });
+  }
+
+  const ultimoConteo = [...data.inventario_movimientos].filter((m) => m.tipo === "conteo").sort((a, b) => b.fecha.localeCompare(a.fecha))[0];
+  const dias_desde_ultimo_conteo = ultimoConteo
+    ? Math.round((new Date(`${hasta}T00:00:00`).getTime() - new Date(`${ultimoConteo.fecha}T00:00:00`).getTime()) / 86400000)
+    : null;
+  if (dias_desde_ultimo_conteo != null && dias_desde_ultimo_conteo > 7) {
+    alertas.push({ severidad: "media", mensaje: `Pasaron ${dias_desde_ultimo_conteo} días desde el último conteo registrado (${ultimoConteo!.fecha}).` });
+  }
+
+  return {
+    compras,
+    consumo,
+    cmv,
+    produccion,
+    inventario_insumos_inicial,
+    inventario_insumos_final,
+    variacion_inventario_insumos,
+    inventario_productos_inicial,
+    inventario_productos_final,
+    variacion_inventario_productos,
+    ajustes_conteo,
+    mermas,
+    consumo_teorico,
+    diferencia_no_explicada,
+    cmv_conciliado_estimado,
+    alertas,
+    dias_desde_ultimo_conteo,
   };
 }
