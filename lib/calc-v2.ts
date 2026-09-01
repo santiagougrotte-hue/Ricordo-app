@@ -18,6 +18,7 @@ import type {
   Categoria,
   EtapaReceta,
   Activo,
+  Canal,
 } from "./types-v2";
 import { fARS, fFechaCorta, fNum, fPct, inPeriod, inYear, isAfter } from "./calc";
 
@@ -319,4 +320,174 @@ export function discrepanciasCaja(data: RicordoDataV2): DiscrepanciaCaja[] {
 export function unidadesEntregadas(data: RicordoDataV2, pedidos: Pedido[]): number {
   const idsEntregados = new Set(pedidos.filter((p) => p.estado === "Entregado").map((p) => p.id));
   return data.pedido_items.filter((i) => idsEntregados.has(i.pedido_id)).reduce((acc, i) => acc + i.cantidad, 0);
+}
+
+// --- EERR (Estado de Resultados) -----------------------------------------------------------------
+// Vista devengada, nunca de caja: la venta se reconoce solo cuando el pedido está Entregado (mismo
+// criterio que ya usa cmvPeriodo/ESTADOS_CMV en toda la app, así ingreso y costo del mismo pedido
+// caen siempre en el mismo período) y el CMV sale de la receta efectiva de cada variante, nunca de
+// las compras. Decisión de negocio confirmada con el usuario: el "costo real de envío" se muestra
+// igual al monto cobrado al cliente (no hay dato de km/combustible por pedido en el esquema, no se
+// migró del viejo) — por eso el envío suma a Ventas netas y resta el mismo importe en Costos
+// indirectos variables, dejando margen $0 en el envío hasta que exista un costo real distinto.
+// "Otros ingresos y gastos" e "Impuestos" quedan en cero: no hay ninguna fuente de datos para esas
+// dos líneas todavía (también confirmado con el usuario) — nunca se inventa un valor.
+
+export interface EerrRegistro {
+  fecha: string;
+  concepto: string;
+  monto: number;
+}
+
+export interface EerrLinea {
+  total: number;
+  registros: EerrRegistro[];
+}
+
+export interface Eerr {
+  ventas_brutas: EerrLinea;
+  descuentos: EerrLinea;
+  envios_cobrados: EerrLinea;
+  ventas_netas: number;
+  cmv: EerrLinea;
+  resultado_bruto: number;
+  margen_bruto_pct: number | null;
+  costos_indirectos_variables: EerrLinea;
+  gastos_operativos: EerrLinea;
+  costos_fijos: EerrLinea;
+  amortizaciones: EerrLinea;
+  resultado_operativo: number;
+  margen_operativo_pct: number | null;
+  otros_ingresos_gastos: EerrLinea;
+  impuestos: EerrLinea;
+  resultado_neto: number;
+  margen_neto_pct: number | null;
+}
+
+/** Meses (mes/año) que un rango de fechas toca, aunque sea parcialmente — un costo fijo recurrente
+ * o una amortización se cuentan una vez por cada mes que el rango pisa, sin prorratear por día
+ * (el esquema no guarda desde/hasta exacto de un costo fijo, ver migrarFinanzas). */
+function mesesEnRango(desde: string, hasta: string): { mes: number; anio: number }[] {
+  const inicio = new Date(`${desde}T00:00:00`);
+  const fin = new Date(`${hasta}T00:00:00`);
+  const meses: { mes: number; anio: number }[] = [];
+  let cursor = new Date(inicio.getFullYear(), inicio.getMonth(), 1);
+  const limite = new Date(fin.getFullYear(), fin.getMonth(), 1);
+  while (cursor <= limite) {
+    meses.push({ mes: cursor.getMonth() + 1, anio: cursor.getFullYear() });
+    cursor = new Date(cursor.getFullYear(), cursor.getMonth() + 1, 1);
+  }
+  return meses;
+}
+
+/** null en vez de 0 cuando no hay ventas netas — evita mostrar un margen que parece un dato real
+ * cuando en realidad no hay nada para calcularlo (pedido explícito de no ser "engañoso"). */
+function margenSeguro(resultado: number, ventasNetas: number): number | null {
+  return ventasNetas > 0 ? (resultado / ventasNetas) * 100 : null;
+}
+
+export function calcularEerr(data: RicordoDataV2, desde: string, hasta: string, canal?: Canal): Eerr {
+  const pedidosPeriodo = data.pedidos.filter(
+    (p) => p.estado === "Entregado" && p.fecha >= desde && p.fecha <= hasta && (!canal || p.canal === canal)
+  );
+  const idsPedidos = new Set(pedidosPeriodo.map((p) => p.id));
+  const itemsPeriodo = data.pedido_items.filter((i) => idsPedidos.has(i.pedido_id));
+  const fechaDePedido = (pedidoId: string) => pedidosPeriodo.find((p) => p.id === pedidoId)?.fecha ?? "";
+
+  const ventas_brutas: EerrLinea = {
+    total: Math.round(itemsPeriodo.reduce((acc, i) => acc + i.precio_unitario * i.cantidad, 0)),
+    registros: itemsPeriodo.map((i) => ({ fecha: fechaDePedido(i.pedido_id), concepto: i.nombre_historico, monto: Math.round(i.precio_unitario * i.cantidad) })),
+  };
+
+  const descuentos: EerrLinea = {
+    total: Math.round(itemsPeriodo.reduce((acc, i) => acc + i.descuento, 0) + pedidosPeriodo.reduce((acc, p) => acc + p.descuento, 0)),
+    registros: [
+      ...itemsPeriodo.filter((i) => i.descuento > 0).map((i) => ({ fecha: fechaDePedido(i.pedido_id), concepto: `Descuento en ${i.nombre_historico}`, monto: i.descuento })),
+      ...pedidosPeriodo.filter((p) => p.descuento > 0).map((p) => ({ fecha: p.fecha, concepto: `Descuento del pedido ${p.id}`, monto: p.descuento })),
+    ],
+  };
+
+  const envios_cobrados: EerrLinea = {
+    total: Math.round(pedidosPeriodo.reduce((acc, p) => acc + p.costo_envio, 0)),
+    registros: pedidosPeriodo.filter((p) => p.costo_envio > 0).map((p) => ({ fecha: p.fecha, concepto: `Envío cobrado — pedido ${p.id}`, monto: p.costo_envio })),
+  };
+
+  const ventas_netas = ventas_brutas.total - descuentos.total + envios_cobrados.total;
+
+  const cmv: EerrLinea = {
+    total: Math.round(itemsPeriodo.reduce((acc, i) => acc + costoPedidoItem(data, i), 0)),
+    registros: itemsPeriodo
+      .filter((i) => i.producto_variante_id)
+      .map((i) => ({ fecha: fechaDePedido(i.pedido_id), concepto: `CMV — ${i.nombre_historico}`, monto: costoPedidoItem(data, i) })),
+  };
+  const resultado_bruto = ventas_netas - cmv.total;
+  const margen_bruto_pct = margenSeguro(resultado_bruto, ventas_netas);
+
+  const movsIndirectosVariables = data.movimientos_financieros.filter(
+    (m) => nombreCategoria(data, m.categoria_id).startsWith("Costo Indirecto — Variable") && m.fecha >= desde && m.fecha <= hasta
+  );
+  const costos_indirectos_variables: EerrLinea = {
+    // Costo real de envío = mismo monto cobrado al cliente (decisión confirmada, ver comentario de arriba).
+    total: Math.round(envios_cobrados.total + movsIndirectosVariables.reduce((acc, m) => acc + m.monto, 0)),
+    registros: [
+      ...envios_cobrados.registros.map((r) => ({ ...r, concepto: `Costo real de envío (= cobrado) — ${r.concepto.replace("Envío cobrado — ", "")}` })),
+      ...movsIndirectosVariables.map((m) => ({ fecha: m.fecha, concepto: m.concepto, monto: m.monto })),
+    ],
+  };
+
+  const movsGastosOperativos = data.movimientos_financieros.filter(
+    (m) => nombreCategoria(data, m.categoria_id).startsWith("Gasto Operativo — ") && m.fecha >= desde && m.fecha <= hasta
+  );
+  const gastos_operativos: EerrLinea = {
+    total: Math.round(movsGastosOperativos.reduce((acc, m) => acc + m.monto, 0)),
+    registros: movsGastosOperativos.map((m) => ({ fecha: m.fecha, concepto: m.concepto, monto: m.monto })),
+  };
+
+  const meses = mesesEnRango(desde, hasta);
+  const movsCostosFijos = data.movimientos_financieros.filter((m) => nombreCategoria(data, m.categoria_id).startsWith("Costo Fijo — ") && m.estado === "confirmado");
+  const costos_fijos: EerrLinea = {
+    total: Math.round(totalCostosFijosRecurrentes(data) * meses.length),
+    registros: meses.flatMap((per) =>
+      movsCostosFijos.map((m) => ({ fecha: `${per.anio}-${String(per.mes).padStart(2, "0")}`, concepto: `${m.concepto} (recurrente)`, monto: m.monto }))
+    ),
+  };
+
+  const amortizaciones: EerrLinea = {
+    total: Math.round(meses.reduce((acc, per) => acc + totalAmortizacionesPeriodo(data, per.mes, per.anio), 0)),
+    registros: meses.flatMap((per) =>
+      data.activos
+        .filter((a) => a.activo && activoActivoEnPeriodo(a, per.mes, per.anio))
+        .map((a) => ({ fecha: `${per.anio}-${String(per.mes).padStart(2, "0")}`, concepto: a.nombre, monto: a.amortizacion_mensual }))
+    ),
+  };
+
+  const resultado_operativo = resultado_bruto - costos_indirectos_variables.total - gastos_operativos.total - costos_fijos.total - amortizaciones.total;
+  const margen_operativo_pct = margenSeguro(resultado_operativo, ventas_netas);
+
+  // Sin fuente de datos todavía — nunca se inventa un valor, quedan en cero hasta que exista un
+  // origen real (ver comentario de arriba, decisión confirmada con el usuario).
+  const otros_ingresos_gastos: EerrLinea = { total: 0, registros: [] };
+  const impuestos: EerrLinea = { total: 0, registros: [] };
+  const resultado_neto = resultado_operativo + otros_ingresos_gastos.total - impuestos.total;
+  const margen_neto_pct = margenSeguro(resultado_neto, ventas_netas);
+
+  return {
+    ventas_brutas,
+    descuentos,
+    envios_cobrados,
+    ventas_netas,
+    cmv,
+    resultado_bruto,
+    margen_bruto_pct,
+    costos_indirectos_variables,
+    gastos_operativos,
+    costos_fijos,
+    amortizaciones,
+    resultado_operativo,
+    margen_operativo_pct,
+    otros_ingresos_gastos,
+    impuestos,
+    resultado_neto,
+    margen_neto_pct,
+  };
 }

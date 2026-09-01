@@ -31,14 +31,11 @@ import {
   inPeriod,
   saldoCaja,
   ORIGENES_CAJA_REAL,
-  ventasNetas,
-  cmvPeriodo,
-  costosFijosTotales,
-  totalGastosOperativos,
-  totalCostoEnvio,
   puntoEquilibrio,
   totalAmortizacionesPeriodo,
+  calcularEerr,
 } from "@/lib/calc-v2";
+import type { EerrLinea } from "@/lib/calc-v2";
 import type { Activo } from "@/lib/types-v2";
 
 function nombreCategoria(data: ReturnType<typeof useStoreV2>["data"], id: string | undefined) {
@@ -489,28 +486,295 @@ function ActivosTab() {
   );
 }
 
+function fARS2(n: number | null | undefined): string {
+  const v = n ?? 0;
+  return v.toLocaleString("es-AR", { style: "currency", currency: "ARS", minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}
+function fPct2(n: number | null | undefined): string {
+  if (n == null) return "—";
+  return `${n.toLocaleString("es-AR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}%`;
+}
+
+function pad2(n: number): string {
+  return String(n).padStart(2, "0");
+}
+function primerDiaMes(mes: number, anio: number): string {
+  return `${anio}-${pad2(mes)}-01`;
+}
+function ultimoDiaMes(mes: number, anio: number): string {
+  return `${anio}-${pad2(mes)}-${pad2(new Date(anio, mes, 0).getDate())}`;
+}
+function mesAnterior(mes: number, anio: number): { mes: number; anio: number } {
+  return mes === 1 ? { mes: 12, anio: anio - 1 } : { mes: mes - 1, anio };
+}
+function sumarDias(fechaIso: string, dias: number): string {
+  const d = new Date(`${fechaIso}T00:00:00`);
+  d.setDate(d.getDate() + dias);
+  return d.toISOString().slice(0, 10);
+}
+
+interface FilaEerr {
+  id: string;
+  label: string;
+  linea?: EerrLinea;
+  actual: number;
+  anterior?: number;
+  esSubtotal?: boolean;
+  margenActual?: number | null;
+  margenAnterior?: number | null;
+  favorable: "mayorMejor" | "menorMejor";
+}
+
+function colorVariacion(favorable: "mayorMejor" | "menorMejor", variacion: number): string {
+  if (variacion === 0) return "text-text2";
+  const esBueno = favorable === "mayorMejor" ? variacion > 0 : variacion < 0;
+  return esBueno ? "text-green" : "text-red";
+}
+
+function FilaEerrVista({ fila, comparar, expandido, onToggle }: { fila: FilaEerr; comparar: boolean; expandido: boolean; onToggle: () => void }) {
+  const variacion = fila.anterior != null ? fila.actual - fila.anterior : 0;
+  const variacionPct = fila.anterior ? (variacion / Math.abs(fila.anterior)) * 100 : null;
+  const tieneRegistros = (fila.linea?.registros.length ?? 0) > 0;
+  return (
+    <>
+      <tr
+        className={`${fila.esSubtotal ? "bg-surface2/60 font-semibold" : ""} ${tieneRegistros ? "cursor-pointer" : ""}`}
+        onClick={tieneRegistros ? onToggle : undefined}
+      >
+        <Td main={fila.esSubtotal}>
+          {tieneRegistros && <span className="mr-1.5 text-text3">{expandido ? "▾" : "▸"}</span>}
+          {fila.label}
+        </Td>
+        <Td>{fARS2(fila.actual)}</Td>
+        {comparar && (
+          <>
+            <Td>{fARS2(fila.anterior ?? 0)}</Td>
+            <Td className={colorVariacion(fila.favorable, variacion)}>{fARS2(variacion)}</Td>
+            <Td className={colorVariacion(fila.favorable, variacion)}>{variacionPct == null ? "—" : fPct2(variacionPct)}</Td>
+          </>
+        )}
+      </tr>
+      {fila.margenActual !== undefined && (
+        <tr className="text-[11.5px] text-text3">
+          <Td>Margen {fila.label.toLowerCase().startsWith("resultado ") ? fila.label.slice(10) : ""}</Td>
+          <Td>{fPct2(fila.margenActual)}</Td>
+          {comparar && (
+            <>
+              <Td>{fPct2(fila.margenAnterior ?? null)}</Td>
+              <Td colSpan={2}>
+                {fila.margenActual != null && fila.margenAnterior != null
+                  ? `${(fila.margenActual - fila.margenAnterior) >= 0 ? "+" : ""}${fNum(fila.margenActual - fila.margenAnterior, 2)} pp`
+                  : "—"}
+              </Td>
+            </>
+          )}
+        </tr>
+      )}
+      {expandido && tieneRegistros && (
+        <tr>
+          <Td colSpan={comparar ? 5 : 2}>
+            <div className="max-h-56 overflow-y-auto rounded-md border border-border bg-surface2/40 p-2">
+              <table className="w-full text-[12px]">
+                <tbody>
+                  {fila.linea!.registros.map((r, i) => (
+                    <tr key={i}>
+                      <td className="py-0.5 pr-3 text-text3">{r.fecha}</td>
+                      <td className="py-0.5 pr-3 text-text2">{r.concepto}</td>
+                      <td className="py-0.5 text-right text-text">{fARS2(r.monto)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </Td>
+        </tr>
+      )}
+    </>
+  );
+}
+
 function RentabilidadTab() {
   const { data } = useStoreV2();
   const { mes, anio } = usePeriod();
 
-  const pedidosPeriodo = useMemo(() => data.pedidos.filter((p) => inPeriod(p.fecha, mes, anio) && p.estado === "Entregado"), [data.pedidos, mes, anio]);
-  const ventas = ventasNetas(pedidosPeriodo);
-  const cmv = cmvPeriodo(data, pedidosPeriodo);
-  const envio = totalCostoEnvio(pedidosPeriodo);
-  const cf = costosFijosTotales(data, mes, anio);
-  const gop = totalGastosOperativos(data, mes, anio);
-  const resultado = ventas - cmv - envio - cf - gop;
-  const pe = puntoEquilibrio(data, pedidosPeriodo, mes, anio);
+  const [modo, setModo] = useState<"mes" | "rango">("mes");
+  const [desdeManual, setDesdeManual] = useState(primerDiaMes(mes, anio));
+  const [hastaManual, setHastaManual] = useState(ultimoDiaMes(mes, anio));
+  const [canal, setCanal] = useState<"todos" | "Minorista" | "Mayorista">("todos");
+  const [comparar, setComparar] = useState(true);
+  const [expandido, setExpandido] = useState<Record<string, boolean>>({});
+
+  const { desde, hasta } = modo === "mes" ? { desde: primerDiaMes(mes, anio), hasta: ultimoDiaMes(mes, anio) } : { desde: desdeManual, hasta: hastaManual };
+  const canalFiltro = canal === "todos" ? undefined : canal;
+
+  const { desdeAnt, hastaAnt } = useMemo(() => {
+    if (modo === "mes") {
+      const ant = mesAnterior(mes, anio);
+      return { desdeAnt: primerDiaMes(ant.mes, ant.anio), hastaAnt: ultimoDiaMes(ant.mes, ant.anio) };
+    }
+    const dias = (new Date(`${hasta}T00:00:00`).getTime() - new Date(`${desde}T00:00:00`).getTime()) / 86400000 + 1;
+    return { desdeAnt: sumarDias(desde, -dias), hastaAnt: sumarDias(desde, -1) };
+  }, [modo, mes, anio, desde, hasta]);
+
+  const eerr = useMemo(() => calcularEerr(data, desde, hasta, canalFiltro), [data, desde, hasta, canalFiltro]);
+  const eerrAnt = useMemo(() => (comparar ? calcularEerr(data, desdeAnt, hastaAnt, canalFiltro) : null), [comparar, data, desdeAnt, hastaAnt, canalFiltro]);
+
+  const pedidosPeriodoPE = useMemo(() => data.pedidos.filter((p) => inPeriod(p.fecha, mes, anio) && p.estado === "Entregado"), [data.pedidos, mes, anio]);
+  const pe = puntoEquilibrio(data, pedidosPeriodoPE, mes, anio);
+
+  function toggle(id: string) {
+    setExpandido((prev) => ({ ...prev, [id]: !prev[id] }));
+  }
+
+  const filas: FilaEerr[] = [
+    { id: "vb", label: "Ventas brutas", linea: eerr.ventas_brutas, actual: eerr.ventas_brutas.total, anterior: eerrAnt?.ventas_brutas.total, favorable: "mayorMejor" },
+    { id: "desc", label: "− Descuentos y devoluciones", linea: eerr.descuentos, actual: -eerr.descuentos.total, anterior: eerrAnt ? -eerrAnt.descuentos.total : undefined, favorable: "menorMejor" },
+    { id: "env", label: "+ Envíos cobrados al cliente", linea: eerr.envios_cobrados, actual: eerr.envios_cobrados.total, anterior: eerrAnt?.envios_cobrados.total, favorable: "mayorMejor" },
+    { id: "vn", label: "= Ventas netas", actual: eerr.ventas_netas, anterior: eerrAnt?.ventas_netas, esSubtotal: true, favorable: "mayorMejor" },
+    { id: "cmv", label: "− CMV", linea: eerr.cmv, actual: -eerr.cmv.total, anterior: eerrAnt ? -eerrAnt.cmv.total : undefined, favorable: "menorMejor" },
+    {
+      id: "rb",
+      label: "= Resultado bruto",
+      actual: eerr.resultado_bruto,
+      anterior: eerrAnt?.resultado_bruto,
+      esSubtotal: true,
+      margenActual: eerr.margen_bruto_pct,
+      margenAnterior: eerrAnt?.margen_bruto_pct,
+      favorable: "mayorMejor",
+    },
+    {
+      id: "civ",
+      label: "− Costos indirectos variables (incl. envío real)",
+      linea: eerr.costos_indirectos_variables,
+      actual: -eerr.costos_indirectos_variables.total,
+      anterior: eerrAnt ? -eerrAnt.costos_indirectos_variables.total : undefined,
+      favorable: "menorMejor",
+    },
+    {
+      id: "gop",
+      label: "− Gastos operativos",
+      linea: eerr.gastos_operativos,
+      actual: -eerr.gastos_operativos.total,
+      anterior: eerrAnt ? -eerrAnt.gastos_operativos.total : undefined,
+      favorable: "menorMejor",
+    },
+    { id: "cf", label: "− Costos fijos", linea: eerr.costos_fijos, actual: -eerr.costos_fijos.total, anterior: eerrAnt ? -eerrAnt.costos_fijos.total : undefined, favorable: "menorMejor" },
+    {
+      id: "am",
+      label: "− Amortizaciones",
+      linea: eerr.amortizaciones,
+      actual: -eerr.amortizaciones.total,
+      anterior: eerrAnt ? -eerrAnt.amortizaciones.total : undefined,
+      favorable: "menorMejor",
+    },
+    {
+      id: "ro",
+      label: "= Resultado operativo",
+      actual: eerr.resultado_operativo,
+      anterior: eerrAnt?.resultado_operativo,
+      esSubtotal: true,
+      margenActual: eerr.margen_operativo_pct,
+      margenAnterior: eerrAnt?.margen_operativo_pct,
+      favorable: "mayorMejor",
+    },
+    {
+      id: "oig",
+      label: "+/− Otros ingresos y gastos",
+      linea: eerr.otros_ingresos_gastos,
+      actual: eerr.otros_ingresos_gastos.total,
+      anterior: eerrAnt?.otros_ingresos_gastos.total,
+      favorable: "mayorMejor",
+    },
+    { id: "imp", label: "− Impuestos", linea: eerr.impuestos, actual: -eerr.impuestos.total, anterior: eerrAnt ? -eerrAnt.impuestos.total : undefined, favorable: "menorMejor" },
+    {
+      id: "rn",
+      label: "= Resultado neto",
+      actual: eerr.resultado_neto,
+      anterior: eerrAnt?.resultado_neto,
+      esSubtotal: true,
+      margenActual: eerr.margen_neto_pct,
+      margenAnterior: eerrAnt?.margen_neto_pct,
+      favorable: "mayorMejor",
+    },
+  ];
 
   return (
     <div>
+      <Card title="Estado de Resultados (EERR)" className="mb-4">
+        <p className="mb-3 text-[12.5px] text-text3">
+          Resultado económico devengado, no de caja: las ventas salen de pedidos Entregados (no de cobros), el CMV sale de
+          la receta de cada producto (no de las compras del período), y los costos fijos/amortización se prorratean por
+          mes. Otros ingresos/gastos e impuestos quedan en $0 — todavía no hay una fuente de datos para esas dos líneas.
+        </p>
+        <div className="flex flex-wrap items-end gap-3">
+          <FilterTabs
+            value={modo}
+            onChange={(v) => setModo(v as "mes" | "rango")}
+            options={[
+              { value: "mes", label: `Mes: ${MESES[mes - 1]} ${anio}` },
+              { value: "rango", label: "Rango personalizado" },
+            ]}
+          />
+          {modo === "rango" && (
+            <>
+              <Field label="Desde">
+                <Input type="date" value={desdeManual} onChange={(e) => setDesdeManual(e.target.value)} />
+              </Field>
+              <Field label="Hasta">
+                <Input type="date" value={hastaManual} onChange={(e) => setHastaManual(e.target.value)} />
+              </Field>
+            </>
+          )}
+          <Field label="Canal">
+            <Select value={canal} onChange={(e) => setCanal(e.target.value as typeof canal)} style={{ width: 140 }}>
+              <option value="todos">Todos</option>
+              <option value="Minorista">Minorista</option>
+              <option value="Mayorista">Mayorista</option>
+            </Select>
+          </Field>
+          <label className="flex items-center gap-1.5 pb-2 text-[12.5px] text-text2">
+            <input type="checkbox" checked={comparar} onChange={(e) => setComparar(e.target.checked)} />
+            Comparar con período anterior
+          </label>
+        </div>
+      </Card>
+
       <StatGrid>
-        <KpiCard label="Ventas netas" value={fARS(ventas)} color="gold" />
-        <KpiCard label="CMV" value={fARS(cmv)} color="orange" />
-        <KpiCard label="Costos fijos + amortiz." value={fARS(cf)} color="orange" />
-        <KpiCard label="Gastos operativos" value={fARS(gop)} color="orange" />
-        <KpiCard label="Resultado del mes" value={fARS(resultado)} color={resultado >= 0 ? "green" : "red"} />
+        <KpiCard label="Ventas netas" value={fARS2(eerr.ventas_netas)} color="gold" />
+        <KpiCard label="Resultado bruto" value={fARS2(eerr.resultado_bruto)} color={eerr.resultado_bruto >= 0 ? "green" : "red"} />
+        <KpiCard label="Margen bruto" value={fPct2(eerr.margen_bruto_pct)} color="blue" />
+        <KpiCard label="Resultado operativo" value={fARS2(eerr.resultado_operativo)} color={eerr.resultado_operativo >= 0 ? "green" : "red"} />
+        <KpiCard label="Resultado neto" value={fARS2(eerr.resultado_neto)} color={eerr.resultado_neto >= 0 ? "green" : "red"} />
+        <KpiCard label="Margen neto" value={fPct2(eerr.margen_neto_pct)} color="blue" />
       </StatGrid>
+
+      <Card>
+        {eerr.ventas_netas === 0 && eerr.cmv.total === 0 ? (
+          <EmptyState text="No hay pedidos Entregados en este período — todo el EERR queda en cero." />
+        ) : null}
+        <TableWrap>
+          <table className="w-full">
+            <thead>
+              <tr>
+                <Th>Concepto</Th>
+                <Th>Período actual</Th>
+                {comparar && (
+                  <>
+                    <Th>Período anterior</Th>
+                    <Th>Variación $</Th>
+                    <Th>Variación %</Th>
+                  </>
+                )}
+              </tr>
+            </thead>
+            <tbody>
+              {filas.map((f) => (
+                <FilaEerrVista key={f.id} fila={f} comparar={comparar} expandido={!!expandido[f.id]} onToggle={() => toggle(f.id)} />
+              ))}
+            </tbody>
+          </table>
+        </TableWrap>
+      </Card>
 
       <Card title={`Punto de equilibrio — ${MESES[mes - 1]} ${anio}`}>
         <div className="grid grid-cols-1 gap-3.5 sm:grid-cols-3">

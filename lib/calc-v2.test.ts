@@ -13,6 +13,7 @@ import {
   totalCostosIndirectosPorTipo,
   puntoEquilibrio,
   valorStockInsumos,
+  calcularEerr,
 } from "./calc-v2";
 
 function fixture(): RicordoData {
@@ -126,4 +127,57 @@ test("puntoEquilibrio: da un número positivo y finito con datos sanos", () => {
   assert.ok(Number.isFinite(resultado.pe));
   assert.ok(resultado.pe > 0);
   assert.equal(resultado.unidadesTotales, 2);
+});
+
+test("calcularEerr: ventas/CMV/costos fijos coinciden con los mismos datos que usan las funciones ya probadas", () => {
+  const { documento } = migrarAV2(fixture());
+  const eerr = calcularEerr(documento.data, "2026-08-01", "2026-08-31");
+  // Ventas netas = 8000 (mismo total que ventasNetas del pedido Entregado, sin descuentos/envío cargados en el fixture).
+  assert.equal(eerr.ventas_netas, 8000);
+  assert.equal(eerr.descuentos.total, 0);
+  assert.equal(eerr.envios_cobrados.total, 0);
+  // CMV = 1300 (2 unidades × $650, igual que el test de cmvPeriodo).
+  assert.equal(eerr.cmv.total, 1300);
+  assert.equal(eerr.resultado_bruto, 6700);
+  assert.ok(eerr.margen_bruto_pct !== null && Math.abs(eerr.margen_bruto_pct - 83.75) < 0.01);
+  // El costo indirecto del fixture es "Fijo", no "Variable" — no debe sumar acá.
+  assert.equal(eerr.costos_indirectos_variables.total, 0);
+  assert.equal(eerr.gastos_operativos.total, 0);
+  // Costo fijo recurrente ($100000) aplica una vez por el único mes del rango (agosto).
+  assert.equal(eerr.costos_fijos.total, 100000);
+  assert.equal(eerr.amortizaciones.total, 0);
+  assert.equal(eerr.resultado_operativo, 6700 - 100000);
+  // Otros ingresos/gastos e impuestos: sin fuente de datos todavía, siempre en cero.
+  assert.equal(eerr.otros_ingresos_gastos.total, 0);
+  assert.equal(eerr.impuestos.total, 0);
+  assert.equal(eerr.resultado_neto, eerr.resultado_operativo);
+  // El detalle de CMV es trazable hasta el pedido_item que lo originó.
+  assert.equal(eerr.cmv.registros.length, 1);
+  assert.ok(eerr.cmv.registros[0].concepto.includes("Calabaza mayorista"));
+});
+
+test("calcularEerr: filtra por canal y no confunde meses sin ventas con NaN", () => {
+  const { documento } = migrarAV2(fixture());
+  // El único pedido del fixture es Mayorista — filtrando por Minorista no debe quedar nada.
+  const eerrMinorista = calcularEerr(documento.data, "2026-08-01", "2026-08-31", "Minorista");
+  assert.equal(eerrMinorista.ventas_netas, 0);
+  assert.equal(eerrMinorista.margen_bruto_pct, null);
+  assert.equal(eerrMinorista.margen_neto_pct, null);
+  // Costos fijos/costos indirectos no dependen de pedidos, así que el filtro de canal no los afecta.
+  assert.equal(eerrMinorista.costos_fijos.total, 100000);
+
+  const eerrMayorista = calcularEerr(documento.data, "2026-08-01", "2026-08-31", "Mayorista");
+  assert.equal(eerrMayorista.ventas_netas, 8000);
+});
+
+test("calcularEerr: un mes sin ningún dato da todo en cero, sin dividir por cero", () => {
+  const { documento } = migrarAV2(fixture());
+  const eerr = calcularEerr(documento.data, "2020-01-01", "2020-01-31");
+  assert.equal(eerr.ventas_netas, 0);
+  assert.equal(eerr.resultado_bruto, 0);
+  assert.equal(eerr.margen_bruto_pct, null);
+  // El costo fijo recurrente sigue aplicando (no depende de fecha), el resto queda en cero.
+  assert.equal(eerr.costos_fijos.total, 100000);
+  assert.equal(eerr.resultado_operativo, -100000);
+  assert.equal(eerr.margen_neto_pct, null);
 });
