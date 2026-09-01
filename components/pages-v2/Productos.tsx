@@ -26,7 +26,13 @@ import { fARS, fNum, costoVariante, margenVariante, recetaEfectivaVariante, cate
 import type { Canal, EtapaReceta, OperacionAjusteReceta, ProductoVariante } from "@/lib/types-v2";
 
 const ETAPAS: EtapaReceta[] = ["masa", "relleno", "salsa", "terminacion", "packaging"];
-const OPERACIONES: OperacionAjusteReceta[] = ["reemplazar", "sumar", "restar"];
+const OPERACIONES: OperacionAjusteReceta[] = ["sumar", "reemplazar", "restar"];
+const OPERACION_LABEL: Record<OperacionAjusteReceta, string> = {
+  sumar: "Agregar (insumo extra, no toca la receta base)",
+  reemplazar: "Reemplazar (cambia la cantidad de un insumo de la receta base)",
+  restar: "Restar (quita cantidad a un insumo de la receta base)",
+};
+const OPERACION_COLOR: Record<OperacionAjusteReceta, "green" | "blue" | "red"> = { sumar: "green", reemplazar: "blue", restar: "red" };
 
 function varianteVacia(): Omit<ProductoVariante, "id" | "producto_id"> {
   return { nombre: "", canal: "Minorista", presentacion: "", incluye_salsa: undefined, unidades_por_paquete: undefined, precio_venta: 0, activo: true };
@@ -53,7 +59,7 @@ function FichaProducto({ productoId }: { productoId: string }) {
   const [varianteAjusteId, setVarianteAjusteId] = useState<string>(variantes[0]?.id ?? "");
   const [nuevoAjuste, setNuevoAjuste] = useState<{ insumo_id: string; operacion: OperacionAjusteReceta; cantidad: number; etapa: EtapaReceta | "" }>({
     insumo_id: "",
-    operacion: "reemplazar",
+    operacion: "sumar",
     cantidad: 0,
     etapa: "",
   });
@@ -160,7 +166,7 @@ function FichaProducto({ productoId }: { productoId: string }) {
         },
       ],
     }));
-    setNuevoAjuste({ insumo_id: "", operacion: "reemplazar", cantidad: 0, etapa: "" });
+    setNuevoAjuste({ insumo_id: "", operacion: "sumar", cantidad: 0, etapa: "" });
   }
   function quitarAjuste(id: string) {
     setData((d) => ({ ...d, ajustes_receta_variante: d.ajustes_receta_variante.filter((a) => a.id !== id) }));
@@ -349,7 +355,11 @@ function FichaProducto({ productoId }: { productoId: string }) {
       </Card>
 
       {variantes.length > 0 && (
-        <Card title="Ajustes y complementos por variante">
+        <Card title="Insumos por canal de venta (sin tocar la receta base)">
+          <p className="mb-3 text-[12.5px] text-text3">
+            Esta variante hereda la receta base tal cual. Acá podés agregarle insumos propios (por ejemplo, algo distinto
+            para Mayorista que para Minorista) sin modificar la receta compartida por el resto de las variantes.
+          </p>
           <div className="mb-3 max-w-[260px]">
             <Select value={varianteSeleccionadaAjustes} onChange={(e) => setVarianteAjusteId(e.target.value)}>
               {variantes.map((v) => (
@@ -360,16 +370,18 @@ function FichaProducto({ productoId }: { productoId: string }) {
             </Select>
           </div>
 
-          <div className="mb-1 text-[11px] font-semibold uppercase tracking-wide text-text3">Ajustes puntuales</div>
+          <div className="mb-1 text-[11px] font-semibold uppercase tracking-wide text-text3">Insumos agregados o ajustados</div>
           {ajustesVariante.length === 0 ? (
-            <EmptyState text="Sin ajustes — usa la receta base tal cual." />
+            <EmptyState text="Sin insumos propios — usa la receta base tal cual." />
           ) : (
             <table className="mb-2 w-full">
               <tbody>
                 {ajustesVariante.map((a) => (
                   <tr key={a.id}>
                     <Td main>{insumoNombre(a.insumo_id)}</Td>
-                    <Td>{a.operacion}</Td>
+                    <Td>
+                      <Badge color={OPERACION_COLOR[a.operacion]}>{OPERACION_LABEL[a.operacion].split(" (")[0]}</Badge>
+                    </Td>
                     <Td>{fNum(a.cantidad, 3)}</Td>
                     <Td>{a.etapa ?? "—"}</Td>
                     <Td>
@@ -394,11 +406,11 @@ function FichaProducto({ productoId }: { productoId: string }) {
             <Select
               value={nuevoAjuste.operacion}
               onChange={(e) => setNuevoAjuste({ ...nuevoAjuste, operacion: e.target.value as OperacionAjusteReceta })}
-              className="w-full sm:w-32"
+              className="w-full sm:w-64"
             >
               {OPERACIONES.map((o) => (
                 <option key={o} value={o}>
-                  {o}
+                  {OPERACION_LABEL[o]}
                 </option>
               ))}
             </Select>
