@@ -236,10 +236,13 @@ export function comprasAcumuladas(data: RicordoDataV2): number {
 /** Orígenes que representan un movimiento real de efectivo/banco (a diferencia de un registro
  * puramente contable como "Costo Fijo"/"Costo Indirecto"/"Gasto Operativo", que nunca tocaba
  * `caja_movimientos` en el esquema viejo tampoco). Load-bearing: toda pantalla nueva que registre
- * un cobro/pago real (Ventas → marcar entregado, Operaciones → marcar compra pagada, Finanzas →
- * movimiento manual de caja) debe etiquetar `origen_tipo` con uno de estos valores para que
- * `saldoCaja` lo cuente. */
-export const ORIGENES_CAJA_REAL = ["caja_movimiento_legacy", "venta_pedido", "compra_pago", "caja_manual"];
+ * un cobro/pago/inversión real (Operaciones → marcar compra pagada, Finanzas → movimiento manual
+ * de caja o alta de un activo) debe etiquetar `origen_tipo` con uno de estos valores para que
+ * `saldoCaja` y `calcularFlujoCaja` lo cuenten. Importante: entregar un pedido NO genera caja por
+ * sí solo — "venta_pedido" recién se usa cuando se registra el cobro real (Finanzas → Cuentas
+ * pendientes), nunca automáticamente al marcar Entregado (una venta entregada y no cobrada sigue
+ * siendo una cuenta por cobrar, no plata en la cuenta). */
+export const ORIGENES_CAJA_REAL = ["caja_movimiento_legacy", "venta_pedido", "compra_pago", "compra_activo", "caja_manual"];
 
 /** "Caja" es el movimiento real de efectivo/banco — no toda `movimientos_financieros` afecta
  * caja: un "Costo Fijo"/"Costo Indirecto"/"Gasto Operativo" es un registro contable para EERR,
@@ -981,4 +984,166 @@ export function alertasMargen(data: RicordoDataV2, items: MargenItemDetalle[], m
   }
 
   return alertas;
+}
+
+// --- Flujo de caja ---------------------------------------------------------------------------
+// Explica cómo cambió la plata disponible — nunca se confunde con el resultado económico (EERR):
+// acá solo entran movimientos con un origen de caja REAL (ver ORIGENES_CAJA_REAL) o transferencias.
+// Una venta entregada no cobrada no aparece acá (no hay caja hasta que se registra el cobro real,
+// en Cuentas pendientes); una compra confirmada no pagada tampoco. La compra de un activo entra
+// como "Inversión" (ver ActivosTab, que ahora genera ese movimiento al crear un activo nuevo) sin
+// afectar el EERR más que por su amortización mensual.
+
+function esMovimientoCajaReal(m: RicordoDataV2["movimientos_financieros"][number]): boolean {
+  return (!!m.origen_tipo && ORIGENES_CAJA_REAL.includes(m.origen_tipo)) || m.tipo === "transferencia";
+}
+
+function clasificarMovimientoCaja(m: RicordoDataV2["movimientos_financieros"][number]): "cobros_clientes" | "pagos_compras" | "inversiones" | "transferencias" | "otros_ingresos" | "gastos_pagados" {
+  if (m.tipo === "transferencia") return "transferencias";
+  if (m.origen_tipo === "venta_pedido") return "cobros_clientes";
+  if (m.origen_tipo === "compra_pago") return "pagos_compras";
+  if (m.origen_tipo === "compra_activo") return "inversiones";
+  return m.tipo === "ingreso" ? "otros_ingresos" : "gastos_pagados";
+}
+
+/** Saldo de caja real hasta una fecha (inclusive) — mismo criterio que saldoCaja pero con corte de
+ * fecha, para poder calcular saldo inicial/final de un período. */
+function saldoCajaAlFecha(data: RicordoDataV2, hastaFecha?: string): number {
+  const movs = data.movimientos_financieros
+    .filter((m) => esMovimientoCajaReal(m) && (!hastaFecha || m.fecha <= hastaFecha))
+    .reduce((acc, m) => (m.tipo === "ingreso" ? acc + m.monto : m.tipo === "egreso" ? acc - m.monto : acc), 0);
+  // `|| 0` normaliza un posible -0 (ej. 0 - 0 acumulado en el reduce) a 0 — mismo valor numérico,
+  // pero assert.equal en modo estricto los distingue y no tiene sentido mostrarlo distinto en la UI.
+  return (data.configuracion.saldo_inicial_caja ?? 0) + movs || 0;
+}
+
+export interface FlujoCajaCuenta {
+  cuenta: string;
+  saldo_inicial: number;
+  entradas: number;
+  salidas: number;
+  saldo_final: number;
+}
+
+export interface FlujoCaja {
+  saldo_inicial: number;
+  cobros_clientes: EerrLinea;
+  otros_ingresos: EerrLinea;
+  pagos_compras: EerrLinea;
+  gastos_pagados: EerrLinea;
+  inversiones: EerrLinea;
+  transferencias: EerrLinea;
+  saldo_final: number;
+  por_cuenta: FlujoCajaCuenta[];
+  flujo_operativo: number;
+  flujo_inversion: number;
+  flujo_financiacion: number;
+  evolucion_diaria: { fecha: string; saldo: number }[];
+  evolucion_mensual: { label: string; entradas: number; salidas: number; saldo_final: number }[];
+  por_categoria: { categoria: string; monto: number }[];
+  proyeccion_30_dias: number;
+}
+
+export function calcularFlujoCaja(data: RicordoDataV2, desde: string, hasta: string): FlujoCaja {
+  const movs = data.movimientos_financieros.filter((m) => esMovimientoCajaReal(m) && m.fecha >= desde && m.fecha <= hasta);
+  const grupos: Record<string, RicordoDataV2["movimientos_financieros"]> = {
+    cobros_clientes: [],
+    pagos_compras: [],
+    inversiones: [],
+    transferencias: [],
+    otros_ingresos: [],
+    gastos_pagados: [],
+  };
+  for (const m of movs) grupos[clasificarMovimientoCaja(m)].push(m);
+
+  const aLinea = (lista: RicordoDataV2["movimientos_financieros"]): EerrLinea => ({
+    total: Math.round(lista.reduce((acc, m) => acc + m.monto, 0)),
+    registros: lista.map((m) => ({ fecha: m.fecha, concepto: m.concepto, monto: m.tipo === "egreso" ? -m.monto : m.monto })),
+  });
+
+  const cobros_clientes = aLinea(grupos.cobros_clientes);
+  const otros_ingresos = aLinea(grupos.otros_ingresos);
+  const pagos_compras = aLinea(grupos.pagos_compras);
+  const gastos_pagados = aLinea(grupos.gastos_pagados);
+  const inversiones = aLinea(grupos.inversiones);
+  const transferencias: EerrLinea = {
+    total: Math.round(grupos.transferencias.reduce((acc, m) => acc + m.monto, 0)),
+    registros: grupos.transferencias.map((m) => ({ fecha: m.fecha, concepto: m.concepto, monto: m.monto })),
+  };
+
+  const diaAnterior = sumarDias(desde, -1);
+  const saldo_inicial = Math.round(saldoCajaAlFecha(data, diaAnterior));
+  const saldo_final = Math.round(saldoCajaAlFecha(data, hasta));
+
+  const porCuentaMap = new Map<string, RicordoDataV2["movimientos_financieros"]>();
+  for (const m of movs) {
+    if (m.tipo === "transferencia") continue; // las transferencias no tienen un único metodo_pago — se muestran aparte
+    const cuenta = m.metodo_pago?.trim() || "Sin especificar";
+    const lista = porCuentaMap.get(cuenta) ?? [];
+    lista.push(m);
+    porCuentaMap.set(cuenta, lista);
+  }
+  const por_cuenta: FlujoCajaCuenta[] = [...porCuentaMap.entries()].map(([cuenta, lista]) => {
+    const entradas = Math.round(lista.filter((m) => m.tipo === "ingreso").reduce((acc, m) => acc + m.monto, 0));
+    const salidas = Math.round(lista.filter((m) => m.tipo === "egreso").reduce((acc, m) => acc + m.monto, 0));
+    // Saldo inicial/final de la cuenta: mismo criterio, pero solo con movimientos de ese método de pago.
+    const historicoCuenta = data.movimientos_financieros.filter((m) => esMovimientoCajaReal(m) && m.tipo !== "transferencia" && (m.metodo_pago?.trim() || "Sin especificar") === cuenta);
+    const antes = historicoCuenta.filter((m) => m.fecha <= diaAnterior).reduce((acc, m) => (m.tipo === "ingreso" ? acc + m.monto : acc - m.monto), 0);
+    const final = historicoCuenta.filter((m) => m.fecha <= hasta).reduce((acc, m) => (m.tipo === "ingreso" ? acc + m.monto : acc - m.monto), 0);
+    return { cuenta, saldo_inicial: Math.round(antes), entradas, salidas, saldo_final: Math.round(final) };
+  });
+
+  const fechasConMovimiento = [...new Set(movs.map((m) => m.fecha))].sort();
+  const evolucion_diaria = fechasConMovimiento.map((fecha) => ({ fecha, saldo: Math.round(saldoCajaAlFecha(data, fecha)) }));
+
+  const meses = mesesEnRango(desde, hasta);
+  const evolucion_mensual = meses.map((per) => {
+    const d0 = primerDiaMes(per.mes, per.anio);
+    const d1 = ultimoDiaMes(per.mes, per.anio);
+    const movsMes = data.movimientos_financieros.filter((m) => esMovimientoCajaReal(m) && m.fecha >= d0 && m.fecha <= d1);
+    return {
+      label: `${d0.slice(0, 7)}`,
+      entradas: Math.round(movsMes.filter((m) => m.tipo === "ingreso").reduce((acc, m) => acc + m.monto, 0)),
+      salidas: Math.round(movsMes.filter((m) => m.tipo === "egreso").reduce((acc, m) => acc + m.monto, 0)),
+      saldo_final: Math.round(saldoCajaAlFecha(data, d1)),
+    };
+  });
+
+  const categoriaMap = new Map<string, number>();
+  for (const m of movs) {
+    const cat = nombreCategoria(data, m.categoria_id) || "Sin categoría";
+    categoriaMap.set(cat, (categoriaMap.get(cat) ?? 0) + (m.tipo === "egreso" ? -m.monto : m.monto));
+  }
+  const por_categoria = [...categoriaMap.entries()].map(([categoria, monto]) => ({ categoria, monto: Math.round(monto) })).sort((a, b) => b.monto - a.monto);
+
+  const flujo_operativo = cobros_clientes.total + otros_ingresos.total - pagos_compras.total - gastos_pagados.total;
+  const flujo_inversion = -inversiones.total || 0;
+  const flujo_financiacion = transferencias.total;
+
+  // Proyección naive: promedio de flujo neto diario real del período, proyectado 30 días — no es
+  // un modelo predictivo, es una extrapolación lineal de lo reciente, y se documenta como tal en
+  // la UI.
+  const dias = Math.max(1, Math.round((new Date(`${hasta}T00:00:00`).getTime() - new Date(`${desde}T00:00:00`).getTime()) / 86400000) + 1);
+  const flujoNetoPeriodo = cobros_clientes.total + otros_ingresos.total - pagos_compras.total - gastos_pagados.total - inversiones.total;
+  const promedioDiario = flujoNetoPeriodo / dias;
+  const proyeccion_30_dias = Math.round(saldo_final + promedioDiario * 30);
+
+  return {
+    saldo_inicial,
+    cobros_clientes,
+    otros_ingresos,
+    pagos_compras,
+    gastos_pagados,
+    inversiones,
+    transferencias,
+    saldo_final,
+    por_cuenta,
+    flujo_operativo: Math.round(flujo_operativo),
+    flujo_inversion: Math.round(flujo_inversion),
+    flujo_financiacion: Math.round(flujo_financiacion),
+    evolucion_diaria,
+    evolucion_mensual,
+    por_categoria,
+    proyeccion_30_dias,
+  };
 }

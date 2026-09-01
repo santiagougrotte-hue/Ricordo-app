@@ -38,6 +38,7 @@ import {
   calcularEerr,
   calcularComprasCmvInventario,
   calcularMargenPorItem,
+  calcularFlujoCaja,
   agruparMargen,
   compararCanalesPorSabor,
   alertasMargen,
@@ -402,7 +403,27 @@ function ActivosTab() {
       setData((d) => ({ ...d, activos: d.activos.map((a) => (a.id === editando ? { ...a, ...registro } : a)) }));
       toast("Activo actualizado");
     } else {
-      setData((d) => ({ ...d, activos: [...d.activos, { id: uid("ACT"), ...registro }] }));
+      const activoId = uid("ACT");
+      setData((d) => ({
+        ...d,
+        activos: [...d.activos, { id: activoId, ...registro }],
+        // La compra de un activo afecta la caja real (Flujo de caja → Inversiones), pero nunca se
+        // lleva completa como gasto al EERR — ahí solo entra la amortización mensual (totalAmortizacionesPeriodo),
+        // por eso este movimiento no lleva categoria_id de "Costo Fijo/Indirecto/Gasto Operativo".
+        movimientos_financieros: [
+          ...d.movimientos_financieros,
+          {
+            id: uid("MOVF"),
+            fecha: registro.fecha_compra,
+            tipo: "egreso",
+            concepto: `Compra de activo — ${registro.nombre}`,
+            monto: registro.costo,
+            origen_tipo: "compra_activo",
+            origen_id: activoId,
+            estado: "confirmado",
+          },
+        ],
+      }));
       toast("Activo creado");
     }
     setModalOpen(false);
@@ -1603,16 +1624,280 @@ function ReinversionTab() {
   );
 }
 
+function GraficoFlujoMensual({ meses }: { meses: { label: string; entradas: number; salidas: number }[] }) {
+  if (meses.length === 0) return null;
+  const max = Math.max(1, ...meses.flatMap((m) => [m.entradas, m.salidas]));
+  const alto = 110;
+  const anchoBarra = 16;
+  const gap = 3;
+  const anchoGrupo = anchoBarra * 2 + gap + 14;
+  const anchoTotal = meses.length * anchoGrupo;
+  return (
+    <div className="overflow-x-auto">
+      <svg viewBox={`0 0 ${anchoTotal} ${alto + 30}`} className="text-text2" style={{ height: 150, minWidth: anchoTotal }}>
+        {meses.map((m, i) => {
+          const x0 = i * anchoGrupo;
+          const hEntradas = (m.entradas / max) * alto;
+          const hSalidas = (m.salidas / max) * alto;
+          return (
+            <g key={i}>
+              <rect x={x0} y={alto - hEntradas} width={anchoBarra} height={hEntradas} fill="#2dbe6c" rx={2} />
+              <rect x={x0 + anchoBarra + gap} y={alto - hSalidas} width={anchoBarra} height={hSalidas} fill="#e5484d" rx={2} />
+              <text x={x0 + anchoBarra} y={alto + 14} fontSize="9" textAnchor="middle" fill="currentColor">
+                {m.label}
+              </text>
+            </g>
+          );
+        })}
+      </svg>
+      <div className="mt-1 flex gap-4 text-[11px] text-text3">
+        <span className="flex items-center gap-1.5">
+          <span className="h-2.5 w-2.5 rounded-sm" style={{ background: "#2dbe6c" }} /> Entradas
+        </span>
+        <span className="flex items-center gap-1.5">
+          <span className="h-2.5 w-2.5 rounded-sm" style={{ background: "#e5484d" }} /> Salidas
+        </span>
+      </div>
+    </div>
+  );
+}
+
+function FlujoCajaTab() {
+  const { data } = useStoreV2();
+  const { mes, anio } = usePeriod();
+
+  const [modo, setModo] = useState<ModoPeriodoInventario>("mes");
+  const [desdeManual, setDesdeManual] = useState(primerDiaMes(mes, anio));
+  const [hastaManual, setHastaManual] = useState(ultimoDiaMes(mes, anio));
+  const [expandido, setExpandido] = useState<Record<string, boolean>>({});
+
+  const { desde, hasta } = useMemo(() => resolverRangoInventario(modo, mes, anio, desdeManual, hastaManual), [modo, mes, anio, desdeManual, hastaManual]);
+  const f = useMemo(() => calcularFlujoCaja(data, desde, hasta), [data, desde, hasta]);
+
+  function toggle(id: string) {
+    setExpandido((prev) => ({ ...prev, [id]: !prev[id] }));
+  }
+
+  return (
+    <div>
+      <Card title="Flujo de caja" className="mb-4">
+        <p className="mb-3 text-[12.5px] text-text3">
+          Explica cómo cambió la plata disponible — nunca se confunde con el resultado económico (Estado de
+          Resultados). Una venta entregada no cobrada no mueve caja todavía (se cobra desde Cuentas pendientes); una
+          compra confirmada no pagada tampoco.
+        </p>
+        <FilterTabs
+          value={modo}
+          onChange={(v) => setModo(v as ModoPeriodoInventario)}
+          options={[
+            { value: "mes", label: `Mes actual (${MESES[mes - 1]})` },
+            { value: "3m", label: "Últimos 3 meses" },
+            { value: "6m", label: "Últimos 6 meses" },
+            { value: "12m", label: "Últimos 12 meses" },
+            { value: "anio", label: `Año ${anio}` },
+            { value: "rango", label: "Rango personalizado" },
+          ]}
+        />
+        {modo === "rango" && (
+          <div className="mt-3 flex flex-wrap gap-3">
+            <Field label="Desde">
+              <Input type="date" value={desdeManual} onChange={(e) => setDesdeManual(e.target.value)} />
+            </Field>
+            <Field label="Hasta">
+              <Input type="date" value={hastaManual} onChange={(e) => setHastaManual(e.target.value)} />
+            </Field>
+          </div>
+        )}
+      </Card>
+
+      <StatGrid>
+        <KpiCard label="Saldo inicial" value={fARS2(f.saldo_inicial)} color="blue" />
+        <KpiCard label="Saldo final" value={fARS2(f.saldo_final)} color={f.saldo_final >= 0 ? "green" : "red"} />
+        <KpiCard label="Flujo operativo" value={fARS2(f.flujo_operativo)} color={f.flujo_operativo >= 0 ? "green" : "red"} />
+        <KpiCard label="Flujo de inversión" value={fARS2(f.flujo_inversion)} color={f.flujo_inversion >= 0 ? "green" : "orange"} />
+        <KpiCard label="Flujo de financiación" value={fARS2(f.flujo_financiacion)} color="blue" />
+        <KpiCard label="Proyección a 30 días" value={fARS2(f.proyeccion_30_dias)} color={f.proyeccion_30_dias >= 0 ? "green" : "red"} />
+      </StatGrid>
+
+      <Card title="Cómo cambió la caja en el período">
+        <TableWrap>
+          <table className="w-full">
+            <thead>
+              <tr>
+                <Th>Concepto</Th>
+                <Th>Importe</Th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <Td main>Saldo inicial</Td>
+                <Td>{fARS2(f.saldo_inicial)}</Td>
+              </tr>
+              <FilaDetalleVista label="+ Cobros de clientes" monto={f.cobros_clientes.total} linea={f.cobros_clientes} expandido={!!expandido.cobros} onToggle={() => toggle("cobros")} />
+              <FilaDetalleVista label="+ Otros ingresos" monto={f.otros_ingresos.total} linea={f.otros_ingresos} expandido={!!expandido.otros} onToggle={() => toggle("otros")} />
+              <FilaDetalleVista
+                label="− Pagos de compras"
+                monto={-f.pagos_compras.total}
+                linea={f.pagos_compras}
+                expandido={!!expandido.pagos}
+                onToggle={() => toggle("pagos")}
+                colorSiNegativo
+              />
+              <FilaDetalleVista
+                label="− Gastos pagados"
+                monto={-f.gastos_pagados.total}
+                linea={f.gastos_pagados}
+                expandido={!!expandido.gastos}
+                onToggle={() => toggle("gastos")}
+                colorSiNegativo
+              />
+              <FilaDetalleVista
+                label="− Inversiones"
+                monto={-f.inversiones.total}
+                linea={f.inversiones}
+                expandido={!!expandido.inversiones}
+                onToggle={() => toggle("inversiones")}
+                colorSiNegativo
+              />
+              <FilaDetalleVista
+                label="+/− Transferencias"
+                monto={f.transferencias.total}
+                linea={f.transferencias}
+                expandido={!!expandido.transferencias}
+                onToggle={() => toggle("transferencias")}
+              />
+              <tr className="bg-surface2/60 font-semibold">
+                <Td main>= Saldo final</Td>
+                <Td className={f.saldo_final >= 0 ? "text-green" : "text-red"}>{fARS2(f.saldo_final)}</Td>
+              </tr>
+            </tbody>
+          </table>
+        </TableWrap>
+      </Card>
+
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+        <Card title="Saldo por cuenta / método de pago">
+          {f.por_cuenta.length === 0 ? (
+            <EmptyState text="Sin movimientos en el período." />
+          ) : (
+            <TableWrap>
+              <table className="w-full">
+                <thead>
+                  <tr>
+                    <Th>Cuenta</Th>
+                    <Th>Inicial</Th>
+                    <Th>Entradas</Th>
+                    <Th>Salidas</Th>
+                    <Th>Final</Th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {f.por_cuenta.map((c) => (
+                    <TrHover key={c.cuenta}>
+                      <Td main>{c.cuenta}</Td>
+                      <Td>{fARS2(c.saldo_inicial)}</Td>
+                      <Td className="text-green">{fARS2(c.entradas)}</Td>
+                      <Td className="text-red">{fARS2(c.salidas)}</Td>
+                      <Td className={c.saldo_final >= 0 ? "text-green" : "text-red"}>{fARS2(c.saldo_final)}</Td>
+                    </TrHover>
+                  ))}
+                </tbody>
+              </table>
+            </TableWrap>
+          )}
+        </Card>
+
+        <Card title="Ingresos y egresos por categoría">
+          {f.por_categoria.length === 0 ? (
+            <EmptyState text="Sin movimientos en el período." />
+          ) : (
+            <TableWrap>
+              <table className="w-full">
+                <thead>
+                  <tr>
+                    <Th>Categoría</Th>
+                    <Th>Neto</Th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {f.por_categoria.map((c) => (
+                    <TrHover key={c.categoria}>
+                      <Td main>{c.categoria}</Td>
+                      <Td className={c.monto >= 0 ? "text-green" : "text-red"}>{fARS2(c.monto)}</Td>
+                    </TrHover>
+                  ))}
+                </tbody>
+              </table>
+            </TableWrap>
+          )}
+        </Card>
+      </div>
+
+      <Card title="Evolución mensual">
+        <GraficoFlujoMensual meses={f.evolucion_mensual} />
+        <TableWrap>
+          <table className="mt-3 w-full">
+            <thead>
+              <tr>
+                <Th>Mes</Th>
+                <Th>Entradas</Th>
+                <Th>Salidas</Th>
+                <Th>Saldo final</Th>
+              </tr>
+            </thead>
+            <tbody>
+              {f.evolucion_mensual.map((m, i) => (
+                <TrHover key={i}>
+                  <Td main>{m.label}</Td>
+                  <Td className="text-green">{fARS2(m.entradas)}</Td>
+                  <Td className="text-red">{fARS2(m.salidas)}</Td>
+                  <Td className={m.saldo_final >= 0 ? "text-green" : "text-red"}>{fARS2(m.saldo_final)}</Td>
+                </TrHover>
+              ))}
+            </tbody>
+          </table>
+        </TableWrap>
+      </Card>
+
+      <Card title="Evolución diaria (días con movimiento)">
+        {f.evolucion_diaria.length === 0 ? (
+          <EmptyState text="Sin movimientos en el período." />
+        ) : (
+          <TableWrap>
+            <table className="w-full">
+              <thead>
+                <tr>
+                  <Th>Fecha</Th>
+                  <Th>Saldo</Th>
+                </tr>
+              </thead>
+              <tbody>
+                {f.evolucion_diaria.map((d, i) => (
+                  <TrHover key={i}>
+                    <Td main>{d.fecha}</Td>
+                    <Td className={d.saldo >= 0 ? "text-green" : "text-red"}>{fARS2(d.saldo)}</Td>
+                  </TrHover>
+                ))}
+              </tbody>
+            </table>
+          </TableWrap>
+        )}
+      </Card>
+    </div>
+  );
+}
+
 export function Finanzas() {
   const [tab, setTab] = useState("caja");
   return (
     <div>
-      <PageHeader title="Finanzas" sub="Caja, ingresos y egresos, gastos, activos, reinversión y rentabilidad" />
+      <PageHeader title="Finanzas" sub="Caja, flujo, ingresos y egresos, gastos, activos, reinversión y rentabilidad" />
       <FilterTabs
         value={tab}
         onChange={setTab}
         options={[
           { value: "caja", label: "Caja y bancos" },
+          { value: "flujo", label: "Flujo de caja" },
           { value: "movimientos", label: "Ingresos y egresos" },
           { value: "gastos", label: "Gastos" },
           { value: "activos", label: "Activos e inversiones" },
@@ -1621,6 +1906,7 @@ export function Finanzas() {
         ]}
       />
       {tab === "caja" && <CajaTab />}
+      {tab === "flujo" && <FlujoCajaTab />}
       {tab === "movimientos" && <IngresosEgresosTab />}
       {tab === "gastos" && <GastosTab />}
       {tab === "activos" && <ActivosTab />}

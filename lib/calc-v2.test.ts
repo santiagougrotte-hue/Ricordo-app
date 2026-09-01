@@ -20,6 +20,7 @@ import {
   agruparMargen,
   compararCanalesPorSabor,
   alertasMargen,
+  calcularFlujoCaja,
 } from "./calc-v2";
 
 function fixture(): RicordoData {
@@ -297,4 +298,44 @@ test("alertasMargen: bajo margen $0 en envío (costo real = cobrado), en cambio 
   const alertas = alertasMargen(data, items, 15);
   // $60 de envío sobre $100 de venta bruta = 60% > 30% → dispara la alerta de envío desproporcionado.
   assert.ok(alertas.some((a) => a.mensaje.includes("representa más del 30%")));
+});
+
+test("calcularFlujoCaja: el caja_movimiento_legacy del fixture entra como caja real, agrupado por método de pago", () => {
+  const { documento } = migrarAV2(fixture());
+  const flujo = calcularFlujoCaja(documento.data, "2026-08-01", "2026-08-31");
+  assert.equal(flujo.saldo_inicial, 0);
+  assert.equal(flujo.saldo_final, 8000);
+  // El movimiento migrado no tiene origen_tipo "venta_pedido" (la entrega ya no genera caja sola) —
+  // cae en "otros ingresos", no en "cobros de clientes".
+  assert.equal(flujo.cobros_clientes.total, 0);
+  assert.equal(flujo.otros_ingresos.total, 8000);
+  assert.equal(flujo.pagos_compras.total, 0);
+  assert.equal(flujo.flujo_operativo, 8000);
+  assert.equal(flujo.flujo_inversion, 0);
+  assert.equal(flujo.por_cuenta.length, 1);
+  assert.equal(flujo.por_cuenta[0].cuenta, "Efectivo");
+  assert.equal(flujo.por_cuenta[0].saldo_final, 8000);
+  assert.equal(flujo.evolucion_diaria.length, 1);
+  assert.equal(flujo.evolucion_mensual.length, 1);
+  assert.ok(Number.isFinite(flujo.proyeccion_30_dias));
+});
+
+test("calcularFlujoCaja: entregar un pedido no genera caja; el cobro y el pago de compra se clasifican en su propio balde; las transferencias no afectan el saldo total", () => {
+  const data = emptyDataV2();
+  data.movimientos_financieros = [
+    { id: "M1", fecha: "2026-02-01", tipo: "ingreso", concepto: "Cobro pedido PED-1", monto: 1000, origen_tipo: "venta_pedido", origen_id: "PED-1", estado: "confirmado" },
+    { id: "M2", fecha: "2026-02-02", tipo: "egreso", concepto: "Compra COM-1", monto: 300, origen_tipo: "compra_pago", origen_id: "COM-1", estado: "confirmado" },
+    { id: "M3", fecha: "2026-02-03", tipo: "egreso", concepto: "Compra de activo — Amasadora", monto: 500, origen_tipo: "compra_activo", origen_id: "ACT-1", estado: "confirmado" },
+    { id: "M4", fecha: "2026-02-04", tipo: "transferencia", concepto: "Banco a Efectivo", monto: 200, estado: "confirmado" },
+    // Un costo fijo NO es caja real (no tiene origen_tipo de ORIGENES_CAJA_REAL) — no debe entrar acá.
+    { id: "M5", fecha: "2026-02-05", tipo: "egreso", concepto: "Alquiler", monto: 9999, categoria_id: "CAT-CF", estado: "confirmado" },
+  ];
+  data.categorias = [{ id: "CAT-CF", nombre: "Costo Fijo — Alquiler", ambito: "financiero", activo: true }];
+  const flujo = calcularFlujoCaja(data, "2026-02-01", "2026-02-28");
+  assert.equal(flujo.cobros_clientes.total, 1000);
+  assert.equal(flujo.pagos_compras.total, 300);
+  assert.equal(flujo.inversiones.total, 500);
+  assert.equal(flujo.transferencias.total, 200);
+  assert.equal(flujo.saldo_final, 1000 - 300 - 500); // la transferencia es neutra para el total agregado
+  assert.equal(flujo.flujo_inversion, -500);
 });

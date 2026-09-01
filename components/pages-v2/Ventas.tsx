@@ -83,13 +83,14 @@ function totalPedido(form: PedidoForm): number {
 }
 
 /** Registrar una entrega genera, de forma idempotente (por `origen_id`), el movimiento de salida
- * de stock por cada ítem y el ingreso de caja del pedido completo — la misma trazabilidad
- * pedido→inventario→finanzas que pide el esquema nuevo. */
+ * de stock por cada ítem — la trazabilidad pedido→inventario que pide el esquema nuevo. Entregar
+ * un pedido NO genera caja: una venta entregada y no cobrada es una cuenta por cobrar, no plata en
+ * la cuenta (ver Finanzas → Cuentas pendientes para registrar el cobro real, total o parcial). */
 function conMovimientosDeEntrega(
   d: ReturnType<typeof useStoreV2>["data"],
   pedido: Pedido,
   items: PedidoItem[]
-): Pick<typeof d, "inventario_movimientos" | "movimientos_financieros"> {
+): Pick<typeof d, "inventario_movimientos"> {
   const yaTieneMovStock = d.inventario_movimientos.some((m) => m.origen_tipo === "pedido" && m.origen_id === pedido.id);
   const nuevosMovStock = yaTieneMovStock
     ? []
@@ -106,26 +107,8 @@ function conMovimientosDeEntrega(
           cantidad: -i.cantidad,
         }));
 
-  const yaTieneMovCaja = d.movimientos_financieros.some((m) => m.origen_tipo === "venta_pedido" && m.origen_id === pedido.id);
-  const nuevoMovCaja = yaTieneMovCaja
-    ? []
-    : [
-        {
-          id: uid("MOVF"),
-          fecha: pedido.fecha,
-          tipo: "ingreso" as const,
-          concepto: `Cobro pedido ${pedido.id}`,
-          monto: pedido.total,
-          metodo_pago: pedido.metodo_pago,
-          origen_tipo: "venta_pedido",
-          origen_id: pedido.id,
-          estado: "confirmado" as const,
-        },
-      ];
-
   return {
     inventario_movimientos: [...d.inventario_movimientos, ...nuevosMovStock],
-    movimientos_financieros: [...d.movimientos_financieros, ...nuevoMovCaja],
   };
 }
 
