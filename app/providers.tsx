@@ -1,7 +1,7 @@
 "use client";
 
 import React from "react";
-import { StoreProvider } from "@/lib/store";
+import { StoreV2Provider } from "@/lib/store-v2";
 import { ToastProvider } from "@/lib/toast";
 import { PeriodProvider } from "@/lib/period";
 import { RouterProvider } from "@/lib/nav-context";
@@ -20,13 +20,13 @@ function AuthGate({ children }: { children: React.ReactNode }) {
   }
 
   return (
-    <StoreProvider>
+    <StoreV2Provider>
       <ToastProvider>
         <PeriodProvider>
           <RouterProvider>{children}</RouterProvider>
         </PeriodProvider>
       </ToastProvider>
-    </StoreProvider>
+    </StoreV2Provider>
   );
 }
 

@@ -224,15 +224,21 @@ export function comprasAcumuladas(data: RicordoDataV2): number {
   return (data.configuracion.saldo_inicial_compras ?? 0) + post.reduce((acc, c) => acc + c.total, 0);
 }
 
+/** Orígenes que representan un movimiento real de efectivo/banco (a diferencia de un registro
+ * puramente contable como "Costo Fijo"/"Costo Indirecto"/"Gasto Operativo", que nunca tocaba
+ * `caja_movimientos` en el esquema viejo tampoco). Load-bearing: toda pantalla nueva que registre
+ * un cobro/pago real (Ventas → marcar entregado, Operaciones → marcar compra pagada, Finanzas →
+ * movimiento manual de caja) debe etiquetar `origen_tipo` con uno de estos valores para que
+ * `saldoCaja` lo cuente. */
+export const ORIGENES_CAJA_REAL = ["caja_movimiento_legacy", "venta_pedido", "compra_pago", "caja_manual"];
+
 /** "Caja" es el movimiento real de efectivo/banco — no toda `movimientos_financieros` afecta
  * caja: un "Costo Fijo"/"Costo Indirecto"/"Gasto Operativo" es un registro contable para EERR,
- * no necesariamente un pago ya hecho (igual que en el esquema viejo, donde esos campos nunca
- * tocaban `caja_movimientos`). Solo cuentan acá los movimientos que vinieron de un movimiento de
- * caja real (`origen_tipo === "caja_movimiento_legacy"`) o de una transferencia entre cuentas
- * propias. */
+ * no necesariamente un pago ya hecho. Solo cuentan acá los movimientos con un origen de caja real
+ * (ver `ORIGENES_CAJA_REAL`) o una transferencia entre cuentas propias. */
 export function saldoCaja(data: RicordoDataV2): number {
   const movs = data.movimientos_financieros
-    .filter((m) => m.origen_tipo === "caja_movimiento_legacy" || m.tipo === "transferencia")
+    .filter((m) => (m.origen_tipo && ORIGENES_CAJA_REAL.includes(m.origen_tipo)) || m.tipo === "transferencia")
     .reduce((acc, m) => {
       if (m.tipo === "ingreso") return acc + m.monto;
       if (m.tipo === "egreso") return acc - m.monto;

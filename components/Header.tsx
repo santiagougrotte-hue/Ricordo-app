@@ -5,24 +5,14 @@ import { Menu, ChevronRight, Circle } from "lucide-react";
 import { NAV_LABELS, NAV_GROUPS } from "@/lib/nav";
 import { useRouter } from "@/lib/nav-context";
 import { MESES, usePeriod } from "@/lib/period";
-import { useStore } from "@/lib/store";
+import { useStoreV2 } from "@/lib/store-v2";
 import { supabaseConfigured } from "@/lib/supabase";
 import { Select } from "./ui";
 
-const PERIOD_PAGES = new Set([
-  "dashboard",
-  "pedidos",
-  "produccion",
-  "costos-indirectos",
-  "eerr",
-  "punto-equilibrio",
-  "an-rentabilidad",
-  "an-productos",
-  "an-clientes",
-  "pe-vivo",
-  "costeo",
-  "roi",
-]);
+// Módulos donde el filtro de mes/año del header tiene sentido (los que muestran datos por
+// período): Inicio, Ventas y Finanzas. Productos/Inventario/Operaciones/Configuración no dependen
+// del período seleccionado.
+const PERIOD_PAGES = new Set(["inicio", "ventas", "finanzas"]);
 
 const SYNC_LABEL: Record<string, { text: string; color: string }> = {
   local: { text: "Solo local", color: "text-text3" },
@@ -34,7 +24,7 @@ const SYNC_LABEL: Record<string, { text: string; color: string }> = {
 export function Header({ onMenuClick }: { onMenuClick?: () => void }) {
   const { page } = useRouter();
   const { mes, anio, setMes, setAnio } = usePeriod();
-  const { syncStatus } = useStore();
+  const { syncStatus } = useStoreV2();
   const showPeriod = PERIOD_PAGES.has(page);
   const years = Array.from({ length: 6 }, (_, i) => new Date().getFullYear() - 3 + i);
   const sync = SYNC_LABEL[syncStatus];

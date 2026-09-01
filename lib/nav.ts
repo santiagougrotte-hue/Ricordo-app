@@ -1,43 +1,4 @@
-import {
-  LayoutDashboard,
-  ShoppingCart,
-  Users,
-  UtensilsCrossed,
-  BookOpen,
-  Wheat,
-  ShoppingBag,
-  Store,
-  BarChart3,
-  Factory,
-  Truck,
-  Landmark,
-  Scale,
-  ArrowLeftRight,
-  TrendingUp,
-  Brain,
-  Repeat,
-  FileText,
-  Home,
-  Receipt,
-  Building2,
-  Target,
-  Beef,
-  History,
-  PieChart,
-  Calendar,
-  FlaskConical,
-  Radio,
-  Calculator,
-  Rocket,
-  Gauge,
-  Briefcase,
-  Timer,
-  Settings,
-  ClipboardList,
-  GitCompare,
-  Layers,
-  type LucideIcon,
-} from "lucide-react";
+import { LayoutDashboard, ShoppingCart, UtensilsCrossed, Boxes, Factory, Landmark, Settings, type LucideIcon } from "lucide-react";
 
 export interface NavItem {
   key: string;
@@ -50,96 +11,24 @@ export interface NavGroup {
   items: NavItem[];
 }
 
+// Menú reducido a 7 módulos (ver plan de refactor): cada uno agrupa, con pestañas internas, lo
+// que antes eran varias pantallas sueltas. Sin sub-grupos — a esta escala una lista plana alcanza.
 const NAV_RAW: NavGroup[] = [
   {
     group: "",
-    items: [{ key: "dashboard", label: "Dashboard", icon: LayoutDashboard }],
-  },
-  {
-    group: "Ventas",
     items: [
-      { key: "pedidos", label: "Pedidos", icon: ShoppingCart },
-      { key: "clientes", label: "Clientes", icon: Users },
-    ],
-  },
-  {
-    group: "Catálogo",
-    items: [
+      { key: "inicio", label: "Inicio", icon: LayoutDashboard },
+      { key: "ventas", label: "Ventas", icon: ShoppingCart },
       { key: "productos", label: "Productos", icon: UtensilsCrossed },
-      { key: "recetas", label: "Recetas", icon: BookOpen },
-      { key: "insumos", label: "Insumos", icon: Wheat },
-      { key: "compras", label: "Compras", icon: ShoppingBag },
-      { key: "proveedores", label: "Proveedores", icon: Store },
-      { key: "familias", label: "Familias", icon: Layers },
-      { key: "informe-control", label: "Informe de Control", icon: GitCompare },
+      { key: "inventario", label: "Inventario", icon: Boxes },
+      { key: "operaciones", label: "Operaciones", icon: Factory },
+      { key: "finanzas", label: "Finanzas", icon: Landmark },
+      { key: "config", label: "Configuración", icon: Settings },
     ],
-  },
-  {
-    group: "Operaciones",
-    items: [
-      { key: "stock", label: "Stock", icon: BarChart3 },
-      { key: "produccion", label: "Producción", icon: Factory },
-      { key: "planificacion-produccion", label: "Planificación", icon: ClipboardList },
-      { key: "envios", label: "Envíos", icon: Truck },
-    ],
-  },
-  {
-    group: "Finanzas",
-    items: [
-      { key: "caja", label: "Caja", icon: Landmark },
-      { key: "posicion", label: "Posición", icon: Scale },
-      { key: "flujo", label: "Flujo", icon: ArrowLeftRight },
-      { key: "proyeccion", label: "Proyección", icon: TrendingUp },
-      { key: "caja-inteligente", label: "Caja Inteligente", icon: Brain },
-      { key: "transferencias", label: "Transferencias", icon: Repeat },
-    ],
-  },
-  {
-    group: "Costos",
-    items: [
-      { key: "eerr", label: "EERR", icon: FileText },
-      { key: "costos-fijos", label: "Costos Fijos", icon: Home },
-      { key: "costos-indirectos", label: "Costos Indirectos", icon: Receipt },
-      { key: "amortizaciones", label: "Amortizaciones", icon: Building2 },
-      { key: "punto-equilibrio", label: "Punto de Equilibrio", icon: Target },
-      { key: "cmv", label: "CMV", icon: Beef },
-      { key: "historial-precios", label: "Historial Precios", icon: History },
-    ],
-  },
-  {
-    group: "Análisis",
-    items: [
-      { key: "an-rentabilidad", label: "Rentabilidad", icon: PieChart },
-      { key: "an-productos", label: "Productos", icon: UtensilsCrossed },
-      { key: "an-clientes", label: "Clientes", icon: Users },
-      { key: "an-anual", label: "Anual", icon: Calendar },
-      { key: "simulador", label: "Simulador", icon: FlaskConical },
-    ],
-  },
-  {
-    group: "Fin. Avanzado",
-    items: [
-      { key: "pe-vivo", label: "PE Vivo", icon: Radio },
-      { key: "costeo", label: "Costeo", icon: Calculator },
-      { key: "roi", label: "ROI", icon: Rocket },
-      { key: "elasticidad", label: "Elasticidad", icon: Gauge },
-      { key: "cap-trabajo", label: "Cap. de Trabajo", icon: Briefcase },
-      { key: "payback", label: "Payback", icon: Timer },
-    ],
-  },
-  {
-    group: "",
-    items: [{ key: "config", label: "Config", icon: Settings }],
   },
 ];
 
-// Items within each named group are sorted alphanumerically (es locale) for
-// easier scanning; the two ungrouped single-item sections (Dashboard, Config)
-// and the group order itself follow the business workflow and stay as authored.
-export const NAV: NavGroup[] = NAV_RAW.map((g) => ({
-  ...g,
-  items: g.group ? [...g.items].sort((a, b) => a.label.localeCompare(b.label, "es", { numeric: true })) : g.items,
-}));
+export const NAV: NavGroup[] = NAV_RAW;
 
 export const NAV_LABELS: Record<string, string> = Object.fromEntries(
   NAV.flatMap((g) => g.items.map((i) => [i.key, i.label]))
@@ -149,4 +38,4 @@ export const NAV_GROUPS: Record<string, string> = Object.fromEntries(
   NAV.flatMap((g) => g.items.map((i) => [i.key, g.group]))
 );
 
-export const DEFAULT_PAGE = "dashboard";
+export const DEFAULT_PAGE = "inicio";

@@ -27,6 +27,7 @@ interface StoreV2Ctx {
   setData: SetDataV2;
   ready: boolean;
   syncStatus: SyncStatus;
+  metadata: RicordoDocument["metadata"];
 }
 
 const Ctx = createContext<StoreV2Ctx | null>(null);
@@ -77,8 +78,16 @@ export function StoreV2Provider({ children }: { children: React.ReactNode }) {
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const lastPushed = useRef<string | null>(null);
   // Metadata estable del documento (fecha de migración original) — se fija una sola vez, nunca
-  // se regenera en cada guardado (si no, "migrado_en" cambiaría con cada edición).
-  const metadataRef = useRef<RicordoDocument["metadata"]>({ migrado_en: new Date().toISOString(), desde_version: 1 });
+  // se regenera en cada guardado (si no, "migrado_en" cambiaría con cada edición). Se espeja en
+  // estado (`metadataState`) solo para exponerla a los componentes vía contexto — el ref sigue
+  // siendo la fuente de verdad que lee el guardado automático de abajo.
+  const metadataInicial: RicordoDocument["metadata"] = { migrado_en: new Date().toISOString(), desde_version: 1 };
+  const metadataRef = useRef<RicordoDocument["metadata"]>(metadataInicial);
+  const [metadataState, setMetadataState] = useState<RicordoDocument["metadata"]>(metadataInicial);
+  function fijarMetadata(m: RicordoDocument["metadata"]) {
+    metadataRef.current = m;
+    setMetadataState(m);
+  }
   // True desde que hay una edición local pendiente hasta que se confirma el push a Supabase —
   // evita que un eco de realtime atrasado pise una edición local más nueva.
   const pendingSave = useRef(false);
@@ -88,7 +97,7 @@ export function StoreV2Provider({ children }: { children: React.ReactNode }) {
     if (local) {
       // eslint-disable-next-line react-hooks/set-state-in-effect -- hidratación inicial, SSR no tiene window/localStorage
       setDataState(local.data);
-      metadataRef.current = local.metadata;
+      fijarMetadata(local.metadata);
     }
 
     const client = supabase;
@@ -96,7 +105,7 @@ export function StoreV2Provider({ children }: { children: React.ReactNode }) {
       if (!local) {
         const { data: seedData, metadata } = comoV2(mapBackupToRicordoData(backupSeed));
         setDataState(seedData);
-        metadataRef.current = metadata;
+        fijarMetadata(metadata);
       }
       setReady(true);
       return;
@@ -118,7 +127,7 @@ export function StoreV2Provider({ children }: { children: React.ReactNode }) {
         if (row?.data) {
           const { data: dataV2, metadata } = comoV2(row.data);
           setDataState(dataV2);
-          metadataRef.current = metadata;
+          fijarMetadata(metadata);
           // Si ya era V2, esto coincide exactamente con lo que el guardado automático de abajo
           // recalcula, así que no reintenta nada. Si se acaba de migrar de V1, lastPushed queda
           // apuntando a lo viejo a propósito: el guardado automático detecta la diferencia y
@@ -128,7 +137,7 @@ export function StoreV2Provider({ children }: { children: React.ReactNode }) {
           // Primera vez que se usa: sembrar la fila compartida con lo que haya localmente.
           const { data: seedData, metadata } = local ? { data: local.data, metadata: local.metadata } : comoV2(mapBackupToRicordoData(backupSeed));
           setDataState(seedData);
-          metadataRef.current = metadata;
+          fijarMetadata(metadata);
           const documento: RicordoDocument = { schema_version: 2, metadata, data: seedData };
           lastPushed.current = JSON.stringify(documento);
           await client.from("app_state").upsert({ id: ROW_ID, data: documento, updated_at: new Date().toISOString() });
@@ -151,7 +160,7 @@ export function StoreV2Provider({ children }: { children: React.ReactNode }) {
           lastPushed.current = serialized;
           const { data: dataV2, metadata } = comoV2(incoming);
           setDataState(dataV2);
-          metadataRef.current = metadata;
+          fijarMetadata(metadata);
           saveToLocalStorage({ schema_version: 2, metadata, data: dataV2 });
         }
       )
@@ -190,7 +199,7 @@ export function StoreV2Provider({ children }: { children: React.ReactNode }) {
     setDataState((prev) => (typeof updater === "function" ? (updater as (d: RicordoDataV2) => RicordoDataV2)(prev) : updater));
   }, []);
 
-  return <Ctx.Provider value={{ data, setData, ready, syncStatus }}>{children}</Ctx.Provider>;
+  return <Ctx.Provider value={{ data, setData, ready, syncStatus, metadata: metadataState }}>{children}</Ctx.Provider>;
 }
 
 export function useStoreV2(): StoreV2Ctx {
