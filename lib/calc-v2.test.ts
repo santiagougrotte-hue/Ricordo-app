@@ -21,6 +21,7 @@ import {
   compararCanalesPorSabor,
   alertasMargen,
   calcularFlujoCaja,
+  detectarCanalInconsistente,
 } from "./calc-v2";
 
 function fixture(): RicordoData {
@@ -338,4 +339,32 @@ test("calcularFlujoCaja: entregar un pedido no genera caja; el cobro y el pago d
   assert.equal(flujo.transferencias.total, 200);
   assert.equal(flujo.saldo_final, 1000 - 300 - 500); // la transferencia es neutra para el total agregado
   assert.equal(flujo.flujo_inversion, -500);
+});
+
+test("detectarCanalInconsistente: detecta variantes cuyo nombre contradice el canal cargado, sin agrupar por texto", () => {
+  const data = emptyDataV2();
+  data.producto_variantes = [
+    { id: "V1", producto_id: "P1", nombre: "Calabaza mayorista", canal: "Minorista", precio_venta: 100, activo: true },
+    { id: "V2", producto_id: "P1", nombre: "Calabaza minorista", canal: "Minorista", precio_venta: 100, activo: true },
+    { id: "V3", producto_id: "P1", nombre: "Calabaza al vacío", canal: "Mayorista", precio_venta: 100, activo: true },
+  ];
+  const alertas = detectarCanalInconsistente(data);
+  assert.equal(alertas.length, 1);
+  assert.equal(alertas[0].variante_id, "V1");
+  assert.equal(alertas[0].canal_actual, "Minorista");
+  assert.equal(alertas[0].canal_sugerido, "Mayorista");
+});
+
+test("detectarCanalInconsistente: 'mayo' cuenta como mayorista, y la propia variante base sin sufijo sugiere Minorista", () => {
+  const data = emptyDataV2();
+  data.producto_variantes = [
+    // La propia base (id === producto_id) sin canal cargado: convención implícita = Minorista.
+    { id: "P1", producto_id: "P1", nombre: "Ravioles de calabaza", canal: undefined, precio_venta: 100, activo: true },
+    // Abreviatura real vista en los datos de ejemplo.
+    { id: "V2", producto_id: "P1", nombre: "Calabaza al vacio mayo", canal: undefined, precio_venta: 100, activo: true },
+  ];
+  const alertas = detectarCanalInconsistente(data);
+  assert.equal(alertas.length, 2);
+  assert.ok(alertas.some((a) => a.variante_id === "P1" && a.canal_sugerido === "Minorista"));
+  assert.ok(alertas.some((a) => a.variante_id === "V2" && a.canal_sugerido === "Mayorista"));
 });

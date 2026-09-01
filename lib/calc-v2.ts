@@ -1147,3 +1147,37 @@ export function calcularFlujoCaja(data: RicordoDataV2, desde: string, hasta: str
     proyeccion_30_dias,
   };
 }
+
+// --- Normalización de canal (Productos) ------------------------------------------------------
+// La agrupación real de variantes YA es por id (producto_id), nunca por texto — esto es solo una
+// alerta de calidad de datos: detecta cuando el nombre de una variante dice "mayorista"/"minorista"
+// pero su campo `canal` (que sí es estructurado y es el que usa el resto de la app) dice lo
+// contrario. Nunca se corrige solo — se lista para que la revise una persona.
+
+export interface AlertaCanalInconsistente {
+  variante_id: string;
+  variante_nombre: string;
+  canal_actual: Canal | undefined;
+  canal_sugerido: Canal;
+}
+
+export function detectarCanalInconsistente(data: RicordoDataV2): AlertaCanalInconsistente[] {
+  const alertas: AlertaCanalInconsistente[] = [];
+  for (const v of data.producto_variantes) {
+    const nombre = v.nombre.toLowerCase();
+    const diceMinorista = /\bminorista\b/.test(nombre);
+    // "mayo" cubre el patrón real visto en los datos de ejemplo ("Calabaza al vacio mayo") — una
+    // abreviatura de "mayorista", no el mes.
+    const diceMayorista = /\bmayorista\b|\bmayo\b/.test(nombre);
+    // Una variante sin ningún sufijo de canal en el nombre y que ES la propia base de su familia
+    // (id === producto_id, el mismo caso que gustosActivos() ya trataba como "la base también
+    // cuenta como variante") sigue la convención implícita del negocio: la presentación sin
+    // sufijo es minorista.
+    const esBaseSinSufijo = !diceMinorista && !diceMayorista && v.producto_id === v.id;
+    const sugerido: Canal | null = diceMinorista && !diceMayorista ? "Minorista" : diceMayorista && !diceMinorista ? "Mayorista" : esBaseSinSufijo ? "Minorista" : null;
+    if (sugerido && v.canal !== sugerido) {
+      alertas.push({ variante_id: v.id, variante_nombre: v.nombre, canal_actual: v.canal, canal_sugerido: sugerido });
+    }
+  }
+  return alertas;
+}

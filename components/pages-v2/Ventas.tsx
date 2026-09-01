@@ -38,14 +38,18 @@ const ESTADO_COLOR: Record<EstadoPedido, "blue" | "orange" | "green" | "red"> = 
 };
 
 interface ItemForm {
+  // canal y productoBaseId son solo para el selector en cascada — lo único que se guarda en el
+  // pedido_item final es producto_variante_id (ya resuelto a partir de esos dos).
+  canal: Canal;
+  productoBaseId: string;
   producto_variante_id: string;
   cantidad: number;
   precio_unitario: number;
   descuento: number;
 }
 
-function itemVacio(): ItemForm {
-  return { producto_variante_id: "", cantidad: 1, precio_unitario: 0, descuento: 0 };
+function itemVacio(canal: Canal): ItemForm {
+  return { canal, productoBaseId: "", producto_variante_id: "", cantidad: 1, precio_unitario: 0, descuento: 0 };
 }
 
 interface PedidoForm {
@@ -70,7 +74,7 @@ function formVacio(): PedidoForm {
     costo_envio: 0,
     descuento: 0,
     notas: "",
-    items: [itemVacio()],
+    items: [itemVacio("Minorista")],
   };
 }
 
@@ -165,12 +169,17 @@ function PedidosTab() {
       costo_envio: p.costo_envio,
       descuento: p.descuento,
       notas: p.notas ?? "",
-      items: items.map((i) => ({
-        producto_variante_id: i.producto_variante_id ?? "",
-        cantidad: i.cantidad,
-        precio_unitario: i.precio_unitario,
-        descuento: i.descuento,
-      })),
+      items: items.map((i) => {
+        const variante = i.producto_variante_id ? data.producto_variantes.find((v) => v.id === i.producto_variante_id) : undefined;
+        return {
+          canal: variante?.canal ?? p.canal,
+          productoBaseId: variante?.producto_id ?? "",
+          producto_variante_id: i.producto_variante_id ?? "",
+          cantidad: i.cantidad,
+          precio_unitario: i.precio_unitario,
+          descuento: i.descuento,
+        };
+      }),
     });
     setModalOpen(true);
   }
@@ -179,7 +188,33 @@ function PedidosTab() {
     setForm((f) => ({ ...f, items: f.items.map((it, i) => (i === idx ? { ...it, ...patch } : it)) }));
   }
   function agregarItem() {
-    setForm((f) => ({ ...f, items: [...f.items, itemVacio()] }));
+    setForm((f) => ({ ...f, items: [...f.items, itemVacio(f.canal)] }));
+  }
+  function saboresDelCanal(canal: Canal) {
+    return data.productos.filter((p) => data.producto_variantes.some((v) => v.activo && v.producto_id === p.id && v.canal === canal));
+  }
+  function variantesDeCanalYSabor(canal: Canal, productoBaseId: string) {
+    if (!productoBaseId) return [];
+    return data.producto_variantes.filter((v) => v.activo && v.canal === canal && v.producto_id === productoBaseId);
+  }
+  // Cambiar el canal invalida el sabor y la variante elegidos (spec: "limpiar el sabor si deja de
+  // ser válido, limpiar la variante, actualizar las opciones disponibles").
+  function actualizarCanalItem(idx: number, canal: Canal) {
+    setForm((f) => ({ ...f, items: f.items.map((it, i) => (i === idx ? { ...it, canal, productoBaseId: "", producto_variante_id: "", precio_unitario: 0 } : it)) }));
+  }
+  // Cambiar el sabor recalcula las presentaciones y auto-selecciona si solo queda una.
+  function actualizarSaborItem(idx: number, productoBaseId: string) {
+    const item = form.items[idx];
+    const variantes = variantesDeCanalYSabor(item.canal, productoBaseId);
+    const unica = variantes.length === 1 ? variantes[0] : undefined;
+    setForm((f) => ({
+      ...f,
+      items: f.items.map((it, i) => (i === idx ? { ...it, productoBaseId, producto_variante_id: unica?.id ?? "", precio_unitario: unica?.precio_venta ?? 0 } : it)),
+    }));
+  }
+  function actualizarVarianteItem(idx: number, varianteId: string) {
+    const v = data.producto_variantes.find((x) => x.id === varianteId);
+    setForm((f) => ({ ...f, items: f.items.map((it, i) => (i === idx ? { ...it, producto_variante_id: varianteId, precio_unitario: v?.precio_venta ?? 0 } : it)) }));
   }
   function quitarItem(idx: number) {
     setForm((f) => ({ ...f, items: f.items.filter((_, i) => i !== idx) }));
@@ -428,26 +463,33 @@ function PedidosTab() {
               + Agregar producto
             </Button>
           </div>
-          {form.items.map((it, idx) => (
+          {form.items.map((it, idx) => {
+            const variantesDisponibles = variantesDeCanalYSabor(it.canal, it.productoBaseId);
+            const mostrarPresentacion = variantesDisponibles.length > 1;
+            return (
             <div key={idx} className="mb-2 flex flex-wrap items-end gap-2 rounded-md border border-border bg-surface2/40 p-2.5">
-              <div className="w-full sm:w-auto sm:flex-[2]">
-                <Select
-                  value={it.producto_variante_id}
-                  onChange={(e) => {
-                    const v = data.producto_variantes.find((x) => x.id === e.target.value);
-                    actualizarItem(idx, { producto_variante_id: e.target.value, precio_unitario: v?.precio_venta ?? 0 });
-                  }}
-                >
-                  <option value="">Producto…</option>
-                  {data.producto_variantes
-                    .filter((v) => v.activo)
-                    .map((v) => (
-                      <option key={v.id} value={v.id}>
-                        {v.nombre}
-                      </option>
-                    ))}
+              <Select value={it.canal} onChange={(e) => actualizarCanalItem(idx, e.target.value as Canal)} className="w-full sm:w-32">
+                <option value="Minorista">Minorista</option>
+                <option value="Mayorista">Mayorista</option>
+              </Select>
+              <Select value={it.productoBaseId} onChange={(e) => actualizarSaborItem(idx, e.target.value)} className="w-full sm:w-40">
+                <option value="">Sabor…</option>
+                {saboresDelCanal(it.canal).map((p) => (
+                  <option key={p.id} value={p.id}>
+                    {p.nombre}
+                  </option>
+                ))}
+              </Select>
+              {mostrarPresentacion && (
+                <Select value={it.producto_variante_id} onChange={(e) => actualizarVarianteItem(idx, e.target.value)} className="w-full sm:w-36">
+                  <option value="">Presentación…</option>
+                  {variantesDisponibles.map((v) => (
+                    <option key={v.id} value={v.id}>
+                      {v.presentacion || v.nombre}
+                    </option>
+                  ))}
                 </Select>
-              </div>
+              )}
               <Input
                 type="number"
                 placeholder="Cant."
@@ -474,7 +516,8 @@ function PedidosTab() {
                 <X className="h-4 w-4" />
               </button>
             </div>
-          ))}
+            );
+          })}
           <div className="mt-2 flex justify-end text-sm">
             <span className="text-text3">Total del pedido:&nbsp;</span>
             <span className="font-semibold text-accent">{fARS(totalPedido(form))}</span>

@@ -22,7 +22,7 @@ import {
   SearchInput,
 } from "@/components/ui";
 import { Modal } from "@/components/Modal";
-import { fARS, fNum, costoVariante, margenVariante, recetaEfectivaVariante, categoriasPorAmbito } from "@/lib/calc-v2";
+import { fARS, fNum, costoVariante, margenVariante, recetaEfectivaVariante, categoriasPorAmbito, detectarCanalInconsistente } from "@/lib/calc-v2";
 import type { Canal, EtapaReceta, OperacionAjusteReceta, ProductoVariante } from "@/lib/types-v2";
 
 const ETAPAS: EtapaReceta[] = ["masa", "relleno", "salsa", "terminacion", "packaging"];
@@ -554,6 +554,17 @@ function ProductosTab() {
     [data.productos, search]
   );
   const actual = seleccionado ?? productos[0]?.id ?? null;
+  const alertasCanal = useMemo(() => detectarCanalInconsistente(data), [data]);
+
+  function corregirCanal(varianteId: string, canal: Canal) {
+    setData((d) => ({ ...d, producto_variantes: d.producto_variantes.map((v) => (v.id === varianteId ? { ...v, canal } : v)) }));
+    toast("Canal corregido");
+  }
+  function corregirTodosLosCanales() {
+    const sugeridos = new Map(alertasCanal.map((a) => [a.variante_id, a.canal_sugerido]));
+    setData((d) => ({ ...d, producto_variantes: d.producto_variantes.map((v) => (sugeridos.has(v.id) ? { ...v, canal: sugeridos.get(v.id)! } : v)) }));
+    toast(`${alertasCanal.length} canal(es) corregido(s)`);
+  }
 
   function crearProducto() {
     if (!nombreNuevo.trim()) {
@@ -569,7 +580,38 @@ function ProductosTab() {
   }
 
   return (
-    <div className="grid grid-cols-1 gap-4 lg:grid-cols-[260px_1fr]">
+    <div>
+      {alertasCanal.length > 0 && (
+        <Card
+          title="Canal inconsistente con el nombre"
+          className="mb-4"
+          right={
+            <Button size="sm" onClick={corregirTodosLosCanales}>
+              Corregir todas ({alertasCanal.length})
+            </Button>
+          }
+        >
+          <p className="mb-2 text-[12.5px] text-text3">
+            La agrupación real siempre es por id, nunca por texto — esto es solo un aviso de calidad de datos: el
+            nombre de la variante sugiere un canal distinto al que tiene cargado (o no tiene ninguno). Revisalo antes
+            de confiar en el valor — el selector de Ventas filtra por este campo.
+          </p>
+          <ul className="flex flex-col gap-2">
+            {alertasCanal.map((a) => (
+              <li key={a.variante_id} className="flex items-center justify-between gap-2 text-[12.5px]">
+                <span className="text-text2">
+                  &ldquo;{a.variante_nombre}&rdquo; — cargado como <Badge color="orange">{a.canal_actual ?? "sin canal"}</Badge>, el
+                  nombre sugiere <Badge color="blue">{a.canal_sugerido}</Badge>
+                </span>
+                <Button size="sm" variant="ghost" onClick={() => corregirCanal(a.variante_id, a.canal_sugerido)}>
+                  Corregir a {a.canal_sugerido}
+                </Button>
+              </li>
+            ))}
+          </ul>
+        </Card>
+      )}
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-[260px_1fr]">
       <Card
         title="Productos base"
         right={
@@ -602,6 +644,7 @@ function ProductosTab() {
       </Card>
 
       {actual ? <FichaProducto productoId={actual} /> : <Card><EmptyState text="Elegí o creá un producto base." /></Card>}
+      </div>
 
       <Modal
         open={modalOpen}
