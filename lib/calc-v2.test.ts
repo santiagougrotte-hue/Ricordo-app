@@ -22,6 +22,8 @@ import {
   alertasMargen,
   calcularFlujoCaja,
   detectarCanalInconsistente,
+  totalCobradoPedido,
+  estadoCobroPedido,
 } from "./calc-v2";
 
 function fixture(): RicordoData {
@@ -367,4 +369,42 @@ test("detectarCanalInconsistente: 'mayo' cuenta como mayorista, y la propia vari
   assert.equal(alertas.length, 2);
   assert.ok(alertas.some((a) => a.variante_id === "P1" && a.canal_sugerido === "Minorista"));
   assert.ok(alertas.some((a) => a.variante_id === "V2" && a.canal_sugerido === "Mayorista"));
+});
+
+test("calcularEerr/calcularMargenPorItem: costo_real_envio distinto de costo_envio no queda en $0 sin motivo", () => {
+  const data = emptyDataV2();
+  data.productos = [{ id: "P1", nombre: "Sabor A", activo: true }];
+  data.producto_variantes = [{ id: "V1", producto_id: "P1", nombre: "A", precio_venta: 100, activo: true }];
+  // Se cobran $50 de envío, pero el costo real (combustible) fue $80 — antes del campo dedicado,
+  // el sistema asumía que eran iguales; ahora deben poder diferir.
+  data.pedidos = [{ id: "PED-1", fecha: "2026-01-01", cliente_id: "C1", estado: "Entregado", canal: "Minorista", descuento: 0, costo_envio: 50, costo_real_envio: 80, total: 150 }];
+  data.pedido_items = [{ id: "I1", pedido_id: "PED-1", producto_variante_id: "V1", nombre_historico: "A", cantidad: 1, precio_unitario: 100, descuento: 0, subtotal: 100 }];
+
+  const eerr = calcularEerr(data, "2026-01-01", "2026-01-31");
+  assert.equal(eerr.envios_cobrados.total, 50); // ventas netas incluyen lo cobrado
+  assert.equal(eerr.costos_indirectos_variables.total, 80); // pero el costo que resta es el real
+  assert.equal(eerr.ventas_netas, 150);
+  assert.equal(eerr.resultado_bruto, 150); // CMV=0 (sin receta)
+  assert.equal(eerr.resultado_operativo, 150 - 80);
+
+  const items = calcularMargenPorItem(data, "2026-01-01", "2026-01-31");
+  assert.equal(items[0].costo_envio, 80);
+  assert.equal(items[0].ventas_netas, 150);
+  assert.equal(items[0].margen_contribucion, 150 - 0 - 80);
+});
+
+test("estadoCobroPedido: Pendiente/Parcial/Cobrado se calculan desde los movimientos ya registrados, nunca desde 'Entregado'", () => {
+  const data = emptyDataV2();
+  const pedido = { id: "PED-1", fecha: "2026-01-01", cliente_id: "C1", estado: "Entregado" as const, canal: "Minorista" as const, descuento: 0, costo_envio: 0, total: 1000 };
+  data.pedidos = [pedido];
+  assert.equal(estadoCobroPedido(data, pedido), "Pendiente"); // entregado, pero sin ningún cobro registrado
+  assert.equal(totalCobradoPedido(data, pedido.id), 0);
+
+  data.movimientos_financieros = [{ id: "M1", fecha: "2026-01-05", tipo: "ingreso", concepto: "Seña", monto: 400, origen_tipo: "venta_pedido", origen_id: "PED-1", estado: "confirmado" }];
+  assert.equal(estadoCobroPedido(data, pedido), "Parcial");
+  assert.equal(totalCobradoPedido(data, pedido.id), 400);
+
+  data.movimientos_financieros.push({ id: "M2", fecha: "2026-01-10", tipo: "ingreso", concepto: "Saldo", monto: 600, origen_tipo: "venta_pedido", origen_id: "PED-1", estado: "confirmado" });
+  assert.equal(estadoCobroPedido(data, pedido), "Cobrado");
+  assert.equal(totalCobradoPedido(data, pedido.id), 1000);
 });

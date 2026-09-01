@@ -25,7 +25,8 @@ import {
   SearchInput,
 } from "@/components/ui";
 import { Modal } from "@/components/Modal";
-import { fARS, fNum, inPeriod, costoVariante, margenVariante, productosConVariantes } from "@/lib/calc-v2";
+import { fARS, fNum, inPeriod, costoVariante, margenVariante, productosConVariantes, estadoCobroPedido } from "@/lib/calc-v2";
+import type { EstadoCobro } from "@/lib/calc-v2";
 import type { Canal, EstadoPedido, Pedido, PedidoItem, ProductoVariante } from "@/lib/types-v2";
 import type { Cliente } from "@/lib/types";
 
@@ -36,6 +37,7 @@ const ESTADO_COLOR: Record<EstadoPedido, "blue" | "orange" | "green" | "red"> = 
   Entregado: "green",
   Cancelado: "red",
 };
+const COBRO_COLOR: Record<EstadoCobro, "orange" | "blue" | "green"> = { Pendiente: "orange", Parcial: "blue", Cobrado: "green" };
 
 interface ItemForm {
   // canal y productoBaseId son solo para el selector en cascada — lo único que se guarda en el
@@ -59,6 +61,7 @@ interface PedidoForm {
   estado: EstadoPedido;
   metodo_pago: string;
   costo_envio: number;
+  costo_real_envio: number;
   descuento: number;
   notas: string;
   items: ItemForm[];
@@ -72,6 +75,7 @@ function formVacio(): PedidoForm {
     estado: "Confirmado",
     metodo_pago: "",
     costo_envio: 0,
+    costo_real_envio: 0,
     descuento: 0,
     notas: "",
     items: [itemVacio("Minorista")],
@@ -167,6 +171,7 @@ function PedidosTab() {
       estado: p.estado,
       metodo_pago: p.metodo_pago ?? "",
       costo_envio: p.costo_envio,
+      costo_real_envio: p.costo_real_envio ?? p.costo_envio,
       descuento: p.descuento,
       notas: p.notas ?? "",
       items: items.map((i) => {
@@ -242,6 +247,7 @@ function PedidosTab() {
       metodo_pago: form.metodo_pago || undefined,
       descuento: form.descuento,
       costo_envio: form.costo_envio,
+      costo_real_envio: form.costo_real_envio,
       total,
       notas: form.notas || undefined,
     };
@@ -356,6 +362,7 @@ function PedidosTab() {
                       <span className="font-semibold text-accent">{fARS(p.total)}</span>
                     </span>
                     <Badge color={ESTADO_COLOR[p.estado]}>{p.estado}</Badge>
+                    <Badge color={COBRO_COLOR[estadoCobroPedido(data, p)]}>{estadoCobroPedido(data, p)}</Badge>
                     <Select value={p.estado} onChange={(e) => cambiarEstado(p, e.target.value as EstadoPedido)} style={{ width: 130, padding: "4px 8px" }}>
                       {ESTADOS.map((e) => (
                         <option key={e} value={e}>
@@ -445,8 +452,20 @@ function PedidosTab() {
           <Field label="Método de pago">
             <Input value={form.metodo_pago} onChange={(e) => setForm({ ...form, metodo_pago: e.target.value })} />
           </Field>
-          <Field label="Costo de envío">
-            <Input type="number" value={form.costo_envio} onChange={(e) => setForm({ ...form, costo_envio: Number(e.target.value) })} />
+          <Field label="Envío cobrado al cliente">
+            <Input
+              type="number"
+              value={form.costo_envio}
+              onChange={(e) => {
+                const v = Number(e.target.value);
+                // Mientras no se haya editado aparte, el costo real sigue al cobrado (caso común:
+                // no hay margen en el envío) — apenas se lo toca a mano, deja de seguirlo.
+                setForm((f) => ({ ...f, costo_envio: v, costo_real_envio: f.costo_real_envio === f.costo_envio ? v : f.costo_real_envio }));
+              }}
+            />
+          </Field>
+          <Field label="Costo real de envío (combustible/logística)">
+            <Input type="number" value={form.costo_real_envio} onChange={(e) => setForm({ ...form, costo_real_envio: Number(e.target.value) })} />
           </Field>
           <Field label="Descuento $ (total del pedido)">
             <Input type="number" value={form.descuento} onChange={(e) => setForm({ ...form, descuento: Number(e.target.value) })} />

@@ -337,12 +337,13 @@ export function unidadesEntregadas(data: RicordoDataV2, pedidos: Pedido[]): numb
 // Vista devengada, nunca de caja: la venta se reconoce solo cuando el pedido está Entregado (mismo
 // criterio que ya usa cmvPeriodo/ESTADOS_CMV en toda la app, así ingreso y costo del mismo pedido
 // caen siempre en el mismo período) y el CMV sale de la receta efectiva de cada variante, nunca de
-// las compras. Decisión de negocio confirmada con el usuario: el "costo real de envío" se muestra
-// igual al monto cobrado al cliente (no hay dato de km/combustible por pedido en el esquema, no se
-// migró del viejo) — por eso el envío suma a Ventas netas y resta el mismo importe en Costos
-// indirectos variables, dejando margen $0 en el envío hasta que exista un costo real distinto.
-// "Otros ingresos y gastos" e "Impuestos" quedan en cero: no hay ninguna fuente de datos para esas
-// dos líneas todavía (también confirmado con el usuario) — nunca se inventa un valor.
+// las compras. El "costo real de envío" usa `Pedido.costo_real_envio` cuando está cargado (Ventas
+// lo pide al armar el pedido); para pedidos que no lo tengan (viejos, o cargados antes de que
+// existiera el campo) se aproxima con el monto cobrado al cliente — mismo comportamiento que la
+// versión anterior de este archivo, ahora como fallback en vez de regla fija. El envío cobrado
+// siempre suma a Ventas netas; el costo real siempre resta en Costos indirectos variables — son
+// dos números que pueden diferir. "Otros ingresos y gastos" e "Impuestos" quedan en cero: no hay
+// ninguna fuente de datos para esas dos líneas todavía — nunca se inventa un valor.
 
 export interface EerrRegistro {
   fecha: string;
@@ -457,11 +458,17 @@ export function calcularEerr(data: RicordoDataV2, desde: string, hasta: string, 
   const movsIndirectosVariables = data.movimientos_financieros.filter(
     (m) => nombreCategoria(data, m.categoria_id).startsWith("Costo Indirecto — Variable") && m.fecha >= desde && m.fecha <= hasta
   );
+  // Costo real de envío: usa el campo dedicado si está cargado (Ventas ya lo pide al armar el
+  // pedido); si un pedido viejo no lo tiene, se aproxima con lo cobrado (mismo comportamiento que
+  // antes de que existiera este campo). Se calcula en vivo acá, nunca como un movimiento aparte —
+  // así no puede duplicarse ni desincronizarse si el pedido se edita o se anula.
+  const costoEnvioReal = pedidosPeriodo.reduce((acc, p) => acc + (p.costo_real_envio ?? p.costo_envio), 0);
   const costos_indirectos_variables: EerrLinea = {
-    // Costo real de envío = mismo monto cobrado al cliente (decisión confirmada, ver comentario de arriba).
-    total: Math.round(envios_cobrados.total + movsIndirectosVariables.reduce((acc, m) => acc + m.monto, 0)),
+    total: Math.round(costoEnvioReal + movsIndirectosVariables.reduce((acc, m) => acc + m.monto, 0)),
     registros: [
-      ...envios_cobrados.registros.map((r) => ({ ...r, concepto: `Costo real de envío (= cobrado) — ${r.concepto.replace("Envío cobrado — ", "")}` })),
+      ...pedidosPeriodo
+        .filter((p) => (p.costo_real_envio ?? p.costo_envio) > 0)
+        .map((p) => ({ fecha: p.fecha, concepto: `Costo real de envío — pedido ${p.id}`, monto: p.costo_real_envio ?? p.costo_envio })),
       ...movsIndirectosVariables.map((m) => ({ fecha: m.fecha, concepto: m.concepto, monto: m.monto })),
     ],
   };
@@ -771,12 +778,13 @@ export interface MargenItemDetalle {
   margen_pct: number | null;
 }
 
-/** Costo real de envío = mismo monto cobrado al cliente (misma convención que calcularEerr). Si un
- * pedido tiene varias líneas, ese único monto se reparte entre ellas según `criterioEnvio`
- * (proporcional a ventas netas de cada línea, o a sus unidades) — un solo criterio, documentado
- * acá, no dos números distintos según quién mire. Los descuentos generales del pedido (no los de
- * línea) se reparten siempre proporcional a ventas, para no descontar el mismo importe en cada
- * producto. */
+/** El envío cobrado (ingreso) y el costo real de envío (egreso, `Pedido.costo_real_envio` o
+ * `costo_envio` como aproximación si no está cargado) son dos montos que pueden diferir — ver el
+ * comentario de `calcularEerr`. Si un pedido tiene varias líneas, cada uno de esos dos montos (por
+ * separado) se reparte entre ellas según `criterioEnvio` (proporcional a ventas netas de cada
+ * línea, o a sus unidades) — un solo criterio, documentado acá, no dos números distintos según
+ * quién mire. Los descuentos generales del pedido (no los de línea) se reparten siempre
+ * proporcional a ventas, para no descontar el mismo importe en cada producto. */
 export function calcularMargenPorItem(data: RicordoDataV2, desde: string, hasta: string, canal?: Canal, criterioEnvio: CriterioEnvioPedido = "ventas"): MargenItemDetalle[] {
   const pedidosPeriodo = data.pedidos.filter((p) => p.estado === "Entregado" && p.fecha >= desde && p.fecha <= hasta && (!canal || p.canal === canal));
   const resultado: MargenItemDetalle[] = [];
@@ -793,14 +801,15 @@ export function calcularMargenPorItem(data: RicordoDataV2, desde: string, hasta:
       const shareUnidades = totalUnidades > 0 ? item.cantidad / totalUnidades : 1 / items.length;
       const share = criterioEnvio === "ventas" ? shareVentas : shareUnidades;
       const descuento = Math.round(item.descuento + pedido.descuento * shareVentas);
-      const costoEnvio = Math.round(pedido.costo_envio * share);
+      // Envío cobrado (ingreso, forma parte de ventas netas) y costo real de envío (egreso, resta
+      // en el margen de contribución) son dos números que pueden diferir — ver Pedido.costo_real_envio.
+      const envioCobrado = Math.round(pedido.costo_envio * share);
+      const costoEnvioReal = Math.round((pedido.costo_real_envio ?? pedido.costo_envio) * share);
       const variante = item.producto_variante_id ? data.producto_variantes.find((v) => v.id === item.producto_variante_id) : undefined;
       const producto = variante ? data.productos.find((p) => p.id === variante.producto_id) : undefined;
       const cmv = costoPedidoItem(data, item);
-      const ventasNetas = Math.round(bruto - descuento + costoEnvio);
-      // Costo real de envío = mismo monto cobrado (política ya definida en calcularEerr) — entra
-      // como ingreso arriba y sale acá como costo, dejando margen $0 en el envío por defecto.
-      const margenContribucion = Math.round(ventasNetas - cmv - costoEnvio);
+      const ventasNetas = Math.round(bruto - descuento + envioCobrado);
+      const margenContribucion = Math.round(ventasNetas - cmv - costoEnvioReal);
 
       resultado.push({
         pedido_id: pedido.id,
@@ -815,7 +824,7 @@ export function calcularMargenPorItem(data: RicordoDataV2, desde: string, hasta:
         cantidad: item.cantidad,
         ventas_brutas: Math.round(bruto),
         descuento,
-        costo_envio: costoEnvio,
+        costo_envio: costoEnvioReal,
         comisiones: 0,
         cmv: Math.round(cmv),
         ventas_netas: ventasNetas,
@@ -1180,4 +1189,26 @@ export function detectarCanalInconsistente(data: RicordoDataV2): AlertaCanalInco
     }
   }
   return alertas;
+}
+
+// --- Estado de cobro de un pedido -----------------------------------------------------------
+// Se calcula en vivo a partir de los movimientos_financieros ya registrados con
+// origen_tipo "venta_pedido" y origen_id = pedido.id — nunca se guarda como campo propio del
+// pedido (evita que quede desincronizado si se registra o se anula un cobro). Entregar un pedido
+// ya NO genera caja por sí solo (ver Ventas.tsx) — por eso un pedido recién entregado empieza
+// "Pendiente" hasta que se registre el cobro real, total o parcial, en Cuentas pendientes.
+
+export type EstadoCobro = "Pendiente" | "Parcial" | "Cobrado";
+
+export function totalCobradoPedido(data: RicordoDataV2, pedidoId: string): number {
+  return data.movimientos_financieros
+    .filter((m) => m.origen_tipo === "venta_pedido" && m.origen_id === pedidoId && m.tipo === "ingreso")
+    .reduce((acc, m) => acc + m.monto, 0);
+}
+
+export function estadoCobroPedido(data: RicordoDataV2, pedido: Pedido): EstadoCobro {
+  const cobrado = totalCobradoPedido(data, pedido.id);
+  if (cobrado <= 0) return "Pendiente";
+  if (cobrado >= pedido.total) return "Cobrado";
+  return "Parcial";
 }
