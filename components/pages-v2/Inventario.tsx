@@ -89,6 +89,10 @@ function StockTab() {
       toast("Nombre y unidad son obligatorios", "error");
       return;
     }
+    if (form.precio_actual < 0) {
+      toast("El precio no puede ser negativo — un precio negativo generaría un CMV negativo", "error");
+      return;
+    }
     if (editando) {
       setData((d) => ({ ...d, insumos: d.insumos.map((i) => (i.id === editando ? { ...i, ...form } : i)) }));
       toast("Insumo actualizado");
@@ -141,10 +145,20 @@ function StockTab() {
               </thead>
               <tbody>
                 {[...filasInsumos, ...filasProductos].map((f) => (
-                  <TrHover key={f.id} className={f.insumo?.stock_minimo != null && f.stock < f.insumo.stock_minimo ? "bg-red-dim/30" : ""}>
+                  <TrHover
+                    key={f.id}
+                    className={f.stock < 0 ? "bg-red-dim/50" : f.insumo?.stock_minimo != null && f.stock < f.insumo.stock_minimo ? "bg-red-dim/30" : ""}
+                  >
                     <Td main>{f.nombre}</Td>
                     <Td>{f.sub}</Td>
-                    <Td>{fNum(f.stock, 2)} {f.unidad}</Td>
+                    <Td>
+                      <span className={f.stock < 0 ? "text-red font-semibold" : ""}>
+                        {fNum(f.stock, 2)} {f.unidad}
+                      </span>
+                      {f.stock < 0 && (
+                        <Badge color="red">Stock negativo — revisar movimientos</Badge>
+                      )}
+                    </Td>
                     <Td>{f.insumo?.stock_minimo != null ? fNum(f.insumo.stock_minimo, 2) : "—"}</Td>
                     <Td>{f.insumo ? fARS(f.insumo.precio_actual) : "—"}</Td>
                     <Td>{f.insumo && <Button size="sm" variant="ghost" onClick={() => abrirEdicion(f.insumo!)}>Editar</Button>}</Td>

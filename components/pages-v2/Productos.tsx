@@ -148,6 +148,7 @@ function FichaProducto({ productoId }: { productoId: string }) {
     setData((d) => ({ ...d, receta_items: d.receta_items.filter((i) => i.id !== id) }));
   }
   function actualizarCantidadRecetaItem(id: string, cantidad: number) {
+    if (cantidad < 0) return; // una cantidad negativa generaría un costo (y CMV) negativo
     setData((d) => ({ ...d, receta_items: d.receta_items.map((i) => (i.id === id ? { ...i, cantidad } : i)) }));
   }
 
