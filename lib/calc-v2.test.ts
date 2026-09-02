@@ -24,6 +24,7 @@ import {
   detectarCanalInconsistente,
   totalCobradoPedido,
   estadoCobroPedido,
+  variantesSinFactorReceta,
 } from "./calc-v2";
 
 function fixture(): RicordoData {
@@ -407,4 +408,20 @@ test("estadoCobroPedido: Pendiente/Parcial/Cobrado se calculan desde los movimie
   data.movimientos_financieros.push({ id: "M2", fecha: "2026-01-10", tipo: "ingreso", concepto: "Saldo", monto: 600, origen_tipo: "venta_pedido", origen_id: "PED-1", estado: "confirmado" });
   assert.equal(estadoCobroPedido(data, pedido), "Cobrado");
   assert.equal(totalCobradoPedido(data, pedido.id), 1000);
+});
+
+test("variantesSinFactorReceta: detecta la variante que hereda la receta compartida pero no tiene unidades_por_paquete", () => {
+  const { documento } = migrarAV2(fixture());
+  // El fixture ya tiene PROD-MAYO con unidades_por_paquete: 12 — no debería salir en la lista
+  // (a diferencia de la propia base, PROD-BASE, que nunca tuvo ese dato en el esquema viejo y por
+  // eso ya sale sola en esta lista — mismo caso real que se ve en los datos de ejemplo).
+  const sinFactor = variantesSinFactorReceta(documento.data);
+  assert.ok(sinFactor.some((s) => s.variante_id === "PROD-BASE"));
+  assert.ok(!sinFactor.some((s) => s.variante_id === "PROD-MAYO"));
+
+  // Le sacamos el dato a PROD-MAYO también para simular el caso completo visto en los datos reales.
+  const dataSinFactor = { ...documento.data, producto_variantes: documento.data.producto_variantes.map((v) => (v.id === "PROD-MAYO" ? { ...v, unidades_por_paquete: undefined } : v)) };
+  const alertas = variantesSinFactorReceta(dataSinFactor);
+  assert.equal(alertas.length, 2);
+  assert.ok(alertas.some((a) => a.variante_id === "PROD-MAYO"));
 });

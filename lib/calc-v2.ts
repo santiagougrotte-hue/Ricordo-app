@@ -90,6 +90,26 @@ export function margenVariante(data: RicordoDataV2, variante: ProductoVariante):
   return variante.precio_venta > 0 ? ((variante.precio_venta - costoVariante(data, variante.id)) / variante.precio_venta) * 100 : 0;
 }
 
+export interface VarianteSinFactor {
+  variante_id: string;
+  variante_nombre: string;
+}
+
+/** Variantes activas que heredan una receta compartida (hay una Receta con su mismo producto_id)
+ * pero no tienen `unidades_por_paquete` cargado — en recetaEfectivaVariante eso hace que el
+ * factor de escala sea 0, así que la receta "se hereda" en el sentido de que la relación existe,
+ * pero cada línea queda en cantidad 0 (costo $0 para esa variante) hasta que se cargue el dato. */
+export function variantesSinFactorReceta(data: RicordoDataV2): VarianteSinFactor[] {
+  const resultado: VarianteSinFactor[] = [];
+  for (const v of data.producto_variantes.filter((variante) => variante.activo)) {
+    const compartida = data.recetas.find((r) => r.producto_id === v.producto_id);
+    if (compartida && v.unidades_por_paquete == null) {
+      resultado.push({ variante_id: v.id, variante_nombre: v.nombre });
+    }
+  }
+  return resultado;
+}
+
 export interface ProductoConVariantes {
   producto: RicordoDataV2["productos"][number];
   variantes: ProductoVariante[];
@@ -962,14 +982,11 @@ export function alertasMargen(data: RicordoDataV2, items: MargenItemDetalle[], m
   for (const p of data.productos.filter((prod) => prod.activo)) {
     if (!data.recetas.some((r) => r.producto_id === p.id)) alertas.push({ severidad: "alta", mensaje: `El producto "${p.nombre}" no tiene ninguna receta cargada.` });
   }
-  for (const v of data.producto_variantes.filter((variante) => variante.activo)) {
-    const compartida = data.recetas.find((r) => r.producto_id === v.producto_id);
-    if (compartida && v.unidades_por_paquete == null) {
-      alertas.push({
-        severidad: "media",
-        mensaje: `"${v.nombre}" no tiene "unidades por paquete" cargado — su receta hereda un factor de conversión de 0, el costo de esta presentación va a dar mal.`,
-      });
-    }
+  for (const sinFactor of variantesSinFactorReceta(data)) {
+    alertas.push({
+      severidad: "media",
+      mensaje: `"${sinFactor.variante_nombre}" no tiene "unidades por paquete" cargado — su receta hereda un factor de conversión de 0, el costo de esta presentación va a dar mal.`,
+    });
   }
 
   // Precio mayorista igual o demasiado cercano al minorista (comparando precio POR UNIDAD, no el

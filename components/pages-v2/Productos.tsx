@@ -22,7 +22,7 @@ import {
   SearchInput,
 } from "@/components/ui";
 import { Modal } from "@/components/Modal";
-import { fARS, fNum, costoVariante, margenVariante, recetaEfectivaVariante, categoriasPorAmbito, detectarCanalInconsistente } from "@/lib/calc-v2";
+import { fARS, fNum, costoVariante, margenVariante, recetaEfectivaVariante, categoriasPorAmbito, detectarCanalInconsistente, variantesSinFactorReceta } from "@/lib/calc-v2";
 import type { Canal, EtapaReceta, OperacionAjusteReceta, ProductoVariante } from "@/lib/types-v2";
 
 const ETAPAS: EtapaReceta[] = ["masa", "relleno", "salsa", "terminacion", "packaging"];
@@ -72,6 +72,10 @@ function FichaProducto({ productoId }: { productoId: string }) {
   const ajustesVariante = data.ajustes_receta_variante.filter((a) => a.variante_id === varianteSeleccionadaAjustes);
   const complementosVariante = data.complementos_variante.filter((c) => c.variante_id === varianteSeleccionadaAjustes);
   const insumoNombre = (id: string) => data.insumos.find((i) => i.id === id)?.nombre ?? "(insumo eliminado)";
+  const precioInsumo = (id: string) => data.insumos.find((i) => i.id === id)?.precio_actual ?? 0;
+  const idsSinFactor = new Set(variantesSinFactorReceta(data).map((s) => s.variante_id));
+  const costoNuevoItem = precioInsumo(nuevoItem.insumo_id) * nuevoItem.cantidad;
+  const costoNuevoAjuste = precioInsumo(nuevoAjuste.insumo_id) * nuevoAjuste.cantidad;
 
   function abrirNuevaVariante() {
     setEditandoVariante(null);
@@ -259,7 +263,9 @@ function FichaProducto({ productoId }: { productoId: string }) {
                     <TrHover key={v.id}>
                       <Td main>{v.nombre}</Td>
                       <Td>{v.canal ?? "—"}</Td>
-                      <Td>{v.unidades_por_paquete ?? "—"}</Td>
+                      <Td>
+                        {v.unidades_por_paquete ?? (idsSinFactor.has(v.id) ? <Badge color="red">Falta — receta en $0</Badge> : "—")}
+                      </Td>
                       <Td>{fARS(v.precio_venta)}</Td>
                       <Td>{fARS(costoVariante(data, v.id))}</Td>
                       <Td className={margen >= 0 ? "text-green" : "text-red"}>{fNum(margen, 1)}%</Td>
@@ -286,6 +292,12 @@ function FichaProducto({ productoId }: { productoId: string }) {
       </Card>
 
       <Card title="Receta base (compartida por todas las variantes)">
+        <p className="mb-3 text-[12.5px] text-text3">
+          Esta receta se hereda automáticamente por todas las variantes de venta de este producto (canal, sabor y
+          presentación), escalada según las unidades por paquete de cada una — no hace falta cargarla de nuevo por
+          canal. Si alguna variante no muestra el costo esperado, revisá la tabla de Variantes: la fila roja indica
+          que le falta ese factor de conversión.
+        </p>
         {recetaItems.length === 0 ? (
           <EmptyState text="Sin receta cargada todavía." />
         ) : (
@@ -296,6 +308,8 @@ function FichaProducto({ productoId }: { productoId: string }) {
                   <Th>Insumo</Th>
                   <Th>Etapa</Th>
                   <Th>Cantidad</Th>
+                  <Th>Precio insumo</Th>
+                  <Th>Costo de la línea</Th>
                   <Th></Th>
                 </tr>
               </thead>
@@ -312,6 +326,8 @@ function FichaProducto({ productoId }: { productoId: string }) {
                         onChange={(e) => actualizarCantidadRecetaItem(i.id, Number(e.target.value))}
                       />
                     </Td>
+                    <Td>{fARS(precioInsumo(i.insumo_id))}</Td>
+                    <Td className="font-medium text-text">{fARS(precioInsumo(i.insumo_id) * i.cantidad)}</Td>
                     <Td>
                       <Button size="sm" variant="danger" onClick={() => quitarRecetaItem(i.id)}>
                         Quitar
@@ -348,6 +364,12 @@ function FichaProducto({ productoId }: { productoId: string }) {
             value={nuevoItem.cantidad}
             onChange={(e) => setNuevoItem({ ...nuevoItem, cantidad: Number(e.target.value) })}
           />
+          {nuevoItem.insumo_id && (
+            <div className="w-full text-[12.5px] text-text2 sm:w-auto">
+              Precio: <span className="font-medium text-text">{fARS(precioInsumo(nuevoItem.insumo_id))}</span> · Costo de esta línea:{" "}
+              <span className="font-medium text-accent">{fARS(costoNuevoItem)}</span>
+            </div>
+          )}
           <Button size="sm" onClick={agregarRecetaItem}>
             + Agregar
           </Button>
@@ -384,6 +406,7 @@ function FichaProducto({ productoId }: { productoId: string }) {
                     </Td>
                     <Td>{fNum(a.cantidad, 3)}</Td>
                     <Td>{a.etapa ?? "—"}</Td>
+                    <Td>{fARS(precioInsumo(a.insumo_id) * a.cantidad)}</Td>
                     <Td>
                       <Button size="sm" variant="danger" onClick={() => quitarAjuste(a.id)}>
                         Quitar
@@ -433,6 +456,12 @@ function FichaProducto({ productoId }: { productoId: string }) {
                 </option>
               ))}
             </Select>
+            {nuevoAjuste.insumo_id && (
+              <div className="w-full text-[12.5px] text-text2 sm:w-auto">
+                Precio: <span className="font-medium text-text">{fARS(precioInsumo(nuevoAjuste.insumo_id))}</span> · Costo:{" "}
+                <span className="font-medium text-accent">{fARS(costoNuevoAjuste)}</span>
+              </div>
+            )}
             <Button size="sm" onClick={agregarAjuste}>
               + Agregar ajuste
             </Button>
