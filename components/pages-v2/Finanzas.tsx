@@ -51,6 +51,7 @@ import {
   calcularCuentasPorPagar,
   calcularProyeccionCaja,
   calcularDineroLibre,
+  calcularBalanceGeneral,
 } from "@/lib/calc-v2";
 import type { EerrLinea, CriterioEnvioPedido, VistaMargen, CuentaPorCobrar, CuentaPorPagar } from "@/lib/calc-v2";
 import type { Activo } from "@/lib/types-v2";
@@ -1552,7 +1553,150 @@ function MargenSaborCanalVista() {
   );
 }
 
-function RentabilidadTab() {
+function BalanceGeneralVista() {
+  const { data } = useStoreV2();
+  const [hasta, setHasta] = useState(hoyIso());
+  const inicioPeriodoActual = useMemo(() => `${hasta.slice(0, 7)}-01`, [hasta]);
+  const b = useMemo(() => calcularBalanceGeneral(data, hasta, inicioPeriodoActual), [data, hasta, inicioPeriodoActual]);
+
+  return (
+    <div>
+      <Card className="mb-4">
+        <p className="mb-3 text-[12.5px] text-text3">
+          Qué tiene, qué debe y cuál es el patrimonio del negocio a una fecha — distinto del Estado de Resultados (que
+          muestra si ganó o perdió) y del Flujo de Caja (cuánta plata entró y salió).
+        </p>
+        <Field label="A fecha">
+          <Input type="date" value={hasta} onChange={(e) => setHasta(e.target.value)} />
+        </Field>
+      </Card>
+
+      {!b.cuadra && (
+        <Card className="mb-4 border-red/30">
+          <Badge color="red">Balance descuadrado</Badge>
+          <p className="mt-2 text-[12.5px] text-text2">
+            ACTIVO ({fARS(b.total_activo)}) no coincide con PASIVO + PATRIMONIO ({fARS(b.total_pasivo_mas_patrimonio)}). Diferencia: {fARS(b.diferencia)}.
+          </p>
+        </Card>
+      )}
+
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
+        <Card title="Activo">
+          <TableWrap>
+            <table className="w-full">
+              <tbody>
+                <tr className="bg-surface2/40 font-semibold">
+                  <Td main colSpan={2}>Activo corriente</Td>
+                </tr>
+                <TrHover>
+                  <Td>Caja y bancos</Td>
+                  <Td>{fARS(b.activo_corriente.caja_bancos)}</Td>
+                </TrHover>
+                <TrHover>
+                  <Td>Cuentas por cobrar</Td>
+                  <Td>{fARS(b.activo_corriente.cuentas_por_cobrar)}</Td>
+                </TrHover>
+                <TrHover>
+                  <Td>Inventario</Td>
+                  <Td>{fARS(b.activo_corriente.inventario)}</Td>
+                </TrHover>
+                <tr className="bg-surface2/60 font-semibold">
+                  <Td>= Total activo corriente</Td>
+                  <Td>{fARS(b.activo_corriente.total)}</Td>
+                </tr>
+                <tr className="bg-surface2/40 font-semibold">
+                  <Td main colSpan={2}>Activo no corriente</Td>
+                </tr>
+                <TrHover>
+                  <Td>Activos (a costo)</Td>
+                  <Td>{fARS(b.activo_no_corriente.valor_activos_costo)}</Td>
+                </TrHover>
+                <TrHover>
+                  <Td>− Amortización acumulada</Td>
+                  <Td className="text-red">{fARS(-b.activo_no_corriente.amortizacion_acumulada)}</Td>
+                </TrHover>
+                <tr className="bg-surface2/60 font-semibold">
+                  <Td>= Total activo no corriente</Td>
+                  <Td>{fARS(b.activo_no_corriente.total)}</Td>
+                </tr>
+                <tr className="bg-accent/10 font-semibold">
+                  <Td>TOTAL ACTIVO</Td>
+                  <Td>{fARS(b.total_activo)}</Td>
+                </tr>
+              </tbody>
+            </table>
+          </TableWrap>
+        </Card>
+
+        <Card title="Pasivo">
+          <TableWrap>
+            <table className="w-full">
+              <tbody>
+                <tr className="bg-surface2/40 font-semibold">
+                  <Td main colSpan={2}>Pasivo corriente</Td>
+                </tr>
+                <TrHover>
+                  <Td>Proveedores por pagar</Td>
+                  <Td>{fARS(b.pasivo_corriente.proveedores_por_pagar)}</Td>
+                </TrHover>
+                <tr className="bg-surface2/60 font-semibold">
+                  <Td>= Total pasivo corriente</Td>
+                  <Td>{fARS(b.pasivo_corriente.total)}</Td>
+                </tr>
+                <tr className="bg-surface2/40 font-semibold">
+                  <Td main colSpan={2}>Pasivo no corriente</Td>
+                </tr>
+                <TrHover>
+                  <Td>Préstamos</Td>
+                  <Td>{fARS(b.pasivo_no_corriente.prestamos)}</Td>
+                </TrHover>
+                <tr className="bg-surface2/60 font-semibold">
+                  <Td>= Total pasivo no corriente</Td>
+                  <Td>{fARS(b.pasivo_no_corriente.total)}</Td>
+                </tr>
+                <tr className="bg-accent/10 font-semibold">
+                  <Td>TOTAL PASIVO</Td>
+                  <Td>{fARS(b.total_pasivo)}</Td>
+                </tr>
+              </tbody>
+            </table>
+          </TableWrap>
+        </Card>
+
+        <Card title="Patrimonio neto">
+          <TableWrap>
+            <table className="w-full">
+              <tbody>
+                <TrHover>
+                  <Td>Aportes del dueño</Td>
+                  <Td>{fARS(b.patrimonio_neto.aportes_dueno)}</Td>
+                </TrHover>
+                <TrHover>
+                  <Td>Resultados acumulados</Td>
+                  <Td>{fARS(b.patrimonio_neto.resultados_acumulados)}</Td>
+                </TrHover>
+                <TrHover>
+                  <Td>Resultado del período</Td>
+                  <Td>{fARS(b.patrimonio_neto.resultado_periodo)}</Td>
+                </TrHover>
+                <TrHover>
+                  <Td>− Retiros del dueño</Td>
+                  <Td className="text-red">{fARS(-b.patrimonio_neto.retiros_dueno)}</Td>
+                </TrHover>
+                <tr className="bg-accent/10 font-semibold">
+                  <Td>TOTAL PATRIMONIO NETO</Td>
+                  <Td>{fARS(b.patrimonio_neto.total)}</Td>
+                </tr>
+              </tbody>
+            </table>
+          </TableWrap>
+        </Card>
+      </div>
+    </div>
+  );
+}
+
+function ResultadosTab() {
   const [subtab, setSubtab] = useState("eerr");
   return (
     <div>
@@ -1561,12 +1705,12 @@ function RentabilidadTab() {
         onChange={setSubtab}
         options={[
           { value: "eerr", label: "Estado de Resultados" },
-          { value: "compras-cmv-inventario", label: "Compras, CMV e Inventario" },
-          { value: "margen-sabor-canal", label: "Margen por sabor y canal" },
+          { value: "balance", label: "Balance General" },
+          { value: "margen-sabor-canal", label: "Productos y canales" },
         ]}
       />
       {subtab === "eerr" && <EstadoResultadosVista />}
-      {subtab === "compras-cmv-inventario" && <ComprasCmvInventarioVista />}
+      {subtab === "balance" && <BalanceGeneralVista />}
       {subtab === "margen-sabor-canal" && <MargenSaborCanalVista />}
     </div>
   );
@@ -1772,6 +1916,30 @@ function GraficoFlujoMensual({ meses }: { meses: { label: string; entradas: numb
   );
 }
 
+function ProyeccionCajaCard() {
+  const { data } = useStoreV2();
+  const proy = useMemo(() => calcularProyeccionCaja(data, hoyIso()), [data]);
+  const labelDias: Record<number, string> = { 0: "Hoy", 7: "7 días", 15: "15 días", 30: "30 días" };
+
+  return (
+    <Card title="Proyección de caja" className="mb-4">
+      <p className="mb-3 text-[12.5px] text-text3">
+        No es una extrapolación del pasado: suma los cobros y pagos que ya tienen fecha esperada cargada (en Cuentas
+        por cobrar/pagar). Lo que no tiene fecha esperada no entra acá — nunca se inventa cuándo va a pasar.
+      </p>
+      {proy.alerta_negativa && <Badge color="red">Riesgo de quedarse sin caja en los próximos 30 días</Badge>}
+      <div className="mt-3 grid grid-cols-2 gap-3 sm:grid-cols-4">
+        {proy.puntos.map((p) => (
+          <div key={p.dias} className="rounded-[var(--radius-card)] border border-border p-3">
+            <div className="text-[11px] text-text3">{labelDias[p.dias]}</div>
+            <div className={`text-lg font-semibold ${p.caja_proyectada >= 0 ? "text-green" : "text-red"}`}>{fARS2(p.caja_proyectada)}</div>
+          </div>
+        ))}
+      </div>
+    </Card>
+  );
+}
+
 function FlujoCajaTab() {
   const { data } = useStoreV2();
   const { mes, anio } = usePeriod();
@@ -1828,6 +1996,8 @@ function FlujoCajaTab() {
         <KpiCard label="Flujo de financiación" value={fARS2(f.flujo_financiacion)} color="blue" />
         <KpiCard label="Variación de caja" value={fARS2(f.variacion_caja)} color={f.variacion_caja >= 0 ? "green" : "red"} />
       </StatGrid>
+
+      <ProyeccionCajaCard />
 
       <Card title="Cómo cambió la caja en el período">
         <TableWrap>
@@ -2353,37 +2523,151 @@ function ResumenTab() {
   );
 }
 
+function TesoreriaTab() {
+  const [subtab, setSubtab] = useState("caja");
+  return (
+    <div>
+      <FilterTabs
+        value={subtab}
+        onChange={setSubtab}
+        options={[
+          { value: "caja", label: "Caja" },
+          { value: "movimientos", label: "Movimientos" },
+          { value: "porcobrar", label: "Por cobrar" },
+          { value: "porpagar", label: "Por pagar" },
+          { value: "gastos", label: "Gastos" },
+          { value: "flujo", label: "Flujo y proyección" },
+        ]}
+      />
+      {subtab === "caja" && <CajaTab />}
+      {subtab === "movimientos" && <IngresosEgresosTab />}
+      {subtab === "porcobrar" && <CuentasPorCobrarTab />}
+      {subtab === "porpagar" && <CuentasPorPagarTab />}
+      {subtab === "gastos" && <GastosTab />}
+      {subtab === "flujo" && <FlujoCajaTab />}
+    </div>
+  );
+}
+
+const TIPOS_APORTES_FINANCIACION = ["aporte_dueno", "retiro_dueno", "prestamo_recibido", "devolucion_prestamo"] as const;
+
+function AportesFinanciacionTab() {
+  const { data, setData } = useStoreV2();
+  const { toast } = useToast();
+
+  const movs = useMemo(
+    () =>
+      data.movimientos_financieros
+        .filter((m) => m.origen_tipo && (TIPOS_APORTES_FINANCIACION as readonly string[]).includes(m.origen_tipo))
+        .sort((a, b) => b.fecha.localeCompare(a.fecha)),
+    [data.movimientos_financieros]
+  );
+
+  const totalAportes = movs.filter((m) => m.origen_tipo === "aporte_dueno").reduce((acc, m) => acc + m.monto, 0);
+  const totalRetiros = movs.filter((m) => m.origen_tipo === "retiro_dueno").reduce((acc, m) => acc + m.monto, 0);
+  const deudaPrestamos =
+    movs.filter((m) => m.origen_tipo === "prestamo_recibido").reduce((acc, m) => acc + m.monto, 0) -
+    movs.filter((m) => m.origen_tipo === "devolucion_prestamo").reduce((acc, m) => acc + m.monto, 0);
+
+  function eliminar(id: string) {
+    setData((d) => ({ ...d, movimientos_financieros: d.movimientos_financieros.filter((m) => m.id !== id) }));
+    toast("Movimiento eliminado");
+  }
+
+  return (
+    <div>
+      <p className="mb-3 text-[12.5px] text-text3">
+        Plata que el dueño puso o sacó del negocio, y préstamos recibidos o devueltos — nunca afectan el resultado del
+        negocio (no son venta ni gasto operativo). Para registrar uno nuevo: Tesorería → Caja → &ldquo;+ Movimiento de
+        caja&rdquo; y elegí el tipo.
+      </p>
+      <StatGrid>
+        <KpiCard label="Aportes del dueño (histórico)" value={fARS(totalAportes)} color="green" />
+        <KpiCard label="Retiros del dueño (histórico)" value={fARS(totalRetiros)} color="orange" />
+        <KpiCard label="Deuda por préstamos" value={fARS(deudaPrestamos)} color={deudaPrestamos > 0 ? "orange" : "green"} />
+      </StatGrid>
+      <Card>
+        {movs.length === 0 ? (
+          <EmptyState text="Todavía no hay aportes, retiros ni préstamos registrados." />
+        ) : (
+          <TableWrap>
+            <table className="w-full">
+              <thead>
+                <tr>
+                  <Th>Fecha</Th>
+                  <Th>Tipo</Th>
+                  <Th>Concepto</Th>
+                  <Th>Monto</Th>
+                  <Th></Th>
+                </tr>
+              </thead>
+              <tbody>
+                {movs.map((m) => (
+                  <TrHover key={m.id}>
+                    <Td>{m.fecha}</Td>
+                    <Td>
+                      <Badge color={m.tipo === "ingreso" ? "green" : "red"}>{LABEL_TIPO_ESPECIAL[m.origen_tipo as TipoEspecialMovimiento]}</Badge>
+                    </Td>
+                    <Td main>{m.concepto}</Td>
+                    <Td className={m.tipo === "egreso" ? "text-red" : "text-green"}>{fARS(m.monto)}</Td>
+                    <Td>
+                      <Button size="sm" variant="danger" onClick={() => eliminar(m.id)}>
+                        Eliminar
+                      </Button>
+                    </Td>
+                  </TrHover>
+                ))}
+              </tbody>
+            </table>
+          </TableWrap>
+        )}
+      </Card>
+    </div>
+  );
+}
+
+function CapitalTab() {
+  const [subtab, setSubtab] = useState("activos");
+  return (
+    <div>
+      <FilterTabs
+        value={subtab}
+        onChange={setSubtab}
+        options={[
+          { value: "activos", label: "Activos" },
+          { value: "reservas", label: "Reservas" },
+          { value: "financiacion", label: "Aportes y financiación" },
+        ]}
+      />
+      {subtab === "activos" && <ActivosTab />}
+      {subtab === "reservas" && <ReinversionTab />}
+      {subtab === "financiacion" && <AportesFinanciacionTab />}
+    </div>
+  );
+}
+
 export function Finanzas() {
   const [tab, setTab] = useState("resumen");
   return (
     <div>
-      <PageHeader title="Finanzas" sub="Caja, flujo, ingresos y egresos, gastos, activos, reinversión y rentabilidad" />
+      <PageHeader title="Finanzas" sub="Resumen, tesorería, resultados, compras e inventario, y capital" />
       <FilterTabs
         value={tab}
         onChange={setTab}
         options={[
           { value: "resumen", label: "Resumen" },
-          { value: "caja", label: "Caja y bancos" },
-          { value: "flujo", label: "Flujo de caja" },
-          { value: "movimientos", label: "Ingresos y egresos" },
-          { value: "porcobrar", label: "Cuentas por cobrar" },
-          { value: "porpagar", label: "Cuentas por pagar" },
-          { value: "gastos", label: "Gastos" },
-          { value: "activos", label: "Activos e inversiones" },
-          { value: "reinversion", label: "Reinversión" },
-          { value: "rentabilidad", label: "Rentabilidad" },
+          { value: "tesoreria", label: "Tesorería" },
+          { value: "resultados", label: "Resultados" },
+          { value: "compras-inventario", label: "Compras e inventario" },
+          { value: "capital", label: "Capital" },
         ]}
       />
       {tab === "resumen" && <ResumenTab />}
-      {tab === "caja" && <CajaTab />}
-      {tab === "flujo" && <FlujoCajaTab />}
-      {tab === "movimientos" && <IngresosEgresosTab />}
-      {tab === "porcobrar" && <CuentasPorCobrarTab />}
-      {tab === "porpagar" && <CuentasPorPagarTab />}
-      {tab === "gastos" && <GastosTab />}
-      {tab === "activos" && <ActivosTab />}
-      {tab === "reinversion" && <ReinversionTab />}
-      {tab === "rentabilidad" && <RentabilidadTab />}
+      {tab === "tesoreria" && <TesoreriaTab />}
+      {tab === "resultados" && <ResultadosTab />}
+      {tab === "compras-inventario" && <ComprasCmvInventarioVista />}
+      {tab === "capital" && <CapitalTab />}
     </div>
   );
 }
+
