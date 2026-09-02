@@ -55,11 +55,47 @@ function nombreCategoria(data: ReturnType<typeof useStoreV2>["data"], id: string
   return data.categorias.find((c) => c.id === id)?.nombre ?? "—";
 }
 
+type TipoEspecialMovimiento = "normal" | "ajuste_saldo" | "aporte_dueno" | "retiro_dueno" | "prestamo_recibido" | "devolucion_prestamo";
+
+// Tipo de movimiento -> dirección de caja fija (ingreso/egreso) cuando la dirección no la elige
+// el usuario — un aporte del dueño siempre es un ingreso, un retiro siempre un egreso, etc. "normal"
+// y "ajuste_saldo" son los únicos que pueden ir en cualquier sentido.
+const DIRECCION_FIJA: Partial<Record<TipoEspecialMovimiento, "ingreso" | "egreso">> = {
+  aporte_dueno: "ingreso",
+  retiro_dueno: "egreso",
+  prestamo_recibido: "ingreso",
+  devolucion_prestamo: "egreso",
+};
+
+const LABEL_TIPO_ESPECIAL: Record<TipoEspecialMovimiento, string> = {
+  normal: "Movimiento normal",
+  ajuste_saldo: "Ajuste de saldo (corrige un saldo mal cargado)",
+  aporte_dueno: "Aporte del dueño",
+  retiro_dueno: "Retiro del dueño",
+  prestamo_recibido: "Préstamo recibido",
+  devolucion_prestamo: "Devolución de préstamo",
+};
+
+const AYUDA_TIPO_ESPECIAL: Partial<Record<TipoEspecialMovimiento, string>> = {
+  ajuste_saldo: "Corrige el saldo de la cuenta pero nunca es una venta ni un gasto: no entra al Estado de Resultados ni afecta la rentabilidad del negocio. Requiere un motivo.",
+  aporte_dueno: "El dueño pone plata en el negocio: aumenta la caja y el patrimonio, pero nunca es una venta ni una ganancia.",
+  retiro_dueno: "El dueño saca plata del negocio: disminuye la caja y el patrimonio, pero nunca es un gasto operativo — no reduce el resultado del negocio.",
+  prestamo_recibido: "Entra plata prestada: aumenta la caja y la deuda, pero no es una venta ni un ingreso del Estado de Resultados.",
+  devolucion_prestamo: "Se devuelve el capital de un préstamo: sale plata de la caja y baja la deuda, pero no es un gasto — solo los intereses, si los hay, se cargan aparte como gasto financiero.",
+};
+
 function CajaTab() {
   const { data, setData } = useStoreV2();
   const { toast } = useToast();
   const [modalOpen, setModalOpen] = useState(false);
-  const [form, setForm] = useState({ fecha: new Date().toISOString().slice(0, 10), tipo: "ingreso" as "ingreso" | "egreso", concepto: "", monto: 0, metodo_pago: "" });
+  const [form, setForm] = useState({
+    fecha: new Date().toISOString().slice(0, 10),
+    tipo: "ingreso" as "ingreso" | "egreso",
+    tipoEspecial: "normal" as TipoEspecialMovimiento,
+    concepto: "",
+    monto: 0,
+    metodo_pago: "",
+  });
 
   const saldo = saldoCaja(data);
   const movimientosCaja = useMemo(
@@ -70,21 +106,39 @@ function CajaTab() {
     [data.movimientos_financieros]
   );
 
+  const esAjuste = form.tipoEspecial === "ajuste_saldo";
+  const direccionFija = DIRECCION_FIJA[form.tipoEspecial];
+  const tipoEfectivo = direccionFija ?? form.tipo;
+
   function registrar() {
     if (!form.concepto.trim() || form.monto <= 0) {
-      toast("Completá el concepto y un monto mayor a 0", "error");
+      toast(esAjuste ? "Completá el motivo del ajuste y un monto mayor a 0" : "Completá el concepto y un monto mayor a 0", "error");
       return;
     }
     setData((d) => ({
       ...d,
       movimientos_financieros: [
         ...d.movimientos_financieros,
-        { id: uid("MOVF"), fecha: form.fecha, tipo: form.tipo, concepto: form.concepto, monto: form.monto, metodo_pago: form.metodo_pago || undefined, origen_tipo: "caja_manual", estado: "confirmado" },
+        {
+          id: uid("MOVF"),
+          fecha: form.fecha,
+          tipo: tipoEfectivo,
+          concepto: form.concepto,
+          monto: form.monto,
+          metodo_pago: form.metodo_pago || undefined,
+          origen_tipo: form.tipoEspecial === "normal" ? "caja_manual" : form.tipoEspecial,
+          estado: "confirmado",
+        },
       ],
     }));
-    toast("Movimiento de caja registrado");
+    toast(`${LABEL_TIPO_ESPECIAL[form.tipoEspecial]} registrado`);
     setModalOpen(false);
-    setForm({ fecha: new Date().toISOString().slice(0, 10), tipo: "ingreso", concepto: "", monto: 0, metodo_pago: "" });
+    setForm({ fecha: new Date().toISOString().slice(0, 10), tipo: "ingreso", tipoEspecial: "normal", concepto: "", monto: 0, metodo_pago: "" });
+  }
+
+  function eliminar(id: string) {
+    setData((d) => ({ ...d, movimientos_financieros: d.movimientos_financieros.filter((m) => m.id !== id) }));
+    toast("Movimiento eliminado");
   }
 
   return (
@@ -108,6 +162,7 @@ function CajaTab() {
                   <Th>Concepto</Th>
                   <Th>Monto</Th>
                   <Th>Método</Th>
+                  <Th></Th>
                 </tr>
               </thead>
               <tbody>
@@ -115,11 +170,21 @@ function CajaTab() {
                   <TrHover key={m.id}>
                     <Td>{m.fecha}</Td>
                     <Td>
-                      <Badge color={m.tipo === "ingreso" ? "green" : m.tipo === "egreso" ? "red" : "blue"}>{m.tipo}</Badge>
+                      <div className="flex flex-wrap gap-1">
+                        <Badge color={m.tipo === "ingreso" ? "green" : m.tipo === "egreso" ? "red" : "blue"}>{m.tipo}</Badge>
+                        {m.origen_tipo && m.origen_tipo !== "caja_manual" && m.origen_tipo in LABEL_TIPO_ESPECIAL && (
+                          <Badge color="orange">{LABEL_TIPO_ESPECIAL[m.origen_tipo as TipoEspecialMovimiento]}</Badge>
+                        )}
+                      </div>
                     </Td>
                     <Td main>{m.concepto}</Td>
                     <Td className={m.tipo === "egreso" ? "text-red" : "text-green"}>{fARS(m.monto)}</Td>
                     <Td>{m.metodo_pago ?? "—"}</Td>
+                    <Td>
+                      <Button size="sm" variant="danger" onClick={() => eliminar(m.id)}>
+                        Eliminar
+                      </Button>
+                    </Td>
                   </TrHover>
                 ))}
               </tbody>
@@ -145,13 +210,25 @@ function CajaTab() {
           <Field label="Fecha">
             <Input type="date" value={form.fecha} onChange={(e) => setForm({ ...form, fecha: e.target.value })} />
           </Field>
-          <Field label="Tipo">
-            <Select value={form.tipo} onChange={(e) => setForm({ ...form, tipo: e.target.value as "ingreso" | "egreso" })}>
-              <option value="ingreso">Ingreso</option>
-              <option value="egreso">Egreso</option>
+          {!direccionFija && (
+            <Field label="Tipo">
+              <Select value={form.tipo} onChange={(e) => setForm({ ...form, tipo: e.target.value as "ingreso" | "egreso" })}>
+                <option value="ingreso">Ingreso</option>
+                <option value="egreso">Egreso</option>
+              </Select>
+            </Field>
+          )}
+          <Field label="Tipo de movimiento" full={!!direccionFija}>
+            <Select value={form.tipoEspecial} onChange={(e) => setForm({ ...form, tipoEspecial: e.target.value as TipoEspecialMovimiento })}>
+              {Object.entries(LABEL_TIPO_ESPECIAL).map(([value, label]) => (
+                <option key={value} value={value}>
+                  {label}
+                </option>
+              ))}
             </Select>
+            {AYUDA_TIPO_ESPECIAL[form.tipoEspecial] && <p className="mt-1.5 text-[12px] text-text3">{AYUDA_TIPO_ESPECIAL[form.tipoEspecial]}</p>}
           </Field>
-          <Field label="Concepto" full>
+          <Field label={esAjuste ? "Motivo del ajuste (obligatorio)" : "Concepto"} full>
             <Input value={form.concepto} onChange={(e) => setForm({ ...form, concepto: e.target.value })} />
           </Field>
           <Field label="Monto">
@@ -167,18 +244,29 @@ function CajaTab() {
 }
 
 function IngresosEgresosTab() {
-  const { data } = useStoreV2();
+  const { data, setData } = useStoreV2();
+  const { toast } = useToast();
   const [tipoFiltro, setTipoFiltro] = useState("todos");
   const [search, setSearch] = useState("");
 
   const filtrados = useMemo(
     () =>
       data.movimientos_financieros
-        .filter((m) => tipoFiltro === "todos" || m.tipo === tipoFiltro)
+        .filter((m) => {
+          if (tipoFiltro === "todos") return true;
+          if (tipoFiltro === "ajustes") return m.origen_tipo === "ajuste_saldo";
+          if (tipoFiltro === "pendientes") return m.estado === "pendiente";
+          return m.tipo === tipoFiltro;
+        })
         .filter((m) => !search || m.concepto.toLowerCase().includes(search.toLowerCase()))
         .sort((a, b) => b.fecha.localeCompare(a.fecha)),
     [data.movimientos_financieros, tipoFiltro, search]
   );
+
+  function eliminar(id: string) {
+    setData((d) => ({ ...d, movimientos_financieros: d.movimientos_financieros.filter((m) => m.id !== id) }));
+    toast("Movimiento eliminado");
+  }
 
   return (
     <div>
@@ -193,6 +281,8 @@ function IngresosEgresosTab() {
           { value: "ingreso", label: "Ingresos" },
           { value: "egreso", label: "Egresos" },
           { value: "transferencia", label: "Transferencias" },
+          { value: "ajustes", label: "Ajustes de saldo" },
+          { value: "pendientes", label: "Pendientes" },
         ]}
       />
       <Card>
@@ -209,6 +299,7 @@ function IngresosEgresosTab() {
                   <Th>Concepto</Th>
                   <Th>Monto</Th>
                   <Th>Estado</Th>
+                  <Th></Th>
                 </tr>
               </thead>
               <tbody>
@@ -216,13 +307,21 @@ function IngresosEgresosTab() {
                   <TrHover key={m.id}>
                     <Td>{m.fecha}</Td>
                     <Td>
-                      <Badge color={m.tipo === "ingreso" ? "green" : m.tipo === "egreso" ? "red" : "blue"}>{m.tipo}</Badge>
+                      <div className="flex flex-wrap gap-1">
+                        <Badge color={m.tipo === "ingreso" ? "green" : m.tipo === "egreso" ? "red" : "blue"}>{m.tipo}</Badge>
+                        {m.origen_tipo === "ajuste_saldo" && <Badge color="orange">Ajuste</Badge>}
+                      </div>
                     </Td>
                     <Td>{nombreCategoria(data, m.categoria_id)}</Td>
                     <Td main>{m.concepto}</Td>
                     <Td className={m.tipo === "egreso" ? "text-red" : "text-green"}>{fARS(m.monto)}</Td>
                     <Td>
                       <Badge color={m.estado === "confirmado" ? "green" : "orange"}>{m.estado}</Badge>
+                    </Td>
+                    <Td>
+                      <Button size="sm" variant="danger" onClick={() => eliminar(m.id)}>
+                        Eliminar
+                      </Button>
                     </Td>
                   </TrHover>
                 ))}
