@@ -49,6 +49,8 @@ import {
   sumarDias,
   calcularCuentasPorCobrar,
   calcularCuentasPorPagar,
+  calcularProyeccionCaja,
+  calcularDineroLibre,
 } from "@/lib/calc-v2";
 import type { EerrLinea, CriterioEnvioPedido, VistaMargen, CuentaPorCobrar, CuentaPorPagar } from "@/lib/calc-v2";
 import type { Activo } from "@/lib/types-v2";
@@ -2307,8 +2309,52 @@ function CuentasPorPagarTab() {
   );
 }
 
+// Máximo ~8 indicadores a propósito (pedido explícito de no llenar la pantalla de entrada con
+// indicadores secundarios) — todo lo demás se ve entrando a la pestaña correspondiente.
+function ResumenTab() {
+  const { data } = useStoreV2();
+  const { mes, anio } = usePeriod();
+  const hoy = hoyIso();
+
+  const desde = primerDiaMes(mes, anio);
+  const hasta = ultimoDiaMes(mes, anio);
+  const eerr = useMemo(() => calcularEerr(data, desde, hasta), [data, desde, hasta]);
+  const pedidosPeriodo = useMemo(() => data.pedidos.filter((p) => inPeriod(p.fecha, mes, anio) && p.estado === "Entregado"), [data.pedidos, mes, anio]);
+  const pe = useMemo(() => puntoEquilibrio(data, pedidosPeriodo, mes, anio), [data, pedidosPeriodo, mes, anio]);
+  const saldo = saldoCaja(data);
+  const libre = useMemo(() => calcularDineroLibre(data, hoy), [data, hoy]);
+  const porCobrar = useMemo(() => calcularCuentasPorCobrar(data, hoy).reduce((acc, c) => acc + c.saldo, 0), [data, hoy]);
+  const porPagar = useMemo(() => calcularCuentasPorPagar(data, hoy).reduce((acc, c) => acc + c.saldo, 0), [data, hoy]);
+  const proyeccion = useMemo(() => calcularProyeccionCaja(data, hoy), [data, hoy]);
+  const proy30 = proyeccion.puntos.find((p) => p.dias === 30);
+
+  return (
+    <div>
+      <p className="mb-4 text-[12.5px] text-text3">Lo esencial de {MESES[mes - 1]} {anio} — el detalle de cada número está en su propia pestaña.</p>
+      <StatGrid>
+        <KpiCard label="Saldo en cuentas" value={fARS(saldo)} color={saldo >= 0 ? "green" : "red"} />
+        <KpiCard label="Dinero libre" value={fARS(libre.dinero_libre)} color={libre.dinero_libre >= 0 ? "blue" : "red"} sub="Descontando lo que ya está comprometido" />
+        <KpiCard label="Ventas del mes" value={fARS(eerr.ventas_netas)} color="blue" />
+        <KpiCard label="Resultado neto" value={fARS(eerr.resultado_neto)} color={eerr.resultado_neto >= 0 ? "green" : "red"} />
+        <KpiCard label="Margen neto" value={eerr.margen_neto_pct === null ? "—" : `${fNum(eerr.margen_neto_pct, 1)}%`} color="purple" />
+        <KpiCard label="Por cobrar" value={fARS(porCobrar)} color={porCobrar > 0 ? "orange" : "green"} />
+        <KpiCard label="Por pagar" value={fARS(porPagar)} color={porPagar > 0 ? "orange" : "green"} />
+        <KpiCard label="Punto de equilibrio" value={fARS(pe.ventasEquilibrio)} sub={`≈ ${fNum(pe.unidadesEquilibrio, 0)} unidades`} color="gold" />
+      </StatGrid>
+      {proy30 && (
+        <Card title="Caja proyectada a 30 días" className="mt-1">
+          <div className="flex flex-wrap items-center gap-3">
+            <span className={`text-2xl font-semibold ${proy30.caja_proyectada >= 0 ? "text-green" : "text-red"}`}>{fARS(proy30.caja_proyectada)}</span>
+            {proyeccion.alerta_negativa && <Badge color="red">Riesgo de quedarse sin caja dentro de los próximos 30 días</Badge>}
+          </div>
+        </Card>
+      )}
+    </div>
+  );
+}
+
 export function Finanzas() {
-  const [tab, setTab] = useState("caja");
+  const [tab, setTab] = useState("resumen");
   return (
     <div>
       <PageHeader title="Finanzas" sub="Caja, flujo, ingresos y egresos, gastos, activos, reinversión y rentabilidad" />
@@ -2316,6 +2362,7 @@ export function Finanzas() {
         value={tab}
         onChange={setTab}
         options={[
+          { value: "resumen", label: "Resumen" },
           { value: "caja", label: "Caja y bancos" },
           { value: "flujo", label: "Flujo de caja" },
           { value: "movimientos", label: "Ingresos y egresos" },
@@ -2327,6 +2374,7 @@ export function Finanzas() {
           { value: "rentabilidad", label: "Rentabilidad" },
         ]}
       />
+      {tab === "resumen" && <ResumenTab />}
       {tab === "caja" && <CajaTab />}
       {tab === "flujo" && <FlujoCajaTab />}
       {tab === "movimientos" && <IngresosEgresosTab />}
