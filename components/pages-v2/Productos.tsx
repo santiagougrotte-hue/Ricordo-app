@@ -22,7 +22,18 @@ import {
   SearchInput,
 } from "@/components/ui";
 import { Modal } from "@/components/Modal";
-import { fARS, fNum, costoVariante, margenVariante, recetaEfectivaVariante, categoriasPorAmbito, detectarCanalInconsistente, variantesSinFactorReceta } from "@/lib/calc-v2";
+import {
+  fARS,
+  fNum,
+  costoVariante,
+  costoUnidadProductoBase,
+  margenVariante,
+  recetaEfectivaVariante,
+  categoriasPorAmbito,
+  detectarCanalInconsistente,
+  variantesSinFactorReceta,
+  ETAPAS_POR_UNIDAD,
+} from "@/lib/calc-v2";
 import type { Canal, EtapaReceta, OperacionAjusteReceta, ProductoVariante } from "@/lib/types-v2";
 
 const ETAPAS: EtapaReceta[] = ["masa", "relleno", "salsa", "terminacion", "packaging"];
@@ -73,9 +84,11 @@ function FichaProducto({ productoId }: { productoId: string }) {
   const complementosVariante = data.complementos_variante.filter((c) => c.variante_id === varianteSeleccionadaAjustes);
   const insumoNombre = (id: string) => data.insumos.find((i) => i.id === id)?.nombre ?? "(insumo eliminado)";
   const precioInsumo = (id: string) => data.insumos.find((i) => i.id === id)?.precio_actual ?? 0;
+  const insumoUnidad = (id: string) => data.insumos.find((i) => i.id === id)?.unidad ?? "—";
   const idsSinFactor = new Set(variantesSinFactorReceta(data).map((s) => s.variante_id));
   const costoNuevoItem = precioInsumo(nuevoItem.insumo_id) * nuevoItem.cantidad;
   const costoNuevoAjuste = precioInsumo(nuevoAjuste.insumo_id) * nuevoAjuste.cantidad;
+  const costoUnidad = costoUnidadProductoBase(data, productoId);
 
   function abrirNuevaVariante() {
     setEditandoVariante(null);
@@ -268,7 +281,14 @@ function FichaProducto({ productoId }: { productoId: string }) {
                         {v.unidades_por_paquete ?? (idsSinFactor.has(v.id) ? <Badge color="red">Falta — receta en $0</Badge> : "—")}
                       </Td>
                       <Td>{fARS(v.precio_venta)}</Td>
-                      <Td>{fARS(costoVariante(data, v.id))}</Td>
+                      <Td>
+                        {fARS(costoVariante(data, v.id))}
+                        {v.unidades_por_paquete != null && (
+                          <div className="text-[11px] text-text3">
+                            Receta base: {fARS(costoUnidad)} × {v.unidades_por_paquete} = {fARS(costoUnidad * v.unidades_por_paquete)}
+                          </div>
+                        )}
+                      </Td>
                       <Td className={margen >= 0 ? "text-green" : "text-red"}>{fNum(margen, 1)}%</Td>
                       <Td>
                         <Badge color={v.activo ? "green" : "red"}>{v.activo ? "Activo" : "Inactivo"}</Badge>
@@ -292,12 +312,16 @@ function FichaProducto({ productoId }: { productoId: string }) {
         )}
       </Card>
 
-      <Card title="Receta base (compartida por todas las variantes)">
+      <Card title="Receta por unidad">
         <p className="mb-3 text-[12.5px] text-text3">
-          Esta receta se hereda automáticamente por todas las variantes de venta de este producto (canal, sabor y
-          presentación), escalada según las unidades por paquete de cada una — no hace falta cargarla de nuevo por
-          canal. Si alguna variante no muestra el costo esperado, revisá la tabla de Variantes: la fila roja indica
-          que le falta ese factor de conversión.
+          Ingresá las cantidades de masa y relleno utilizadas para fabricar 1 unidad. La app multiplicará
+          automáticamente estas cantidades según las unidades que contenga cada presentación — no hace falta cargar
+          la receta de nuevo por canal ni por presentación. Si alguna variante no muestra el costo esperado, revisá
+          la tabla de Variantes: la fila roja indica que le falta ese factor de conversión.
+        </p>
+        <p className="mb-3 text-[12.5px] text-text3">
+          Packaging, salsa, complementos y otros insumos de una presentación puntual NO se cargan acá — se agregan
+          por variante más abajo (Ajustes) o como complementos, y nunca se multiplican por unidades por paquete.
         </p>
         {recetaItems.length === 0 ? (
           <EmptyState text="Sin receta cargada todavía." />
@@ -306,19 +330,24 @@ function FichaProducto({ productoId }: { productoId: string }) {
             <table className="mb-3 w-full">
               <thead>
                 <tr>
-                  <Th>Insumo</Th>
                   <Th>Etapa</Th>
-                  <Th>Cantidad</Th>
-                  <Th>Precio insumo</Th>
-                  <Th>Costo de la línea</Th>
+                  <Th>Insumo</Th>
+                  <Th>Cantidad por unidad</Th>
+                  <Th>Unidad</Th>
+                  <Th>Costo por unidad</Th>
                   <Th></Th>
                 </tr>
               </thead>
               <tbody>
                 {recetaItems.map((i) => (
                   <TrHover key={i.id}>
+                    <Td>
+                      {i.etapa}
+                      {!ETAPAS_POR_UNIDAD.includes(i.etapa) && (
+                        <span className="ml-1.5 text-[11px] text-text3">(no escala por presentación)</span>
+                      )}
+                    </Td>
                     <Td main>{insumoNombre(i.insumo_id)}</Td>
-                    <Td>{i.etapa}</Td>
                     <Td>
                       <Input
                         type="number"
@@ -327,7 +356,7 @@ function FichaProducto({ productoId }: { productoId: string }) {
                         onChange={(e) => actualizarCantidadRecetaItem(i.id, Number(e.target.value))}
                       />
                     </Td>
-                    <Td>{fARS(precioInsumo(i.insumo_id))}</Td>
+                    <Td>{insumoUnidad(i.insumo_id)}</Td>
                     <Td className="font-medium text-text">{fARS(precioInsumo(i.insumo_id) * i.cantidad)}</Td>
                     <Td>
                       <Button size="sm" variant="danger" onClick={() => quitarRecetaItem(i.id)}>
@@ -340,6 +369,10 @@ function FichaProducto({ productoId }: { productoId: string }) {
             </table>
           </TableWrap>
         )}
+        <div className="mb-3 rounded-md border border-border bg-surface2/40 p-2.5 text-[13px]">
+          <span className="text-text2">Costo de 1 unidad (masa + relleno): </span>
+          <span className="font-semibold text-text">{fARS(costoUnidad)}</span>
+        </div>
         <div className="flex flex-wrap items-end gap-2 rounded-md border border-border bg-surface2/40 p-2.5">
           <div className="w-full sm:w-auto sm:flex-[2]">
             <Select value={nuevoItem.insumo_id} onChange={(e) => setNuevoItem({ ...nuevoItem, insumo_id: e.target.value })}>

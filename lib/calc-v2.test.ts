@@ -38,6 +38,8 @@ import {
   calcularBalanceGeneral,
   calcularFondoReposicion,
   calcularFondosInternos,
+  recetaEfectivaVariante,
+  costoUnidadProductoBase,
 } from "./calc-v2";
 
 function fixture(): RicordoData {
@@ -647,4 +649,58 @@ test("calcularFondosInternos/calcularDineroLibre: el fondo de reposición tambi�
   assert.equal(calcularFondosInternos(data).saldo_total, 0); // caja_inteligente sin asignaciones
   assert.equal(libre.fondos_reservados, 100000); // solo el fondo de reposición
   assert.equal(libre.dinero_libre, 500000 - 100000);
+});
+
+function fixtureRecetaPorUnidad() {
+  const data = emptyDataV2();
+  data.insumos = [
+    { id: "INS-PREMEZCLA", nombre: "Premezcla", tipo: "ingrediente", unidad: "kg", precio_actual: 1000, controla_stock: true, activo: true },
+    { id: "INS-MOZZA", nombre: "Mozzarella", tipo: "ingrediente", unidad: "kg", precio_actual: 4000, controla_stock: true, activo: true },
+    { id: "INS-BOLSA", nombre: "Bolsa al vacío", tipo: "packaging", unidad: "unidad", precio_actual: 50, controla_stock: true, activo: true },
+  ];
+  data.productos = [{ id: "PROD-RAVIOL", nombre: "Raviol de jamón y queso", activo: true }];
+  data.recetas = [{ id: "REC-RAVIOL", producto_id: "PROD-RAVIOL", nombre: "Receta base", activa: true }];
+  // Receta "por unidad": 0,018 kg de premezcla y 0,025 kg de mozzarella por CADA raviol individual.
+  data.receta_items = [
+    { id: "RI-1", receta_id: "REC-RAVIOL", insumo_id: "INS-PREMEZCLA", etapa: "masa", cantidad: 0.018 },
+    { id: "RI-2", receta_id: "REC-RAVIOL", insumo_id: "INS-MOZZA", etapa: "relleno", cantidad: 0.025 },
+    // Packaging cargado (por error, o a propósito) en la receta compartida — no debe escalar.
+    { id: "RI-3", receta_id: "REC-RAVIOL", insumo_id: "INS-BOLSA", etapa: "packaging", cantidad: 1 },
+  ];
+  data.producto_variantes = [
+    { id: "VAR-CAJA10", producto_id: "PROD-RAVIOL", nombre: "Caja de 10", unidades_por_paquete: 10, precio_venta: 3000, activo: true },
+    { id: "VAR-CAJA12", producto_id: "PROD-RAVIOL", nombre: "Caja de 12", unidades_por_paquete: 12, precio_venta: 3500, activo: true },
+  ];
+  return data;
+}
+
+test("recetaEfectivaVariante: masa y relleno escalan × unidades_por_paquete, packaging de la receta compartida NO", () => {
+  const data = fixtureRecetaPorUnidad();
+  const v10 = data.producto_variantes.find((v) => v.id === "VAR-CAJA10")!;
+  const items = recetaEfectivaVariante(data, v10);
+
+  const premezcla = items.find((i) => i.insumo_id === "INS-PREMEZCLA")!;
+  const mozza = items.find((i) => i.insumo_id === "INS-MOZZA")!;
+  const bolsa = items.find((i) => i.insumo_id === "INS-BOLSA")!;
+
+  assert.equal(premezcla.cantidad, 0.018 * 10);
+  assert.equal(mozza.cantidad, 0.025 * 10);
+  // La bolsa nunca se multiplica por unidades_por_paquete, aunque esté en la receta compartida.
+  assert.equal(bolsa.cantidad, 1);
+});
+
+test("costoVariante: dos presentaciones del mismo producto base dan costos de masa/relleno distintos, packaging igual", () => {
+  const data = fixtureRecetaPorUnidad();
+  // Costo de 1 raviol: 0,018×$1000 + 0,025×$4000 = $18 + $100 = $118 -> caja de 10 = $1180 + $50 bolsa = $1230
+  assert.equal(costoVariante(data, "VAR-CAJA10"), 1230);
+  // Caja de 12: $118×12 = $1416 + $50 bolsa = $1466 — la bolsa no cambia entre presentaciones.
+  assert.equal(costoVariante(data, "VAR-CAJA12"), 1466);
+});
+
+test("costoUnidadProductoBase: costo de exactamente 1 unidad — solo masa+relleno, nunca packaging, no depende de ninguna variante", () => {
+  const data = fixtureRecetaPorUnidad();
+  // $18 + $100 = $118 — nunca incluye la bolsa, y da lo mismo sin importar qué variante exista.
+  assert.equal(costoUnidadProductoBase(data, "PROD-RAVIOL"), 118);
+  data.producto_variantes = [];
+  assert.equal(costoUnidadProductoBase(data, "PROD-RAVIOL"), 118);
 });

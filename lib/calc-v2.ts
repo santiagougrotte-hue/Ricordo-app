@@ -38,20 +38,32 @@ export interface ItemRecetaEfectiva {
   etapa: EtapaReceta;
 }
 
+/** La receta compartida se carga "por unidad individual" (ver costoUnidadProductoBase), pero eso
+ * solo tiene sentido para lo que realmente escala con la cantidad de unidades de una presentación:
+ * masa y relleno. Salsa/terminación/packaging, si están cargados en la receta compartida, ya
+ * representan la cantidad pensada para esa presentación (por eso lo normal es cargarlos como
+ * ajuste/complemento por variante, no acá) — nunca se multiplican por unidades_por_paquete. */
+export const ETAPAS_POR_UNIDAD: EtapaReceta[] = ["masa", "relleno"];
+
 /** Receta completa de una variante ya resuelta: hereda de la receta compartida del producto
- * base (escalada × unidades_por_paquete) o usa su propia receta standalone (si nunca se migró a
- * una familia con receta compartida), + ajustes propios (reemplaza/suma/resta) + complementos
- * (recetas de otros productos base sumadas con su propia cantidad). */
+ * base (masa/relleno escalados × unidades_por_paquete, el resto de las etapas tal cual están
+ * cargadas) o usa su propia receta standalone (si nunca se migró a una familia con receta
+ * compartida), + ajustes propios (reemplaza/suma/resta) + complementos (recetas de otros
+ * productos base sumadas con su propia cantidad). */
 export function recetaEfectivaVariante(data: RicordoDataV2, variante: ProductoVariante): ItemRecetaEfectiva[] {
   const recetaCompartida = data.recetas.find((r) => r.producto_id === variante.producto_id);
   const recetaPropia = recetaCompartida ? undefined : data.recetas.find((r) => r.producto_id === variante.id);
   const receta = recetaCompartida ?? recetaPropia;
   if (!receta) return [];
 
-  const factor = receta === recetaCompartida ? variante.unidades_por_paquete ?? 0 : 1;
+  const esCompartida = receta === recetaCompartida;
+  const factorPorUnidad = variante.unidades_por_paquete ?? 0;
   const items: ItemRecetaEfectiva[] = data.receta_items
     .filter((i) => i.receta_id === receta.id)
-    .map((i) => ({ insumo_id: i.insumo_id, cantidad: i.cantidad * factor, etapa: i.etapa }));
+    .map((i) => {
+      const factor = esCompartida && ETAPAS_POR_UNIDAD.includes(i.etapa) ? factorPorUnidad : 1;
+      return { insumo_id: i.insumo_id, cantidad: i.cantidad * factor, etapa: i.etapa };
+    });
 
   for (const ajuste of data.ajustes_receta_variante.filter((a) => a.variante_id === variante.id)) {
     const idx = items.findIndex((it) => it.insumo_id === ajuste.insumo_id && (!ajuste.etapa || it.etapa === ajuste.etapa));
@@ -87,6 +99,23 @@ export function costoVariante(data: RicordoDataV2, varianteId: string): number {
   return Math.round(total);
 }
 
+/** Costo de fabricar exactamente 1 unidad individual del producto base: solo los insumos de masa
+ * y relleno de la receta compartida, nunca packaging/salsa/terminación/complementos (esos se
+ * agregan aparte, a nivel de cada variante, y no forman parte de "1 unidad"). Es la base que cada
+ * variante multiplica × sus propias unidades_por_paquete — no depende de ninguna variante en
+ * particular ni de su unidades_por_paquete. */
+export function costoUnidadProductoBase(data: RicordoDataV2, productoId: string): number {
+  const receta = data.recetas.find((r) => r.producto_id === productoId);
+  if (!receta) return 0;
+  const total = data.receta_items
+    .filter((i) => i.receta_id === receta.id && ETAPAS_POR_UNIDAD.includes(i.etapa))
+    .reduce((acc, i) => {
+      const insumo = data.insumos.find((ins) => ins.id === i.insumo_id);
+      return acc + i.cantidad * (insumo?.precio_actual ?? 0);
+    }, 0);
+  return Math.round(total);
+}
+
 export function margenVariante(data: RicordoDataV2, variante: ProductoVariante): number {
   return variante.precio_venta > 0 ? ((variante.precio_venta - costoVariante(data, variante.id)) / variante.precio_venta) * 100 : 0;
 }
@@ -97,9 +126,10 @@ export interface VarianteSinFactor {
 }
 
 /** Variantes activas que heredan una receta compartida (hay una Receta con su mismo producto_id)
- * pero no tienen `unidades_por_paquete` cargado — en recetaEfectivaVariante eso hace que el
- * factor de escala sea 0, así que la receta "se hereda" en el sentido de que la relación existe,
- * pero cada línea queda en cantidad 0 (costo $0 para esa variante) hasta que se cargue el dato. */
+ * pero no tienen `unidades_por_paquete` cargado — en recetaEfectivaVariante eso hace que el factor
+ * de escala de masa/relleno sea 0, así que esas líneas quedan en cantidad 0 (costo $0 por esa
+ * parte) hasta que se cargue el dato. Packaging/salsa/terminación de la receta compartida (si los
+ * hay) no dependen de este factor y no se ven afectados. */
 export function variantesSinFactorReceta(data: RicordoDataV2): VarianteSinFactor[] {
   const resultado: VarianteSinFactor[] = [];
   for (const v of data.producto_variantes.filter((variante) => variante.activo)) {
