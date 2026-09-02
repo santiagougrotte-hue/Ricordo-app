@@ -843,6 +843,8 @@ export function migrarAV2(data: RicordoData): { documento: RicordoDocument; repo
         efectivo_en_mano: money(data.efectivo_en_mano),
         conciliacion_ignorados: data.conciliacion_ignorados,
         caja_inteligente: data.caja_inteligente,
+        // No existía en el esquema v1 — arranca vacío, es una decisión manual del usuario.
+        fondo_reposicion: { aportes: [], usos: [] },
       },
       datos_pendientes_revision: reporte.todas,
       legacy,

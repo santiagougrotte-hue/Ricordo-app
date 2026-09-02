@@ -52,6 +52,8 @@ import {
   calcularProyeccionCaja,
   calcularDineroLibre,
   calcularBalanceGeneral,
+  calcularFondosInternos,
+  calcularFondoReposicion,
 } from "@/lib/calc-v2";
 import type { EerrLinea, CriterioEnvioPedido, VistaMargen, CuentaPorCobrar, CuentaPorPagar } from "@/lib/calc-v2";
 import type { Activo } from "@/lib/types-v2";
@@ -1716,20 +1718,31 @@ function ResultadosTab() {
   );
 }
 
+type FondoReinversionSeguridad = "reinversion" | "seguridad";
+
 function ReinversionTab() {
   const { data, setData } = useStoreV2();
   const { toast } = useToast();
   const ci = data.configuracion.caja_inteligente;
+  const fr = data.configuracion.fondo_reposicion;
 
   const [pctReinversion, setPctReinversion] = useState(ci.porcentaje_reinversion);
   const [pctSeguridad, setPctSeguridad] = useState(ci.porcentaje_seguridad);
   const [form, setForm] = useState({ fecha: new Date().toISOString().slice(0, 10), monto: 0 });
+  const [usoForm, setUsoForm] = useState({ fondo: "reinversion" as FondoReinversionSeguridad, fecha: new Date().toISOString().slice(0, 10), concepto: "", monto: 0 });
+  const [reposicionForm, setReposicionForm] = useState({ fecha: new Date().toISOString().slice(0, 10), concepto: "", monto: 0 });
 
-  const totalAportado = ci.asignaciones.reduce((acc, a) => acc + a.monto, 0);
-  const totalReinversion = Math.round((totalAportado * ci.porcentaje_reinversion) / 100);
-  const totalSeguridad = totalAportado - totalReinversion;
+  const fondos = useMemo(() => calcularFondosInternos(data), [data]);
+  const saldoReposicion = useMemo(() => calcularFondoReposicion(data), [data]);
 
   const aportesOrdenados = useMemo(() => [...ci.asignaciones].sort((a, b) => b.fecha.localeCompare(a.fecha)), [ci.asignaciones]);
+  const usosOrdenados = useMemo(
+    () =>
+      [...ci.usos_reinversion.map((u) => ({ ...u, fondo: "reinversion" as const })), ...ci.usos_seguridad.map((u) => ({ ...u, fondo: "seguridad" as const }))].sort((a, b) =>
+        b.fecha.localeCompare(a.fecha)
+      ),
+    [ci.usos_reinversion, ci.usos_seguridad]
+  );
 
   function guardarPorcentajes() {
     if (pctReinversion + pctSeguridad !== 100) {
@@ -1743,7 +1756,7 @@ function ReinversionTab() {
     toast("Reparto actualizado");
   }
 
-  function agregarAporte() {
+  function distribuirExcedente() {
     if (form.monto <= 0) {
       toast("Ingresá un monto mayor a 0", "error");
       return;
@@ -1758,7 +1771,7 @@ function ReinversionTab() {
         },
       },
     }));
-    toast("Aporte registrado");
+    toast("Excedente distribuido");
     setForm({ fecha: new Date().toISOString().slice(0, 10), monto: 0 });
   }
 
@@ -1772,18 +1785,99 @@ function ReinversionTab() {
     }));
   }
 
+  function registrarUso() {
+    if (usoForm.monto <= 0 || !usoForm.concepto.trim()) {
+      toast("Completá el concepto y un monto mayor a 0", "error");
+      return;
+    }
+    const clave = usoForm.fondo === "reinversion" ? "usos_reinversion" : "usos_seguridad";
+    setData((d) => ({
+      ...d,
+      configuracion: {
+        ...d.configuracion,
+        caja_inteligente: {
+          ...d.configuracion.caja_inteligente,
+          [clave]: [...d.configuracion.caja_inteligente[clave], { id: uid("USO"), fecha: usoForm.fecha, concepto: usoForm.concepto, monto: usoForm.monto }],
+        },
+      },
+    }));
+    toast("Uso registrado");
+    setUsoForm({ fondo: usoForm.fondo, fecha: new Date().toISOString().slice(0, 10), concepto: "", monto: 0 });
+  }
+
+  function eliminarUso(fondo: FondoReinversionSeguridad, id: string) {
+    const clave = fondo === "reinversion" ? "usos_reinversion" : "usos_seguridad";
+    setData((d) => ({
+      ...d,
+      configuracion: { ...d.configuracion, caja_inteligente: { ...d.configuracion.caja_inteligente, [clave]: d.configuracion.caja_inteligente[clave].filter((u) => u.id !== id) } },
+    }));
+  }
+
+  function aportarReposicion() {
+    if (reposicionForm.monto <= 0) {
+      toast("Ingresá un monto mayor a 0", "error");
+      return;
+    }
+    setData((d) => ({
+      ...d,
+      configuracion: {
+        ...d.configuracion,
+        fondo_reposicion: {
+          ...d.configuracion.fondo_reposicion,
+          aportes: [...d.configuracion.fondo_reposicion.aportes, { id: uid("FR"), fecha: reposicionForm.fecha, concepto: reposicionForm.concepto || "Aporte", monto: reposicionForm.monto }],
+        },
+      },
+    }));
+    toast("Aporte al fondo de reposición registrado");
+    setReposicionForm({ fecha: new Date().toISOString().slice(0, 10), concepto: "", monto: 0 });
+  }
+
+  function usarReposicion() {
+    if (reposicionForm.monto <= 0 || !reposicionForm.concepto.trim()) {
+      toast("Completá el concepto y un monto mayor a 0", "error");
+      return;
+    }
+    setData((d) => ({
+      ...d,
+      configuracion: {
+        ...d.configuracion,
+        fondo_reposicion: {
+          ...d.configuracion.fondo_reposicion,
+          usos: [...d.configuracion.fondo_reposicion.usos, { id: uid("FR"), fecha: reposicionForm.fecha, concepto: reposicionForm.concepto, monto: reposicionForm.monto }],
+        },
+      },
+    }));
+    toast("Uso del fondo de reposición registrado");
+    setReposicionForm({ fecha: new Date().toISOString().slice(0, 10), concepto: "", monto: 0 });
+  }
+
+  function eliminarMovReposicion(lista: "aportes" | "usos", id: string) {
+    setData((d) => ({
+      ...d,
+      configuracion: { ...d.configuracion, fondo_reposicion: { ...d.configuracion.fondo_reposicion, [lista]: d.configuracion.fondo_reposicion[lista].filter((m) => m.id !== id) } },
+    }));
+  }
+
   const previewReinversion = Math.round((form.monto * ci.porcentaje_reinversion) / 100);
   const previewSeguridad = form.monto - previewReinversion;
+  const movReposicion = useMemo(
+    () => [...fr.aportes.map((a) => ({ ...a, tipo: "aporte" as const })), ...fr.usos.map((u) => ({ ...u, tipo: "uso" as const }))].sort((a, b) => b.fecha.localeCompare(a.fecha)),
+    [fr]
+  );
 
   return (
     <div>
+      <p className="mb-3 text-[12.5px] text-text3">
+        Reservar plata acá es una decisión, no un gasto: nunca aparece como gasto en el Estado de Resultados. Cada fondo
+        se calcula como saldo anterior + aportes − usos = saldo actual.
+      </p>
       <StatGrid>
-        <KpiCard label="Total aportado" value={fARS(totalAportado)} color="gold" />
-        <KpiCard label="Destinado a reinversión" value={fARS(totalReinversion)} color="green" />
-        <KpiCard label="Destinado a margen de seguridad" value={fARS(totalSeguridad)} color="blue" />
+        <KpiCard label="Fondo de reinversión (maquinaria)" value={fARS(fondos.saldo_reinversion)} color="green" />
+        <KpiCard label="Fondo de margen de seguridad" value={fARS(fondos.saldo_seguridad)} color="blue" />
+        <KpiCard label="Fondo de reposición de maquinaria" value={fARS(saldoReposicion)} color="gold" />
       </StatGrid>
 
-      <Card title="Cómo se reparte cada aporte">
+      <Card title="Cómo se reparte cada excedente distribuido">
         <div className="grid grid-cols-1 gap-3.5 sm:grid-cols-2">
           <Field label="% Reinversión (maquinaria)">
             <Input
@@ -1813,7 +1907,7 @@ function ReinversionTab() {
         </div>
       </Card>
 
-      <Card title="Registrar aporte mensual">
+      <Card title="Distribuir excedente">
         <p className="mb-3 text-[12.5px] text-text3">
           Elegí el mes al que corresponde el monto — podés cargar meses anteriores, no hace falta que sea el mes actual.
         </p>
@@ -1832,13 +1926,13 @@ function ReinversionTab() {
           </p>
         )}
         <div className="mt-3 flex justify-end">
-          <Button onClick={agregarAporte}>+ Agregar aporte</Button>
+          <Button onClick={distribuirExcedente}>Distribuir excedente</Button>
         </div>
       </Card>
 
-      <Card title="Historial de aportes">
+      <Card title="Historial de excedentes distribuidos">
         {aportesOrdenados.length === 0 ? (
-          <EmptyState text="Todavía no cargaste ningún aporte." />
+          <EmptyState text="Todavía no distribuiste ningún excedente." />
         ) : (
           <TableWrap>
             <table className="w-full">
@@ -1869,6 +1963,127 @@ function ReinversionTab() {
                     </TrHover>
                   );
                 })}
+              </tbody>
+            </table>
+          </TableWrap>
+        )}
+      </Card>
+
+      <Card title="Registrar uso de un fondo">
+        <p className="mb-3 text-[12.5px] text-text3">Usar el fondo de reinversión o de seguridad reduce su saldo — tampoco es un gasto operativo.</p>
+        <FormGrid>
+          <Field label="Fondo">
+            <Select value={usoForm.fondo} onChange={(e) => setUsoForm({ ...usoForm, fondo: e.target.value as FondoReinversionSeguridad })}>
+              <option value="reinversion">Reinversión (maquinaria)</option>
+              <option value="seguridad">Margen de seguridad</option>
+            </Select>
+          </Field>
+          <Field label="Fecha">
+            <Input type="date" value={usoForm.fecha} onChange={(e) => setUsoForm({ ...usoForm, fecha: e.target.value })} />
+          </Field>
+          <Field label="Concepto" full>
+            <Input value={usoForm.concepto} onChange={(e) => setUsoForm({ ...usoForm, concepto: e.target.value })} />
+          </Field>
+          <Field label="Monto">
+            <Input type="number" value={usoForm.monto} onChange={(e) => setUsoForm({ ...usoForm, monto: Number(e.target.value) })} />
+          </Field>
+        </FormGrid>
+        <div className="mt-3 flex justify-end">
+          <Button onClick={registrarUso}>+ Registrar uso</Button>
+        </div>
+      </Card>
+
+      <Card title="Historial de usos">
+        {usosOrdenados.length === 0 ? (
+          <EmptyState text="Todavía no se usó ningún fondo." />
+        ) : (
+          <TableWrap>
+            <table className="w-full">
+              <thead>
+                <tr>
+                  <Th>Fecha</Th>
+                  <Th>Fondo</Th>
+                  <Th>Concepto</Th>
+                  <Th>Monto</Th>
+                  <Th></Th>
+                </tr>
+              </thead>
+              <tbody>
+                {usosOrdenados.map((u) => (
+                  <TrHover key={u.id}>
+                    <Td>{u.fecha}</Td>
+                    <Td>{u.fondo === "reinversion" ? "Reinversión" : "Margen de seguridad"}</Td>
+                    <Td main>{u.concepto}</Td>
+                    <Td className="text-red">{fARS(u.monto)}</Td>
+                    <Td>
+                      <Button size="sm" variant="danger" onClick={() => eliminarUso(u.fondo, u.id)}>
+                        Eliminar
+                      </Button>
+                    </Td>
+                  </TrHover>
+                ))}
+              </tbody>
+            </table>
+          </TableWrap>
+        )}
+      </Card>
+
+      <Card title="Fondo de reposición de maquinaria" className="mt-4">
+        <p className="mb-3 text-[12.5px] text-text3">
+          Separado por completo de la amortización contable: la cuota mensual de amortización de un activo es un gasto
+          económico del Estado de Resultados, nunca reserva plata acá sola. Si querés reservar de verdad para el día que
+          haya que reponer una máquina, hacelo manualmente acá.
+        </p>
+        <FormGrid>
+          <Field label="Fecha">
+            <Input type="date" value={reposicionForm.fecha} onChange={(e) => setReposicionForm({ ...reposicionForm, fecha: e.target.value })} />
+          </Field>
+          <Field label="Concepto (obligatorio para un uso)">
+            <Input value={reposicionForm.concepto} onChange={(e) => setReposicionForm({ ...reposicionForm, concepto: e.target.value })} />
+          </Field>
+          <Field label="Monto">
+            <Input type="number" value={reposicionForm.monto} onChange={(e) => setReposicionForm({ ...reposicionForm, monto: Number(e.target.value) })} />
+          </Field>
+        </FormGrid>
+        <div className="mt-3 flex justify-end gap-2">
+          <Button variant="ghost" onClick={usarReposicion}>
+            − Registrar uso
+          </Button>
+          <Button onClick={aportarReposicion}>+ Registrar aporte</Button>
+        </div>
+      </Card>
+
+      <Card title="Historial del fondo de reposición">
+        {movReposicion.length === 0 ? (
+          <EmptyState text="Todavía no cargaste nada en este fondo." />
+        ) : (
+          <TableWrap>
+            <table className="w-full">
+              <thead>
+                <tr>
+                  <Th>Fecha</Th>
+                  <Th>Tipo</Th>
+                  <Th>Concepto</Th>
+                  <Th>Monto</Th>
+                  <Th></Th>
+                </tr>
+              </thead>
+              <tbody>
+                {movReposicion.map((m) => (
+                  <TrHover key={m.id}>
+                    <Td>{m.fecha}</Td>
+                    <Td>
+                      <Badge color={m.tipo === "aporte" ? "green" : "red"}>{m.tipo === "aporte" ? "Aporte" : "Uso"}</Badge>
+                    </Td>
+                    <Td main>{m.concepto}</Td>
+                    <Td className={m.tipo === "uso" ? "text-red" : "text-green"}>{fARS(m.monto)}</Td>
+                    <Td>
+                      <Button size="sm" variant="danger" onClick={() => eliminarMovReposicion(m.tipo === "aporte" ? "aportes" : "usos", m.id)}>
+                        Eliminar
+                      </Button>
+                    </Td>
+                  </TrHover>
+                ))}
               </tbody>
             </table>
           </TableWrap>

@@ -1289,6 +1289,16 @@ export function calcularFondosInternos(data: RicordoDataV2): FondosInternos {
   return { saldo_reinversion, saldo_seguridad, saldo_total: saldo_reinversion + saldo_seguridad };
 }
 
+/** Fondo de reposición de maquinaria: separado por completo de la amortización contable — nadie
+ * "hereda" plata acá automáticamente por la cuota de amortización de un activo, es una reserva
+ * 100% manual (aporte/uso), igual que Reinversión/Margen de seguridad. */
+export function calcularFondoReposicion(data: RicordoDataV2): number {
+  const f = data.configuracion.fondo_reposicion;
+  const aportes = f.aportes.reduce((acc, a) => acc + a.monto, 0);
+  const usos = f.usos.reduce((acc, u) => acc + u.monto, 0);
+  return Math.round(aportes - usos) || 0;
+}
+
 /** Dinero libre/disponible: lo que realmente se puede usar sin comprometer pagos ya previsibles ni
  * plata ya reservada en los fondos internos. No incluye "compromisos próximos" (gastos con
  * vencimiento futuro) — eso vive en `calcularProyeccionCaja`, para no duplicar esa lógica acá. */
@@ -1304,7 +1314,7 @@ export function calcularDineroLibre(data: RicordoDataV2, hoy: string): DineroLib
   const cuentas_por_pagar = Math.round(
     data.compras.reduce((acc, c) => acc + Math.max(0, c.total - totalPagadoCompra(data, c.id)), 0)
   );
-  const fondos_reservados = calcularFondosInternos(data).saldo_total;
+  const fondos_reservados = calcularFondosInternos(data).saldo_total + calcularFondoReposicion(data);
   const dinero_libre = Math.round(dinero_en_cuentas - cuentas_por_pagar - fondos_reservados) || 0;
   return { dinero_en_cuentas, cuentas_por_pagar, fondos_reservados, dinero_libre };
 }

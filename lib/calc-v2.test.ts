@@ -36,6 +36,8 @@ import {
   amortizacionAcumulada,
   valorContableActivo,
   calcularBalanceGeneral,
+  calcularFondoReposicion,
+  calcularFondosInternos,
 } from "./calc-v2";
 
 function fixture(): RicordoData {
@@ -625,4 +627,24 @@ test("calcularBalanceGeneral: separa resultado del período de los resultados ac
   const balance = calcularBalanceGeneral(data, "2026-02-28", "2026-02-01");
   assert.equal(balance.patrimonio_neto.resultado_periodo, 2000); // solo febrero
   assert.equal(balance.patrimonio_neto.resultados_acumulados, 1000); // enero, período anterior
+});
+
+test("calcularFondoReposicion: separado por completo de la amortización — aportes/usos 100% manuales", () => {
+  const data = emptyDataV2();
+  assert.equal(calcularFondoReposicion(data), 0); // sin aportes, sin amortización que lo alimente sola
+  data.configuracion.fondo_reposicion = {
+    aportes: [{ id: "FR-1", fecha: "2026-01-01", concepto: "Aporte enero", monto: 50000 }],
+    usos: [{ id: "FR-2", fecha: "2026-02-01", concepto: "Repuesto sobadora", monto: 15000 }],
+  };
+  assert.equal(calcularFondoReposicion(data), 35000);
+});
+
+test("calcularFondosInternos/calcularDineroLibre: el fondo de reposición también resta del dinero libre", () => {
+  const data = emptyDataV2();
+  data.configuracion.saldo_inicial_caja = 500000;
+  data.configuracion.fondo_reposicion = { aportes: [{ id: "FR-1", fecha: "2026-01-01", concepto: "Aporte", monto: 100000 }], usos: [] };
+  const libre = calcularDineroLibre(data, "2026-01-15");
+  assert.equal(calcularFondosInternos(data).saldo_total, 0); // caja_inteligente sin asignaciones
+  assert.equal(libre.fondos_reservados, 100000); // solo el fondo de reposición
+  assert.equal(libre.dinero_libre, 500000 - 100000);
 });

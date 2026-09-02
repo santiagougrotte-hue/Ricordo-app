@@ -315,6 +315,23 @@ export interface Configuracion {
   /** `id` de pedido_item confirmados en la conciliación de Caja como intencionalmente sin cobrar. */
   conciliacion_ignorados: string[];
   caja_inteligente: CajaInteligente;
+  /** Fondo de reposición de maquinaria: plata que se decide reservar A PROPÓSITO para el día que
+   * haya que reponer una máquina — separado por completo de la amortización contable (que es un
+   * gasto económico del EERR, no una salida de caja). Reservar acá es una decisión manual, nunca
+   * automática. */
+  fondo_reposicion: FondoReposicion;
+}
+
+export interface FondoInternoMovimiento {
+  id: string;
+  fecha: string;
+  concepto: string;
+  monto: number;
+}
+
+export interface FondoReposicion {
+  aportes: FondoInternoMovimiento[];
+  usos: FondoInternoMovimiento[];
 }
 
 // --- Pendientes de revisión / legacy -----------------------------------------------------------
@@ -415,6 +432,7 @@ export function emptyDataV2(): RicordoDataV2 {
         usos_reinversion: [],
         usos_seguridad: [],
       },
+      fondo_reposicion: { aportes: [], usos: [] },
     },
     datos_pendientes_revision: [],
     legacy: {},
