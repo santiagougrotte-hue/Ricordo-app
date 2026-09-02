@@ -214,6 +214,22 @@ export function totalAmortizacionesPeriodo(data: RicordoDataV2, mes: number, ani
     .reduce((acc, a) => acc + cuotaMensualActivo(a), 0);
 }
 
+/** Amortización acumulada de un activo hasta una fecha de corte — nunca supera su costo, y da 0
+ * si la fecha de corte es anterior a la compra. Es un gasto económico (afecta EERR), nunca una
+ * salida de caja — no se toca acá, solo se usa para el valor contable del Balance General. */
+export function amortizacionAcumulada(a: Activo, hastaFecha: string): number {
+  const inicio = new Date(`${a.fecha_compra}T00:00:00`);
+  const hasta = new Date(`${hastaFecha}T00:00:00`);
+  if (hasta < inicio) return 0;
+  const mesesTranscurridos = (hasta.getFullYear() - inicio.getFullYear()) * 12 + (hasta.getMonth() - inicio.getMonth()) + 1;
+  const meses = Math.max(0, Math.min(mesesTranscurridos, a.vida_util_meses));
+  return Math.round(Math.min(meses * cuotaMensualActivo(a), a.costo));
+}
+
+export function valorContableActivo(a: Activo, hastaFecha: string): number {
+  return Math.round(a.costo - amortizacionAcumulada(a, hastaFecha)) || 0;
+}
+
 export function costosFijosTotales(data: RicordoDataV2, mes: number, anio: number): number {
   return totalCostosFijosRecurrentes(data) + totalCostosIndirectosPorTipo(data, mes, anio, "Fijo") + totalAmortizacionesPeriodo(data, mes, anio);
 }
@@ -1494,4 +1510,106 @@ export function calcularProyeccionCaja(data: RicordoDataV2, hoy: string): Proyec
   });
 
   return { caja_actual, puntos, alerta_negativa: puntos.some((p) => p.caja_proyectada < 0) };
+}
+
+// --- Balance General / Estado de Situación Patrimonial ----------------------------------------
+// "A fecha" `hasta`: usa cuentas por cobrar/pagar ya ABIERTAS hoy pero originadas hasta esa
+// fecha (el esquema no guarda un histórico de saldos día a día, así que no se reconstruye con
+// precisión absoluta un balance de una fecha pasada con cobros/pagos posteriores a esa fecha ya
+// registrados — se documenta la limitación en vez de fingir precisión que el dato no tiene).
+// Cualquier rubro sin una fuente de datos propia en el esquema (Gastos por pagar, Impuestos por
+// pagar, Deudas de corto plazo, Otras deudas, Capital aportado como algo distinto de los aportes
+// del dueño) se deja en $0 — mismo criterio que "Impuestos" en el EERR: nunca se inventa un valor.
+
+export interface BalanceGeneral {
+  activo_corriente: { caja_bancos: number; cuentas_por_cobrar: number; inventario: number; otros_activos_corrientes: number; total: number };
+  activo_no_corriente: { valor_activos_costo: number; amortizacion_acumulada: number; valor_neto: number; total: number };
+  total_activo: number;
+  pasivo_corriente: { proveedores_por_pagar: number; gastos_por_pagar: number; impuestos_por_pagar: number; deudas_corto_plazo: number; total: number };
+  pasivo_no_corriente: { prestamos: number; otras_deudas: number; total: number };
+  total_pasivo: number;
+  patrimonio_neto: {
+    capital_aportado: number;
+    aportes_dueno: number;
+    resultados_acumulados: number;
+    resultado_periodo: number;
+    retiros_dueno: number;
+    total: number;
+  };
+  total_pasivo_mas_patrimonio: number;
+  diferencia: number;
+  cuadra: boolean;
+}
+
+export function calcularBalanceGeneral(data: RicordoDataV2, hasta: string, inicioPeriodoActual: string): BalanceGeneral {
+  const caja_bancos = Math.round(saldoCajaAlFecha(data, hasta));
+  const cuentas_por_cobrar = Math.round(
+    calcularCuentasPorCobrar(data, hasta)
+      .filter((c) => c.fecha <= hasta)
+      .reduce((acc, c) => acc + c.saldo, 0)
+  );
+  const inventario = Math.round(valorStockInsumos(data, hasta) + valorStockProductos(data, hasta));
+  const otros_activos_corrientes = 0;
+  const totalCorriente = caja_bancos + cuentas_por_cobrar + inventario + otros_activos_corrientes;
+
+  const activosVigentes = data.activos.filter((a) => a.activo && a.fecha_compra <= hasta);
+  const valor_activos_costo = Math.round(activosVigentes.reduce((acc, a) => acc + a.costo, 0));
+  const amortizacion_acumulada = Math.round(activosVigentes.reduce((acc, a) => acc + amortizacionAcumulada(a, hasta), 0));
+  const valor_neto = Math.round(valor_activos_costo - amortizacion_acumulada) || 0;
+
+  const activo_corriente = { caja_bancos, cuentas_por_cobrar, inventario, otros_activos_corrientes, total: Math.round(totalCorriente) };
+  const activo_no_corriente = { valor_activos_costo, amortizacion_acumulada, valor_neto, total: valor_neto };
+  const total_activo = activo_corriente.total + activo_no_corriente.total;
+
+  const proveedores_por_pagar = Math.round(
+    calcularCuentasPorPagar(data, hasta)
+      .filter((c) => c.fecha <= hasta)
+      .reduce((acc, c) => acc + c.saldo, 0)
+  );
+  const pasivo_corriente = { proveedores_por_pagar, gastos_por_pagar: 0, impuestos_por_pagar: 0, deudas_corto_plazo: 0, total: proveedores_por_pagar };
+
+  const movsPrestamo = data.movimientos_financieros.filter((m) => m.fecha <= hasta);
+  const prestamosRecibidos = movsPrestamo.filter((m) => m.origen_tipo === "prestamo_recibido").reduce((acc, m) => acc + m.monto, 0);
+  const devolucionPrestamos = movsPrestamo.filter((m) => m.origen_tipo === "devolucion_prestamo").reduce((acc, m) => acc + m.monto, 0);
+  const prestamos = Math.round(prestamosRecibidos - devolucionPrestamos) || 0;
+  const pasivo_no_corriente = { prestamos, otras_deudas: 0, total: prestamos };
+  const total_pasivo = pasivo_corriente.total + pasivo_no_corriente.total;
+
+  const aportesDueno = movsPrestamo.filter((m) => m.origen_tipo === "aporte_dueno").reduce((acc, m) => acc + m.monto, 0);
+  const retirosDueno = movsPrestamo.filter((m) => m.origen_tipo === "retiro_dueno").reduce((acc, m) => acc + m.monto, 0);
+  // Resultado del período (desde que arranca el período actual hasta la fecha de corte) separado
+  // del resultado acumulado de todos los períodos anteriores — así se ven distinto sin duplicarse.
+  const resultado_periodo = Math.round(calcularEerr(data, inicioPeriodoActual, hasta).resultado_neto);
+  const diaAntesPeriodo = sumarDias(inicioPeriodoActual, -1);
+  const resultados_acumulados = Math.round(calcularEerr(data, "0000-01-01", diaAntesPeriodo).resultado_neto);
+
+  const capital_aportado = 0;
+  const totalPatrimonio =
+    capital_aportado + Math.round(aportesDueno) + resultados_acumulados + resultado_periodo - Math.round(retirosDueno);
+  const patrimonio_neto = {
+    capital_aportado,
+    aportes_dueno: Math.round(aportesDueno),
+    resultados_acumulados,
+    resultado_periodo,
+    retiros_dueno: Math.round(retirosDueno),
+    total: Math.round(totalPatrimonio) || 0,
+  };
+
+  const total_pasivo_mas_patrimonio = total_pasivo + patrimonio_neto.total;
+  const diferencia = Math.round(total_activo - total_pasivo_mas_patrimonio) || 0;
+
+  return {
+    activo_corriente,
+    activo_no_corriente,
+    total_activo,
+    pasivo_corriente,
+    pasivo_no_corriente,
+    total_pasivo,
+    patrimonio_neto,
+    total_pasivo_mas_patrimonio,
+    diferencia,
+    // Tolerancia de redondeo: cada rubro se redondea a peso entero por separado, así que un
+    // desvío de uno o dos pesos entre rubros es acumulación de redondeo, no un balance descuadrado.
+    cuadra: Math.abs(diferencia) <= 2,
+  };
 }

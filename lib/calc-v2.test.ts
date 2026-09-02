@@ -33,6 +33,9 @@ import {
   calcularCuentasPorPagar,
   calcularProyeccionCaja,
   calcularDineroLibre,
+  amortizacionAcumulada,
+  valorContableActivo,
+  calcularBalanceGeneral,
 } from "./calc-v2";
 
 function fixture(): RicordoData {
@@ -576,4 +579,50 @@ test("calcularDineroLibre: descuenta cuentas por pagar y fondos internos reserva
   assert.equal(libre.cuentas_por_pagar, 200000);
   assert.equal(libre.fondos_reservados, 150000); // 60% + 40% de 150.000 = el total aportado
   assert.equal(libre.dinero_libre, 1000000 - 200000 - 150000);
+});
+
+test("amortizacionAcumulada/valorContableActivo: nunca supera el costo, da 0 antes de la compra", () => {
+  const activo = { id: "A1", nombre: "Sobadora", fecha_compra: "2026-01-15", costo: 120000, vida_util_meses: 12, amortizacion_mensual: 10000, activo: true };
+  assert.equal(amortizacionAcumulada(activo, "2026-01-10"), 0); // antes de comprarla
+  assert.equal(amortizacionAcumulada(activo, "2026-01-15"), 10000); // mismo mes: 1 cuota
+  assert.equal(amortizacionAcumulada(activo, "2026-04-15"), 40000); // 4 meses
+  assert.equal(amortizacionAcumulada(activo, "2030-01-01"), 120000); // nunca supera el costo
+  assert.equal(valorContableActivo(activo, "2026-04-15"), 120000 - 40000);
+  assert.equal(valorContableActivo(activo, "2030-01-01"), 0);
+});
+
+test("calcularBalanceGeneral: ACTIVO = PASIVO + PATRIMONIO NETO con aportes/retiros/préstamos/resultado", () => {
+  const data = emptyDataV2();
+  data.configuracion.saldo_inicial_caja = 0;
+  data.movimientos_financieros = [
+    { id: "M1", fecha: "2026-01-01", tipo: "ingreso", concepto: "Aporte inicial del dueño", monto: 1000000, origen_tipo: "aporte_dueno", estado: "confirmado" },
+    { id: "M2", fecha: "2026-01-02", tipo: "ingreso", concepto: "Préstamo banco", monto: 200000, origen_tipo: "prestamo_recibido", estado: "confirmado" },
+    { id: "M3", fecha: "2026-01-03", tipo: "egreso", concepto: "Retiro del dueño", monto: 50000, origen_tipo: "retiro_dueno", estado: "confirmado" },
+  ];
+  const balance = calcularBalanceGeneral(data, "2026-01-31", "2026-01-01");
+  assert.equal(balance.activo_corriente.caja_bancos, 1000000 + 200000 - 50000);
+  assert.equal(balance.pasivo_no_corriente.prestamos, 200000);
+  assert.equal(balance.patrimonio_neto.aportes_dueno, 1000000);
+  assert.equal(balance.patrimonio_neto.retiros_dueno, 50000);
+  assert.equal(balance.total_activo, balance.total_pasivo_mas_patrimonio);
+  assert.ok(balance.cuadra);
+  assert.equal(balance.diferencia, 0);
+});
+
+test("calcularBalanceGeneral: separa resultado del período de los resultados acumulados de períodos anteriores", () => {
+  const data = emptyDataV2();
+  data.productos = [{ id: "P1", nombre: "Sabor A", activo: true }];
+  data.producto_variantes = [{ id: "V1", producto_id: "P1", nombre: "A", precio_venta: 1000, activo: true }];
+  data.pedidos = [
+    { id: "PED-1", fecha: "2026-01-15", cliente_id: "C1", estado: "Entregado", canal: "Minorista", descuento: 0, costo_envio: 0, total: 1000 },
+    { id: "PED-2", fecha: "2026-02-15", cliente_id: "C1", estado: "Entregado", canal: "Minorista", descuento: 0, costo_envio: 0, total: 2000 },
+  ];
+  data.pedido_items = [
+    { id: "I1", pedido_id: "PED-1", producto_variante_id: "V1", nombre_historico: "A", cantidad: 1, precio_unitario: 1000, descuento: 0, subtotal: 1000 },
+    { id: "I2", pedido_id: "PED-2", producto_variante_id: "V1", nombre_historico: "A", cantidad: 2, precio_unitario: 1000, descuento: 0, subtotal: 2000 },
+  ];
+  // Sin CMV cargado (sin receta): resultado neto de cada venta == su venta neta.
+  const balance = calcularBalanceGeneral(data, "2026-02-28", "2026-02-01");
+  assert.equal(balance.patrimonio_neto.resultado_periodo, 2000); // solo febrero
+  assert.equal(balance.patrimonio_neto.resultados_acumulados, 1000); // enero, período anterior
 });
