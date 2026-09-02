@@ -50,6 +50,8 @@ export interface Pedido {
    * cada vez que se necesita (EERR, Margen por sabor), así que no puede duplicarse ni desincronizarse. */
   costo_real_envio?: number;
   total: number;
+  /** Fecha esperada de cobro (opcional) — permite calcular vencidas y proyectar caja. */
+  fecha_vencimiento?: string;
   notas?: string;
   adjunto?: Adjunto;
 }
@@ -217,6 +219,8 @@ export interface Compra {
   estado_pago: EstadoPagoCompra;
   metodo_pago?: string;
   total: number;
+  /** Fecha esperada de pago (opcional) — permite calcular vencidas y proyectar caja. */
+  fecha_vencimiento?: string;
   notas?: string;
   adjunto?: Adjunto;
 }

@@ -19,6 +19,7 @@ import type {
   EtapaReceta,
   Activo,
   Canal,
+  Compra,
 } from "./types-v2";
 import { fARS, fFechaCorta, fNum, fPct, inPeriod, inYear, isAfter } from "./calc";
 
@@ -262,7 +263,18 @@ export function comprasAcumuladas(data: RicordoDataV2): number {
  * sí solo — "venta_pedido" recién se usa cuando se registra el cobro real (Finanzas → Cuentas
  * pendientes), nunca automáticamente al marcar Entregado (una venta entregada y no cobrada sigue
  * siendo una cuenta por cobrar, no plata en la cuenta). */
-export const ORIGENES_CAJA_REAL = ["caja_movimiento_legacy", "venta_pedido", "compra_pago", "compra_activo", "caja_manual"];
+export const ORIGENES_CAJA_REAL = [
+  "caja_movimiento_legacy",
+  "venta_pedido",
+  "compra_pago",
+  "compra_activo",
+  "caja_manual",
+  "ajuste_saldo",
+  "aporte_dueno",
+  "retiro_dueno",
+  "prestamo_recibido",
+  "devolucion_prestamo",
+];
 
 /** "Caja" es el movimiento real de efectivo/banco — no toda `movimientos_financieros` afecta
  * caja: un "Costo Fijo"/"Costo Indirecto"/"Gasto Operativo" es un registro contable para EERR,
@@ -285,13 +297,20 @@ export function margenContribucionUnitario(data: RicordoDataV2, varianteId: stri
   return precioVenta - costoVariante(data, varianteId);
 }
 
+/** Dos indicadores DISTINTOS, nunca se confunden entre sí:
+ * - `ventasEquilibrio` (pesos): cuánto hay que facturar para cubrir los costos fijos —
+ *   costos fijos / ratio de contribución (margen de contribución como % de las ventas).
+ * - `unidadesEquilibrio` (unidades, redondeado hacia arriba): cuántas unidades hay que vender —
+ *   costos fijos / margen de contribución promedio POR UNIDAD (en pesos/unidad, no en %). Nunca
+ *   se muestran pesos como si fueran unidades — son dos fórmulas distintas a propósito. */
 export function puntoEquilibrio(
   data: RicordoDataV2,
   pedidosPeriodo: Pedido[],
   mes: number,
   anio: number
 ): {
-  pe: number;
+  ventasEquilibrio: number;
+  unidadesEquilibrio: number;
   margenPromedioPonderado: number;
   cfTotal: number;
   precioPromedioPonderado: number;
@@ -319,10 +338,11 @@ export function puntoEquilibrio(
   }
   const margenPromedioPonderado = sumaQ > 0 ? sumaMcxQ / sumaQ : 0;
   const ratioContribucion = sumaPxQ > 0 ? sumaMcxQ / sumaPxQ : 0;
-  const pe = ratioContribucion > 0 ? cfTotal / ratioContribucion : 0;
+  const ventasEquilibrio = ratioContribucion > 0 ? cfTotal / ratioContribucion : 0;
+  const unidadesEquilibrio = margenPromedioPonderado > 0 ? Math.ceil(cfTotal / margenPromedioPonderado) : 0;
   const precioPromedioPonderado = sumaQ > 0 ? sumaPxQ / sumaQ : 0;
   const costoVariableUnitarioPromedio = precioPromedioPonderado - margenPromedioPonderado;
-  return { pe, margenPromedioPonderado, cfTotal, precioPromedioPonderado, costoVariableUnitarioPromedio, unidadesTotales: sumaQ };
+  return { ventasEquilibrio, unidadesEquilibrio, margenPromedioPonderado, cfTotal, precioPromedioPonderado, costoVariableUnitarioPromedio, unidadesTotales: sumaQ };
 }
 
 // --- Categorías ------------------------------------------------------------------------------------
@@ -1024,11 +1044,43 @@ function esMovimientoCajaReal(m: RicordoDataV2["movimientos_financieros"][number
   return (!!m.origen_tipo && ORIGENES_CAJA_REAL.includes(m.origen_tipo)) || m.tipo === "transferencia";
 }
 
-function clasificarMovimientoCaja(m: RicordoDataV2["movimientos_financieros"][number]): "cobros_clientes" | "pagos_compras" | "inversiones" | "transferencias" | "otros_ingresos" | "gastos_pagados" {
+type BucketFlujo =
+  | "cobros_clientes"
+  | "otros_ingresos"
+  | "pagos_compras"
+  | "gastos_pagados"
+  | "inversiones"
+  | "prestamos_recibidos"
+  | "devolucion_prestamos"
+  | "aportes_dueno"
+  | "retiros_dueno"
+  | "ajustes_saldo"
+  | "transferencias";
+
+export const BUCKET_LABEL: Record<BucketFlujo, string> = {
+  cobros_clientes: "Cobros de clientes",
+  otros_ingresos: "Otros ingresos",
+  pagos_compras: "Pagos a proveedores",
+  gastos_pagados: "Gastos pagados",
+  inversiones: "Inversiones",
+  prestamos_recibidos: "Préstamos recibidos",
+  devolucion_prestamos: "Devolución de préstamos",
+  aportes_dueno: "Aportes del dueño",
+  retiros_dueno: "Retiros del dueño",
+  ajustes_saldo: "Ajustes de saldo",
+  transferencias: "Transferencias",
+};
+
+function clasificarMovimientoCaja(m: RicordoDataV2["movimientos_financieros"][number]): BucketFlujo {
   if (m.tipo === "transferencia") return "transferencias";
   if (m.origen_tipo === "venta_pedido") return "cobros_clientes";
   if (m.origen_tipo === "compra_pago") return "pagos_compras";
   if (m.origen_tipo === "compra_activo") return "inversiones";
+  if (m.origen_tipo === "prestamo_recibido") return "prestamos_recibidos";
+  if (m.origen_tipo === "devolucion_prestamo") return "devolucion_prestamos";
+  if (m.origen_tipo === "aporte_dueno") return "aportes_dueno";
+  if (m.origen_tipo === "retiro_dueno") return "retiros_dueno";
+  if (m.origen_tipo === "ajuste_saldo") return "ajustes_saldo";
   return m.tipo === "ingreso" ? "otros_ingresos" : "gastos_pagados";
 }
 
@@ -1057,28 +1109,44 @@ export interface FlujoCaja {
   otros_ingresos: EerrLinea;
   pagos_compras: EerrLinea;
   gastos_pagados: EerrLinea;
+  flujo_operativo: number;
   inversiones: EerrLinea;
+  flujo_inversion: number;
+  prestamos_recibidos: EerrLinea;
+  devolucion_prestamos: EerrLinea;
+  aportes_dueno: EerrLinea;
+  retiros_dueno: EerrLinea;
+  flujo_financiacion: number;
+  /** A diferencia de las demás líneas, `total` acá es un NETO con signo (puede ser ingreso o
+   * egreso según el ajuste), no una magnitud sin signo — un ajuste de saldo puede ir en cualquier
+   * sentido, así que no hay una única dirección implícita en la etiqueta como en el resto de los
+   * buckets. */
+  ajustes_saldo: EerrLinea;
+  /** Informativo (se muestra en la UI para que el movimiento no "desaparezca" del historial), pero
+   * nunca suma a variacion_caja: mover plata entre cuentas propias no genera ni consume caja real. */
   transferencias: EerrLinea;
+  variacion_caja: number;
   saldo_final: number;
   por_cuenta: FlujoCajaCuenta[];
-  flujo_operativo: number;
-  flujo_inversion: number;
-  flujo_financiacion: number;
   evolucion_diaria: { fecha: string; saldo: number }[];
   evolucion_mensual: { label: string; entradas: number; salidas: number; saldo_final: number }[];
   por_categoria: { categoria: string; monto: number }[];
-  proyeccion_30_dias: number;
 }
 
 export function calcularFlujoCaja(data: RicordoDataV2, desde: string, hasta: string): FlujoCaja {
   const movs = data.movimientos_financieros.filter((m) => esMovimientoCajaReal(m) && m.fecha >= desde && m.fecha <= hasta);
-  const grupos: Record<string, RicordoDataV2["movimientos_financieros"]> = {
+  const grupos: Record<BucketFlujo, RicordoDataV2["movimientos_financieros"]> = {
     cobros_clientes: [],
-    pagos_compras: [],
-    inversiones: [],
-    transferencias: [],
     otros_ingresos: [],
+    pagos_compras: [],
     gastos_pagados: [],
+    inversiones: [],
+    prestamos_recibidos: [],
+    devolucion_prestamos: [],
+    aportes_dueno: [],
+    retiros_dueno: [],
+    ajustes_saldo: [],
+    transferencias: [],
   };
   for (const m of movs) grupos[clasificarMovimientoCaja(m)].push(m);
 
@@ -1092,6 +1160,15 @@ export function calcularFlujoCaja(data: RicordoDataV2, desde: string, hasta: str
   const pagos_compras = aLinea(grupos.pagos_compras);
   const gastos_pagados = aLinea(grupos.gastos_pagados);
   const inversiones = aLinea(grupos.inversiones);
+  const prestamos_recibidos = aLinea(grupos.prestamos_recibidos);
+  const devolucion_prestamos = aLinea(grupos.devolucion_prestamos);
+  const aportes_dueno = aLinea(grupos.aportes_dueno);
+  const retiros_dueno = aLinea(grupos.retiros_dueno);
+  // Neto con signo — ver comentario en la interfaz FlujoCaja.
+  const ajustes_saldo: EerrLinea = {
+    total: Math.round(grupos.ajustes_saldo.reduce((acc, m) => acc + (m.tipo === "egreso" ? -m.monto : m.monto), 0)) || 0,
+    registros: grupos.ajustes_saldo.map((m) => ({ fecha: m.fecha, concepto: m.concepto, monto: m.tipo === "egreso" ? -m.monto : m.monto })),
+  };
   const transferencias: EerrLinea = {
     total: Math.round(grupos.transferencias.reduce((acc, m) => acc + m.monto, 0)),
     registros: grupos.transferencias.map((m) => ({ fecha: m.fecha, concepto: m.concepto, monto: m.monto })),
@@ -1142,17 +1219,15 @@ export function calcularFlujoCaja(data: RicordoDataV2, desde: string, hasta: str
   }
   const por_categoria = [...categoriaMap.entries()].map(([categoria, monto]) => ({ categoria, monto: Math.round(monto) })).sort((a, b) => b.monto - a.monto);
 
-  const flujo_operativo = cobros_clientes.total + otros_ingresos.total - pagos_compras.total - gastos_pagados.total;
-  const flujo_inversion = -inversiones.total || 0;
-  const flujo_financiacion = transferencias.total;
-
-  // Proyección naive: promedio de flujo neto diario real del período, proyectado 30 días — no es
-  // un modelo predictivo, es una extrapolación lineal de lo reciente, y se documenta como tal en
-  // la UI.
-  const dias = Math.max(1, Math.round((new Date(`${hasta}T00:00:00`).getTime() - new Date(`${desde}T00:00:00`).getTime()) / 86400000) + 1);
-  const flujoNetoPeriodo = cobros_clientes.total + otros_ingresos.total - pagos_compras.total - gastos_pagados.total - inversiones.total;
-  const promedioDiario = flujoNetoPeriodo / dias;
-  const proyeccion_30_dias = Math.round(saldo_final + promedioDiario * 30);
+  const flujo_operativo = Math.round(cobros_clientes.total + otros_ingresos.total - pagos_compras.total - gastos_pagados.total) || 0;
+  const flujo_inversion = Math.round(-inversiones.total) || 0;
+  // Aportes/retiros del dueño y préstamos son movimientos de financiación, no de operación — se
+  // suman acá una sola vez (el pedido original los mencionaba también como si fueran parte del
+  // flujo operativo, pero contablemente un aporte de capital nunca es un ingreso operativo).
+  const flujo_financiacion =
+    Math.round(prestamos_recibidos.total - devolucion_prestamos.total + aportes_dueno.total - retiros_dueno.total) || 0;
+  // Transferencias entre cuentas propias quedan afuera a propósito: no generan ni consumen caja.
+  const variacion_caja = Math.round(flujo_operativo + flujo_inversion + flujo_financiacion + ajustes_saldo.total) || 0;
 
   return {
     saldo_inicial,
@@ -1160,18 +1235,62 @@ export function calcularFlujoCaja(data: RicordoDataV2, desde: string, hasta: str
     otros_ingresos,
     pagos_compras,
     gastos_pagados,
+    flujo_operativo,
     inversiones,
+    flujo_inversion,
+    prestamos_recibidos,
+    devolucion_prestamos,
+    aportes_dueno,
+    retiros_dueno,
+    flujo_financiacion,
+    ajustes_saldo,
     transferencias,
+    variacion_caja,
     saldo_final,
     por_cuenta,
-    flujo_operativo: Math.round(flujo_operativo),
-    flujo_inversion: Math.round(flujo_inversion),
-    flujo_financiacion: Math.round(flujo_financiacion),
     evolucion_diaria,
     evolucion_mensual,
     por_categoria,
-    proyeccion_30_dias,
   };
+}
+
+/** Saldos de los fondos internos (Reinversión/Seguridad, ver ReinversionTab): plata ya asignada
+ * pero que sigue físicamente en las mismas cuentas — no es un movimiento de caja, es una reserva
+ * contable. `saldo = % del total aportado − usos registrados de ese fondo`. */
+export interface FondosInternos {
+  saldo_reinversion: number;
+  saldo_seguridad: number;
+  saldo_total: number;
+}
+
+export function calcularFondosInternos(data: RicordoDataV2): FondosInternos {
+  const ci = data.configuracion.caja_inteligente;
+  const totalAportado = ci.asignaciones.reduce((acc, a) => acc + a.monto, 0);
+  const usosReinversion = ci.usos_reinversion.reduce((acc, u) => acc + u.monto, 0);
+  const usosSeguridad = ci.usos_seguridad.reduce((acc, u) => acc + u.monto, 0);
+  const saldo_reinversion = Math.round((totalAportado * ci.porcentaje_reinversion) / 100 - usosReinversion) || 0;
+  const saldo_seguridad = Math.round((totalAportado * ci.porcentaje_seguridad) / 100 - usosSeguridad) || 0;
+  return { saldo_reinversion, saldo_seguridad, saldo_total: saldo_reinversion + saldo_seguridad };
+}
+
+/** Dinero libre/disponible: lo que realmente se puede usar sin comprometer pagos ya previsibles ni
+ * plata ya reservada en los fondos internos. No incluye "compromisos próximos" (gastos con
+ * vencimiento futuro) — eso vive en `calcularProyeccionCaja`, para no duplicar esa lógica acá. */
+export interface DineroLibre {
+  dinero_en_cuentas: number;
+  cuentas_por_pagar: number;
+  fondos_reservados: number;
+  dinero_libre: number;
+}
+
+export function calcularDineroLibre(data: RicordoDataV2, hoy: string): DineroLibre {
+  const dinero_en_cuentas = Math.round(saldoCajaAlFecha(data, hoy));
+  const cuentas_por_pagar = Math.round(
+    data.compras.reduce((acc, c) => acc + Math.max(0, c.total - totalPagadoCompra(data, c.id)), 0)
+  );
+  const fondos_reservados = calcularFondosInternos(data).saldo_total;
+  const dinero_libre = Math.round(dinero_en_cuentas - cuentas_por_pagar - fondos_reservados) || 0;
+  return { dinero_en_cuentas, cuentas_por_pagar, fondos_reservados, dinero_libre };
 }
 
 // --- Normalización de canal (Productos) ------------------------------------------------------
@@ -1228,4 +1347,41 @@ export function estadoCobroPedido(data: RicordoDataV2, pedido: Pedido): EstadoCo
   if (cobrado <= 0) return "Pendiente";
   if (cobrado >= pedido.total) return "Cobrado";
   return "Parcial";
+}
+
+/** Vencido: tiene fecha_vencimiento cargada, ya pasó, y todavía no se cobró/pagó del todo. Se
+ * calcula contra la fecha de hoy del navegador — no se guarda como estado propio, evita quedar
+ * desactualizado. */
+export type EstadoCuenta = EstadoCobro | "Vencido";
+
+export function estadoCuentaPorCobrar(data: RicordoDataV2, pedido: Pedido, hoy: string): EstadoCuenta {
+  const base = estadoCobroPedido(data, pedido);
+  if (base !== "Cobrado" && pedido.fecha_vencimiento && pedido.fecha_vencimiento < hoy) return "Vencido";
+  return base;
+}
+
+// --- Estado de pago de una compra -------------------------------------------------------------
+// Misma idea que el cobro de un pedido: COMPRA ≠ PAGO. `Compra.estado_pago` es el valor que ya
+// carga la pantalla de Compras al confirmar (pagado/pendiente); acá se calcula en vivo desde los
+// movimientos reales para soportar pagos PARCIALES sin necesitar un tercer estado guardado.
+
+export function totalPagadoCompra(data: RicordoDataV2, compraId: string): number {
+  return data.movimientos_financieros
+    .filter((m) => m.origen_tipo === "compra_pago" && m.origen_id === compraId && m.tipo === "egreso")
+    .reduce((acc, m) => acc + m.monto, 0);
+}
+
+export type EstadoPagoCalculado = "Pendiente" | "Parcial" | "Pagado";
+
+export function estadoPagoCompraCalculado(data: RicordoDataV2, compra: Compra): EstadoPagoCalculado {
+  const pagado = totalPagadoCompra(data, compra.id);
+  if (pagado <= 0) return "Pendiente";
+  if (pagado >= compra.total) return "Pagado";
+  return "Parcial";
+}
+
+export function estadoCuentaPorPagar(data: RicordoDataV2, compra: Compra, hoy: string): EstadoPagoCalculado | "Vencido" {
+  const base = estadoPagoCompraCalculado(data, compra);
+  if (base !== "Pagado" && compra.fecha_vencimiento && compra.fecha_vencimiento < hoy) return "Vencido";
+  return base;
 }

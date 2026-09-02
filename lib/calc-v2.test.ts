@@ -131,12 +131,20 @@ test("costosFijosTotales: el costo fijo recurrente aplica a cualquier mes, el in
   assert.equal(totalCostosIndirectosPorTipo(documento.data, 1, 2026, "Fijo"), 0);
 });
 
-test("puntoEquilibrio: da un número positivo y finito con datos sanos", () => {
+test("puntoEquilibrio: ventas de equilibrio (pesos) y unidades de equilibrio son dos números distintos, ninguno es el otro disfrazado", () => {
   const { documento } = migrarAV2(fixture());
   const pedidosAgosto = documento.data.pedidos.filter((p) => p.fecha.startsWith("2026-08"));
   const resultado = puntoEquilibrio(documento.data, pedidosAgosto, 8, 2026);
-  assert.ok(Number.isFinite(resultado.pe));
-  assert.ok(resultado.pe > 0);
+  assert.ok(Number.isFinite(resultado.ventasEquilibrio));
+  assert.ok(resultado.ventasEquilibrio > 0);
+  assert.ok(Number.isFinite(resultado.unidadesEquilibrio));
+  assert.ok(resultado.unidadesEquilibrio > 0);
+  // Costos fijos ($100000) / margen de contribución promedio por unidad debe dar unidades chicas
+  // (de a unidades), nunca un número en el orden de los pesos de venta.
+  assert.ok(resultado.unidadesEquilibrio < 1000);
+  assert.ok(resultado.ventasEquilibrio > resultado.unidadesEquilibrio * 10);
+  // unidadesEquilibrio = costos fijos / margen de contribución por unidad, redondeado hacia arriba.
+  assert.equal(resultado.unidadesEquilibrio, Math.ceil(resultado.cfTotal / resultado.margenPromedioPonderado));
   assert.equal(resultado.unidadesTotales, 2);
 });
 
@@ -321,7 +329,7 @@ test("calcularFlujoCaja: el caja_movimiento_legacy del fixture entra como caja r
   assert.equal(flujo.por_cuenta[0].saldo_final, 8000);
   assert.equal(flujo.evolucion_diaria.length, 1);
   assert.equal(flujo.evolucion_mensual.length, 1);
-  assert.ok(Number.isFinite(flujo.proyeccion_30_dias));
+  assert.equal(flujo.variacion_caja, 8000);
 });
 
 test("calcularFlujoCaja: entregar un pedido no genera caja; el cobro y el pago de compra se clasifican en su propio balde; las transferencias no afectan el saldo total", () => {
@@ -342,6 +350,33 @@ test("calcularFlujoCaja: entregar un pedido no genera caja; el cobro y el pago d
   assert.equal(flujo.transferencias.total, 200);
   assert.equal(flujo.saldo_final, 1000 - 300 - 500); // la transferencia es neutra para el total agregado
   assert.equal(flujo.flujo_inversion, -500);
+  assert.equal(flujo.flujo_operativo, 1000 - 300);
+  assert.equal(flujo.flujo_financiacion, 0);
+  // Variación de caja == saldo_final - saldo_inicial, y nunca incluye la transferencia.
+  assert.equal(flujo.variacion_caja, flujo.saldo_final - flujo.saldo_inicial);
+});
+
+test("calcularFlujoCaja: aportes/retiros del dueño y préstamos van solo a financiación (nunca a operativo), y el ajuste de saldo es neto con signo", () => {
+  const data = emptyDataV2();
+  data.movimientos_financieros = [
+    { id: "M1", fecha: "2026-03-01", tipo: "ingreso", concepto: "Aporte del dueño", monto: 500000, origen_tipo: "aporte_dueno", estado: "confirmado" },
+    { id: "M2", fecha: "2026-03-02", tipo: "egreso", concepto: "Retiro del dueño", monto: 200000, origen_tipo: "retiro_dueno", estado: "confirmado" },
+    { id: "M3", fecha: "2026-03-03", tipo: "ingreso", concepto: "Préstamo banco", monto: 300000, origen_tipo: "prestamo_recibido", estado: "confirmado" },
+    { id: "M4", fecha: "2026-03-04", tipo: "egreso", concepto: "Cuota préstamo", monto: 50000, origen_tipo: "devolucion_prestamo", estado: "confirmado" },
+    { id: "M5", fecha: "2026-03-05", tipo: "egreso", concepto: "Corrección de saldo inicial", monto: 2756572, origen_tipo: "ajuste_saldo", estado: "confirmado" },
+  ];
+  const flujo = calcularFlujoCaja(data, "2026-03-01", "2026-03-31");
+  assert.equal(flujo.aportes_dueno.total, 500000);
+  assert.equal(flujo.retiros_dueno.total, 200000);
+  assert.equal(flujo.prestamos_recibidos.total, 300000);
+  assert.equal(flujo.devolucion_prestamos.total, 50000);
+  // Neto con signo: es un egreso, así que da negativo (a diferencia de todas las otras líneas,
+  // que son siempre una magnitud sin signo).
+  assert.equal(flujo.ajustes_saldo.total, -2756572);
+  assert.equal(flujo.flujo_operativo, 0); // nada de esto es operativo
+  assert.equal(flujo.flujo_financiacion, 300000 - 50000 + 500000 - 200000);
+  assert.equal(flujo.variacion_caja, flujo.flujo_financiacion - 2756572);
+  assert.equal(flujo.saldo_final, flujo.saldo_inicial + flujo.variacion_caja);
 });
 
 test("detectarCanalInconsistente: detecta variantes cuyo nombre contradice el canal cargado, sin agrupar por texto", () => {

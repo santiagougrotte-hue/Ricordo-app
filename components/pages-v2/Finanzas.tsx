@@ -793,13 +793,20 @@ function EstadoResultadosVista() {
       </Card>
 
       <Card title={`Punto de equilibrio — ${MESES[mes - 1]} ${anio}`}>
-        <div className="grid grid-cols-1 gap-3.5 sm:grid-cols-3">
+        <p className="mb-3 text-[12.5px] text-text3">
+          Son dos indicadores distintos — nunca se muestran pesos como si fueran unidades.
+        </p>
+        <div className="grid grid-cols-1 gap-3.5 sm:grid-cols-2">
           <div>
-            <div className="text-[11px] text-text3">Unidades para cubrir costos fijos</div>
-            <div className="text-xl font-semibold text-text">{fNum(pe.pe, 0)}</div>
+            <div className="text-[11px] text-text3">Ventas necesarias para el equilibrio</div>
+            <div className="text-xl font-semibold text-text">{fARS(pe.ventasEquilibrio)}</div>
           </div>
           <div>
-            <div className="text-[11px] text-text3">Margen de contribución promedio</div>
+            <div className="text-[11px] text-text3">Unidades estimadas para el equilibrio</div>
+            <div className="text-xl font-semibold text-text">{fNum(pe.unidadesEquilibrio, 0)}</div>
+          </div>
+          <div>
+            <div className="text-[11px] text-text3">Margen de contribución promedio (por unidad)</div>
             <div className="text-xl font-semibold text-text">{fARS(pe.margenPromedioPonderado)}</div>
           </div>
           <div>
@@ -1716,7 +1723,7 @@ function FlujoCajaTab() {
         <KpiCard label="Flujo operativo" value={fARS2(f.flujo_operativo)} color={f.flujo_operativo >= 0 ? "green" : "red"} />
         <KpiCard label="Flujo de inversión" value={fARS2(f.flujo_inversion)} color={f.flujo_inversion >= 0 ? "green" : "orange"} />
         <KpiCard label="Flujo de financiación" value={fARS2(f.flujo_financiacion)} color="blue" />
-        <KpiCard label="Proyección a 30 días" value={fARS2(f.proyeccion_30_dias)} color={f.proyeccion_30_dias >= 0 ? "green" : "red"} />
+        <KpiCard label="Variación de caja" value={fARS2(f.variacion_caja)} color={f.variacion_caja >= 0 ? "green" : "red"} />
       </StatGrid>
 
       <Card title="Cómo cambió la caja en el período">
@@ -1736,7 +1743,7 @@ function FlujoCajaTab() {
               <FilaDetalleVista label="+ Cobros de clientes" monto={f.cobros_clientes.total} linea={f.cobros_clientes} expandido={!!expandido.cobros} onToggle={() => toggle("cobros")} />
               <FilaDetalleVista label="+ Otros ingresos" monto={f.otros_ingresos.total} linea={f.otros_ingresos} expandido={!!expandido.otros} onToggle={() => toggle("otros")} />
               <FilaDetalleVista
-                label="− Pagos de compras"
+                label="− Pagos a proveedores"
                 monto={-f.pagos_compras.total}
                 linea={f.pagos_compras}
                 expandido={!!expandido.pagos}
@@ -1751,25 +1758,60 @@ function FlujoCajaTab() {
                 onToggle={() => toggle("gastos")}
                 colorSiNegativo
               />
+              <tr className="bg-surface2/40 font-semibold">
+                <Td main>= Flujo operativo</Td>
+                <Td className={f.flujo_operativo >= 0 ? "text-green" : "text-red"}>{fARS2(f.flujo_operativo)}</Td>
+              </tr>
               <FilaDetalleVista
-                label="− Inversiones"
+                label="− Inversiones (compra de activos)"
                 monto={-f.inversiones.total}
                 linea={f.inversiones}
                 expandido={!!expandido.inversiones}
                 onToggle={() => toggle("inversiones")}
                 colorSiNegativo
               />
+              <tr className="bg-surface2/40 font-semibold">
+                <Td main>= Flujo de inversión</Td>
+                <Td className={f.flujo_inversion >= 0 ? "text-green" : "text-red"}>{fARS2(f.flujo_inversion)}</Td>
+              </tr>
+              <FilaDetalleVista label="+ Préstamos recibidos" monto={f.prestamos_recibidos.total} linea={f.prestamos_recibidos} expandido={!!expandido.prestamos} onToggle={() => toggle("prestamos")} />
               <FilaDetalleVista
-                label="+/− Transferencias"
+                label="− Devolución de préstamos"
+                monto={-f.devolucion_prestamos.total}
+                linea={f.devolucion_prestamos}
+                expandido={!!expandido.devolucion}
+                onToggle={() => toggle("devolucion")}
+                colorSiNegativo
+              />
+              <FilaDetalleVista label="+ Aportes del dueño" monto={f.aportes_dueno.total} linea={f.aportes_dueno} expandido={!!expandido.aportes} onToggle={() => toggle("aportes")} />
+              <FilaDetalleVista
+                label="− Retiros del dueño"
+                monto={-f.retiros_dueno.total}
+                linea={f.retiros_dueno}
+                expandido={!!expandido.retiros}
+                onToggle={() => toggle("retiros")}
+                colorSiNegativo
+              />
+              <tr className="bg-surface2/40 font-semibold">
+                <Td main>= Flujo de financiación</Td>
+                <Td className={f.flujo_financiacion >= 0 ? "text-green" : "text-red"}>{fARS2(f.flujo_financiacion)}</Td>
+              </tr>
+              <FilaDetalleVista label="+/− Ajustes de saldo" monto={f.ajustes_saldo.total} linea={f.ajustes_saldo} expandido={!!expandido.ajustes} onToggle={() => toggle("ajustes")} />
+              <tr className="bg-surface2/60 font-semibold">
+                <Td main>= Variación de caja</Td>
+                <Td className={f.variacion_caja >= 0 ? "text-green" : "text-red"}>{fARS2(f.variacion_caja)}</Td>
+              </tr>
+              <tr className="bg-surface2/60 font-semibold">
+                <Td main>= Saldo final</Td>
+                <Td className={f.saldo_final >= 0 ? "text-green" : "text-red"}>{fARS2(f.saldo_final)}</Td>
+              </tr>
+              <FilaDetalleVista
+                label="+/− Transferencias entre cuentas propias (no afecta el total)"
                 monto={f.transferencias.total}
                 linea={f.transferencias}
                 expandido={!!expandido.transferencias}
                 onToggle={() => toggle("transferencias")}
               />
-              <tr className="bg-surface2/60 font-semibold">
-                <Td main>= Saldo final</Td>
-                <Td className={f.saldo_final >= 0 ? "text-green" : "text-red"}>{fARS2(f.saldo_final)}</Td>
-              </tr>
             </tbody>
           </table>
         </TableWrap>
