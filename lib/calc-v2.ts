@@ -20,6 +20,7 @@ import type {
   Activo,
   Canal,
   Compra,
+  TipoUnidadVenta,
 } from "./types-v2";
 import type { DistribucionGanancia } from "./types";
 import { fARS, fFechaCorta, fNum, fPct, inPeriod, inYear, isAfter } from "./calc";
@@ -863,6 +864,9 @@ export interface MargenItemDetalle {
   ventas_netas: number;
   margen_contribucion: number;
   margen_pct: number | null;
+  /** Del `ProductoVariante.tipo_unidad_venta` — "caja" por default si no está cargado (ver el tipo
+   * en types-v2.ts). Usado por Analítica de Ventas para no contar salsa/complementos como cajas. */
+  tipo_unidad_venta: TipoUnidadVenta;
 }
 
 /** El envío cobrado (ingreso) y el costo real de envío (egreso, `Pedido.costo_real_envio` o
@@ -917,6 +921,7 @@ export function calcularMargenPorItem(data: RicordoDataV2, desde: string, hasta:
         ventas_netas: ventasNetas,
         margen_contribucion: margenContribucion,
         margen_pct: ventasNetas > 0 ? (margenContribucion / ventasNetas) * 100 : null,
+        tipo_unidad_venta: variante?.tipo_unidad_venta ?? "caja",
       });
     }
   }

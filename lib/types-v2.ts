@@ -88,6 +88,13 @@ export interface Producto {
  * receta que se desincronizaba de las demás variantes; ahora solo guarda cómo difiere del
  * envase/canal, y hereda la receta de `producto_id` vía `recetas`/`receta_items` +
  * `ajustes_receta_variante`. */
+/** Qué representa una unidad de venta de esta variante — usado por Analítica de Ventas para
+ * saber qué contar como "caja" (ej. no sumar salsa/complementos como si fueran cajas de pasta).
+ * Sin cargar (`undefined`), se asume "caja": el catálogo real de Ricordo es mayoritariamente cajas
+ * de pasta, así que ese es el default seguro para no forzar una carga manual sobre todo lo que ya
+ * existe — se corrige puntualmente en las variantes que no lo son. */
+export type TipoUnidadVenta = "caja" | "unidad" | "pote" | "bolsa" | "otro";
+
 export interface ProductoVariante {
   id: string;
   producto_id: string;
@@ -100,6 +107,7 @@ export interface ProductoVariante {
   activo: boolean;
   gramos_masa_por_caja?: number;
   gramos_relleno_por_caja?: number;
+  tipo_unidad_venta?: TipoUnidadVenta;
 }
 
 // --- Recetas ------------------------------------------------------------------------------------
