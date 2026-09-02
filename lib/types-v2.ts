@@ -429,6 +429,8 @@ export function emptyDataV2(): RicordoDataV2 {
         porcentaje_reinversion: 60,
         porcentaje_seguridad: 40,
         asignaciones: [],
+        distribuciones: [],
+        cargas_historicas: [],
         usos_reinversion: [],
         usos_seguridad: [],
       },

@@ -21,6 +21,7 @@ import type {
   Canal,
   Compra,
 } from "./types-v2";
+import type { DistribucionGanancia } from "./types";
 import { fARS, fFechaCorta, fNum, fPct, inPeriod, inYear, isAfter } from "./calc";
 
 export { fARS, fFechaCorta, fNum, fPct, inPeriod, inYear, isAfter };
@@ -1300,23 +1301,111 @@ export function calcularFlujoCaja(data: RicordoDataV2, desde: string, hasta: str
   };
 }
 
-/** Saldos de los fondos internos (Reinversión/Seguridad, ver ReinversionTab): plata ya asignada
- * pero que sigue físicamente en las mismas cuentas — no es un movimiento de caja, es una reserva
- * contable. `saldo = % del total aportado − usos registrados de ese fondo`. */
-export interface FondosInternos {
-  saldo_reinversion: number;
-  saldo_seguridad: number;
-  saldo_total: number;
+export function mesReferencia(mes: number, anio: number): string {
+  return `${anio}-${pad2(mes)}`;
 }
 
-export function calcularFondosInternos(data: RicordoDataV2): FondosInternos {
+/** Ganancia neta distribuible de un mes: el resultado_neto del Estado de Resultados de ese mes,
+ * nunca las ventas brutas — ya viene con CMV, costos fijos/indirectos, gastos operativos,
+ * amortizaciones, otros ingresos/gastos e impuestos descontados (ver calcularEerr). Es la única
+ * fuente de la que puede salir plata hacia Reinversión/Margen de seguridad. */
+export function gananciaNetaDistribuible(data: RicordoDataV2, mes: number, anio: number): number {
+  return calcularEerr(data, primerDiaMes(mes, anio), ultimoDiaMes(mes, anio)).resultado_neto;
+}
+
+/** Ganancia neta ya acumulada en períodos anteriores al de referencia que todavía no tiene una
+ * distribución registrada — solo cuenta meses con ganancia positiva (una pérdida no "espera" a
+ * ser distribuida) y nunca antes del primer pedido entregado (no hay EERR posible antes de eso). */
+export function gananciaNetaPendienteDistribuir(data: RicordoDataV2, mesRefActual: string): number {
+  const entregados = data.pedidos.filter((p) => p.estado === "Entregado");
+  if (entregados.length === 0) return 0;
+  const primeraFecha = entregados.reduce((min, p) => (p.fecha < min ? p.fecha : min), entregados[0].fecha);
+  const inicio = { mes: Number(primeraFecha.slice(5, 7)), anio: Number(primeraFecha.slice(0, 4)) };
+  const anioLimite = Number(mesRefActual.slice(0, 4)) + 1; // salvaguarda: nunca debería hacer falta
+  const distribuidos = new Set(data.configuracion.caja_inteligente.distribuciones.map((d) => d.mes_referencia));
+
+  let pendiente = 0;
+  let cursor = inicio;
+  while (mesReferencia(cursor.mes, cursor.anio) < mesRefActual && cursor.anio <= anioLimite) {
+    const ref = mesReferencia(cursor.mes, cursor.anio);
+    if (!distribuidos.has(ref)) {
+      const ganancia = gananciaNetaDistribuible(data, cursor.mes, cursor.anio);
+      if (ganancia > 0) pendiente += ganancia;
+    }
+    cursor = cursor.mes === 12 ? { mes: 1, anio: cursor.anio + 1 } : { mes: cursor.mes + 1, anio: cursor.anio };
+  }
+  return Math.round(pendiente) || 0;
+}
+
+/** Estado de la distribución de un mes puntual: si ya se distribuyó, con qué ganancia se
+ * distribuyó en ese momento, la ganancia que da HOY el EERR de ese mes, y si esos dos valores ya
+ * no coinciden (el EERR del mes cambió después de distribuir — nunca se corrige solo). */
+export interface EstadoDistribucionMes {
+  ya_distribuido: boolean;
+  distribucion?: DistribucionGanancia;
+  ganancia_actual: number;
+  cambio_desde_distribucion: boolean;
+}
+
+export function estadoDistribucionMes(data: RicordoDataV2, mes: number, anio: number): EstadoDistribucionMes {
+  const ref = mesReferencia(mes, anio);
+  const distribucion = data.configuracion.caja_inteligente.distribuciones.find((d) => d.mes_referencia === ref);
+  const ganancia_actual = gananciaNetaDistribuible(data, mes, anio);
+  return {
+    ya_distribuido: !!distribucion,
+    distribucion,
+    ganancia_actual,
+    cambio_desde_distribucion: !!distribucion && distribucion.ganancia_neta !== ganancia_actual,
+  };
+}
+
+/** Saldos de Reinversión/Margen de seguridad, distinguiendo lo asignado (nunca baja) de lo
+ * gastado (usos registrados) — `disponible = asignado − gastado`. Lo asignado suma: distribuciones
+ * automáticas de ganancia neta + cargas históricas manuales + el legado del modelo anterior
+ * (`asignaciones`, repartido por el % vigente — no tenía destino propio guardado, así que no se
+ * puede reconstruir con exactitud, pero se sigue contando para no perder el saldo que ya tenía). */
+export interface FondoReinversionDetalle {
+  asignado: number;
+  gastado: number;
+  disponible: number;
+}
+
+export interface FondosReinversion {
+  reinversion: FondoReinversionDetalle;
+  seguridad: FondoReinversionDetalle;
+}
+
+export function calcularFondosReinversion(data: RicordoDataV2): FondosReinversion {
   const ci = data.configuracion.caja_inteligente;
-  const totalAportado = ci.asignaciones.reduce((acc, a) => acc + a.monto, 0);
-  const usosReinversion = ci.usos_reinversion.reduce((acc, u) => acc + u.monto, 0);
-  const usosSeguridad = ci.usos_seguridad.reduce((acc, u) => acc + u.monto, 0);
-  const saldo_reinversion = Math.round((totalAportado * ci.porcentaje_reinversion) / 100 - usosReinversion) || 0;
-  const saldo_seguridad = Math.round((totalAportado * ci.porcentaje_seguridad) / 100 - usosSeguridad) || 0;
-  return { saldo_reinversion, saldo_seguridad, saldo_total: saldo_reinversion + saldo_seguridad };
+
+  const totalLegacy = ci.asignaciones.reduce((acc, a) => acc + a.monto, 0);
+  const legacyReinversion = Math.round((totalLegacy * ci.porcentaje_reinversion) / 100);
+  const legacySeguridad = totalLegacy - legacyReinversion;
+
+  const asignadoReinversion =
+    legacyReinversion +
+    ci.distribuciones.reduce((acc, d) => acc + d.monto_reinversion, 0) +
+    ci.cargas_historicas.filter((c) => c.destino === "reinversion").reduce((acc, c) => acc + c.monto, 0);
+  const asignadoSeguridad =
+    legacySeguridad +
+    ci.distribuciones.reduce((acc, d) => acc + d.monto_seguridad, 0) +
+    ci.cargas_historicas.filter((c) => c.destino === "seguridad").reduce((acc, c) => acc + c.monto, 0);
+
+  const gastadoReinversion = ci.usos_reinversion.reduce((acc, u) => acc + u.monto, 0);
+  const gastadoSeguridad = ci.usos_seguridad.reduce((acc, u) => acc + u.monto, 0);
+
+  return {
+    reinversion: {
+      asignado: Math.round(asignadoReinversion),
+      gastado: Math.round(gastadoReinversion),
+      disponible: Math.round(asignadoReinversion - gastadoReinversion) || 0,
+    },
+    seguridad: {
+      asignado: Math.round(asignadoSeguridad),
+      gastado: Math.round(gastadoSeguridad),
+      disponible: Math.round(asignadoSeguridad - gastadoSeguridad) || 0,
+    },
+  };
 }
 
 /** Fondo de reposición de maquinaria: separado por completo de la amortización contable — nadie
@@ -1344,7 +1433,8 @@ export function calcularDineroLibre(data: RicordoDataV2, hoy: string): DineroLib
   const cuentas_por_pagar = Math.round(
     data.compras.reduce((acc, c) => acc + Math.max(0, c.total - totalPagadoCompra(data, c.id)), 0)
   );
-  const fondos_reservados = calcularFondosInternos(data).saldo_total + calcularFondoReposicion(data);
+  const fondos = calcularFondosReinversion(data);
+  const fondos_reservados = fondos.reinversion.disponible + fondos.seguridad.disponible + calcularFondoReposicion(data);
   const dinero_libre = Math.round(dinero_en_cuentas - cuentas_por_pagar - fondos_reservados) || 0;
   return { dinero_en_cuentas, cuentas_por_pagar, fondos_reservados, dinero_libre };
 }

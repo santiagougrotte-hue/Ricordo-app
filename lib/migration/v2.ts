@@ -842,7 +842,10 @@ export function migrarAV2(data: RicordoData): { documento: RicordoDocument; repo
         saldo_inicial_caja: money(data.saldo_anterior_caja?.valor),
         efectivo_en_mano: money(data.efectivo_en_mano),
         conciliacion_ignorados: data.conciliacion_ignorados,
-        caja_inteligente: data.caja_inteligente,
+        // `data` puede venir de un backup crudo más viejo que estos dos campos (agregados
+        // después) — se completan acá en vez de confiar en que ya estén, ver mismo criterio en
+        // store-v2.tsx (comoV2).
+        caja_inteligente: { ...data.caja_inteligente, distribuciones: data.caja_inteligente.distribuciones ?? [], cargas_historicas: data.caja_inteligente.cargas_historicas ?? [] },
         // No existía en el esquema v1 — arranca vacío, es una decisión manual del usuario.
         fondo_reposicion: { aportes: [], usos: [] },
       },

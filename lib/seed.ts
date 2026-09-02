@@ -325,6 +325,8 @@ export function mapBackupToRicordoData(backup: any): RicordoData {
       porcentaje_reinversion: backup.caja_inteligente.porcentaje_reinversion ?? 70,
       porcentaje_seguridad: backup.caja_inteligente.porcentaje_seguridad ?? 30,
       asignaciones: backup.caja_inteligente.asignaciones ?? [],
+      distribuciones: backup.caja_inteligente.distribuciones ?? [],
+      cargas_historicas: backup.caja_inteligente.cargas_historicas ?? [],
       usos_reinversion: backup.caja_inteligente.usos_reinversion ?? [],
       usos_seguridad: backup.caja_inteligente.usos_seguridad ?? [],
     };

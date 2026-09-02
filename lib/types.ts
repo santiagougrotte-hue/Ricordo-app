@@ -307,10 +307,41 @@ export interface CajaInteligenteUso {
   monto: number;
 }
 
+/** Reparto automático de la ganancia neta de UN mes (mes_referencia, "2026-08") entre Reinversión
+ * y Margen de seguridad — nunca de las ventas brutas. `ganancia_neta` queda grabada como una foto
+ * del resultado_neto del EERR al momento de distribuir, para poder avisar si el EERR de ese mes
+ * cambió después (sin tocar la distribución sola). Un mes solo se distribuye una vez. */
+export interface DistribucionGanancia {
+  id: string;
+  mes_referencia: string;
+  ganancia_neta: number;
+  monto_reinversion: number;
+  monto_seguridad: number;
+  fecha: string;
+}
+
+/** Dinero de un fondo que ya existía antes de este sistema (o que se reserva por fuera del reparto
+ * automático) — nunca genera ingreso ni toca el Estado de Resultados, solo asigna un monto que ya
+ * es real a Reinversión o a Margen de seguridad. */
+export interface CargaHistoricaFondo {
+  id: string;
+  mes_referencia: string;
+  destino: "reinversion" | "seguridad";
+  monto: number;
+  nota?: string;
+  fecha: string;
+}
+
 export interface CajaInteligente {
   porcentaje_reinversion: number;
   porcentaje_seguridad: number;
+  /** Legacy: aportes mensuales del modelo anterior (monto único, dividido por el % vigente al
+   * mostrarlo, sin destino propio guardado) — se conserva tal cual para no perder historial, pero
+   * ya no se carga nada nuevo acá: lo nuevo va a `distribuciones`/`cargas_historicas`, que sí
+   * guardan el destino real. */
   asignaciones: { id: string; fecha: string; monto: number }[];
+  distribuciones: DistribucionGanancia[];
+  cargas_historicas: CargaHistoricaFondo[];
   usos_reinversion: CajaInteligenteUso[];
   usos_seguridad: CajaInteligenteUso[];
 }
@@ -466,6 +497,8 @@ export function emptyData(): RicordoData {
       porcentaje_reinversion: 70,
       porcentaje_seguridad: 30,
       asignaciones: [],
+      distribuciones: [],
+      cargas_historicas: [],
       usos_reinversion: [],
       usos_seguridad: [],
     },

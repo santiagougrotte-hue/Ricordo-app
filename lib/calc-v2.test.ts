@@ -37,9 +37,13 @@ import {
   valorContableActivo,
   calcularBalanceGeneral,
   calcularFondoReposicion,
-  calcularFondosInternos,
+  calcularFondosReinversion,
   recetaEfectivaVariante,
   costoUnidadProductoBase,
+  mesReferencia,
+  gananciaNetaDistribuible,
+  gananciaNetaPendienteDistribuir,
+  estadoDistribucionMes,
 } from "./calc-v2";
 
 function fixture(): RicordoData {
@@ -575,6 +579,8 @@ test("calcularDineroLibre: descuenta cuentas por pagar y fondos internos reserva
     porcentaje_reinversion: 60,
     porcentaje_seguridad: 40,
     asignaciones: [{ id: "CI-1", fecha: "2026-01-01", monto: 150000 }],
+    distribuciones: [],
+    cargas_historicas: [],
     usos_reinversion: [],
     usos_seguridad: [],
   };
@@ -641,14 +647,77 @@ test("calcularFondoReposicion: separado por completo de la amortización — apo
   assert.equal(calcularFondoReposicion(data), 35000);
 });
 
-test("calcularFondosInternos/calcularDineroLibre: el fondo de reposición también resta del dinero libre", () => {
+test("calcularFondosReinversion/calcularDineroLibre: el fondo de reposición también resta del dinero libre", () => {
   const data = emptyDataV2();
   data.configuracion.saldo_inicial_caja = 500000;
   data.configuracion.fondo_reposicion = { aportes: [{ id: "FR-1", fecha: "2026-01-01", concepto: "Aporte", monto: 100000 }], usos: [] };
   const libre = calcularDineroLibre(data, "2026-01-15");
-  assert.equal(calcularFondosInternos(data).saldo_total, 0); // caja_inteligente sin asignaciones
+  const fondos = calcularFondosReinversion(data);
+  assert.equal(fondos.reinversion.disponible, 0); // caja_inteligente sin asignaciones/distribuciones/cargas
+  assert.equal(fondos.seguridad.disponible, 0);
   assert.equal(libre.fondos_reservados, 100000); // solo el fondo de reposición
   assert.equal(libre.dinero_libre, 500000 - 100000);
+});
+
+test("mesReferencia/gananciaNetaDistribuible: la ganancia distribuible es el resultado_neto del EERR, nunca las ventas brutas", () => {
+  const data = emptyDataV2();
+  assert.equal(mesReferencia(8, 2026), "2026-08");
+  data.productos = [{ id: "P1", nombre: "Sabor A", activo: true }];
+  data.producto_variantes = [{ id: "V1", producto_id: "P1", nombre: "A", precio_venta: 1000, activo: true }];
+  data.pedidos = [{ id: "PED-1", fecha: "2026-08-15", cliente_id: "C1", estado: "Entregado", canal: "Minorista", descuento: 0, costo_envio: 0, total: 1000 }];
+  data.pedido_items = [{ id: "I1", pedido_id: "PED-1", producto_variante_id: "V1", nombre_historico: "A", cantidad: 1, precio_unitario: 1000, descuento: 0, subtotal: 1000 }];
+  data.categorias = [{ id: "CAT-CF", nombre: "Costo Fijo — Alquiler", ambito: "financiero", activo: true }];
+  data.movimientos_financieros = [{ id: "M1", fecha: "2026-08-01", tipo: "egreso", concepto: "Alquiler", monto: 400, categoria_id: "CAT-CF", estado: "confirmado" }];
+  // Ventas brutas = 1000, pero la ganancia distribuible descuenta el costo fijo -> 600, no 1000.
+  assert.equal(gananciaNetaDistribuible(data, 8, 2026), 600);
+});
+
+test("gananciaNetaPendienteDistribuir: suma solo meses con ganancia positiva y sin distribución todavía", () => {
+  const data = emptyDataV2();
+  data.productos = [{ id: "P1", nombre: "Sabor A", activo: true }];
+  data.producto_variantes = [{ id: "V1", producto_id: "P1", nombre: "A", precio_venta: 1000, activo: true }];
+  data.pedidos = [
+    { id: "PED-1", fecha: "2026-06-10", cliente_id: "C1", estado: "Entregado", canal: "Minorista", descuento: 0, costo_envio: 0, total: 1000 },
+    { id: "PED-2", fecha: "2026-07-10", cliente_id: "C1", estado: "Entregado", canal: "Minorista", descuento: 0, costo_envio: 0, total: 2000 },
+  ];
+  data.pedido_items = [
+    { id: "I1", pedido_id: "PED-1", producto_variante_id: "V1", nombre_historico: "A", cantidad: 1, precio_unitario: 1000, descuento: 0, subtotal: 1000 },
+    { id: "I2", pedido_id: "PED-2", producto_variante_id: "V1", nombre_historico: "A", cantidad: 2, precio_unitario: 1000, descuento: 0, subtotal: 2000 },
+  ];
+  // Junio y julio, sin costos: ganancia de 1000 y 2000 respectivamente. Agosto es el mes de referencia (excluido).
+  assert.equal(gananciaNetaPendienteDistribuir(data, "2026-08"), 3000);
+
+  data.configuracion.caja_inteligente.distribuciones = [
+    { id: "D1", mes_referencia: "2026-06", ganancia_neta: 1000, monto_reinversion: 700, monto_seguridad: 300, fecha: "2026-08-20" },
+  ];
+  // Junio ya se distribuyó -> solo queda pendiente julio.
+  assert.equal(gananciaNetaPendienteDistribuir(data, "2026-08"), 2000);
+});
+
+test("estadoDistribucionMes: detecta si ya se distribuyó y si el EERR cambió después de distribuir", () => {
+  const data = emptyDataV2();
+  data.productos = [{ id: "P1", nombre: "Sabor A", activo: true }];
+  data.producto_variantes = [{ id: "V1", producto_id: "P1", nombre: "A", precio_venta: 1000, activo: true }];
+  data.pedidos = [{ id: "PED-1", fecha: "2026-08-15", cliente_id: "C1", estado: "Entregado", canal: "Minorista", descuento: 0, costo_envio: 0, total: 1000 }];
+  data.pedido_items = [{ id: "I1", pedido_id: "PED-1", producto_variante_id: "V1", nombre_historico: "A", cantidad: 1, precio_unitario: 1000, descuento: 0, subtotal: 1000 }];
+
+  let estado = estadoDistribucionMes(data, 8, 2026);
+  assert.equal(estado.ya_distribuido, false);
+  assert.equal(estado.ganancia_actual, 1000);
+
+  data.configuracion.caja_inteligente.distribuciones = [
+    { id: "D1", mes_referencia: "2026-08", ganancia_neta: 1000, monto_reinversion: 700, monto_seguridad: 300, fecha: "2026-08-20" },
+  ];
+  estado = estadoDistribucionMes(data, 8, 2026);
+  assert.equal(estado.ya_distribuido, true);
+  assert.equal(estado.cambio_desde_distribucion, false);
+
+  // Se agrega otro pedido de agosto DESPUÉS de haber distribuido -> el EERR de agosto ya no da lo mismo.
+  data.pedidos.push({ id: "PED-2", fecha: "2026-08-20", cliente_id: "C1", estado: "Entregado", canal: "Minorista", descuento: 0, costo_envio: 0, total: 500 });
+  data.pedido_items.push({ id: "I2", pedido_id: "PED-2", producto_variante_id: "V1", nombre_historico: "A", cantidad: 1, precio_unitario: 500, descuento: 0, subtotal: 500 });
+  estado = estadoDistribucionMes(data, 8, 2026);
+  assert.equal(estado.ganancia_actual, 1500);
+  assert.equal(estado.cambio_desde_distribucion, true);
 });
 
 function fixtureRecetaPorUnidad() {

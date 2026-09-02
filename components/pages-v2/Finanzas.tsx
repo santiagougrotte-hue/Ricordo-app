@@ -52,10 +52,13 @@ import {
   calcularProyeccionCaja,
   calcularDineroLibre,
   calcularBalanceGeneral,
-  calcularFondosInternos,
+  calcularFondosReinversion,
   calcularFondoReposicion,
+  mesReferencia,
+  gananciaNetaPendienteDistribuir,
+  estadoDistribucionMes,
 } from "@/lib/calc-v2";
-import type { EerrLinea, CriterioEnvioPedido, VistaMargen, CuentaPorCobrar, CuentaPorPagar } from "@/lib/calc-v2";
+import type { Eerr, EerrLinea, CriterioEnvioPedido, VistaMargen, CuentaPorCobrar, CuentaPorPagar } from "@/lib/calc-v2";
 import type { Activo } from "@/lib/types-v2";
 
 function nombreCategoria(data: ReturnType<typeof useStoreV2>["data"], id: string | undefined) {
@@ -1720,6 +1723,44 @@ function ResultadosTab() {
 
 type FondoReinversionSeguridad = "reinversion" | "seguridad";
 
+function opcionesMesReferencia(cantidad: number): { value: string; label: string }[] {
+  const hoy = new Date();
+  const opciones: { value: string; label: string }[] = [];
+  for (let i = 0; i < cantidad; i++) {
+    const d = new Date(hoy.getFullYear(), hoy.getMonth() - i, 1);
+    const mes = d.getMonth() + 1;
+    const anio = d.getFullYear();
+    opciones.push({ value: mesReferencia(mes, anio), label: `${MESES[mes - 1]} ${anio}` });
+  }
+  return opciones;
+}
+
+function labelMesReferencia(ref: string): string {
+  const [anio, mes] = ref.split("-").map(Number);
+  return `${MESES[mes - 1]} ${anio}`;
+}
+
+interface DesgloseGanancia {
+  ingresos_netos: number;
+  costos_variables: number;
+  costos_fijos: number;
+  gastos: number;
+  ganancia_neta: number;
+}
+
+/** Reagrupa el EERR completo en los 4 renglones que pide este módulo — la suma da EXACTAMENTE
+ * resultado_neto (no es una aproximación): ingresos_netos − costos_variables − costos_fijos −
+ * gastos = resultado_neto, siempre. */
+function desgloseGanancia(eerr: Eerr): DesgloseGanancia {
+  return {
+    ingresos_netos: eerr.ventas_netas,
+    costos_variables: eerr.cmv.total + eerr.costos_indirectos_variables.total,
+    costos_fijos: eerr.costos_fijos.total + eerr.amortizaciones.total,
+    gastos: eerr.gastos_operativos.total + eerr.impuestos.total - eerr.otros_ingresos_gastos.total,
+    ganancia_neta: eerr.resultado_neto,
+  };
+}
+
 function ReinversionTab() {
   const { data, setData } = useStoreV2();
   const { toast } = useToast();
@@ -1728,14 +1769,26 @@ function ReinversionTab() {
 
   const [pctReinversion, setPctReinversion] = useState(ci.porcentaje_reinversion);
   const [pctSeguridad, setPctSeguridad] = useState(ci.porcentaje_seguridad);
-  const [form, setForm] = useState({ fecha: new Date().toISOString().slice(0, 10), monto: 0 });
+  const hoy = new Date();
+  const mesRefHoy = mesReferencia(hoy.getMonth() + 1, hoy.getFullYear());
+  const [mesGanancia, setMesGanancia] = useState(mesRefHoy);
+  const [historicoForm, setHistoricoForm] = useState({ mes_referencia: mesRefHoy, destino: "reinversion" as FondoReinversionSeguridad, monto: 0, nota: "" });
   const [usoForm, setUsoForm] = useState({ fondo: "reinversion" as FondoReinversionSeguridad, fecha: new Date().toISOString().slice(0, 10), concepto: "", monto: 0 });
   const [reposicionForm, setReposicionForm] = useState({ fecha: new Date().toISOString().slice(0, 10), concepto: "", monto: 0 });
 
-  const fondos = useMemo(() => calcularFondosInternos(data), [data]);
+  const opcionesMes = useMemo(() => opcionesMesReferencia(24), []);
+  const fondos = useMemo(() => calcularFondosReinversion(data), [data]);
   const saldoReposicion = useMemo(() => calcularFondoReposicion(data), [data]);
+  const gananciaPendiente = useMemo(() => gananciaNetaPendienteDistribuir(data, mesRefHoy), [data, mesRefHoy]);
 
-  const aportesOrdenados = useMemo(() => [...ci.asignaciones].sort((a, b) => b.fecha.localeCompare(a.fecha)), [ci.asignaciones]);
+  const [mesSelAnio, mesSelMes] = mesGanancia.split("-").map(Number);
+  const eerrMes = useMemo(() => calcularEerr(data, primerDiaMes(mesSelMes, mesSelAnio), ultimoDiaMes(mesSelMes, mesSelAnio)), [data, mesSelMes, mesSelAnio]);
+  const desglose = useMemo(() => desgloseGanancia(eerrMes), [eerrMes]);
+  const estado = useMemo(() => estadoDistribucionMes(data, mesSelMes, mesSelAnio), [data, mesSelMes, mesSelAnio]);
+  const hayGanancia = desglose.ganancia_neta > 0;
+  const previstoReinversion = hayGanancia ? Math.round((desglose.ganancia_neta * pctReinversion) / 100) : 0;
+  const previstoSeguridad = hayGanancia ? desglose.ganancia_neta - previstoReinversion : 0;
+
   const usosOrdenados = useMemo(
     () =>
       [...ci.usos_reinversion.map((u) => ({ ...u, fondo: "reinversion" as const })), ...ci.usos_seguridad.map((u) => ({ ...u, fondo: "seguridad" as const }))].sort((a, b) =>
@@ -1756,8 +1809,47 @@ function ReinversionTab() {
     toast("Reparto actualizado");
   }
 
-  function distribuirExcedente() {
-    if (form.monto <= 0) {
+  function distribuirGanancia() {
+    if (!hayGanancia) {
+      toast("Este mes no existe ganancia neta disponible para distribuir.", "error");
+      return;
+    }
+    if (estado.ya_distribuido) {
+      toast(`La ganancia de ${labelMesReferencia(mesGanancia)} ya fue distribuida.`, "error");
+      return;
+    }
+    setData((d) => ({
+      ...d,
+      configuracion: {
+        ...d.configuracion,
+        caja_inteligente: {
+          ...d.configuracion.caja_inteligente,
+          distribuciones: [
+            ...d.configuracion.caja_inteligente.distribuciones,
+            {
+              id: uid("DIST"),
+              mes_referencia: mesGanancia,
+              ganancia_neta: desglose.ganancia_neta,
+              monto_reinversion: previstoReinversion,
+              monto_seguridad: previstoSeguridad,
+              fecha: new Date().toISOString().slice(0, 10),
+            },
+          ],
+        },
+      },
+    }));
+    toast(`Ganancia de ${labelMesReferencia(mesGanancia)} distribuida`);
+  }
+
+  function eliminarDistribucion(id: string) {
+    setData((d) => ({
+      ...d,
+      configuracion: { ...d.configuracion, caja_inteligente: { ...d.configuracion.caja_inteligente, distribuciones: d.configuracion.caja_inteligente.distribuciones.filter((x) => x.id !== id) } },
+    }));
+  }
+
+  function registrarSaldoHistorico() {
+    if (historicoForm.monto <= 0) {
       toast("Ingresá un monto mayor a 0", "error");
       return;
     }
@@ -1767,20 +1859,30 @@ function ReinversionTab() {
         ...d.configuracion,
         caja_inteligente: {
           ...d.configuracion.caja_inteligente,
-          asignaciones: [...d.configuracion.caja_inteligente.asignaciones, { id: uid("CI"), fecha: form.fecha, monto: form.monto }],
+          cargas_historicas: [
+            ...d.configuracion.caja_inteligente.cargas_historicas,
+            {
+              id: uid("HIST"),
+              mes_referencia: historicoForm.mes_referencia,
+              destino: historicoForm.destino,
+              monto: historicoForm.monto,
+              nota: historicoForm.nota || undefined,
+              fecha: new Date().toISOString().slice(0, 10),
+            },
+          ],
         },
       },
     }));
-    toast("Excedente distribuido");
-    setForm({ fecha: new Date().toISOString().slice(0, 10), monto: 0 });
+    toast("Saldo histórico registrado");
+    setHistoricoForm({ mes_referencia: historicoForm.mes_referencia, destino: historicoForm.destino, monto: 0, nota: "" });
   }
 
-  function eliminarAporte(id: string) {
+  function eliminarCargaHistorica(id: string) {
     setData((d) => ({
       ...d,
       configuracion: {
         ...d.configuracion,
-        caja_inteligente: { ...d.configuracion.caja_inteligente, asignaciones: d.configuracion.caja_inteligente.asignaciones.filter((a) => a.id !== id) },
+        caja_inteligente: { ...d.configuracion.caja_inteligente, cargas_historicas: d.configuracion.caja_inteligente.cargas_historicas.filter((x) => x.id !== id) },
       },
     }));
   }
@@ -1858,28 +1960,105 @@ function ReinversionTab() {
     }));
   }
 
-  const previewReinversion = Math.round((form.monto * ci.porcentaje_reinversion) / 100);
-  const previewSeguridad = form.monto - previewReinversion;
   const movReposicion = useMemo(
     () => [...fr.aportes.map((a) => ({ ...a, tipo: "aporte" as const })), ...fr.usos.map((u) => ({ ...u, tipo: "uso" as const }))].sort((a, b) => b.fecha.localeCompare(a.fecha)),
     [fr]
   );
 
+  // Legado del modelo anterior (asignaciones sin destino propio guardado, repartidas por el % vigente)
+  // — se muestra como una fila aparte del historial para no perder de dónde sale ese dinero del saldo.
+  const totalLegacy = ci.asignaciones.reduce((acc, a) => acc + a.monto, 0);
+  const legacyReinversion = Math.round((totalLegacy * ci.porcentaje_reinversion) / 100);
+  const legacySeguridad = totalLegacy - legacyReinversion;
+
+  interface FilaHistorial {
+    id: string;
+    mes: string;
+    tipo: "Distribución automática" | "Saldo histórico" | "Uso del fondo" | "Anterior a este sistema";
+    origen: string;
+    reinversion: number;
+    seguridad: number;
+    total: number;
+    automatico: boolean;
+    fondoUso?: FondoReinversionSeguridad;
+  }
+
+  const historial = useMemo<FilaHistorial[]>(() => {
+    const conOrden: { fila: FilaHistorial; ordenPor: string }[] = [
+      ...ci.distribuciones.map((d) => ({
+        ordenPor: d.mes_referencia,
+        fila: {
+          id: d.id,
+          mes: labelMesReferencia(d.mes_referencia),
+          tipo: "Distribución automática" as const,
+          origen: "Ganancia neta",
+          reinversion: d.monto_reinversion,
+          seguridad: d.monto_seguridad,
+          total: d.monto_reinversion + d.monto_seguridad,
+          automatico: true,
+        },
+      })),
+      ...ci.cargas_historicas.map((c) => ({
+        ordenPor: c.mes_referencia,
+        fila: {
+          id: c.id,
+          mes: labelMesReferencia(c.mes_referencia),
+          tipo: "Saldo histórico" as const,
+          origen: c.nota?.trim() || "Carga manual",
+          reinversion: c.destino === "reinversion" ? c.monto : 0,
+          seguridad: c.destino === "seguridad" ? c.monto : 0,
+          total: c.monto,
+          automatico: false,
+        },
+      })),
+      ...usosOrdenados.map((u) => ({
+        ordenPor: u.fecha.slice(0, 7),
+        fila: {
+          id: u.id,
+          mes: labelMesReferencia(u.fecha.slice(0, 7)),
+          tipo: "Uso del fondo" as const,
+          origen: u.concepto,
+          reinversion: u.fondo === "reinversion" ? -u.monto : 0,
+          seguridad: u.fondo === "seguridad" ? -u.monto : 0,
+          fondoUso: u.fondo,
+          total: -u.monto,
+          automatico: false,
+        },
+      })),
+    ];
+    const filas = conOrden.sort((a, b) => b.ordenPor.localeCompare(a.ordenPor)).map((x) => x.fila);
+    if (totalLegacy > 0) {
+      filas.push({
+        id: "legacy",
+        mes: "—",
+        tipo: "Anterior a este sistema",
+        origen: "Aportes del modelo anterior",
+        reinversion: legacyReinversion,
+        seguridad: legacySeguridad,
+        total: totalLegacy,
+        automatico: false,
+      });
+    }
+    return filas;
+  }, [ci.distribuciones, ci.cargas_historicas, usosOrdenados, totalLegacy, legacyReinversion, legacySeguridad]);
+
   return (
     <div>
       <p className="mb-3 text-[12.5px] text-text3">
-        Reservar plata acá es una decisión, no un gasto: nunca aparece como gasto en el Estado de Resultados. Cada fondo
-        se calcula como saldo anterior + aportes − usos = saldo actual.
+        La ganancia neta del mes (nunca las ventas brutas) se reparte automáticamente entre Reinversión y Margen de
+        seguridad. Distribuir no es un gasto nuevo — es solo cambiar el destino interno de una ganancia que ya existe,
+        nunca aparece como gasto en el Estado de Resultados.
       </p>
+
       <StatGrid>
-        <KpiCard label="Fondo de reinversión (maquinaria)" value={fARS(fondos.saldo_reinversion)} color="green" />
-        <KpiCard label="Fondo de margen de seguridad" value={fARS(fondos.saldo_seguridad)} color="blue" />
-        <KpiCard label="Fondo de reposición de maquinaria" value={fARS(saldoReposicion)} color="gold" />
+        <KpiCard label="Ganancia pendiente de distribuir" value={fARS(gananciaPendiente)} color={gananciaPendiente > 0 ? "orange" : "green"} />
+        <KpiCard label="Reinversión disponible" value={fARS(fondos.reinversion.disponible)} color="green" />
+        <KpiCard label="Margen de seguridad disponible" value={fARS(fondos.seguridad.disponible)} color="blue" />
       </StatGrid>
 
-      <Card title="Cómo se reparte cada excedente distribuido">
+      <Card title="Configuración del reparto">
         <div className="grid grid-cols-1 gap-3.5 sm:grid-cols-2">
-          <Field label="% Reinversión (maquinaria)">
+          <Field label="% Reinversión">
             <Input
               type="number"
               value={pctReinversion}
@@ -1902,79 +2081,122 @@ function ReinversionTab() {
             />
           </Field>
         </div>
+        <p className="mt-2 text-[12px] text-text3">Total: {pctReinversion + pctSeguridad}%{pctReinversion + pctSeguridad !== 100 && " — tiene que sumar 100%"}</p>
         <div className="mt-4 flex justify-end">
           <Button onClick={guardarPorcentajes}>Guardar reparto</Button>
         </div>
       </Card>
 
-      <Card title="Distribuir excedente">
-        <p className="mb-3 text-[12.5px] text-text3">
-          Elegí el mes al que corresponde el monto — podés cargar meses anteriores, no hace falta que sea el mes actual.
-        </p>
-        <FormGrid>
-          <Field label="Mes (fecha de referencia)">
-            <Input type="date" value={form.fecha} onChange={(e) => setForm({ ...form, fecha: e.target.value })} />
-          </Field>
-          <Field label="Monto total del mes">
-            <Input type="number" value={form.monto} onChange={(e) => setForm({ ...form, monto: Number(e.target.value) })} />
-          </Field>
-        </FormGrid>
-        {form.monto > 0 && (
-          <p className="mt-2 text-[12.5px] text-text2">
-            Se reparte: <span className="font-medium text-green">{fARS(previewReinversion)}</span> a reinversión y{" "}
-            <span className="font-medium text-blue">{fARS(previewSeguridad)}</span> a margen de seguridad.
+      <Card title="Ganancia disponible para distribuir">
+        <Field label="Mes">
+          <Select value={mesGanancia} onChange={(e) => setMesGanancia(e.target.value)} style={{ maxWidth: 220 }}>
+            {opcionesMes.map((o) => (
+              <option key={o.value} value={o.value}>
+                {o.label}
+              </option>
+            ))}
+          </Select>
+        </Field>
+        <TableWrap>
+          <table className="mt-3 w-full">
+            <tbody>
+              <TrHover>
+                <Td main>Ingresos netos</Td>
+                <Td className="text-green">{fARS(desglose.ingresos_netos)}</Td>
+              </TrHover>
+              <TrHover>
+                <Td main>Costos variables</Td>
+                <Td className="text-red">{fARS(-desglose.costos_variables)}</Td>
+              </TrHover>
+              <TrHover>
+                <Td main>Costos fijos</Td>
+                <Td className="text-red">{fARS(-desglose.costos_fijos)}</Td>
+              </TrHover>
+              <TrHover>
+                <Td main>Gastos</Td>
+                <Td className="text-red">{fARS(-desglose.gastos)}</Td>
+              </TrHover>
+              <tr className="bg-surface2/60 font-semibold">
+                <Td main>Ganancia neta</Td>
+                <Td className={desglose.ganancia_neta >= 0 ? "text-green" : "text-red"}>{fARS(desglose.ganancia_neta)}</Td>
+              </tr>
+            </tbody>
+          </table>
+        </TableWrap>
+
+        {!hayGanancia && (
+          <p className="mt-3 rounded-md border border-border bg-surface2/40 p-2.5 text-[13px] text-text2">
+            Este mes no existe ganancia neta disponible para distribuir.
           </p>
         )}
+
+        {hayGanancia && !estado.ya_distribuido && (
+          <p className="mt-3 text-[12.5px] text-text2">
+            Con el reparto actual: <span className="font-medium text-green">{fARS(previstoReinversion)}</span> a reinversión y{" "}
+            <span className="font-medium text-blue">{fARS(previstoSeguridad)}</span> a margen de seguridad.
+          </p>
+        )}
+
+        {estado.ya_distribuido && (
+          <p className="mt-3 rounded-md border border-border bg-surface2/40 p-2.5 text-[13px] text-text2">
+            La ganancia de {labelMesReferencia(mesGanancia)} ya fue distribuida
+            {estado.distribucion && ` (${fARS(estado.distribucion.monto_reinversion)} reinversión + ${fARS(estado.distribucion.monto_seguridad)} margen de seguridad)`}.
+          </p>
+        )}
+
+        {estado.cambio_desde_distribucion && (
+          <p className="mt-2 rounded-md border border-orange/30 bg-orange/10 p-2.5 text-[13px] text-orange">
+            El resultado del período cambió después de haber sido distribuido — se distribuyó con {fARS(estado.distribucion?.ganancia_neta ?? 0)} y ahora el EERR de{" "}
+            {labelMesReferencia(mesGanancia)} da {fARS(estado.ganancia_actual)}. No se corrige solo: revisá manualmente si hace falta ajustar.
+          </p>
+        )}
+
         <div className="mt-3 flex justify-end">
-          <Button onClick={distribuirExcedente}>Distribuir excedente</Button>
+          <Button onClick={distribuirGanancia} disabled={!hayGanancia || estado.ya_distribuido}>
+            Distribuir ganancia
+          </Button>
         </div>
       </Card>
 
-      <Card title="Historial de excedentes distribuidos">
-        {aportesOrdenados.length === 0 ? (
-          <EmptyState text="Todavía no distribuiste ningún excedente." />
-        ) : (
-          <TableWrap>
-            <table className="w-full">
-              <thead>
-                <tr>
-                  <Th>Mes</Th>
-                  <Th>Monto total</Th>
-                  <Th>Reinversión</Th>
-                  <Th>Margen de seguridad</Th>
-                  <Th></Th>
-                </tr>
-              </thead>
-              <tbody>
-                {aportesOrdenados.map((a) => {
-                  const reinv = Math.round((a.monto * ci.porcentaje_reinversion) / 100);
-                  const seg = a.monto - reinv;
-                  return (
-                    <TrHover key={a.id}>
-                      <Td main>{a.fecha}</Td>
-                      <Td>{fARS(a.monto)}</Td>
-                      <Td className="text-green">{fARS(reinv)}</Td>
-                      <Td className="text-blue">{fARS(seg)}</Td>
-                      <Td>
-                        <Button size="sm" variant="danger" onClick={() => eliminarAporte(a.id)}>
-                          Eliminar
-                        </Button>
-                      </Td>
-                    </TrHover>
-                  );
-                })}
-              </tbody>
-            </table>
-          </TableWrap>
-        )}
+      <Card title="Cargar saldo histórico">
+        <p className="mb-3 text-[12.5px] text-text3">
+          Para dinero que ya existe de meses anteriores y todavía no está cargado en estos fondos. Nunca genera ingreso,
+          venta ni toca el Estado de Resultados — solo asigna un monto real a Reinversión o a Margen de seguridad.
+        </p>
+        <FormGrid>
+          <Field label="Mes de origen">
+            <Select value={historicoForm.mes_referencia} onChange={(e) => setHistoricoForm({ ...historicoForm, mes_referencia: e.target.value })}>
+              {opcionesMes.map((o) => (
+                <option key={o.value} value={o.value}>
+                  {o.label}
+                </option>
+              ))}
+            </Select>
+          </Field>
+          <Field label="Destino">
+            <Select value={historicoForm.destino} onChange={(e) => setHistoricoForm({ ...historicoForm, destino: e.target.value as FondoReinversionSeguridad })}>
+              <option value="reinversion">Reinversión</option>
+              <option value="seguridad">Margen de seguridad</option>
+            </Select>
+          </Field>
+          <Field label="Monto">
+            <Input type="number" value={historicoForm.monto} onChange={(e) => setHistoricoForm({ ...historicoForm, monto: Number(e.target.value) })} />
+          </Field>
+          <Field label="Descripción / nota (opcional)" full>
+            <Input value={historicoForm.nota} onChange={(e) => setHistoricoForm({ ...historicoForm, nota: e.target.value })} placeholder="Ej.: Ganancia de julio reservada antes de este sistema" />
+          </Field>
+        </FormGrid>
+        <div className="mt-3 flex justify-end">
+          <Button onClick={registrarSaldoHistorico}>+ Registrar saldo histórico</Button>
+        </div>
       </Card>
 
       <Card title="Registrar uso de un fondo">
-        <p className="mb-3 text-[12.5px] text-text3">Usar el fondo de reinversión o de seguridad reduce su saldo — tampoco es un gasto operativo.</p>
+        <p className="mb-3 text-[12.5px] text-text3">Usar el fondo de reinversión o de seguridad reduce su saldo disponible — tampoco es un gasto operativo.</p>
         <FormGrid>
           <Field label="Fondo">
             <Select value={usoForm.fondo} onChange={(e) => setUsoForm({ ...usoForm, fondo: e.target.value as FondoReinversionSeguridad })}>
-              <option value="reinversion">Reinversión (maquinaria)</option>
+              <option value="reinversion">Reinversión</option>
               <option value="seguridad">Margen de seguridad</option>
             </Select>
           </Field>
@@ -1993,32 +2215,51 @@ function ReinversionTab() {
         </div>
       </Card>
 
-      <Card title="Historial de usos">
-        {usosOrdenados.length === 0 ? (
-          <EmptyState text="Todavía no se usó ningún fondo." />
+      <Card title="Historial de movimientos">
+        {historial.length === 0 ? (
+          <EmptyState text="Todavía no hay distribuciones, cargas ni usos registrados." />
         ) : (
           <TableWrap>
             <table className="w-full">
               <thead>
                 <tr>
-                  <Th>Fecha</Th>
-                  <Th>Fondo</Th>
-                  <Th>Concepto</Th>
-                  <Th>Monto</Th>
+                  <Th>Mes</Th>
+                  <Th>Tipo</Th>
+                  <Th>Origen</Th>
+                  <Th>Reinversión</Th>
+                  <Th>Margen seguridad</Th>
+                  <Th>Total</Th>
                   <Th></Th>
                 </tr>
               </thead>
               <tbody>
-                {usosOrdenados.map((u) => (
-                  <TrHover key={u.id}>
-                    <Td>{u.fecha}</Td>
-                    <Td>{u.fondo === "reinversion" ? "Reinversión" : "Margen de seguridad"}</Td>
-                    <Td main>{u.concepto}</Td>
-                    <Td className="text-red">{fARS(u.monto)}</Td>
+                {historial.map((f) => (
+                  <TrHover key={f.id}>
+                    <Td main>{f.mes}</Td>
                     <Td>
-                      <Button size="sm" variant="danger" onClick={() => eliminarUso(u.fondo, u.id)}>
-                        Eliminar
-                      </Button>
+                      <Badge color={f.automatico ? "blue" : f.tipo === "Uso del fondo" ? "red" : "orange"}>{f.automatico ? "Automático" : "Histórico/manual"}</Badge>
+                      <div className="mt-0.5 text-[11px] text-text3">{f.tipo}</div>
+                    </Td>
+                    <Td>{f.origen}</Td>
+                    <Td className={f.reinversion < 0 ? "text-red" : ""}>{fARS(f.reinversion)}</Td>
+                    <Td className={f.seguridad < 0 ? "text-red" : ""}>{fARS(f.seguridad)}</Td>
+                    <Td className="font-medium text-text">{fARS(f.total)}</Td>
+                    <Td>
+                      {f.tipo === "Distribución automática" && (
+                        <Button size="sm" variant="danger" onClick={() => eliminarDistribucion(f.id)}>
+                          Eliminar
+                        </Button>
+                      )}
+                      {f.tipo === "Saldo histórico" && (
+                        <Button size="sm" variant="danger" onClick={() => eliminarCargaHistorica(f.id)}>
+                          Eliminar
+                        </Button>
+                      )}
+                      {f.tipo === "Uso del fondo" && f.fondoUso && (
+                        <Button size="sm" variant="danger" onClick={() => eliminarUso(f.fondoUso!, f.id)}>
+                          Eliminar
+                        </Button>
+                      )}
                     </Td>
                   </TrHover>
                 ))}
@@ -2034,6 +2275,9 @@ function ReinversionTab() {
           económico del Estado de Resultados, nunca reserva plata acá sola. Si querés reservar de verdad para el día que
           haya que reponer una máquina, hacelo manualmente acá.
         </p>
+        <StatGrid>
+          <KpiCard label="Saldo disponible" value={fARS(saldoReposicion)} color="gold" />
+        </StatGrid>
         <FormGrid>
           <Field label="Fecha">
             <Input type="date" value={reposicionForm.fecha} onChange={(e) => setReposicionForm({ ...reposicionForm, fecha: e.target.value })} />
