@@ -53,6 +53,21 @@ function GeneralTab() {
         </div>
       </Card>
 
+      <Card title="Caja">
+        <p className="mb-3 text-[12.5px] text-text3">
+          Punto de partida del Flujo de caja (Finanzas → Tesorería → Flujo y proyección) antes de sumar cualquier
+          movimiento — no es un ingreso ni un gasto, y nunca debería usarse para forzar el saldo con un movimiento
+          artificial (para eso está &ldquo;Ajuste de saldo&rdquo; en Tesorería → Caja).
+        </p>
+        <Field label="Saldo inicial de caja">
+          <Input
+            type="number"
+            value={data.configuracion.saldo_inicial_caja}
+            onChange={(e) => setUmbral("saldo_inicial_caja", Number(e.target.value))}
+          />
+        </Field>
+      </Card>
+
       <Card title="Umbrales de alerta">
         <FormGrid>
           <Field label="Stock bajo de producto">
