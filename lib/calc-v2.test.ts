@@ -25,6 +25,14 @@ import {
   totalCobradoPedido,
   estadoCobroPedido,
   variantesSinFactorReceta,
+  estadoCuentaPorCobrar,
+  totalPagadoCompra,
+  estadoPagoCompraCalculado,
+  estadoCuentaPorPagar,
+  calcularCuentasPorCobrar,
+  calcularCuentasPorPagar,
+  calcularProyeccionCaja,
+  calcularDineroLibre,
 } from "./calc-v2";
 
 function fixture(): RicordoData {
@@ -459,4 +467,113 @@ test("variantesSinFactorReceta: detecta la variante que hereda la receta compart
   const alertas = variantesSinFactorReceta(dataSinFactor);
   assert.equal(alertas.length, 2);
   assert.ok(alertas.some((a) => a.variante_id === "PROD-MAYO"));
+});
+
+test("estadoCuentaPorCobrar/estadoCuentaPorPagar: Pendiente/Parcial/Cobrado(Pagado)/Vencido, VENTA≠COBRO y COMPRA≠PAGO", () => {
+  const data = emptyDataV2();
+  data.pedidos = [
+    { id: "PED-1", fecha: "2026-01-01", cliente_id: "C1", estado: "Entregado", canal: "Minorista", descuento: 0, costo_envio: 0, total: 100000 },
+    { id: "PED-2", fecha: "2026-01-02", cliente_id: "C1", estado: "Entregado", canal: "Minorista", descuento: 0, costo_envio: 0, total: 50000, fecha_vencimiento: "2026-01-10" },
+  ];
+  data.compras = [
+    { id: "COM-1", fecha: "2026-01-01", proveedor_id: "P1", estado_pago: "pendiente", total: 80000 },
+    { id: "COM-2", fecha: "2026-01-02", proveedor_id: "P1", estado_pago: "pendiente", total: 40000, fecha_vencimiento: "2026-01-10" },
+  ];
+  data.movimientos_financieros = [
+    { id: "M1", fecha: "2026-01-05", tipo: "ingreso", concepto: "Cobro parcial PED-1", monto: 30000, origen_tipo: "venta_pedido", origen_id: "PED-1", estado: "confirmado" },
+    { id: "M2", fecha: "2026-01-05", tipo: "egreso", concepto: "Pago parcial COM-1", monto: 20000, origen_tipo: "compra_pago", origen_id: "COM-1", estado: "confirmado" },
+  ];
+  const hoy = "2026-01-20"; // ya pasó la fecha_vencimiento de PED-2/COM-2 (10 de enero)
+
+  assert.equal(estadoCuentaPorCobrar(data, data.pedidos[0], hoy), "Parcial");
+  // Sin cobrar nada y ya vencido -> Vencido (no Pendiente a secas).
+  assert.equal(estadoCuentaPorCobrar(data, data.pedidos[1], hoy), "Vencido");
+
+  assert.equal(totalPagadoCompra(data, "COM-1"), 20000);
+  assert.equal(estadoPagoCompraCalculado(data, data.compras[0]), "Parcial");
+  assert.equal(estadoCuentaPorPagar(data, data.compras[1], hoy), "Vencido");
+
+  // Cobrar/pagar el saldo completo cierra la cuenta.
+  data.movimientos_financieros.push(
+    { id: "M3", fecha: "2026-01-06", tipo: "ingreso", concepto: "Resto PED-1", monto: 70000, origen_tipo: "venta_pedido", origen_id: "PED-1", estado: "confirmado" },
+    { id: "M4", fecha: "2026-01-06", tipo: "egreso", concepto: "Resto COM-1", monto: 60000, origen_tipo: "compra_pago", origen_id: "COM-1", estado: "confirmado" }
+  );
+  assert.equal(estadoCuentaPorCobrar(data, data.pedidos[0], hoy), "Cobrado");
+  assert.equal(estadoCuentaPorPagar(data, data.compras[0], hoy), "Pagado");
+});
+
+test("calcularCuentasPorCobrar/calcularCuentasPorPagar: solo pedidos Entregados con saldo abierto, ordenadas por vencimiento", () => {
+  const data = emptyDataV2();
+  data.pedidos = [
+    { id: "PED-1", fecha: "2026-01-01", cliente_id: "C1", estado: "Confirmado", canal: "Minorista", descuento: 0, costo_envio: 0, total: 999999 }, // no entregado: no genera cuenta
+    { id: "PED-2", fecha: "2026-01-02", cliente_id: "C1", estado: "Entregado", canal: "Minorista", descuento: 0, costo_envio: 0, total: 50000, fecha_vencimiento: "2026-01-20" },
+    { id: "PED-3", fecha: "2026-01-03", cliente_id: "C1", estado: "Entregado", canal: "Minorista", descuento: 0, costo_envio: 0, total: 30000 },
+  ];
+  data.movimientos_financieros = [
+    { id: "M1", fecha: "2026-01-04", tipo: "ingreso", concepto: "Cobro total PED-3", monto: 30000, origen_tipo: "venta_pedido", origen_id: "PED-3", estado: "confirmado" },
+  ];
+  const cuentas = calcularCuentasPorCobrar(data, "2026-01-15");
+  assert.equal(cuentas.length, 1); // PED-1 no entregado, PED-3 ya cobrado del todo
+  assert.equal(cuentas[0].pedido_id, "PED-2");
+  assert.equal(cuentas[0].saldo, 50000);
+
+  data.compras = [
+    { id: "COM-1", fecha: "2026-01-01", proveedor_id: "P1", estado_pago: "pendiente", total: 10000, fecha_vencimiento: "2026-02-01" },
+    { id: "COM-2", fecha: "2026-01-01", proveedor_id: "P1", estado_pago: "pendiente", total: 5000, fecha_vencimiento: "2026-01-05" },
+  ];
+  const porPagar = calcularCuentasPorPagar(data, "2026-01-15");
+  assert.equal(porPagar.length, 2);
+  assert.equal(porPagar[0].compra_id, "COM-2"); // vence antes -> primero
+});
+
+test("calcularProyeccionCaja: suma cobros/pagos pendientes con fecha esperada dentro de cada horizonte, nunca extrapola", () => {
+  const data = emptyDataV2();
+  data.configuracion.saldo_inicial_caja = 500000;
+  data.pedidos = [
+    { id: "PED-1", fecha: "2026-01-01", cliente_id: "C1", estado: "Entregado", canal: "Minorista", descuento: 0, costo_envio: 0, total: 100000, fecha_vencimiento: "2026-01-05" },
+    // Sin fecha_vencimiento: no se puede ubicar en ningún horizonte, nunca se inventa una fecha.
+    { id: "PED-2", fecha: "2026-01-01", cliente_id: "C1", estado: "Entregado", canal: "Minorista", descuento: 0, costo_envio: 0, total: 40000 },
+  ];
+  data.compras = [{ id: "COM-1", fecha: "2026-01-01", proveedor_id: "P1", estado_pago: "pendiente", total: 60000, fecha_vencimiento: "2026-01-12" }];
+  const hoy = "2026-01-01";
+  const proy = calcularProyeccionCaja(data, hoy);
+  assert.equal(proy.caja_actual, 500000);
+  assert.equal(proy.puntos[0].dias, 0);
+  assert.equal(proy.puntos[0].caja_proyectada, 500000); // "hoy" nunca proyecta, es la caja real
+  const d7 = proy.puntos.find((p) => p.dias === 7)!;
+  assert.equal(d7.cobros_pendientes, 100000); // vence el 5, dentro de los 7 días
+  assert.equal(d7.pagos_pendientes, 0); // COM-1 vence el 12, todavía no
+  assert.equal(d7.caja_proyectada, 600000);
+  const d15 = proy.puntos.find((p) => p.dias === 15)!;
+  assert.equal(d15.pagos_pendientes, 60000); // ya entró en la ventana de 15 días
+  assert.equal(d15.caja_proyectada, 500000 + 100000 - 60000);
+  assert.equal(proy.alerta_negativa, false);
+});
+
+test("calcularProyeccionCaja: si la caja proyectada da negativa, prende la alerta", () => {
+  const data = emptyDataV2();
+  data.configuracion.saldo_inicial_caja = 10000;
+  data.compras = [{ id: "COM-1", fecha: "2026-01-01", proveedor_id: "P1", estado_pago: "pendiente", total: 50000, fecha_vencimiento: "2026-01-03" }];
+  const proy = calcularProyeccionCaja(data, "2026-01-01");
+  const d7 = proy.puntos.find((p) => p.dias === 7)!;
+  assert.ok(d7.caja_proyectada < 0);
+  assert.equal(proy.alerta_negativa, true);
+});
+
+test("calcularDineroLibre: descuenta cuentas por pagar y fondos internos reservados del saldo de caja", () => {
+  const data = emptyDataV2();
+  data.configuracion.saldo_inicial_caja = 1000000;
+  data.compras = [{ id: "COM-1", fecha: "2026-01-01", proveedor_id: "P1", estado_pago: "pendiente", total: 200000 }];
+  data.configuracion.caja_inteligente = {
+    porcentaje_reinversion: 60,
+    porcentaje_seguridad: 40,
+    asignaciones: [{ id: "CI-1", fecha: "2026-01-01", monto: 150000 }],
+    usos_reinversion: [],
+    usos_seguridad: [],
+  };
+  const libre = calcularDineroLibre(data, "2026-01-15");
+  assert.equal(libre.dinero_en_cuentas, 1000000);
+  assert.equal(libre.cuentas_por_pagar, 200000);
+  assert.equal(libre.fondos_reservados, 150000); // 60% + 40% de 150.000 = el total aportado
+  assert.equal(libre.dinero_libre, 1000000 - 200000 - 150000);
 });

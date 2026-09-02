@@ -1385,3 +1385,113 @@ export function estadoCuentaPorPagar(data: RicordoDataV2, compra: Compra, hoy: s
   if (base !== "Pagado" && compra.fecha_vencimiento && compra.fecha_vencimiento < hoy) return "Vencido";
   return base;
 }
+
+// --- Cuentas por cobrar / por pagar (listas para la UI) -------------------------------------
+// Solo pedidos Entregados generan cuenta por cobrar (recién ahí se reconoce la venta — un pedido
+// Confirmado/En producción todavía no es una venta). Se excluyen los ya cobrados del todo: una
+// cuenta por cobrar es, por definición, un saldo abierto.
+
+export interface CuentaPorCobrar {
+  pedido_id: string;
+  cliente_id: string;
+  fecha: string;
+  total: number;
+  cobrado: number;
+  saldo: number;
+  fecha_vencimiento?: string;
+  estado: EstadoCuenta;
+}
+
+export function calcularCuentasPorCobrar(data: RicordoDataV2, hoy: string): CuentaPorCobrar[] {
+  return data.pedidos
+    .filter((p) => p.estado === "Entregado")
+    .map((p) => {
+      const cobrado = totalCobradoPedido(data, p.id);
+      return {
+        pedido_id: p.id,
+        cliente_id: p.cliente_id,
+        fecha: p.fecha,
+        total: Math.round(p.total),
+        cobrado: Math.round(cobrado),
+        saldo: Math.round(p.total - cobrado),
+        fecha_vencimiento: p.fecha_vencimiento,
+        estado: estadoCuentaPorCobrar(data, p, hoy),
+      };
+    })
+    .filter((c) => c.saldo > 0)
+    .sort((a, b) => (a.fecha_vencimiento || a.fecha).localeCompare(b.fecha_vencimiento || b.fecha));
+}
+
+export interface CuentaPorPagar {
+  compra_id: string;
+  proveedor_id: string;
+  fecha: string;
+  total: number;
+  pagado: number;
+  saldo: number;
+  fecha_vencimiento?: string;
+  estado: EstadoPagoCalculado | "Vencido";
+}
+
+export function calcularCuentasPorPagar(data: RicordoDataV2, hoy: string): CuentaPorPagar[] {
+  return data.compras
+    .map((c) => {
+      const pagado = totalPagadoCompra(data, c.id);
+      return {
+        compra_id: c.id,
+        proveedor_id: c.proveedor_id,
+        fecha: c.fecha,
+        total: Math.round(c.total),
+        pagado: Math.round(pagado),
+        saldo: Math.round(c.total - pagado),
+        fecha_vencimiento: c.fecha_vencimiento,
+        estado: estadoCuentaPorPagar(data, c, hoy),
+      };
+    })
+    .filter((c) => c.saldo > 0)
+    .sort((a, b) => (a.fecha_vencimiento || a.fecha).localeCompare(b.fecha_vencimiento || b.fecha));
+}
+
+// --- Proyección de caja -----------------------------------------------------------------------
+// A diferencia de la proyección naive que tenía calcularFlujoCaja (extrapolar el promedio diario
+// del período), esto NO extrapola nada: suma compromisos reales ya cargados (cobros/pagos
+// pendientes con fecha esperada). Gastos/costos fijos/sueldos/impuestos/inversiones "próximos" no
+// tienen hoy una fecha de vencimiento propia en el esquema (no son un compromiso con vencimiento,
+// son un movimiento que se carga cuando ocurre) — se dejan en $0 en vez de inventar un valor,
+// mismo criterio que "Impuestos" en el EERR.
+
+export interface ProyeccionCajaPunto {
+  dias: number;
+  fecha: string;
+  cobros_pendientes: number;
+  pagos_pendientes: number;
+  caja_proyectada: number;
+}
+
+export interface ProyeccionCaja {
+  caja_actual: number;
+  puntos: ProyeccionCajaPunto[];
+  alerta_negativa: boolean;
+}
+
+export function calcularProyeccionCaja(data: RicordoDataV2, hoy: string): ProyeccionCaja {
+  const caja_actual = Math.round(saldoCajaAlFecha(data, hoy));
+  const cuentasPorCobrar = calcularCuentasPorCobrar(data, hoy);
+  const cuentasPorPagar = calcularCuentasPorPagar(data, hoy);
+
+  const puntos = [0, 7, 15, 30].map((dias) => {
+    const fechaLimite = sumarDias(hoy, dias);
+    const cobros_pendientes =
+      dias === 0
+        ? 0
+        : Math.round(cuentasPorCobrar.reduce((acc, c) => acc + (c.fecha_vencimiento && c.fecha_vencimiento <= fechaLimite ? c.saldo : 0), 0));
+    const pagos_pendientes =
+      dias === 0
+        ? 0
+        : Math.round(cuentasPorPagar.reduce((acc, c) => acc + (c.fecha_vencimiento && c.fecha_vencimiento <= fechaLimite ? c.saldo : 0), 0));
+    const caja_proyectada = Math.round(caja_actual + cobros_pendientes - pagos_pendientes) || 0;
+    return { dias, fecha: fechaLimite, cobros_pendientes, pagos_pendientes, caja_proyectada };
+  });
+
+  return { caja_actual, puntos, alerta_negativa: puntos.some((p) => p.caja_proyectada < 0) };
+}
