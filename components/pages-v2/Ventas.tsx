@@ -25,6 +25,7 @@ import {
   SearchInput,
 } from "@/components/ui";
 import { Modal } from "@/components/Modal";
+import { AnaliticaVentasTab } from "./AnaliticaVentas";
 import { fARS, fNum, inPeriod, costoVariante, margenVariante, productosConVariantes, estadoCobroPedido } from "@/lib/calc-v2";
 import type { EstadoCobro } from "@/lib/calc-v2";
 import type { Canal, EstadoPedido, Pedido, PedidoItem, ProductoVariante } from "@/lib/types-v2";
@@ -811,12 +812,14 @@ export function Ventas() {
           { value: "clientes", label: "Clientes" },
           { value: "precios", label: "Lista de precios" },
           { value: "entregas", label: "Entregas" },
+          { value: "analitica", label: "Analítica de ventas" },
         ]}
       />
       {tab === "pedidos" && <PedidosTab />}
       {tab === "clientes" && <ClientesTab />}
       {tab === "precios" && <ListaPreciosTab />}
       {tab === "entregas" && <EntregasTab />}
+      {tab === "analitica" && <AnaliticaVentasTab />}
     </div>
   );
 }
