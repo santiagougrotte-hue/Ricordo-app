@@ -47,8 +47,10 @@ import {
   ultimoDiaMes,
   mesAnterior,
   sumarDias,
+  calcularCuentasPorCobrar,
+  calcularCuentasPorPagar,
 } from "@/lib/calc-v2";
-import type { EerrLinea, CriterioEnvioPedido, VistaMargen } from "@/lib/calc-v2";
+import type { EerrLinea, CriterioEnvioPedido, VistaMargen, CuentaPorCobrar, CuentaPorPagar } from "@/lib/calc-v2";
 import type { Activo } from "@/lib/types-v2";
 
 function nombreCategoria(data: ReturnType<typeof useStoreV2>["data"], id: string | undefined) {
@@ -2028,6 +2030,283 @@ function FlujoCajaTab() {
   );
 }
 
+const ESTADO_CUENTA_COLOR: Record<string, "green" | "orange" | "red" | "blue"> = {
+  Pendiente: "orange",
+  Parcial: "blue",
+  Cobrado: "green",
+  Pagado: "green",
+  Vencido: "red",
+};
+
+function hoyIso(): string {
+  return new Date().toISOString().slice(0, 10);
+}
+
+function CuentasPorCobrarTab() {
+  const { data, setData } = useStoreV2();
+  const { toast } = useToast();
+  const [cobrando, setCobrando] = useState<CuentaPorCobrar | null>(null);
+  const [form, setForm] = useState({ fecha: hoyIso(), monto: 0, metodo_pago: "" });
+
+  const cuentas = useMemo(() => calcularCuentasPorCobrar(data, hoyIso()), [data]);
+  const totalPendiente = cuentas.reduce((acc, c) => acc + c.saldo, 0);
+
+  function abrirCobro(c: CuentaPorCobrar) {
+    setCobrando(c);
+    setForm({ fecha: hoyIso(), monto: c.saldo, metodo_pago: "" });
+  }
+
+  function registrarCobro() {
+    if (!cobrando) return;
+    if (form.monto <= 0) {
+      toast("El monto tiene que ser mayor a 0", "error");
+      return;
+    }
+    if (form.monto > cobrando.saldo) {
+      toast(`Atención: el cobro (${fARS(form.monto)}) supera el saldo pendiente (${fARS(cobrando.saldo)})`, "error");
+      return;
+    }
+    setData((d) => ({
+      ...d,
+      movimientos_financieros: [
+        ...d.movimientos_financieros,
+        {
+          id: uid("MOVF"),
+          fecha: form.fecha,
+          tipo: "ingreso",
+          concepto: `Cobro pedido ${cobrando.pedido_id}`,
+          monto: form.monto,
+          metodo_pago: form.metodo_pago || undefined,
+          origen_tipo: "venta_pedido",
+          origen_id: cobrando.pedido_id,
+          estado: "confirmado",
+        },
+      ],
+    }));
+    toast("Cobro registrado — aumenta la caja y reduce la cuenta por cobrar");
+    setCobrando(null);
+  }
+
+  return (
+    <div>
+      <p className="mb-3 text-[12.5px] text-text3">
+        Un pedido entregado es una venta, pero no siempre plata cobrada: acá se ve lo que todavía falta cobrar. Registrar
+        un cobro (total o parcial) aumenta la caja y reduce este saldo — la venta ya está reconocida en el Estado de
+        Resultados desde que se entregó, así que cobrar no la vuelve a contar.
+      </p>
+      <StatGrid>
+        <KpiCard label="Total por cobrar" value={fARS(totalPendiente)} color={totalPendiente > 0 ? "orange" : "green"} />
+        <KpiCard label="Cuentas abiertas" value={fNum(cuentas.length, 0)} color="blue" />
+      </StatGrid>
+      <Card>
+        {cuentas.length === 0 ? (
+          <EmptyState text="No hay cuentas por cobrar abiertas." />
+        ) : (
+          <TableWrap>
+            <table className="w-full">
+              <thead>
+                <tr>
+                  <Th>Cliente</Th>
+                  <Th>Pedido</Th>
+                  <Th>Fecha</Th>
+                  <Th>Total</Th>
+                  <Th>Cobrado</Th>
+                  <Th>Saldo pendiente</Th>
+                  <Th>Fecha esperada</Th>
+                  <Th>Estado</Th>
+                  <Th></Th>
+                </tr>
+              </thead>
+              <tbody>
+                {cuentas.map((c) => (
+                  <TrHover key={c.pedido_id}>
+                    <Td main>{data.clientes.find((cl) => cl.id === c.cliente_id)?.nombre ?? "—"}</Td>
+                    <Td>{c.pedido_id}</Td>
+                    <Td>{c.fecha}</Td>
+                    <Td>{fARS(c.total)}</Td>
+                    <Td className="text-green">{fARS(c.cobrado)}</Td>
+                    <Td className="text-orange">{fARS(c.saldo)}</Td>
+                    <Td>{c.fecha_vencimiento ?? "—"}</Td>
+                    <Td>
+                      <Badge color={ESTADO_CUENTA_COLOR[c.estado]}>{c.estado}</Badge>
+                    </Td>
+                    <Td>
+                      <Button size="sm" onClick={() => abrirCobro(c)}>
+                        Registrar cobro
+                      </Button>
+                    </Td>
+                  </TrHover>
+                ))}
+              </tbody>
+            </table>
+          </TableWrap>
+        )}
+      </Card>
+
+      <Modal
+        open={!!cobrando}
+        onClose={() => setCobrando(null)}
+        title={cobrando ? `Registrar cobro — Pedido ${cobrando.pedido_id}` : ""}
+        footer={
+          <>
+            <Button variant="ghost" onClick={() => setCobrando(null)}>
+              Cancelar
+            </Button>
+            <Button onClick={registrarCobro}>Registrar cobro</Button>
+          </>
+        }
+      >
+        {cobrando && (
+          <FormGrid>
+            <InfoRow label="Saldo pendiente" value={fARS(cobrando.saldo)} />
+            <Field label="Fecha">
+              <Input type="date" value={form.fecha} onChange={(e) => setForm({ ...form, fecha: e.target.value })} />
+            </Field>
+            <Field label="Monto cobrado">
+              <Input type="number" value={form.monto} onChange={(e) => setForm({ ...form, monto: Number(e.target.value) })} />
+            </Field>
+            <Field label="Método de pago">
+              <Input value={form.metodo_pago} onChange={(e) => setForm({ ...form, metodo_pago: e.target.value })} />
+            </Field>
+          </FormGrid>
+        )}
+      </Modal>
+    </div>
+  );
+}
+
+function CuentasPorPagarTab() {
+  const { data, setData } = useStoreV2();
+  const { toast } = useToast();
+  const [pagando, setPagando] = useState<CuentaPorPagar | null>(null);
+  const [form, setForm] = useState({ fecha: hoyIso(), monto: 0, metodo_pago: "" });
+
+  const cuentas = useMemo(() => calcularCuentasPorPagar(data, hoyIso()), [data]);
+  const totalPendiente = cuentas.reduce((acc, c) => acc + c.saldo, 0);
+
+  function abrirPago(c: CuentaPorPagar) {
+    setPagando(c);
+    setForm({ fecha: hoyIso(), monto: c.saldo, metodo_pago: "" });
+  }
+
+  function registrarPago() {
+    if (!pagando) return;
+    if (form.monto <= 0) {
+      toast("El monto tiene que ser mayor a 0", "error");
+      return;
+    }
+    if (form.monto > pagando.saldo) {
+      toast(`Atención: el pago (${fARS(form.monto)}) supera el saldo pendiente (${fARS(pagando.saldo)})`, "error");
+      return;
+    }
+    setData((d) => ({
+      ...d,
+      movimientos_financieros: [
+        ...d.movimientos_financieros,
+        {
+          id: uid("MOVF"),
+          fecha: form.fecha,
+          tipo: "egreso",
+          concepto: `Pago compra ${pagando.compra_id}`,
+          monto: form.monto,
+          metodo_pago: form.metodo_pago || undefined,
+          origen_tipo: "compra_pago",
+          origen_id: pagando.compra_id,
+          estado: "confirmado",
+        },
+      ],
+    }));
+    toast("Pago registrado — disminuye la caja y reduce la cuenta por pagar");
+    setPagando(null);
+  }
+
+  return (
+    <div>
+      <p className="mb-3 text-[12.5px] text-text3">
+        Confirmar una compra no es lo mismo que pagarla: acá se ve lo que todavía falta pagar a los proveedores.
+        Registrar un pago (total o parcial) disminuye la caja y reduce este saldo.
+      </p>
+      <StatGrid>
+        <KpiCard label="Total por pagar" value={fARS(totalPendiente)} color={totalPendiente > 0 ? "orange" : "green"} />
+        <KpiCard label="Cuentas abiertas" value={fNum(cuentas.length, 0)} color="blue" />
+      </StatGrid>
+      <Card>
+        {cuentas.length === 0 ? (
+          <EmptyState text="No hay cuentas por pagar abiertas." />
+        ) : (
+          <TableWrap>
+            <table className="w-full">
+              <thead>
+                <tr>
+                  <Th>Proveedor</Th>
+                  <Th>Compra</Th>
+                  <Th>Fecha</Th>
+                  <Th>Total</Th>
+                  <Th>Pagado</Th>
+                  <Th>Saldo pendiente</Th>
+                  <Th>Vencimiento</Th>
+                  <Th>Estado</Th>
+                  <Th></Th>
+                </tr>
+              </thead>
+              <tbody>
+                {cuentas.map((c) => (
+                  <TrHover key={c.compra_id}>
+                    <Td main>{data.proveedores.find((p) => p.id === c.proveedor_id)?.nombre ?? "—"}</Td>
+                    <Td>{c.compra_id}</Td>
+                    <Td>{c.fecha}</Td>
+                    <Td>{fARS(c.total)}</Td>
+                    <Td className="text-green">{fARS(c.pagado)}</Td>
+                    <Td className="text-orange">{fARS(c.saldo)}</Td>
+                    <Td>{c.fecha_vencimiento ?? "—"}</Td>
+                    <Td>
+                      <Badge color={ESTADO_CUENTA_COLOR[c.estado]}>{c.estado}</Badge>
+                    </Td>
+                    <Td>
+                      <Button size="sm" onClick={() => abrirPago(c)}>
+                        Registrar pago
+                      </Button>
+                    </Td>
+                  </TrHover>
+                ))}
+              </tbody>
+            </table>
+          </TableWrap>
+        )}
+      </Card>
+
+      <Modal
+        open={!!pagando}
+        onClose={() => setPagando(null)}
+        title={pagando ? `Registrar pago — Compra ${pagando.compra_id}` : ""}
+        footer={
+          <>
+            <Button variant="ghost" onClick={() => setPagando(null)}>
+              Cancelar
+            </Button>
+            <Button onClick={registrarPago}>Registrar pago</Button>
+          </>
+        }
+      >
+        {pagando && (
+          <FormGrid>
+            <InfoRow label="Saldo pendiente" value={fARS(pagando.saldo)} />
+            <Field label="Fecha">
+              <Input type="date" value={form.fecha} onChange={(e) => setForm({ ...form, fecha: e.target.value })} />
+            </Field>
+            <Field label="Monto pagado">
+              <Input type="number" value={form.monto} onChange={(e) => setForm({ ...form, monto: Number(e.target.value) })} />
+            </Field>
+            <Field label="Método de pago">
+              <Input value={form.metodo_pago} onChange={(e) => setForm({ ...form, metodo_pago: e.target.value })} />
+            </Field>
+          </FormGrid>
+        )}
+      </Modal>
+    </div>
+  );
+}
+
 export function Finanzas() {
   const [tab, setTab] = useState("caja");
   return (
@@ -2040,6 +2319,8 @@ export function Finanzas() {
           { value: "caja", label: "Caja y bancos" },
           { value: "flujo", label: "Flujo de caja" },
           { value: "movimientos", label: "Ingresos y egresos" },
+          { value: "porcobrar", label: "Cuentas por cobrar" },
+          { value: "porpagar", label: "Cuentas por pagar" },
           { value: "gastos", label: "Gastos" },
           { value: "activos", label: "Activos e inversiones" },
           { value: "reinversion", label: "Reinversión" },
@@ -2049,6 +2330,8 @@ export function Finanzas() {
       {tab === "caja" && <CajaTab />}
       {tab === "flujo" && <FlujoCajaTab />}
       {tab === "movimientos" && <IngresosEgresosTab />}
+      {tab === "porcobrar" && <CuentasPorCobrarTab />}
+      {tab === "porpagar" && <CuentasPorPagarTab />}
       {tab === "gastos" && <GastosTab />}
       {tab === "activos" && <ActivosTab />}
       {tab === "reinversion" && <ReinversionTab />}
