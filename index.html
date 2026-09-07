@@ -1476,10 +1476,13 @@ const Program = {
             mkEx('peso_muerto_rumano_barra','3','6-8','—','RPE 8','libre','B1'),
             mkEx('saltos_verticales_caderas','3','4-5','1:45-2:00 min','—','—','B2'),
           ]},
-        { n:5, name:'PLIOMETRÍA', type:'plyo', dur:'~8 min',
-          goal:'3 series. Descanso 90s entre series.',
+        { n:5, name:'SUPERSERIE D — PLIOMETRÍA + CORE', type:'superserie', dur:'~10 min',
+          goal:'3 rondas. Pliometría las 3 rondas; core solo en rondas 1 y 2. Descanso 90s entre rondas.',
+          roundRest:90, transitionRest:'20-30s',
+          supNote:'Ronda 3: solo Pliometría (D1). Core únicamente en rondas 1 y 2.',
           items:[
-            mkEx('caida_cajon_reactivo','3','2/2','90s','—','—'),
+            mkEx('caida_cajon_reactivo','3','2/2','—','—','—','D1'),
+            mkEx('rueda_abdominal','2','6-8','90s','—','—','D2'),
           ]},
         { n:6, name:'POTENCIA — LEVANTAMIENTO OLÍMPICO', type:'olimpico', dur:'~10 min',
           goal:'Priorizar técnica, velocidad y explosividad. NO superserie. 2 min de descanso.',
@@ -1493,11 +1496,6 @@ const Program = {
           items:[
             mkEx('press_landmine_cadera','3','8','—','RPE 7','libre','C1'),
             mkEx('press_frances_barra_w','2','10-12','75-90s','RPE 7','libre','C2'),
-          ]},
-        { n:8, name:'CORE', type:'core', dur:'~5 min',
-          goal:'2 series. Descanso 60s.',
-          items:[
-            mkEx('rueda_abdominal','2','6-8','60s','—','—'),
           ]},
       ];
     } else {
