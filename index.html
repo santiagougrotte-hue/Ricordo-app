@@ -374,6 +374,84 @@ svg.chart{width:100%; height:150px; overflow:visible;}
   .card,.block-card{border:1px solid #ccc; background:#fff; color:#000; break-inside:avoid;}
 }
 @media (min-width:640px){ .view{padding:26px 24px;} }
+
+/* ===== Block type badge & color coding ===== */
+.block-type-tag{display:inline-block;font-size:9px;font-weight:700;letter-spacing:.07em;text-transform:uppercase;padding:2px 8px;border-radius:5px;margin-left:8px;vertical-align:middle;}
+.block-card.type-movilidad   .block-num{background:rgba(0,188,212,.18);color:#26C6DA;}
+.block-card.type-activacion  .block-num{background:rgba(255,193,7,.18);color:#FFC107;}
+.block-card.type-fuerza      .block-num{background:rgba(33,150,243,.18);color:#42A5F5;}
+.block-card.type-superserie  .block-num{background:rgba(186,104,200,.2);color:#CE93D8;}
+.block-card.type-plyo        .block-num{background:rgba(0,200,83,.2);color:var(--accent);}
+.block-card.type-olimpico    .block-num{background:rgba(255,179,0,.2);color:var(--warn);}
+.block-card.type-core        .block-num{background:rgba(158,158,158,.2);color:#BDBDBD;}
+.block-card.type-cardio      .block-num{background:rgba(244,67,54,.2);color:#EF5350;}
+.block-card.type-accesorio   .block-num{background:rgba(141,110,99,.2);color:#A1887F;}
+.block-card.type-movilidad   .block-type-tag{background:rgba(0,188,212,.12);color:#26C6DA;}
+.block-card.type-activacion  .block-type-tag{background:rgba(255,193,7,.12);color:#FFC107;}
+.block-card.type-fuerza      .block-type-tag{background:rgba(33,150,243,.12);color:#42A5F5;}
+.block-card.type-superserie  .block-type-tag{background:rgba(186,104,200,.12);color:#CE93D8;}
+.block-card.type-plyo        .block-type-tag{background:rgba(0,200,83,.12);color:var(--accent);}
+.block-card.type-olimpico    .block-type-tag{background:rgba(255,179,0,.12);color:var(--warn);}
+.block-card.type-core        .block-type-tag{background:rgba(158,158,158,.12);color:#BDBDBD;}
+.block-card.type-cardio      .block-type-tag{background:rgba(244,67,54,.12);color:#EF5350;}
+.block-card.type-accesorio   .block-type-tag{background:rgba(141,110,99,.12);color:#A1887F;}
+
+/* ===== Movilidad / Activación checklist ===== */
+.mob-ex-item{display:flex;align-items:flex-start;gap:11px;padding:11px 0;border-bottom:1px solid var(--border);}
+.mob-ex-item:last-child{border-bottom:none;padding-bottom:0;}
+.mob-check{width:24px;height:24px;border-radius:7px;border:2px solid var(--border);flex:none;cursor:pointer;display:flex;align-items:center;justify-content:center;background:var(--surface);transition:all .15s;}
+.mob-check.done{background:var(--accent);border-color:var(--accent);}
+.mob-ex-name{font-size:14px;font-weight:600;color:var(--text);line-height:1.3;}
+.mob-ex-detail{font-size:12px;color:var(--text-muted);margin-top:2px;}
+.mob-transition-note{font-size:11px;color:var(--text-faint);background:var(--surface-2);border-radius:6px;padding:3px 8px;margin-top:4px;display:inline-block;}
+
+/* ===== Superserie flow ===== */
+.sup-round-tracker{display:flex;align-items:center;gap:10px;margin-bottom:14px;padding:10px 12px;background:rgba(186,104,200,.07);border-radius:10px;border:1px solid rgba(186,104,200,.2);}
+.sup-round-label{font-size:11px;color:var(--text-faint);text-transform:uppercase;letter-spacing:.06em;white-space:nowrap;}
+.sup-round-dots{display:flex;gap:6px;margin-left:auto;}
+.sup-round-dot{width:30px;height:30px;border-radius:50%;background:var(--surface-2);border:2px solid var(--border);display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;color:var(--text-faint);transition:all .2s;}
+.sup-round-dot.active{background:rgba(186,104,200,.25);border-color:#CE93D8;color:#CE93D8;}
+.sup-round-dot.done{background:#AB47BC;border-color:#AB47BC;color:#fff;}
+.sup-flow-item{border:1px solid var(--border);border-radius:12px;padding:13px 14px;background:var(--surface-2);}
+.sup-item-label{font-size:10px;font-weight:800;color:#CE93D8;text-transform:uppercase;letter-spacing:.1em;margin-bottom:4px;}
+.sup-item-name{font-size:15px;font-weight:700;color:var(--text);line-height:1.3;}
+.sup-item-detail{font-size:12px;color:var(--text-muted);margin-top:2px;}
+.sup-arrow{text-align:center;padding:6px 0;font-size:12px;color:var(--text-faint);display:flex;align-items:center;gap:6px;}
+.sup-arrow::before,.sup-arrow::after{content:'';flex:1;height:1px;background:var(--border);}
+.sup-round-rest{text-align:center;margin-top:10px;padding:10px;background:rgba(186,104,200,.05);border:1px dashed rgba(186,104,200,.25);border-radius:10px;}
+.sup-round-rest-label{font-size:11px;color:var(--text-faint);margin-bottom:8px;}
+.sup-advance-btn{width:100%;background:rgba(186,104,200,.15);color:#CE93D8;border:1.5px solid rgba(186,104,200,.3);border-radius:11px;padding:11px 16px;font-size:13.5px;font-weight:700;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:8px;}
+.sup-advance-btn:active{transform:scale(.97);}
+.sup-advance-btn.all-done{background:rgba(0,200,83,.1);color:var(--accent);border-color:rgba(0,200,83,.3);}
+.sup-note{font-size:11.5px;color:var(--warn);background:rgba(255,179,0,.08);border:1px solid rgba(255,179,0,.2);border-radius:8px;padding:8px 11px;margin-top:10px;}
+
+/* ===== Individual exercise card (fuerza/plyo/olimpico/core) ===== */
+.solo-ex-card{border:1px solid var(--border);border-radius:12px;padding:14px;background:var(--surface-2);}
+.solo-ex-name{font-size:16px;font-weight:700;margin-bottom:4px;}
+.solo-ex-scheme{font-size:13px;color:var(--text-muted);margin-bottom:10px;}
+.solo-ex-rest{font-size:12px;color:var(--text-faint);margin-bottom:10px;}
+.set-dots{display:flex;gap:7px;margin:8px 0;}
+.set-dot{width:26px;height:26px;border-radius:50%;background:var(--surface);border:2px solid var(--border);cursor:pointer;transition:all .15s;display:flex;align-items:center;justify-content:center;}
+.set-dot.done{background:var(--accent);border-color:var(--accent);}
+.set-dot.done::after{content:'✓';font-size:11px;color:#04140A;font-weight:900;}
+
+/* ===== Treadmill / Cardio block ===== */
+.cinta-wrap{padding:4px 0;}
+.cinta-display{background:var(--surface);border:1.5px solid rgba(244,67,54,.3);border-radius:14px;padding:22px 16px;text-align:center;margin-bottom:12px;}
+.cinta-phase-label{font-size:12px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;margin-bottom:6px;}
+.cinta-phase-label.work{color:#EF5350;}
+.cinta-phase-label.rest-phase{color:#42A5F5;}
+.cinta-round-num{font-size:52px;font-weight:900;font-family:var(--font-mono);line-height:1;color:#EF5350;}
+.cinta-time-num{font-size:44px;font-weight:800;font-family:var(--font-mono);}
+.cinta-speed-lbl{font-size:18px;color:var(--text-muted);margin-top:4px;}
+.cinta-ctrl-btns{display:flex;gap:8px;margin-bottom:12px;}
+.cinta-start-btn{flex:1;background:rgba(244,67,54,.15);color:#EF5350;border:1.5px solid rgba(244,67,54,.3);border-radius:11px;padding:13px;font-size:13.5px;font-weight:700;cursor:pointer;}
+.cinta-start-btn:active{transform:scale(.97);}
+.cinta-skip-btn{flex:0 0 auto;background:var(--surface-2);color:var(--text-faint);border:1px solid var(--border);border-radius:11px;padding:13px 14px;font-size:13px;cursor:pointer;}
+.cinta-pills{display:flex;flex-wrap:wrap;gap:5px;justify-content:center;margin-top:4px;}
+.cinta-pill{width:32px;height:32px;border-radius:50%;background:var(--surface-2);border:1.5px solid var(--border);display:flex;align-items:center;justify-content:center;font-size:10.5px;font-weight:700;color:var(--text-faint);cursor:pointer;transition:all .15s;}
+.cinta-pill.done{background:#EF5350;border-color:#EF5350;color:#fff;}
+.cinta-pill.active{background:rgba(244,67,54,.2);border-color:#EF5350;color:#EF5350;}
 </style>
 </head>
 <body>
@@ -800,6 +878,8 @@ const State = {
     if(!this.data.exerciseSwaps) this.data.exerciseSwaps = {};
     if(!this.data.sessionLog) this.data.sessionLog = {};
     if(!this.data.sessionMeta) this.data.sessionMeta = {};
+    if(!this.data.supRound) this.data.supRound = {};
+    if(!this.data.setsLog) this.data.setsLog = {};
     return this.data;
   },
   save(){ localStorage.setItem(STORE_KEY, JSON.stringify(this.data)); },
@@ -817,7 +897,10 @@ const State = {
       sessionHistory:[], // [{week, day, dayLabel, dayType, phase, date, exercisesTotal, exercisesDone, complete}]
       exerciseSwaps:{}, // key: `${week}-${day}-${origExId}` -> newExId
       sessionLog:{}, // key: `${week}-${day}-${exId}` -> [{peso,reps,rir,...}, ...]
-      sessionMeta:{} // key: `${week}-${day}-${exId}` -> {rodilla,calidad,obs}
+      sessionMeta:{}, // key: `${week}-${day}-${exId}` -> {rodilla,calidad,obs}
+      supRound:{}, // key: `${week}-${day}-${blockN}` -> completedRounds (int)
+      setsLog:{}, // key: `${week}-${day}-${exId}` -> [bool, bool, ...]
+      cinteState:null // treadmill timer state
     };
   }
 };
@@ -1140,7 +1223,108 @@ const EX = {
     errors:['Empujar demasiado con la pierna trasera','Bajar sin control','Inclinarse excesivamente'], progreg:'Progresión: mayor carga o altura del banco.', video:'explosive step up dumbbell power unilateral'},
   jump_squat:{name:'Jump Squat con Carga', cat:'Potencia', muscles:'Cuádriceps, glúteos, pantorrillas', goal:'Potencia vertical explosiva — conversión fuerza → velocidad',
     desc:'Con carga liviana, salto vertical máximo. Aterrizar controlado. Detener la serie si cae la altura del salto.',
-    errors:['Sobrecargar perdiendo velocidad','Aterrizaje rígido','No llegar a extensión completa'], progreg:'Progresión: aumentar carga levemente sin perder altura.', video:'jump squat loaded power plyometric'}
+    errors:['Sobrecargar perdiendo velocidad','Aterrizaje rígido','No llegar a extensión completa'], progreg:'Progresión: aumentar carga levemente sin perder altura.', video:'jump squat loaded power plyometric'},
+  // ===== DÍA 1: Fuerza + Potencia =====
+  hip_9090_inclinacion:{name:'Cadera 90/90 + inclinación', cat:'Movilidad', muscles:'Rotadores de cadera, flexores laterales', goal:'Movilidad de cadera y columna torácica',
+    desc:'Sentado en el suelo, piernas en 90/90. Inclinar el tronco hacia la rodilla delantera manteniendo columna larga.',
+    errors:['Redondear la espalda','No llegar a rango completo'], progreg:'Progresión: agregar rotación de tronco.', video:'hip 90 90 mobility stretch rotation'},
+  psoas_flex_rodilla:{name:'Psoas + flexo-extensión de rodilla', cat:'Movilidad', muscles:'Psoas ilíaco, cuádriceps, isquiotibiales', goal:'Movilidad de flexores de cadera y rodilla',
+    desc:'En posición de estocada, extender y flexionar la rodilla trasera con control. Mantener el tronco erguido.',
+    errors:['Adelantar el tronco','Perder la estabilidad de cadera'], progreg:'Variante con apoyo lateral.', video:'psoas hip flexor stretch knee extension'},
+  gato_superman:{name:'Gato/Superman + cuadrupedia', cat:'Movilidad', muscles:'Columna vertebral, glúteos, erectores', goal:'Movilidad espinal y activación de cadena posterior',
+    desc:'En cuadrupedia: 1) Gato — arquear columna hacia arriba. 2) Enojado — hundir hacia abajo. 3) Superman — extender brazo y pierna opuestos.',
+    errors:['Hiperextender el cuello','No controlar la pelvis en Superman'], progreg:'Añadir pausa en Superman.', video:'cat cow superman quadruped spine mobility'},
+  rot_interna_banda:{name:'Rotación interna de cadera + banda', cat:'Movilidad', muscles:'Rotadores internos de cadera, glúteo medio', goal:'Movilidad de rotación interna de cadera',
+    desc:'De pie con banda alrededor de la rodilla. Rotar internamente la cadera llevando la rodilla hacia adentro. Control total.',
+    errors:['Compensar con el tronco','Perder el apoyo'], progreg:'Mayor resistencia de banda.', video:'hip internal rotation band standing'},
+  caminata_granjero_d1:{name:'Caminata del granjero', cat:'Core', muscles:'Core, trapecios, antebrazos, glúteos', goal:'Activación de core y estabilidad bajo carga axial',
+    desc:'Con mancuernas o pesas en cada mano, caminar distancia establecida manteniendo postura erguida y core apretado.',
+    errors:['Inclinarse hacia un lado','Perder la tensión del core'], progreg:'Progresión: aumentar carga o distancia.', video:'farmers walk carries core stability'},
+  plancha_fitball_empuje:{name:'Plancha Fitball + empuje/apoyo del pie', cat:'Core', muscles:'Core, pectorales, glúteos, estabilizadores', goal:'Activación de core y estabilidad en superficie inestable',
+    desc:'Manos sobre Fitball en posición de plancha. Empujar el balón hacia abajo alternando el apoyo del pie.',
+    errors:['Cadera muy alta o baja','Perder la tensión del core'], progreg:'Variante unipodal.', video:'fitball plank push foot stability'},
+  edc_unipodal_fitball:{name:'EDC unipodal Fitball', cat:'Core', muscles:'Core, glúteos, isquiotibiales, estabilizadores de tobillo', goal:'Activación neuromuscular unilateral y control de cadera',
+    desc:'Parado sobre una pierna, flexionar la cadera llevando el otro pie sobre el Fitball. Equilibrio y estabilidad.',
+    errors:['Rodilla de apoyo colapsando','Perder el equilibrio'], progreg:'Mayor velocidad de ejecución.', video:'single leg hip extension fitball stability'},
+  press_banco_barra:{name:'Press banco plano con barra', cat:'Fuerza', muscles:'Pectoral mayor, tríceps, deltoides anterior', goal:'Fuerza de empuje horizontal',
+    desc:'Barra a la altura del pecho. Bajar controlado hasta el pecho. Empuje explosivo hacia arriba. Codos a ~45°.',
+    errors:['Arquear excesivamente la espalda','Rebotar la barra en el pecho'], progreg:'Progresión: más carga o pausa en el pecho.', video:'bench press barbell technique flat'},
+  pelota_cabeza_lanzamiento:{name:'Pelota detrás de la cabeza — lanzamiento a pared', cat:'Potencia', muscles:'Tríceps, deltoides, core, pectorales', goal:'Potencia de tren superior — velocidad de extensión',
+    desc:'De pie o sentado, pelota medicinal por detrás de la cabeza. Lanzar contra la pared con máxima velocidad de extensión.',
+    errors:['Usar solo los brazos','Flexionar la espalda al lanzar'], progreg:'Mayor peso de pelota.', video:'overhead medicine ball throw wall power'},
+  peso_muerto_rumano_barra:{name:'Peso muerto rumano con barra', cat:'Fuerza', muscles:'Isquiotibiales, glúteos, erectores espinales', goal:'Fuerza de cadena posterior — patrón de bisagra de cadera',
+    desc:'Barra en agarre prono. Bisagra de cadera manteniendo espalda recta. Bajar hasta sentir isquiotibiales. Empuje de cadera al subir.',
+    errors:['Flexionar las rodillas en exceso','Redondear la espalda baja'], progreg:'Progresión: mayor carga o RDL a una pierna.', video:'romanian deadlift barbell technique RDL'},
+  saltos_verticales_caderas:{name:'Saltos verticales — manos en la cadera', cat:'Pliometría', muscles:'Cuádriceps, glúteos, pantorrillas, core', goal:'Potencia vertical máxima — sin swing de brazos',
+    desc:'Con manos en la cadera, salto vertical máximo. Aterrizar con rodillas semiflexionadas. Detener si baja la altura.',
+    errors:['Aterrizaje rígido','Usar el balanceo del tronco para compensar'], progreg:'Progresión: agregar lastre.', video:'vertical jump hands on hips squat jump'},
+  caida_cajon_reactivo:{name:'Caída desde cajón + salto reactivo + salto al cajón', cat:'Pliometría', muscles:'Cuádriceps, glúteos, pantorrillas, isquiotibiales', goal:'Pliometría reactiva — fuerza y velocidad de despegue',
+    desc:'Bajar del cajón, aterrizar amortiguando, reaccionar rápido y saltar de vuelta al cajón. Tiempo de contacto mínimo.',
+    errors:['Aterrizaje rígido','Pausa demasiado larga en el suelo'], progreg:'Mayor altura del cajón.', video:'box drop reactive jump depth jump'},
+  cargada_colgado:{name:'Cargada desde colgado con barra', cat:'Potencia', muscles:'Cadena posterior completa, trapecios, hombros, core', goal:'Potencia total — derivado olímpico',
+    desc:'Agarre prono, barra al nivel de rodillas. Extensión explosiva de caderas + encogimiento de hombros + tirón de codos → recibir en rack.',
+    errors:['Brazos doblándose antes que caderas','No bloquear la barra en el rack'], progreg:'Hang clean completo.', video:'hang power clean barbell olympic technique'},
+  press_landmine_cadera:{name:'Press Landmine + empuje de cadera arrodillado', cat:'Fuerza', muscles:'Pectorales, deltoides, tríceps, glúteos, core', goal:'Potencia de empuje con integración de cadera',
+    desc:'Arrodillado con barra en Landmine. Empujar la barra hacia arriba integrando extensión de cadera al mismo tiempo.',
+    errors:['Separar el movimiento de brazo y cadera','Perder la estabilidad del tronco'], progreg:'Variante de pie.', video:'landmine press hip thrust kneeling power'},
+  press_frances_barra_w:{name:'Press francés con barra W', cat:'Hipertrofia', muscles:'Tríceps largo, tríceps lateral, tríceps medial', goal:'Hipertrofia de tríceps — extensión de codo aislada',
+    desc:'Acostado, barra W por encima. Bajar hacia la frente doblando los codos. Extender completamente. Codos fijos.',
+    errors:['Abrir los codos al bajar','No llegar a extensión completa'], progreg:'Mayor carga o pausa en la extensión.', video:'skull crusher EZ bar triceps french press'},
+  rueda_abdominal:{name:'Rueda abdominal', cat:'Core', muscles:'Recto abdominal, oblicuos, dorsal ancho, serrato', goal:'Fuerza antiextensión de core',
+    desc:'De rodillas con la rueda. Extender los brazos controlando la cadera (no caer). Volver con contracción de core.',
+    errors:['Caer la cadera al extender','Usar el impulso para volver'], progreg:'Progresión: desde los pies.', video:'ab wheel rollout core antiextension'},
+  // ===== DÍA 2: Fuerza Unilateral + Potencia =====
+  cinta_intervalos:{name:'Intervalos en cinta', cat:'Resistencia', muscles:'Cardiovascular, tren inferior completo', goal:'Resistencia intermitente — 15 rondas 40s/30s',
+    desc:'15 rondas: 40s a 14 km/h + 30s a 5 km/h. Duración total ~17 min 30s.',
+    errors:['Velocidad demasiado alta al inicio','No recuperar en las pausas'], progreg:'Aumentar velocidad de trabajo.', video:'treadmill interval sprint cardio'},
+  tobillo_psoas_kb:{name:'Tobillo + psoas con kettlebell', cat:'Movilidad', muscles:'Tobillo, psoas, flexores de cadera', goal:'Movilidad de tobillo y flexores de cadera',
+    desc:'Con kettlebell como apoyo, movilizar el tobillo hacia adelante y luego abrir el psoas en posición de estocada.',
+    errors:['No mantener el talón en el suelo','Compensar con la espalda baja'], progreg:'Mayor rango sin compensar.', video:'ankle mobility psoas stretch kettlebell'},
+  flexores_cadera_banda:{name:'Flexores de cadera con banda', cat:'Movilidad', muscles:'Psoas ilíaco, recto femoral, ilíaco', goal:'Movilización de flexores de cadera',
+    desc:'Banda anclada al frente. En estocada, desplazar la cadera hacia adelante para estirar los flexores traseros.',
+    errors:['Compensar con lordosis lumbar','No mantener la alineación de rodilla'], progreg:'Mayor tensión de banda.', video:'hip flexor band stretch mobility'},
+  movilidad_unilateral_palo:{name:'Movilidad unilateral con palo', cat:'Movilidad', muscles:'Cadera, columna torácica, hombros', goal:'Movilidad integrada con referencia externa',
+    desc:'Con el palo a lo largo de la espalda como referencia, realizar rotaciones y movilidad en plano unilateral.',
+    errors:['Separar la espalda del palo','Compensar con cervicales'], progreg:'Variante sin palo, controlando la postura.', video:'mobility stick thoracic spine unilateral'},
+  rot_interna_pelota:{name:'Rotación interna de cadera con pelota', cat:'Movilidad', muscles:'Rotadores internos de cadera, aductores', goal:'Movilidad de rotación interna de cadera',
+    desc:'Acostado boca arriba, pelota debajo de la rodilla. Rotar internamente la cadera con suavidad aumentando el rango.',
+    errors:['Compensar rotando la pelvis','Forzar el rango'], progreg:'Progresión: con tensión de banda.', video:'hip internal rotation ball floor supine'},
+  plancha_fitball_unipodal:{name:'Plancha Fitball unipodal + empuje', cat:'Core', muscles:'Core, glúteos, estabilizadores', goal:'Activación de core unilateral y estabilidad en superficie inestable',
+    desc:'Manos en Fitball, posición de plancha. Levantar una pierna y mantener equilibrio mientras empujas el balón.',
+    errors:['Rotar la cadera al levantar la pierna','Cadera alta o baja'], progreg:'Agregar movimiento de la pierna levantada.', video:'single leg plank fitball push stability'},
+  plancha_lateral_abduccion:{name:'Plancha lateral + abducción', cat:'Core', muscles:'Oblicuos, glúteo medio, abductores, cuadrado lumbar', goal:'Activación lateral de core y cadera',
+    desc:'Plancha lateral. Levantar la pierna superior con control, abriendo la cadera. Mantener la alineación de cuerpo.',
+    errors:['Rotar la cadera hacia adelante','Caer la cadera hacia el suelo'], progreg:'Agregar banda en las rodillas.', video:'side plank hip abduction core lateral'},
+  pallof_estocada:{name:'Pallof + estocada', cat:'Core', muscles:'Core, oblicuos, cuádriceps, glúteos', goal:'Estabilidad de core antirotación en movimiento dinámico',
+    desc:'Con cable o banda. Sostener el Pallof en el pecho mientras realizas una estocada. No rotar el tronco.',
+    errors:['Rotar el tronco al bajar','Perder la tensión del core'], progreg:'Pallof en extensión durante la estocada.', video:'pallof press lunge antirotation core'},
+  estocada_fija_barra:{name:'Estocada fija con barra', cat:'Fuerza', muscles:'Cuádriceps, glúteos, isquiotibiales, core', goal:'Fuerza unilateral de tren inferior',
+    desc:'Barra en espalda. Posición de estocada fija. Bajar y subir controlado durante el tiempo indicado. Ambas piernas.',
+    errors:['Rodilla delantera colapsando','Talón trasero levantándose'], progreg:'Aumentar la carga.', video:'barbell split squat static lunge'},
+  saltos_laterales_disco:{name:'Saltos laterales al disco', cat:'Pliometría', muscles:'Glúteos, abductores, aductores, gemelos', goal:'Potencia lateral explosiva con aterrizaje controlado',
+    desc:'Saltar lateralmente aterrizando en el disco marcado. Amortiguación controlada. Máxima explosividad lateral.',
+    errors:['Aterrizaje rígido','Rodilla colapsando al aterrizar'], progreg:'Mayor distancia lateral.', video:'lateral bound disk landing power'},
+  dominadas_supinas:{name:'Dominadas supinas', cat:'Fuerza', muscles:'Dorsal ancho, bíceps, romboides, trapecio inferior', goal:'Fuerza de tracción vertical máxima',
+    desc:'Agarre supino, colgado con los brazos extendidos. Subir el pecho hacia la barra, escápulas hacia abajo.',
+    errors:['Usar el impulso del cuerpo','No llegar a extensión completa abajo'], progreg:'Progresión: lastre.', video:'supine chin up pull up underhand technique'},
+  golpe_pared_unipodal:{name:'Golpe/lanzamiento a pared en apoyo unipodal', cat:'Potencia', muscles:'Core, hombros, glúteos, estabilizadores de tobillo', goal:'Potencia rotacional en apoyo unipodal',
+    desc:'Parado sobre un pie, lanzar pelota medicinal a la pared con rotación de tronco. Máxima velocidad. Control del equilibrio.',
+    errors:['Perder el equilibrio al lanzar','No generar potencia desde la cadera'], progreg:'Mayor peso de pelota.', video:'rotational throw wall single leg balance power'},
+  snatch_olimpico:{name:'Snatch / variante olímpica', cat:'Potencia', muscles:'Cadena posterior completa, deltoides, trapecios, core', goal:'Potencia total — patrón de snatch',
+    desc:'Extensión explosiva de cadera + tirón de codos hacia fuera y arriba → recibir con brazos extendidos sobre la cabeza. Priorizar técnica.',
+    errors:['Brazos empujando antes que caderas','No bloquear la barra arriba'], progreg:'Progresión: carga paulatina manteniendo técnica.', video:'power snatch hang snatch technique barbell'},
+  arrodillado_cajon_lateral:{name:'Arrodillado → empuje cadera → unipodal → salto lateral → cajón', cat:'Pliometría', muscles:'Glúteos, cuádriceps, core, gemelos, isquiotibiales', goal:'Transición explosiva desde el suelo — patrón fútbol',
+    desc:'Desde rodillas: empuje de cadera para ponerse de pie → apoyo unipodal breve → salto lateral → aterrizaje en cajón. Máxima velocidad.',
+    errors:['Aterrizaje en cajón rígido','Perder el equilibrio en el apoyo unipodal'], progreg:'Mayor altura del cajón.', video:'kneeling hip thrust jump lateral box plyometric'},
+  sentadilla_bulgara_mancuerna:{name:'Sentadilla búlgara con mancuerna', cat:'Fuerza', muscles:'Cuádriceps, glúteos, isquiotibiales, core', goal:'Fuerza unilateral de tren inferior',
+    desc:'Pie trasero elevado. Mancuernas a los lados. Bajar hasta muslo paralelo al piso. Subir empujando con el talón delantero.',
+    errors:['Rodilla delantera pasando la punta del pie en exceso','No llegar a paralelo'], progreg:'Progresión: aumentar carga.', video:'bulgarian split squat dumbbell technique'},
+  pallof_arrodillado:{name:'Pallof arrodillado con banda/disco', cat:'Core', muscles:'Core, oblicuos, rotadores de tronco', goal:'Antirotación de core en posición arrodillada',
+    desc:'Arrodillado con tensión lateral de banda o disco. Extender los brazos al frente y resistir la rotación del tronco.',
+    errors:['Rotar el tronco al extender','Perder la postura erguida'], progreg:'Variante con rotación controlada.', video:'pallof press kneeling band antirotation core'},
+  curl_biceps_barra_w:{name:'Curl de bíceps con barra W', cat:'Hipertrofia', muscles:'Bíceps braquial, braquial anterior', goal:'Hipertrofia de bíceps — flexión de codo aislada',
+    desc:'Barra W en agarre supino. Flexionar los codos llevando la barra hacia los hombros. Codos fijos al costado del tronco.',
+    errors:['Mover los codos hacia adelante','Usar impulso del tronco'], progreg:'Mayor carga o pausa en la contracción.', video:'EZ bar bicep curl technique form'}
 };
 
 /* ---------- Categorías funcionales (independiente de cat de biblioteca) ---------- */
@@ -1193,6 +1377,22 @@ const FUNC_CAT = {
   single_leg_hop_fwd:'PLIOMETRÍA', lateral_hop_uni:'PLIOMETRÍA',
   lateral_jump_to_vertical:'PLIOMETRÍA', mini_hurdle_sprint:'PLIOMETRÍA',
   step_up_explosive:'POTENCIA', jump_squat:'POTENCIA',
+  // Programa 2 días específicos
+  hip_9090_inclinacion:'MOVILIDAD', psoas_flex_rodilla:'MOVILIDAD', gato_superman:'MOVILIDAD', rot_interna_banda:'MOVILIDAD',
+  caminata_granjero_d1:'CORE', plancha_fitball_empuje:'CORE', edc_unipodal_fitball:'CORE',
+  press_banco_barra:'FUERZA', pelota_cabeza_lanzamiento:'POTENCIA',
+  peso_muerto_rumano_barra:'FUERZA', saltos_verticales_caderas:'PLIOMETRÍA',
+  caida_cajon_reactivo:'PLIOMETRÍA', cargada_colgado:'POTENCIA',
+  press_landmine_cadera:'FUERZA', press_frances_barra_w:'HIPERTROFIA',
+  rueda_abdominal:'CORE',
+  cinta_intervalos:'RESISTENCIA',
+  tobillo_psoas_kb:'MOVILIDAD', flexores_cadera_banda:'MOVILIDAD', movilidad_unilateral_palo:'MOVILIDAD', rot_interna_pelota:'MOVILIDAD',
+  plancha_fitball_unipodal:'CORE', plancha_lateral_abduccion:'CORE', pallof_estocada:'CORE',
+  estocada_fija_barra:'FUERZA', saltos_laterales_disco:'PLIOMETRÍA',
+  dominadas_supinas:'FUERZA', golpe_pared_unipodal:'POTENCIA',
+  snatch_olimpico:'POTENCIA', arrodillado_cajon_lateral:'PLIOMETRÍA',
+  sentadilla_bulgara_mancuerna:'FUERZA', pallof_arrodillado:'CORE',
+  curl_biceps_barra_w:'HIPERTROFIA',
 };
 
 /* ---------- Generador de programa 12 semanas ---------- */
@@ -1235,119 +1435,131 @@ const Program = {
     if(deload){ load -= 10; }
     return { sets: deload?2:3, reps:'3-5', rpe:'3-5', load:Math.round(load) };
   },
-  // día 0=Miércoles (Fuerza+Hiper+Resistencia), 1=Viernes (Velocidad+Plyo+Potencia)
-  dayLabel(d){ return ['Miércoles','Viernes'][d]; },
-  dayType(d){ return ['Fuerza + Hipertrofia + Resistencia','Velocidad + Pliometría + Potencia'][d]; },
-  sessionFocus(d){ return ['Fuerza + Hipertrofia + Resistencia Intermitente — 55-60 min','Velocidad + Pliometría + Potencia — 50-60 min (calidad neuromuscular)'][d]; },
+  // día 0=Día 1 (Fuerza+Potencia), 1=Día 2 (Fuerza Unilateral+Potencia)
+  dayLabel(d){ return ['Día 1','Día 2'][d]; },
+  dayType(d){ return ['Fuerza + Potencia','Fuerza Unilateral + Potencia'][d]; },
+  sessionFocus(d){ return ['Fuerza + Potencia — Tren superior e inferior','Fuerza Unilateral + Potencia — Con cinta al inicio'][d]; },
 
   buildDay(week, day){
-    const routine = this.routineOf(week); // 'A' semanas impares, 'B' semanas pares
-    const deload = this.isDeload(week);
     const mkEx = (id, sets, reps, rest, rpe, load, sup=null) => ({id, sets, reps, rest, rpe, load, sup});
-
-    // Fuerza progression: 4 series normales, 3 en descarga
-    const strSets = deload ? 3 : 4;
-    const strReps = deload ? '4' : '4-5';
-    const rpe78 = deload ? '6-7' : '7-8';
-
-    // Intermittent circuit progression by week
-    const icRounds = week <= 2 ? '2×6' : week <= 4 ? '2×7' : week <= 6 ? '2×8' : '2×9';
-
     let blocks = [];
 
     if(day===0){
-      // ===== MIÉRCOLES: Fuerza + Hipertrofia + Resistencia Intermitente =====
-      const mainLift = routine==='A' ? 'back_squat' : 'trap_bar_dl';
-      const mainLiftName = routine==='A' ? 'Sentadilla' : 'Trap Bar Deadlift';
+      // ===== DÍA 1: FUERZA + POTENCIA =====
       blocks = [
-        { n:1, name:'Calentamiento + Movilidad', dur:'6 min', goal:'Preparar articulaciones y activar cadena inferior',
-          items: [
-            mkEx('ankle_mobility','2','10','30s','—','—'),
-            mkEx('hip_openers','2','8 c/lado','30s','—','—'),
-            mkEx('adductor_rock_back','2','8 c/lado','30s','—','—'),
-            mkEx('glute_bridge_bw','2','10','30s','—','—'),
-            mkEx(mainLift,'2','5 progresivo','60s','—','peso corporal'),
-          ]
-        },
-        { n:2, name:'Fuerza Principal', dur:'12 min', goal:`Fuerza máxima — ${mainLiftName} · Rutina ${routine}`, trackProgression:true,
-          items: [mkEx(mainLift, strSets, strReps, '2:30 min', rpe78, 'libre')]
-        },
-        { n:3, name:'Fuerza Unilateral', dur:'8 min', goal:'Fuerza unilateral — control pélvico y rodilla', trackProgression:true,
-          items: [mkEx('bulgarian_split_squat','3','6 c/pierna','90s', rpe78,'libre')]
-        },
-        { n:4, name:'Cadena Posterior', dur:'7 min', goal:'Isquiotibiales y cadena posterior — protección de rodilla', trackProgression:true,
-          items: [mkEx('rdl','3','6-8','90s', rpe78,'libre')]
-        },
-        { n:5, name:'Cuádriceps Específico', dur:'5 min', goal:'Refuerzo de cuádriceps — RIR 1-2, sin llegar al fallo',
-          items: [mkEx('leg_extension','3','10-15','60s','RIR 1-2','libre')]
-        },
-        { n:6, name:'Tren Superior Superserie', dur:'8 min', goal:'Empuje + tracción — Superserie A1/A2', trackProgression:true,
-          items: [
-            mkEx('bench_press','3','6-8','—', rpe78,'libre','A1'),
-            mkEx('lat_pulldown','3','6-10','90s', rpe78,'libre','A2'),
-          ]
-        },
-        { n:7, name:'Brazos Superserie', dur:'4 min', goal:'Volumen de bíceps y tríceps — accesorio',
-          items: [
-            mkEx('biceps_curl','2','10-15','—','RIR 1-2','libre','A1'),
-            mkEx('triceps_pushdown','2','10-15','60s','RIR 1-2','libre','A2'),
-          ]
-        },
-        { n:8, name:'Resistencia Intermitente', dur:'8 min', goal:`Condicionamiento con balón — 20s on/20s off · Sem${week}: ${icRounds} bloques`,
-          items: [mkEx('intermittent_circuit','1',`${icRounds} rondas · 20s on/20s off`,'2 min entre bloques','7','—')]
-        },
+        { n:1, name:'MOVILIDAD ARTICULAR', type:'movilidad', dur:'~8 min',
+          goal:'Realizar 1 vuelta completa. Sin descanso formal entre ejercicios.',
+          items:[
+            mkEx('hip_9090_inclinacion','1','6/6','—','—','—'),
+            mkEx('psoas_flex_rodilla','1','6/6','—','—','—'),
+            mkEx('gato_superman','1','6 + 6/6','—','—','—'),
+            mkEx('rot_interna_banda','1','6/6','—','—','—'),
+          ]},
+        { n:2, name:'ACTIVACIÓN', type:'activacion', dur:'~5 min',
+          goal:'Realizar 1 vuelta. 10-20s entre ejercicios.',
+          items:[
+            mkEx('caminata_granjero_d1','1','6/6','10-20s','—','libre'),
+            mkEx('plancha_fitball_empuje','1','15','10-20s','—','—'),
+            mkEx('edc_unipodal_fitball','1','8/8','—','—','—'),
+          ]},
+        { n:3, name:'SUPERSERIE A — FUERZA + POTENCIA TREN SUPERIOR', type:'superserie', dur:'~12 min',
+          goal:'3 rondas. Después de A2 descansar 90s antes de volver a A1.',
+          roundRest:90, transitionRest:'20-30s',
+          items:[
+            mkEx('press_banco_barra','3','6','—','RPE 8','libre','A1'),
+            mkEx('pelota_cabeza_lanzamiento','3','4/4','90s','—','—','A2'),
+          ]},
+        { n:4, name:'SUPERSERIE B — FUERZA POSTERIOR + SALTO', type:'superserie', dur:'~14 min',
+          goal:'3 rondas. Objetivo del salto: máxima explosividad. 1:45-2:00 min entre rondas.',
+          roundRest:105, transitionRest:'20-30s',
+          items:[
+            mkEx('peso_muerto_rumano_barra','3','6-8','—','RPE 8','libre','B1'),
+            mkEx('saltos_verticales_caderas','3','4-5','1:45-2:00 min','—','—','B2'),
+          ]},
+        { n:5, name:'PLIOMETRÍA', type:'plyo', dur:'~8 min',
+          goal:'3 series. Descanso 90s entre series.',
+          items:[
+            mkEx('caida_cajon_reactivo','3','2/2','90s','—','—'),
+          ]},
+        { n:6, name:'POTENCIA — LEVANTAMIENTO OLÍMPICO', type:'olimpico', dur:'~10 min',
+          goal:'Priorizar técnica, velocidad y explosividad. NO superserie. 2 min de descanso.',
+          items:[
+            mkEx('cargada_colgado','3','3-4','2 min','—','libre'),
+          ]},
+        { n:7, name:'SUPERSERIE C — LANDMINE + TRÍCEPS', type:'superserie', dur:'~10 min',
+          goal:'Landmine: 3 series. Press francés: 2 series (Rondas 1 y 2 únicamente). Descanso 75-90s.',
+          roundRest:82, transitionRest:'20s',
+          supNote:'Ronda 3: solo Landmine (3×8). Press francés solo en rondas 1 y 2.',
+          items:[
+            mkEx('press_landmine_cadera','3','8','—','RPE 7','libre','C1'),
+            mkEx('press_frances_barra_w','2','10-12','75-90s','RPE 7','libre','C2'),
+          ]},
+        { n:8, name:'CORE', type:'core', dur:'~5 min',
+          goal:'2 series. Descanso 60s.',
+          items:[
+            mkEx('rueda_abdominal','2','6-8','60s','—','—'),
+          ]},
       ];
     } else {
-      // ===== VIERNES: Velocidad + Pliometría + Potencia =====
-      const powerV = routine==='A' ? 'trap_bar_jump' : 'jump_squat';
-      const powerVName = routine==='A' ? 'Trap Bar Jump' : 'Jump Squat';
-      const powerR = routine==='A' ? 'med_ball_rotational_throw' : 'cable_chop';
-      const powerRName = routine==='A' ? 'Med Ball Throw' : 'Cable Chop';
+      // ===== DÍA 2: FUERZA UNILATERAL + POTENCIA =====
       blocks = [
-        { n:1, name:'Calentamiento', dur:'8 min', goal:'Activación neuromuscular progresiva — preparar el sistema nervioso',
-          items: [
-            mkEx('ankle_mobility','1','10','30s','—','—'),
-            mkEx('hip_openers','1','8 c/lado','30s','—','—'),
-            mkEx('cossack_squat','1','5 c/lado','30s','—','—'),
-            mkEx('leg_swings','1','10 c/lado','30s','—','—'),
-            mkEx('a_skip','2','20m','45s','—','—'),
-            mkEx('pogo_jump','1','10 contactos suave','45s','—','—'),
-            mkEx('accel_10','2','10m progresivo','90s','—','—'),
-          ]
-        },
-        { n:2, name:'Aceleración', dur:'10 min', goal:'Velocidad máxima — 95-100% · Calidad sobre cantidad', trackProgression:true,
-          items: [
-            mkEx('accel_10','3','10m','90s','95-100%','—'),
-            mkEx('sprint_20','2','20m','2 min','95-100%','—'),
-          ]
-        },
-        { n:3, name:'Pliometría Reactiva', dur:'5 min', goal:'Ciclo de estiramiento-acortamiento — contacto rápido con el suelo',
-          items: [mkEx('pogo_jump','2','10-15 contactos','60s','—','—')]
-        },
-        { n:4, name:'Pliometría Unilateral', dur:'6 min', goal:'Potencia unilateral — aterrizaje con control de rodilla', trackProgression:true,
-          items: [mkEx('single_leg_hop_fwd','3','3 c/pierna + estabilizar','75s','—','—')]
-        },
-        { n:5, name:'Pliometría Lateral', dur:'6 min', goal:'Potencia y estabilidad lateral — patrón de cambio de dirección', trackProgression:true,
-          items: [mkEx('lateral_hop_uni','3','4 saltos c/lado','60s','—','—')]
-        },
-        { n:6, name:'Pliometría Multidireccional', dur:'6 min', goal:'Absorber fuerza lateral y convertirla en potencia vertical', trackProgression:true,
-          items: [mkEx('lateral_jump_to_vertical','2','3 rep c/lado','75s','—','—')]
-        },
-        { n:7, name:'Salto + Aceleración', dur:'7 min', goal:'Transición aterrizaje → sprint — patrón específico de fútbol', trackProgression:true,
-          items: [mkEx('mini_hurdle_sprint','3','3 rep c/pierna','90s','—','—')]
-        },
-        { n:8, name:'Potencia Unilateral', dur:'7 min', goal:'Potencia explosiva unilateral — transferencia a aceleración', trackProgression:true,
-          items: [mkEx('step_up_explosive','3','5 c/pierna','90s','—','libre')]
-        },
-        { n:9, name:`Potencia Vertical`, dur:'6 min', goal:`${powerVName} · Rutina ${routine}`, trackProgression:true,
-          items: [mkEx(powerV,'3','3','90s','—', routine==='A'?'libre':'—')]
-        },
-        { n:10, name:`Potencia Rotacional`, dur:'5 min', goal:`${powerRName} · Rutina ${routine}`, trackProgression:true,
-          items: [mkEx(powerR,'3','4-6 c/lado','60s','—', routine==='A'?'—':'libre')]
-        },
+        { n:1, name:'CINTA — RESISTENCIA INTERMITENTE', type:'cardio', dur:'~17 min',
+          goal:'15 rondas: 40s a 14 km/h + 30s a 5 km/h. Total ~17 min 30s.',
+          cinteRounds:15, workSec:40, workSpeed:14, restSec:30, restSpeed:5,
+          items:[mkEx('cinta_intervalos','1','15 rondas','—','7','—')]},
+        { n:2, name:'MOVILIDAD ARTICULAR', type:'movilidad', dur:'~8 min',
+          goal:'Realizar 1 vuelta. Sin descanso formal entre ejercicios.',
+          items:[
+            mkEx('tobillo_psoas_kb','1','6/6','—','—','—'),
+            mkEx('flexores_cadera_banda','1','6/6','—','—','—'),
+            mkEx('movilidad_unilateral_palo','1','6/6','—','—','—'),
+            mkEx('rot_interna_pelota','1','6/6','—','—','—'),
+          ]},
+        { n:3, name:'ACTIVACIÓN', type:'activacion', dur:'~6 min',
+          goal:'1 vuelta. 10-20s de transición entre ejercicios.',
+          items:[
+            mkEx('plancha_fitball_unipodal','1','10/10','10-20s','—','—'),
+            mkEx('plancha_lateral_abduccion','1','10/10','10-20s','—','—'),
+            mkEx('pallof_estocada','1','6/6','—','—','libre'),
+          ]},
+        { n:4, name:'SUPERSERIE A — FUERZA UNILATERAL + POTENCIA LATERAL', type:'superserie', dur:'~14 min',
+          goal:'3 rondas. 1:45-2:00 min entre rondas.',
+          roundRest:105, transitionRest:'20-30s',
+          items:[
+            mkEx('estocada_fija_barra','3','30"/30"','—','RPE 8','libre','A1'),
+            mkEx('saltos_laterales_disco','3','4/4','1:45-2:00 min','—','—','A2'),
+          ]},
+        { n:5, name:'SUPERSERIE B — TIRÓN + POTENCIA', type:'superserie', dur:'~12 min',
+          goal:'3 rondas. Descanso 90s entre rondas.',
+          roundRest:90, transitionRest:'20s',
+          items:[
+            mkEx('dominadas_supinas','3','6','—','RPE 8','—','B1'),
+            mkEx('golpe_pared_unipodal','3','5-6/5-6','90s','—','—','B2'),
+          ]},
+        { n:6, name:'POTENCIA — SNATCH OLÍMPICO', type:'olimpico', dur:'~10 min',
+          goal:'Priorizar técnica, velocidad y explosividad. NO superserie. 2-2:30 min de descanso.',
+          items:[
+            mkEx('snatch_olimpico','3','3','2:00-2:30 min','—','libre'),
+          ]},
+        { n:7, name:'PLIOMETRÍA', type:'plyo', dur:'~8 min',
+          goal:'3 series. Descanso 90s entre series.',
+          items:[
+            mkEx('arrodillado_cajon_lateral','3','2/2','90s','—','—'),
+          ]},
+        { n:8, name:'SUPERSERIE C — FUERZA UNILATERAL + CORE', type:'superserie', dur:'~12 min',
+          goal:'3 rondas. Descanso 75-90s entre rondas.',
+          roundRest:82, transitionRest:'15-20s',
+          items:[
+            mkEx('sentadilla_bulgara_mancuerna','3','6/6','—','RPE 8','libre','C1'),
+            mkEx('pallof_arrodillado','3','6/6','75-90s','—','libre','C2'),
+          ]},
+        { n:9, name:'BÍCEPS', type:'accesorio', dur:'~5 min',
+          goal:'2 series. Descanso 60s.',
+          items:[
+            mkEx('curl_biceps_barra_w','2','10-12','60s','—','libre'),
+          ]},
       ];
     }
-
     return blocks;
   }
 };
@@ -1456,6 +1668,132 @@ const Timer = {
     const el = document.getElementById('timer-time');
     el.textContent = `${m}:${s.toString().padStart(2,'0')}`;
     el.className = 'timer-time' + (remSec < 10 ? ' urgent' : '');
+  }
+};
+
+/* ---------- Cinta (treadmill interval timer) ---------- */
+const Cinta = {
+  _interval: null,
+  _ctx: null,
+
+  _fmt(s){ return Math.floor(s/60)+':'+String(s%60).padStart(2,'0'); },
+
+  _beep(high){
+    try{
+      if(!this._ctx) this._ctx = new(window.AudioContext||window.webkitAudioContext)();
+      const osc=this._ctx.createOscillator(), gain=this._ctx.createGain();
+      osc.connect(gain); gain.connect(this._ctx.destination);
+      osc.frequency.value = high ? 1100 : 550;
+      gain.gain.setValueAtTime(0.3, this._ctx.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.01, this._ctx.currentTime+0.4);
+      osc.start(); osc.stop(this._ctx.currentTime+0.4);
+    }catch(e){}
+  },
+
+  initState(bKey, blk){
+    const s = State.data;
+    if(!s.cinteState || s.cinteState.bKey !== bKey){
+      s.cinteState = {bKey, round:1, phase:'work',
+        rounds:blk.cinteRounds, workSec:blk.workSec, restSec:blk.restSec,
+        workSpeed:blk.workSpeed, restSpeed:blk.restSpeed,
+        running:false, done:false, endTime:0};
+      State.save();
+    }
+  },
+
+  start(bKey){
+    const cs = State.data.cinteState;
+    if(!cs || cs.bKey !== bKey) return;
+    cs.running = true;
+    if(!cs.endTime || cs.endTime <= Date.now()){
+      cs.endTime = Date.now() + (cs.phase==='work' ? cs.workSec : cs.restSec)*1000;
+    }
+    State.save();
+    if(this._interval) clearInterval(this._interval);
+    this._interval = setInterval(()=>this._tick(bKey), 250);
+    this._render(bKey);
+  },
+
+  pause(bKey){
+    if(this._interval){ clearInterval(this._interval); this._interval=null; }
+    const cs = State.data.cinteState;
+    if(!cs) return;
+    cs.running = false;
+    State.save();
+    this._render(bKey);
+  },
+
+  skipRound(bKey){
+    const cs = State.data.cinteState;
+    if(!cs || cs.done) return;
+    this._advance(bKey, cs);
+    State.save();
+    this._render(bKey);
+  },
+
+  _advance(bKey, cs){
+    if(cs.phase==='work'){
+      if(cs.round >= cs.rounds){ this._complete(bKey, cs); return; }
+      cs.phase='rest'; cs.endTime=Date.now()+cs.restSec*1000;
+      this._beep(false);
+    } else {
+      cs.round++; cs.phase='work'; cs.endTime=Date.now()+cs.workSec*1000;
+      this._beep(true);
+    }
+  },
+
+  _complete(bKey, cs){
+    if(this._interval){ clearInterval(this._interval); this._interval=null; }
+    cs.running=false; cs.done=true;
+    this._beep(true); setTimeout(()=>{ try{ this._beep(true); }catch(e){} }, 350);
+    Toast.show('🏁 ¡Cinta completada! 15/15 rondas ✓');
+  },
+
+  _tick(bKey){
+    const cs = State.data.cinteState;
+    if(!cs || !cs.running){ clearInterval(this._interval); this._interval=null; return; }
+    if(Date.now() >= cs.endTime){ this._advance(bKey, cs); }
+    State.save();
+    this._render(bKey);
+  },
+
+  reset(bKey){
+    const cs = State.data.cinteState;
+    if(!cs) return;
+    if(this._interval){ clearInterval(this._interval); this._interval=null; }
+    cs.done=false; cs.round=1; cs.phase='work'; cs.endTime=0; cs.running=false;
+    State.save();
+    this._render(bKey);
+  },
+
+  _render(bKey){
+    const wrap = document.getElementById('cinta-wrap-'+bKey);
+    if(!wrap) return;
+    const cs = State.data.cinteState;
+    if(!cs){ wrap.innerHTML='<div style="color:var(--text-muted);padding:12px;">Cargando...</div>'; return; }
+    const done=!!cs.done, isWork=cs.phase==='work';
+    const remSec = done ? 0 : Math.max(0, Math.ceil((cs.endTime - Date.now())/1000));
+    const speed = isWork ? cs.workSpeed : cs.restSpeed;
+    const pills = Array.from({length:cs.rounds},(_,i)=>{
+      const r=i+1, isDone=r<cs.round||done, isAct=r===cs.round&&!done;
+      return `<div class="cinta-pill ${isDone?'done':isAct?'active':''}">${r}</div>`;
+    }).join('');
+    wrap.innerHTML=`
+      <div class="cinta-display">
+        <div class="cinta-phase-label ${done?'work':isWork?'work':'rest-phase'}">${done?'🏁 COMPLETADO':isWork?'⚡ SPRINT':'🚶 TROTE SUAVE'}</div>
+        <div class="cinta-round-num">${done?'✓':cs.round}<span style="font-size:22px;color:var(--text-faint);font-family:var(--font-mono);">/${cs.rounds}</span></div>
+        <div class="cinta-time-num" style="color:${done?'var(--accent)':isWork?'#EF5350':'#42A5F5'}">${this._fmt(remSec)}</div>
+        <div class="cinta-speed-lbl">${done?'¡Excelente! 🎉':speed+' km/h → '+(isWork?'próximo: trote '+cs.restSpeed:'próximo: sprint '+cs.workSpeed)+' km/h'}</div>
+      </div>
+      <div class="cinta-ctrl-btns">
+        ${done
+          ?`<button class="cinta-start-btn" style="background:rgba(0,200,83,.1);color:var(--accent);border-color:rgba(0,200,83,.3);" onclick="Cinta.reset('${bKey}')">↺ Repetir</button>`
+          :cs.running
+            ?`<button class="cinta-start-btn" onclick="Cinta.pause('${bKey}')">⏸ Pausar</button><button class="cinta-skip-btn" onclick="Cinta.skipRound('${bKey}')">Saltar →</button>`
+            :`<button class="cinta-start-btn" onclick="Cinta.start('${bKey}')">${cs.round===1&&cs.phase==='work'&&!cs.endTime?'▶ Iniciar cinta':'▶ Reanudar'}</button><button class="cinta-skip-btn" onclick="Cinta.skipRound('${bKey}')">Saltar →</button>`
+        }
+      </div>
+      <div class="cinta-pills">${pills}</div>`;
   }
 };
 
@@ -1748,102 +2086,173 @@ const Plan = {
     document.getElementById('blocks-count').textContent = `${blocks.length} bloques`;
     const container = document.getElementById('blocks-container');
     container.innerHTML='';
+
+    const typeLabel = {movilidad:'Movilidad',activacion:'Activación',superserie:'Superserie',
+      plyo:'Pliometría',olimpico:'Olímpico',core:'Core',cardio:'Cardio',accesorio:'Accesorio',fuerza:'Fuerza'};
+    const fmtSec = s => s>=60 ? Math.floor(s/60)+'m'+(s%60?s%60+'s':'') : s+'s';
+
     blocks.forEach((b, idx)=>{
-      const card = document.createElement('div');
-      card.className='block-card'+(idx===0?' open':'');
+      const bKey = `${s.currentWeek}-${s.currentDay}-${b.n}`;
       const doneCount = b.items.filter(it=>s.completedExercises[`${s.currentWeek}-${s.currentDay}-${it.id}`]).length;
+      const card = document.createElement('div');
+      card.className = `block-card type-${b.type}` + (idx===0?' open':'');
+
+      let bodyHtml = `<div style="font-size:12px;color:var(--text-muted);margin-bottom:12px;line-height:1.5;">${b.goal}</div>`;
+
+      /* ---- MOVILIDAD / ACTIVACIÓN: simple checklist ---- */
+      if(b.type==='movilidad' || b.type==='activacion'){
+        bodyHtml += b.items.map(it=>{
+          const key=`${s.currentWeek}-${s.currentDay}-${it.id}`;
+          const done=!!s.completedExercises[key];
+          const ex=EX[it.id]||{name:it.id,muscles:'',goal:''};
+          const videoHref='https://www.youtube.com/results?search_query='+encodeURIComponent(ex.video||ex.name);
+          return `<div class="mob-ex-item">
+            <div class="mob-check ${done?'done':''}" onclick="Plan.toggleDone(event,'${key}')">
+              ${done?'<svg viewBox="0 0 24 24" fill="none" stroke="#04140A" stroke-width="3" width="14" height="14"><path d="M5 13l4 4L19 7"/></svg>':''}
+            </div>
+            <div style="flex:1;">
+              <div class="mob-ex-name ${done?'done-text':''}">${ex.name}</div>
+              <div class="mob-ex-detail">${it.sets}×${it.reps}${it.rest!=='—'?' &nbsp;·&nbsp; '+it.rest:''}</div>
+            </div>
+            <a href="${videoHref}" target="_blank" rel="noopener" style="color:var(--text-faint);flex:none;padding:4px;" title="Ver video">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+            </a>
+          </div>`;
+        }).join('');
+
+      /* ---- SUPERSERIE: round tracker + flow items ---- */
+      } else if(b.type==='superserie'){
+        const rounds = parseInt(b.items[0]?.sets) || 3;
+        const curRound = (s.supRound||{})[bKey] || 0;
+        const dots = Array.from({length:rounds},(_,i)=>{
+          const r=i+1, isDone=r<=curRound, isAct=r===curRound+1;
+          return `<div class="sup-round-dot ${isDone?'done':isAct?'active':''}">${r}</div>`;
+        }).join('');
+        bodyHtml += `<div class="sup-round-tracker">
+          <div class="sup-round-label">${curRound<rounds?`Ronda ${curRound+1} de ${rounds}`:'✓ Superserie completada'}</div>
+          <div class="sup-round-dots">${dots}</div>
+        </div>`;
+        if(b.supNote){
+          bodyHtml += `<div class="sup-note">⚠ ${b.supNote}</div>`;
+        }
+        b.items.forEach((it,i)=>{
+          const ex=EX[it.id]||{name:it.id,muscles:'',goal:''};
+          const key=`${s.currentWeek}-${s.currentDay}-${it.id}`;
+          const funcCat=FUNC_CAT[it.id];
+          const hasLoad=it.load&&it.load!=='—'&&it.load!=='libre';
+          const restSec=Timer.restSeconds(it.id);
+          const exNameSafe=ex.name.replace(/'/g,'\\u0027');
+          const videoHref='https://www.youtube.com/results?search_query='+encodeURIComponent(ex.video||ex.name);
+          if(i>0){
+            bodyHtml += `<div class="sup-arrow">${b.transitionRest||'20-30s'} de transición → siguiente ejercicio</div>`;
+          }
+          bodyHtml += `<div class="sup-flow-item">
+            <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;">
+              <div class="sup-item-label">${it.sup}</div>
+              <a href="${videoHref}" target="_blank" rel="noopener" style="color:var(--text-faint);font-size:11px;display:flex;align-items:center;gap:4px;">
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="5 3 19 12 5 21 5 3"/></svg>video
+              </a>
+            </div>
+            <div class="sup-item-name">${ex.name}</div>
+            <div class="sup-item-detail">${it.sets} series&nbsp;·&nbsp;${it.reps} reps${hasLoad?' &nbsp;·&nbsp; '+it.load:''}${it.rpe&&it.rpe!=='—'?' &nbsp;·&nbsp; '+it.rpe:''}</div>
+            ${SeriesLog.buildTable(key,it,funcCat||ex.cat,{exName:exNameSafe,restSec,rng:Timer.restRangeOf(it.id)})}
+          </div>`;
+        });
+        bodyHtml += `<div class="sup-round-rest">
+          <div class="sup-round-rest-label">Descanso entre rondas: ${fmtSec(b.roundRest||90)}</div>
+          ${curRound<rounds
+            ?`<button class="sup-advance-btn" onclick="Plan.advanceSupRound('${bKey}',${rounds},${b.roundRest||90})">
+                ✓ Ronda ${curRound+1} completada — Iniciar descanso ${fmtSec(b.roundRest||90)}
+              </button>`
+            :`<button class="sup-advance-btn all-done" disabled>✓ Superserie completada</button>`
+          }
+        </div>`;
+
+      /* ---- CARDIO / CINTA ---- */
+      } else if(b.type==='cardio'){
+        bodyHtml += `<div class="cinta-wrap" id="cinta-wrap-${bKey}">
+          <div style="text-align:center;padding:20px;color:var(--text-muted);">Inicializando...</div>
+        </div>`;
+
+      /* ---- SOLO EXERCISES: plyo, olimpico, core, accesorio, fuerza ---- */
+      } else {
+        b.items.forEach(it=>{
+          const ex=EX[it.id]||{name:it.id,muscles:'',goal:'',video:''};
+          const key=`${s.currentWeek}-${s.currentDay}-${it.id}`;
+          const funcCat=FUNC_CAT[it.id];
+          const done=!!s.completedExercises[key];
+          const restSec=Timer.restSeconds(it.id);
+          const exNameSafe=ex.name.replace(/'/g,'\\u0027');
+          const videoHref='https://www.youtube.com/results?search_query='+encodeURIComponent(ex.video||ex.name);
+          const numSets=parseInt(it.sets)||2;
+          const setsLog=(s.setsLog||{})[key]||[];
+          const dots=Array.from({length:numSets},(_,i)=>`<div class="set-dot ${setsLog[i]?'done':''}" onclick="Plan.toggleSetDot('${key}',${i})"></div>`).join('');
+          bodyHtml += `<div class="solo-ex-card">
+            <div style="display:flex;align-items:flex-start;gap:10px;margin-bottom:8px;">
+              <div class="ex-check ${done?'done':''}" onclick="Plan.toggleDone(event,'${key}')" style="flex:none;margin-top:2px;">
+                ${done?'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M5 13l4 4L19 7"/></svg>':''}
+              </div>
+              <div style="flex:1;">
+                <div class="solo-ex-name ${done?'done-text':''}">${ex.name}</div>
+                <div class="solo-ex-scheme">${it.sets} series&nbsp;·&nbsp;${it.reps}${it.load&&it.load!=='—'&&it.load!=='libre'?' &nbsp;·&nbsp; '+it.load:''}${it.rpe&&it.rpe!=='—'?' &nbsp;·&nbsp; '+it.rpe:''}</div>
+                <div class="solo-ex-rest">Descanso: ${it.rest!=='—'?it.rest:fmtSec(restSec)}</div>
+              </div>
+              <a href="${videoHref}" target="_blank" rel="noopener" style="color:var(--text-faint);flex:none;padding:4px;" title="Ver video">
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+              </a>
+            </div>
+            <div style="font-size:11px;color:var(--text-faint);margin-bottom:4px;">Series completadas:</div>
+            <div class="set-dots">${dots}</div>
+            ${SeriesLog.buildTable(key,it,funcCat||ex.cat,{exName:exNameSafe,restSec,rng:Timer.restRangeOf(it.id)})}
+          </div>`;
+        });
+      }
+
       card.innerHTML = `
         <div class="block-head" onclick="Plan.toggleBlock(this)">
           <div class="block-num">${b.n}</div>
           <div class="block-head-text">
-            <div class="block-title">${b.name.toUpperCase()}</div>
-            <div class="block-sub">${b.dur} · ${doneCount}/${b.items.length} completados</div>
+            <div class="block-title">${b.name}<span class="block-type-tag">${typeLabel[b.type]||b.type}</span></div>
+            <div class="block-sub">${b.dur} · ${doneCount}/${b.items.length} ej. completados</div>
           </div>
           <svg class="block-chevron" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 9l6 6 6-6"/></svg>
         </div>
-        <div class="block-body"><div class="block-body-inner">
-          <div style="font-size:12px; color:var(--text-muted); margin-bottom:10px;">${b.goal}</div>
-          ${(()=>{
-            let html='';
-            let prevGroup=null;
-            let isFirst=true;
-            const catNotes = {
-              'Fuerza':'Concéntrico explosivo. RIR 2 en S1 · RIR 1 en S2-S3. Sin llegar al fallo muscular.',
-              'Potencia':'Máxima velocidad en cada rep. Terminá la serie si la velocidad baja, aunque queden reps.',
-              'Pliometría':'Finalizar la serie cuando disminuya la altura, distancia o velocidad del salto.',
-              'Core':'Tensión abdominal constante. Respiración controlada. Sin compensar con lumbar.',
-              'Accesorio':'Control excéntrico (bajada lenta). RIR 1-2. No llegar al fallo.',
-              'Resistencia':'Mantener la potencia de salida. Detener si baja la calidad técnica.',
-            };
-            b.items.forEach(it=>{
-              const group = it.sup ? it.sup.charAt(0) : null;
-              let afterHeader=false;
-              if(group && group!==prevGroup){
-                html += `<div class="superset-header">Superserie ${group}</div>`;
-                afterHeader=true;
-              } else if(!group && prevGroup){
-                html += `<div class="superset-header muted">Finalizar con</div>`;
-                afterHeader=true;
-              }
-              prevGroup = group;
-              const swapKey = `${s.currentWeek}-${s.currentDay}-${it.id}`;
-              const actualId = (s.exerciseSwaps && s.exerciseSwaps[swapKey]) || it.id;
-              const isSwapped = actualId !== it.id;
-              const ex = EX[actualId];
-              const key = `${s.currentWeek}-${s.currentDay}-${it.id}`;
-              const done = !!s.completedExercises[key];
-              const supLabel = it.sup ? `<span class="mono" style="color:var(--accent); margin-right:4px;">${it.sup}.</span>` : '';
-              const noBorder = isFirst || afterHeader;
-              isFirst = false;
-              const swapBtn = `<button class="prog-toggle" onclick="ExerciseSwap.open('${swapKey}','${it.id}')" title="Cambiar ejercicio" style="${isSwapped?'color:var(--accent);border-color:var(--accent);':''}"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 7h16m0 0-4-4m4 4-4 4M20 17H4m0 0 4 4m-4-4 4-4"/></svg></button>`;
-              const panelId = 'expanel-' + key.replace(/[^a-zA-Z0-9]/g,'-');
-              const arrowId = 'earrow-' + key.replace(/[^a-zA-Z0-9]/g,'-');
-              const funcCat = FUNC_CAT[actualId];
-              const catNoteKey = {FUERZA:'Fuerza',POTENCIA:'Potencia',PLIOMETRÍA:'Pliometría',CORE:'Core',HIPERTROFIA:'Accesorio',ROBUSTEZ:'Accesorio',RESISTENCIA:'Resistencia'}[funcCat] || ex.cat;
-              const catNote = catNotes[catNoteKey] ? `<div class="ex-cat-note"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="2" style="flex:none;margin-top:1px"><circle cx="12" cy="12" r="10"/><path d="M12 8v4m0 4h.01"/></svg><span>${catNotes[catNoteKey]}</span></div>` : '';
-              const restSec = Timer.restSeconds(actualId);
-              const restLbl = {FUERZA:'3-4 min',POTENCIA:'2-3 min',PLIOMETRÍA:'60-120s',CORE:'45-60s',HIPERTROFIA:'60-90s',ROBUSTEZ:'60-90s'}[funcCat]||'90s';
-              const exNameSafe = ex.name.replace(/'/g,'\\u0027');
-              const videoHref = 'https://www.youtube.com/results?search_query=' + encodeURIComponent(ex.video);
-              const progHistory = b.trackProgression ? `<button class="prog-panel-toggle" onclick="Progression.toggle(event,'${actualId}')">📊 Historial de progresión semanal</button><div class="progression-wrap" id="progwrap-${actualId}" style="display:none;"></div>` : '';
-              html += `<div class="exercise-row-wrap ${noBorder?'no-border':''}">
-                <div class="exercise-row" onclick="Plan.toggleExPanel('${panelId}','${arrowId}')">
-                  <div class="ex-check ${done?'done':''}" onclick="Plan.toggleDone(event,'${key}')">
-                    ${done? '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><path d="M5 13l4 4L19 7"/></svg>':''}
-                  </div>
-                  <div class="ex-info">
-                    <div class="ex-name ${done?'done-text':''}">${supLabel}${ex.name}</div>
-                    <div class="ex-detail">${it.sets}×${it.reps}${it.rest!=='—'?' · desc '+it.rest:''} · RPE ${it.rpe}${it.load!=='—'&&it.load!=='libre'?' · '+it.load:''}</div>
-                  </div>
-                  ${swapBtn}
-                  <svg id="${arrowId}" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--text-faint)" stroke-width="2" style="flex:none; transition:transform .2s ease;"><path d="M6 9l6 6 6-6"/></svg>
-                </div>
-                <div class="ex-log-area">
-                  ${SeriesLog.buildTable(key, it, funcCat || ex.cat, {
-                    exName: exNameSafe,
-                    restSec: restSec,
-                    rng: Timer.restRangeOf(actualId),
-                    sup: it.sup
-                  })}
-                </div>
-                <div class="ex-panel" id="${panelId}">
-                  <div class="ex-panel-muscles">${ex.muscles}</div>
-                  <div class="ex-panel-goal">${ex.goal}</div>
-                  ${catNote}
-                  <a class="ex-video-link" href="${videoHref}" target="_blank" rel="noopener">
-                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="5 3 19 12 5 21 5 3"/></svg>
-                    Ver técnica en video
-                  </a>
-                  ${progHistory}
-                </div>
-              </div>`;
-            });
-            return html;
-          })()}
-        </div></div>`;
+        <div class="block-body"><div class="block-body-inner">${bodyHtml}</div></div>`;
       container.appendChild(card);
     });
+
+    // Init cardio blocks after DOM is ready
+    blocks.forEach(b=>{
+      if(b.type==='cardio'){
+        const bKey=`${s.currentWeek}-${s.currentDay}-${b.n}`;
+        Cinta.initState(bKey,b);
+        Cinta._render(bKey);
+      }
+    });
+
     this.renderSessionStatus();
+  },
+  advanceSupRound(bKey, maxRounds, restSec){
+    const s = State.data;
+    if(!s.supRound) s.supRound = {};
+    const cur = s.supRound[bKey] || 0;
+    if(cur >= maxRounds) return;
+    s.supRound[bKey] = cur + 1;
+    State.save();
+    if(cur + 1 < maxRounds){
+      Timer.start(restSec, `Descanso entre rondas · ${Math.floor(restSec/60)}:${String(restSec%60).padStart(2,'0')}`);
+    } else {
+      Toast.show('✓ ¡Superserie completada!');
+    }
+    this.renderBlocks();
+  },
+  toggleSetDot(key, setIdx){
+    const s = State.data;
+    if(!s.setsLog) s.setsLog = {};
+    if(!s.setsLog[key]) s.setsLog[key] = [];
+    s.setsLog[key][setIdx] = !s.setsLog[key][setIdx];
+    State.save();
+    this.renderBlocks();
   },
   renderSessionStatus(){
     const s = State.data;
