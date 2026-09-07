@@ -1541,10 +1541,13 @@ const Program = {
           items:[
             mkEx('snatch_olimpico','3','3','2:00-2:30 min','—','libre'),
           ]},
-        { n:7, name:'PLIOMETRÍA', type:'plyo', dur:'~8 min',
-          goal:'3 series. Descanso 90s entre series.',
+        { n:7, name:'SUPERSERIE D — PLIOMETRÍA + BÍCEPS', type:'superserie', dur:'~10 min',
+          goal:'3 rondas. Pliometría las 3 rondas; bíceps solo en rondas 1 y 2. Descanso 90s entre rondas.',
+          roundRest:90, transitionRest:'20-30s',
+          supNote:'Ronda 3: solo Pliometría (D1). Bíceps únicamente en rondas 1 y 2.',
           items:[
-            mkEx('arrodillado_cajon_lateral','3','2/2','90s','—','—'),
+            mkEx('arrodillado_cajon_lateral','3','2/2','—','—','—','D1'),
+            mkEx('curl_biceps_barra_w','2','10-12','90s','—','libre','D2'),
           ]},
         { n:8, name:'SUPERSERIE C — FUERZA UNILATERAL + CORE', type:'superserie', dur:'~12 min',
           goal:'3 rondas. Descanso 75-90s entre rondas.',
@@ -1552,11 +1555,6 @@ const Program = {
           items:[
             mkEx('sentadilla_bulgara_mancuerna','3','6/6','—','RPE 8','libre','C1'),
             mkEx('pallof_arrodillado','3','6/6','75-90s','—','libre','C2'),
-          ]},
-        { n:9, name:'BÍCEPS', type:'accesorio', dur:'~5 min',
-          goal:'2 series. Descanso 60s.',
-          items:[
-            mkEx('curl_biceps_barra_w','2','10-12','60s','—','libre'),
           ]},
       ];
     }
