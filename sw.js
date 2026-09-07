@@ -1,4 +1,4 @@
-const CACHE = 'apexfc-v7';
+const CACHE = 'apexfc-v8';
 const ASSETS = [
   './',
   './index.html',
