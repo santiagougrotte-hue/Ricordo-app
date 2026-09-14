@@ -476,12 +476,12 @@ svg.chart{width:100%; height:150px; overflow:visible;}
 <!-- ================= DASHBOARD ================= -->
 <div class="view active" id="view-dashboard">
   <div class="hero">
-    <div class="hero-eyebrow" id="hero-phase">Fase 1 · Semana 1</div>
-    <h1 class="hero-title" id="hero-day">Hoy: Lunes — Sesión A</h1>
-    <div class="hero-sub" id="hero-sub">6 bloques · ~75 min · Fuerza + Potencia</div>
+    <div class="hero-eyebrow" id="hero-phase">APEX FC · Fútbol</div>
+    <h1 class="hero-title" id="hero-day">Día 1 — Fuerza + Potencia</h1>
+    <div class="hero-sub" id="hero-sub">7 bloques</div>
     <div class="hero-meta">
-      <div class="hero-meta-item">Próxima sesión<b id="hero-next">Miércoles</b></div>
-      <div class="hero-meta-item">Carga semanal<b id="hero-load">—</b></div>
+      <div class="hero-meta-item">Siguiente<b id="hero-next">Día 2</b></div>
+      <div class="hero-meta-item">Sesión<b id="hero-load">—</b></div>
       <div class="hero-meta-item">Recuperación<b id="hero-recovery">—</b></div>
     </div>
     <button class="hero-cta" onclick="Router.go('plan')">
@@ -516,21 +516,8 @@ svg.chart{width:100%; height:150px; overflow:visible;}
   <div class="section-title">ÚLTIMOS PR</div>
   <div class="card" id="dash-pr-list"><div class="empty-hint">Todavía no registraste marcas. Cargalas en Progreso.</div></div>
 
-  <div class="section-title">RESUMEN DE LA SEMANA</div>
-  <div class="card">
-    <div style="display:flex; justify-content:space-between; font-size:12px; color:var(--text-muted);">
-      <span>Sesiones completadas</span><span class="mono" id="dash-week-sessions">0/3</span>
-    </div>
-    <div class="progress-track"><div class="progress-fill" id="dash-week-progress" style="width:0%"></div></div>
-  </div>
-
-  <div class="card" style="margin-top:10px; display:flex; justify-content:space-between; align-items:center; cursor:pointer;" onclick="Router.go('progreso'); document.querySelector('[data-ptab=historial]').click();">
-    <div>
-      <div class="stat-label">Semana sugerida (según historial)</div>
-      <div class="stat-value" id="dash-suggested-week" style="font-size:20px; margin-top:2px;">—</div>
-    </div>
-    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--text-faint)" stroke-width="2"><path d="M9 18l6-6-6-6"/></svg>
-  </div>
+  <div class="section-title">ÚLTIMAS SESIONES</div>
+  <div id="dash-last-sessions"></div>
 </div>
 
 <!-- ================= PERFIL ================= -->
@@ -574,31 +561,15 @@ svg.chart{width:100%; height:150px; overflow:visible;}
 
 <!-- ================= PLAN ================= -->
 <div class="view" id="view-plan">
-  <h2 style="font-size:22px; margin-bottom:4px;">Plan de entrenamiento</h2>
-  <div style="font-size:12.5px; color:var(--text-faint); margin-bottom:10px;">Programa de 12 semanas — rendimiento en fútbol</div>
-
-  <div class="week-rail" id="week-rail"></div>
-
-  <div class="card" id="phase-banner" style="padding:12px 16px; display:flex; justify-content:space-between; align-items:center;">
-    <div>
-      <div style="font-size:13px; font-weight:600;" id="phase-banner-title">Fase 1 — Rutina A</div>
-      <div style="font-size:11px; color:var(--text-faint);" id="phase-banner-desc">Base de fuerza y potencia</div>
-    </div>
-    <div class="chip accent" id="phase-banner-tag">SEM 1</div>
-  </div>
-
   <div class="day-tabs" id="day-tabs"></div>
+  <div id="plan-session-bar" style="margin:10px 0;"></div>
 
-  <div class="section-title">BLOQUES DE HOY <span id="blocks-count" class="mono" style="margin-left:auto;"></span></div>
+  <div class="section-title">BLOQUES <span id="blocks-count" class="mono" style="margin-left:auto;"></span></div>
   <div id="blocks-container"></div>
 
-  <div class="card" style="margin-top:16px; display:flex; gap:10px; align-items:center;">
-    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" stroke-width="2" style="flex:none"><circle cx="12" cy="12" r="10"/><path d="M12 8v4l3 3"/></svg>
-    <div style="font-size:12px; color:var(--text-muted);">La progresión de carga, RPE y volumen se ajusta automáticamente semana a semana.</div>
-  </div>
-
-  <button class="btn primary" style="margin-top:10px" onclick="Plan.finalizeSession(true)">💾 Guardar sesión de hoy</button>
+  <button class="btn primary" style="margin-top:14px" onclick="Plan.finalizeSession(true)">💾 Guardar sesión</button>
   <div style="text-align:center; font-size:11px; color:var(--text-faint); margin-top:8px;" id="plan-session-status"></div>
+  <div id="plan-progress-compare" style="margin-top:12px;"></div>
 </div>
 
 <!-- ================= PROGRESO ================= -->
@@ -880,6 +851,7 @@ const State = {
     if(!this.data.sessionMeta) this.data.sessionMeta = {};
     if(!this.data.supRound) this.data.supRound = {};
     if(!this.data.setsLog) this.data.setsLog = {};
+    if(!this.data.sessionNums) this.data.sessionNums = {0:1,1:1};
     return this.data;
   },
   save(){ localStorage.setItem(STORE_KEY, JSON.stringify(this.data)); },
@@ -887,20 +859,19 @@ const State = {
     return {
       profile:{ name:'Santi', pos:'Delantero', age:21, height:'', targetWeight:'', injuries:'',
         rm:{ squat:'', rdl:'', bench:'', row:'' } },
-      currentWeek:1,
-      currentDay:0, // 0 lunes 1 miercoles 2 viernes
-      completedExercises:{}, // key: `${week}-${day}-${exId}` -> true
+      currentDay:0,
+      sessionNums:{0:1,1:1}, // current session number per day type
+      completedExercises:{}, // key: `d${day}-s${num}-${exId}` -> true
       logs:{}, // metric -> [{date, value}]
       wellness:{}, // date -> {weight,sleep,soreness}
-      sessionsCompleted:{}, // `${week}` -> count de sesiones completas (derivado de sessionHistory)
-      progressionLogs:{}, // exerciseId -> { w1:{peso,series,reps,rpe,obs}, ... w6:{...} }
-      sessionHistory:[], // [{week, day, dayLabel, dayType, phase, date, exercisesTotal, exercisesDone, complete}]
+      progressionLogs:{},
+      sessionHistory:[], // [{day, sessionNum, date, exercisesTotal, exercisesDone, complete}]
       exerciseSwaps:{}, // key: `${week}-${day}-${origExId}` -> newExId
-      sessionLog:{}, // key: `${week}-${day}-${exId}` -> [{peso,reps,rir,...}, ...]
-      sessionMeta:{}, // key: `${week}-${day}-${exId}` -> {rodilla,calidad,obs}
-      supRound:{}, // key: `${week}-${day}-${blockN}` -> completedRounds (int)
-      setsLog:{}, // key: `${week}-${day}-${exId}` -> [bool, bool, ...]
-      cinteState:null // treadmill timer state
+      sessionLog:{}, // key: `d${day}-s${num}-${exId}` -> [{peso,reps,rir,...}]
+      sessionMeta:{}, // key: `d${day}-s${num}-${exId}` -> {rodilla,calidad,obs}
+      supRound:{}, // key: `d${day}-s${num}-${blockN}` -> completedRounds
+      setsLog:{}, // key: `d${day}-s${num}-${exId}` -> [bool,bool,...]
+      cinteState:null
     };
   }
 };
@@ -1440,7 +1411,7 @@ const Program = {
   dayType(d){ return ['Fuerza + Potencia','Fuerza Unilateral + Potencia'][d]; },
   sessionFocus(d){ return ['Fuerza + Potencia — Tren superior e inferior','Fuerza Unilateral + Potencia — Con cinta al inicio'][d]; },
 
-  buildDay(week, day){
+  buildDay(day){
     const mkEx = (id, sets, reps, rest, rpe, load, sup=null) => ({id, sets, reps, rest, rpe, load, sup});
     let blocks = [];
 
@@ -1800,8 +1771,27 @@ const SeriesLog = {
   _isTimed(repsStr){ return typeof repsStr === 'string' && /\d+s/.test(repsStr) && !repsStr.includes('reps'); },
 
   // Busca el log más reciente del mismo ejercicio en sesiones anteriores (para prefill de referencia)
+  // Key format: d${day}-s${num}-${exId}
   _getLastLog(key){
     const log = State.data.sessionLog || {};
+    // Parse new format: d0-s3-press_banco_barra
+    const newFmt = key.match(/^d(\d+)-s(\d+)-(.+)$/);
+    if(newFmt){
+      const curDay = parseInt(newFmt[1]);
+      const curNum = parseInt(newFmt[2]);
+      const exId = newFmt[3];
+      // Look for same day, previous session numbers
+      const matches = [];
+      for(let n = curNum-1; n >= 1; n--){
+        const prevKey = `d${curDay}-s${n}-${exId}`;
+        if(log[prevKey] && log[prevKey].length > 0){
+          matches.push({num: n, data: log[prevKey]});
+          break;
+        }
+      }
+      return matches.length > 0 ? matches[0].data : null;
+    }
+    // Legacy fallback
     const parts = key.split('-');
     const curWeek = parseInt(parts[0]);
     const curDay = parseInt(parts[1]);
@@ -1960,25 +1950,17 @@ const Router = {
 const Dashboard = {
   render(){
     const s = State.data;
-    const week = s.currentWeek, day = s.currentDay;
-    const phase = Program.phaseOf(week);
-    const routine = Program.routineOf(week);
-    document.getElementById('hero-phase').textContent = `${phase.name} · Semana ${week} · Rutina ${routine}`;
-    document.getElementById('hero-day').textContent = `Hoy: ${Program.dayLabel(day)} — ${Program.dayType(day)}`;
-    const todayBlocks = Program.buildDay(week, day);
-    const totalMin = todayBlocks.reduce((a,bl)=>a+(parseInt(bl.dur)||0),0);
-    document.getElementById('hero-sub').textContent = `${todayBlocks.length} bloques · ~${totalMin} min · ${Program.dayType(day)}`;
-    const days=['Miércoles','Viernes'];
-    document.getElementById('hero-next').textContent = days[(day+1)%2];
+    const day = s.currentDay;
+    const num = (s.sessionNums||{})[day]||1;
+    const todayBlocks = Program.buildDay(day);
+    document.getElementById('hero-phase').textContent = 'APEX FC · Fútbol';
+    document.getElementById('hero-day').textContent = `${Program.dayLabel(day)} — ${Program.dayType(day)}`;
+    document.getElementById('hero-sub').textContent = `${todayBlocks.length} bloques · Sesión #${num}`;
+    document.getElementById('hero-next').textContent = Program.dayLabel(1-day);
+    document.getElementById('hero-load').textContent = '#'+num;
 
-    const strength = Program.strengthPrincipal(week);
-    document.getElementById('hero-load').textContent = strength.load+'% 1RM';
-    const deload = Program.isDeload(week);
-    document.getElementById('hero-recovery').textContent = deload? 'Descarga' : (strength.load>=87? 'Exigente':'Óptima');
-
-    const todayKey = d=>Object.keys(s.wellness).sort().reverse()[0];
-    const lastDate = Object.keys(s.wellness).sort().reverse()[0];
-    const w = lastDate? s.wellness[lastDate] : null;
+    const lastDate = Object.keys(s.wellness||{}).sort().reverse()[0];
+    const w = lastDate ? s.wellness[lastDate] : null;
     document.getElementById('dash-weight').innerHTML = (w&&w.weight? w.weight : '—') + '<small>kg</small>';
     document.getElementById('dash-sleep').innerHTML = (w&&w.sleep? w.sleep : '—') + '<small>h</small>';
     document.getElementById('dash-soreness').innerHTML = (w&&w.soreness!==undefined? w.soreness : '—') + '<small>/10</small>';
@@ -1990,19 +1972,30 @@ const Dashboard = {
     }
     document.getElementById('dash-recovery-badge').textContent = badge;
 
-    // PRs
     const prList = document.getElementById('dash-pr-list');
     const prs = Tracker.computePRs();
-    if(prs.length===0){ prList.innerHTML = '<div class="empty-hint">Todavía no registraste marcas. Cargalas en Progreso.</div>'; }
-    else {
-      prList.innerHTML = prs.slice(0,4).map(p=>`<div class="pr-row"><div class="pr-name">${p.label}</div><div class="pr-val">${p.value}${p.unit}</div></div>`).join('');
-    }
+    prList.innerHTML = prs.length===0
+      ? '<div class="empty-hint">Todavía no registraste marcas. Cargalas en Progreso.</div>'
+      : prs.slice(0,4).map(p=>`<div class="pr-row"><div class="pr-name">${p.label}</div><div class="pr-val">${p.value}${p.unit}</div></div>`).join('');
 
-    const sessions = s.sessionsCompleted[week] || 0;
-    document.getElementById('dash-week-sessions').textContent = `${sessions}/3`;
-    document.getElementById('dash-week-progress').style.width = Math.round(sessions/3*100)+'%';
-    const suggestedEl = document.getElementById('dash-suggested-week');
-    if(suggestedEl) suggestedEl.textContent = History.isProgramComplete() ? '¡Programa completo! ✓' : `Semana ${History.suggestedWeek()} de 12`;
+    const hist = s.sessionHistory||[];
+    const lastEl = document.getElementById('dash-last-sessions');
+    if(lastEl){
+      const rows = [0,1].map(d=>{
+        const recs = hist.filter(r=>r.day===d).sort((a,b)=>b.date.localeCompare(a.date)||b.sessionNum-a.sessionNum);
+        const last = recs[0];
+        return `<div class="card" style="padding:12px 14px;display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
+          <div>
+            <div style="font-size:13px;font-weight:600;">${Program.dayLabel(d)} — ${Program.dayType(d)}</div>
+            ${last
+              ?`<div style="font-size:11px;color:var(--text-faint);margin-top:2px;">${last.date} · ${last.exercisesDone}/${last.exercisesTotal} ej.${last.complete?' · Completa':''}</div>`
+              :`<div style="font-size:11px;color:var(--text-faint);margin-top:2px;">Sin sesiones guardadas</div>`}
+          </div>
+          <div class="chip ${last&&last.complete?'accent':''}" style="flex:none;">${last?'#'+last.sessionNum:'—'}</div>
+        </div>`;
+      }).join('');
+      lastEl.innerHTML = rows || '<div class="empty-hint">Todavía no guardaste sesiones.</div>';
+    }
   }
 };
 
@@ -2046,27 +2039,11 @@ const Profile = {
 const Plan = {
   render(){
     const s = State.data;
-    // week rail
-    const rail = document.getElementById('week-rail');
-    rail.innerHTML='';
-    for(let w=1; w<=12; w++){
-      const el = document.createElement('div');
-      const wr = Program.routineOf(w);
-      el.className = 'week-pill' + (w===s.currentWeek?' active':'') + (Program.isDeload(w)?' deload':'');
-      el.innerHTML = `<div class="wl">SEM</div><div class="wn">${w}</div><div class="wr ${wr==='A'?'ra':'rb'}">${wr}</div>`;
-      el.onclick = ()=>{ s.currentWeek=w; State.save(); this.render(); };
-      rail.appendChild(el);
-    }
-    const phase = Program.phaseOf(s.currentWeek);
-    const routine = Program.routineOf(s.currentWeek);
-    document.getElementById('phase-banner-title').textContent = phase.name + ' — Rutina ' + routine;
-    document.getElementById('phase-banner-desc').textContent = phase.desc + (Program.isDeload(s.currentWeek)? ' · Semana de descarga':'');
-    document.getElementById('phase-banner-tag').textContent = 'SEM ' + s.currentWeek + ' · ' + routine;
 
     // day tabs
     const dayTabs = document.getElementById('day-tabs');
     dayTabs.innerHTML='';
-    ['Miércoles','Viernes'].forEach((label,i)=>{
+    ['Día 1','Día 2'].forEach((label,i)=>{
       const el = document.createElement('div');
       el.className='day-tab'+(i===s.currentDay?' active':'');
       el.innerHTML = `${label}<div style="font-size:10px; font-weight:400; opacity:.7; margin-top:1px;">${Program.dayType(i)}</div>`;
@@ -2074,11 +2051,24 @@ const Plan = {
       dayTabs.appendChild(el);
     });
 
+    // session bar
+    const day = s.currentDay;
+    const num = (s.sessionNums||{})[day]||1;
+    const bar = document.getElementById('plan-session-bar');
+    if(bar){
+      bar.innerHTML = `<div style="display:flex;align-items:center;justify-content:space-between;gap:8px;">
+        <div style="font-size:13px;font-weight:600;">Sesión #${num}</div>
+        <button class="btn" style="padding:6px 14px;font-size:12px;" onclick="Plan.newSession()">+ Nueva sesión</button>
+      </div>`;
+    }
+
     this.renderBlocks();
   },
   renderBlocks(){
     const s = State.data;
-    const blocks = Program.buildDay(s.currentWeek, s.currentDay);
+    const day = s.currentDay;
+    const num = (s.sessionNums||{})[day]||1;
+    const blocks = Program.buildDay(day);
     document.getElementById('blocks-count').textContent = `${blocks.length} bloques`;
     const container = document.getElementById('blocks-container');
     container.innerHTML='';
@@ -2088,8 +2078,8 @@ const Plan = {
     const fmtSec = s => s>=60 ? Math.floor(s/60)+'m'+(s%60?s%60+'s':'') : s+'s';
 
     blocks.forEach((b, idx)=>{
-      const bKey = `${s.currentWeek}-${s.currentDay}-${b.n}`;
-      const doneCount = b.items.filter(it=>s.completedExercises[`${s.currentWeek}-${s.currentDay}-${it.id}`]).length;
+      const bKey = `d${day}-s${num}-${b.n}`;
+      const doneCount = b.items.filter(it=>s.completedExercises[`d${day}-s${num}-${it.id}`]).length;
       const card = document.createElement('div');
       card.className = `block-card type-${b.type}` + (idx===0?' open':'');
 
@@ -2098,7 +2088,7 @@ const Plan = {
       /* ---- MOVILIDAD / ACTIVACIÓN: simple checklist ---- */
       if(b.type==='movilidad' || b.type==='activacion'){
         bodyHtml += b.items.map(it=>{
-          const key=`${s.currentWeek}-${s.currentDay}-${it.id}`;
+          const key=`d${day}-s${num}-${it.id}`;
           const done=!!s.completedExercises[key];
           const ex=EX[it.id]||{name:it.id,muscles:'',goal:''};
           const videoHref='https://www.youtube.com/results?search_query='+encodeURIComponent(ex.video||ex.name);
@@ -2133,7 +2123,7 @@ const Plan = {
         }
         b.items.forEach((it,i)=>{
           const ex=EX[it.id]||{name:it.id,muscles:'',goal:''};
-          const key=`${s.currentWeek}-${s.currentDay}-${it.id}`;
+          const key=`d${day}-s${num}-${it.id}`;
           const funcCat=FUNC_CAT[it.id];
           const hasLoad=it.load&&it.load!=='—'&&it.load!=='libre';
           const restSec=Timer.restSeconds(it.id);
@@ -2174,7 +2164,7 @@ const Plan = {
       } else {
         b.items.forEach(it=>{
           const ex=EX[it.id]||{name:it.id,muscles:'',goal:'',video:''};
-          const key=`${s.currentWeek}-${s.currentDay}-${it.id}`;
+          const key=`d${day}-s${num}-${it.id}`;
           const funcCat=FUNC_CAT[it.id];
           const done=!!s.completedExercises[key];
           const restSec=Timer.restSeconds(it.id);
@@ -2220,7 +2210,7 @@ const Plan = {
     // Init cardio blocks after DOM is ready
     blocks.forEach(b=>{
       if(b.type==='cardio'){
-        const bKey=`${s.currentWeek}-${s.currentDay}-${b.n}`;
+        const bKey=`d${day}-s${num}-${b.n}`;
         Cinta.initState(bKey,b);
         Cinta._render(bKey);
       }
@@ -2252,7 +2242,9 @@ const Plan = {
   },
   renderSessionStatus(){
     const s = State.data;
-    const rec = (s.sessionHistory||[]).find(r=>r.week===s.currentWeek && r.day===s.currentDay);
+    const day = s.currentDay;
+    const num = (s.sessionNums||{})[day]||1;
+    const rec = (s.sessionHistory||[]).find(r=>r.day===day && r.sessionNum===num);
     const el = document.getElementById('plan-session-status');
     if(!el) return;
     if(!rec){ el.textContent = 'Todavía no guardaste esta sesión.'; }
@@ -2277,32 +2269,80 @@ const Plan = {
     const record = this.finalizeSession(false);
     if(record && record.complete) Toast.show('¡Sesión completa y guardada! 💪');
   },
+  newSession(){
+    const s = State.data;
+    const day = s.currentDay;
+    if(!s.sessionNums) s.sessionNums = {0:1,1:1};
+    s.sessionNums[day] = (s.sessionNums[day]||1) + 1;
+    // Clear current session exercise state
+    const num = s.sessionNums[day];
+    // Remove completed exercises and setsLog for this new session key
+    State.save();
+    Toast.show(`Nueva sesión #${num} iniciada`);
+    this.render();
+  },
   // Guarda (o actualiza) el registro de la sesión actual en el historial.
   // showToast=true muestra "Sesión guardada" (botón manual); false lo omite (se llama automáticamente al tildar ejercicios)
   finalizeSession(showToast){
     const s = State.data;
-    const week = s.currentWeek, day = s.currentDay;
-    const blocks = Program.buildDay(week, day);
+    const day = s.currentDay;
+    const num = (s.sessionNums||{})[day]||1;
+    const blocks = Program.buildDay(day);
     const allItems = blocks.reduce((a,b)=>a.concat(b.items), []);
     const total = allItems.length;
-    const done = allItems.filter(it=>s.completedExercises[`${week}-${day}-${it.id}`]).length;
-    const phase = Program.phaseOf(week);
-    const routine = Program.routineOf(week);
+    const done = allItems.filter(it=>s.completedExercises[`d${day}-s${num}-${it.id}`]).length;
     const today = new Date().toISOString().slice(0,10);
     if(!s.sessionHistory) s.sessionHistory = [];
-    const idx = s.sessionHistory.findIndex(r=>r.week===week && r.day===day);
+    const idx = s.sessionHistory.findIndex(r=>r.day===day && r.sessionNum===num);
     const record = {
-      week, day, dayLabel: Program.dayLabel(day), dayType: Program.dayType(day),
-      phase: phase.name, routine, date: today, exercisesTotal: total, exercisesDone: done,
+      day, sessionNum: num, dayLabel: Program.dayLabel(day), dayType: Program.dayType(day),
+      date: today, exercisesTotal: total, exercisesDone: done,
       complete: done===total && total>0
     };
     if(idx>=0) s.sessionHistory[idx] = record; else s.sessionHistory.push(record);
-    s.sessionsCompleted[week] = [0,1,2].filter(d=>s.sessionHistory.some(r=>r.week===week && r.day===d && r.complete)).length;
     State.save();
-    if(showToast) Toast.show('Sesión guardada ✓');
+    if(showToast){
+      Toast.show('Sesión guardada ✓');
+      // Show progress comparison vs previous session
+      this.renderProgressCompare(day, num);
+    }
     this.renderSessionStatus();
     if(document.getElementById('view-dashboard').classList.contains('active')) Dashboard.render();
     return record;
+  },
+  renderProgressCompare(day, num){
+    const el = document.getElementById('plan-progress-compare');
+    if(!el) return;
+    if(num <= 1){ el.innerHTML = ''; return; }
+    const prevNum = num - 1;
+    const log = State.data.sessionLog || {};
+    const blocks = Program.buildDay(day);
+    const allItems = blocks.reduce((a,b)=>a.concat(b.items),[]);
+    const rows = allItems.map(it=>{
+      const curKey = `d${day}-s${num}-${it.id}`;
+      const prevKey = `d${day}-s${prevNum}-${it.id}`;
+      const curLog = log[curKey]||[];
+      const prevLog = log[prevKey]||[];
+      if(!curLog.length && !prevLog.length) return null;
+      const ex = EX[it.id]||{name:it.id};
+      const curS1 = curLog[0]||{};
+      const prevS1 = prevLog[0]||{};
+      const curPeso = parseFloat(curS1.peso)||0;
+      const prevPeso = parseFloat(prevS1.peso)||0;
+      const diff = curPeso && prevPeso ? curPeso - prevPeso : null;
+      const arrow = diff===null?'':'<span style="color:'+( diff>0?'var(--green)':diff<0?'#e55':'var(--text-faint)')+'">'+( diff>0?'▲ +':diff<0?'▼ ':'')+( diff!==0?Math.abs(diff).toFixed(1)+'kg':'=')+' </span>';
+      return `<div style="display:flex;justify-content:space-between;align-items:center;padding:6px 0;border-bottom:1px solid var(--border);font-size:12px;">
+        <div style="font-weight:500;">${ex.name}</div>
+        <div style="color:var(--text-muted);text-align:right;">
+          ${prevPeso?prevPeso+'kg → ':''}${curPeso?curPeso+'kg':curLog[0]?'registrado':'—'} ${arrow}
+        </div>
+      </div>`;
+    }).filter(Boolean);
+    if(!rows.length){ el.innerHTML=''; return; }
+    el.innerHTML = `<div class="card" style="padding:12px 14px;">
+      <div style="font-size:12px;font-weight:600;margin-bottom:8px;color:var(--text-muted);">PROGRESO vs SESIÓN ANTERIOR</div>
+      ${rows.join('')}
+    </div>`;
   }
 };
 
@@ -2404,54 +2444,36 @@ const Progression = {
 
 /* ---------- Historial de sesiones (saber por qué semana voy) ---------- */
 const History = {
-  weekComplete(w){
-    const s = State.data;
-    return [0,1,2].every(d=>(s.sessionHistory||[]).some(r=>r.week===w && r.day===d && r.complete));
-  },
-  suggestedWeek(){
-    for(let w=1; w<=12; w++){ if(!this.weekComplete(w)) return w; }
-    return 12;
-  },
-  isProgramComplete(){
-    for(let w=1; w<=12; w++){ if(!this.weekComplete(w)) return false; }
-    return true;
-  },
   render(){
     const s = State.data;
-    const hist = (s.sessionHistory||[]).slice().sort((a,b)=> b.date.localeCompare(a.date) || b.week-a.week || b.day-a.day);
-    const suggested = this.suggestedWeek();
-    const complete = this.isProgramComplete();
+    const hist = (s.sessionHistory||[]).slice().sort((a,b)=> b.date.localeCompare(a.date) || b.sessionNum-a.sessionNum || b.day-a.day);
     const summaryEl = document.getElementById('history-summary');
     if(summaryEl){
+      const d1count = hist.filter(r=>r.day===0).length;
+      const d2count = hist.filter(r=>r.day===1).length;
       summaryEl.innerHTML = `
         <div class="grid-2">
           <div class="card stat-card">
-            <div class="stat-label">Semana sugerida</div>
-            <div class="stat-value">${complete? '✓' : suggested}<small>${complete? 'programa completo':'/ 12'}</small></div>
+            <div class="stat-label">Sesiones Día 1</div>
+            <div class="stat-value">${d1count}<small>total</small></div>
           </div>
           <div class="card stat-card">
-            <div class="stat-label">Sesiones guardadas</div>
-            <div class="stat-value">${hist.length}<small>total</small></div>
+            <div class="stat-label">Sesiones Día 2</div>
+            <div class="stat-value">${d2count}<small>total</small></div>
           </div>
-        </div>
-        <div style="font-size:11.5px; color:var(--text-faint); margin-top:8px; padding:0 2px;">
-          La semana sugerida es la primera con alguna sesión pendiente o sin guardar. Podés seguir navegando libremente con el selector de semanas en Plan.
         </div>`;
     }
     const listEl = document.getElementById('history-list');
     if(!listEl) return;
     if(hist.length===0){
-      listEl.innerHTML = '<div class="empty-hint">Todavía no guardaste ninguna sesión. Completá los ejercicios de un entrenamiento (se guarda solo) o tocá "Guardar sesión de hoy" en la pantalla de Plan.</div>';
+      listEl.innerHTML = '<div class="empty-hint">Todavía no guardaste ninguna sesión. Completá los ejercicios de un entrenamiento o tocá "Guardar sesión" en Plan.</div>';
       return;
     }
     listEl.innerHTML = hist.map(r=>`
       <div class="card" style="padding:12px 14px; display:flex; justify-content:space-between; align-items:center; gap:10px; margin-bottom:8px;">
         <div style="min-width:0;">
-          <div style="font-size:13px; font-weight:600; display:flex; align-items:center; gap:7px;">
-            Sem ${r.week} · ${r.dayLabel} — ${r.dayType}
-            ${r.routine ? `<span class="routine-badge ${r.routine==='B'?'b':''}">${r.routine}</span>` : ''}
-          </div>
-          <div style="font-size:11px; color:var(--text-faint); margin-top:2px;">${r.date} · ${r.phase}</div>
+          <div style="font-size:13px; font-weight:600;">${r.dayLabel||Program.dayLabel(r.day)} — ${r.dayType||Program.dayType(r.day)}</div>
+          <div style="font-size:11px; color:var(--text-faint); margin-top:2px;">${r.date} · Sesión #${r.sessionNum||1}</div>
         </div>
         <div class="chip ${r.complete?'accent':''}" style="flex:none;">${r.exercisesDone}/${r.exercisesTotal}</div>
       </div>
