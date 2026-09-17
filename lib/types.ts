@@ -86,9 +86,26 @@ export interface Cliente {
   id: string;
   nombre: string;
   canal: Canal;
+  /** Dirección en texto libre, tal como se cargaba antes de los campos estructurados —
+   * nunca se elimina ni se reemplaza automáticamente por los campos de abajo. */
   direccion?: string;
   telefono?: string;
   email?: string;
+  calle?: string;
+  numero?: string;
+  localidad?: string;
+  partido?: string;
+  provincia?: string;
+  codigo_postal?: string;
+  latitud?: number;
+  longitud?: number;
+  /** Id de lugar del proveedor de mapas (Google Place ID / Mapbox feature id, etc.) —
+   * evita volver a geocodificar la misma dirección. */
+  place_id_externo?: string;
+  /** true una vez que el usuario confirmó la dirección estructurada (autocompletado + pin en
+   * el mapa) — mientras no esté validada, no se puede confiar en latitud/longitud para rutas. */
+  direccion_validada?: boolean;
+  observaciones_entrega?: string;
 }
 
 export type ComponenteReceta = "masa" | "relleno" | "packaging";

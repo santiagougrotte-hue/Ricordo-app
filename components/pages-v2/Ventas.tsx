@@ -549,7 +549,23 @@ function PedidosTab() {
 }
 
 function clienteVacio(): Omit<Cliente, "id"> {
-  return { nombre: "", canal: "Minorista", direccion: "", telefono: "", email: "" };
+  return {
+    nombre: "",
+    canal: "Minorista",
+    direccion: "",
+    telefono: "",
+    email: "",
+    calle: "",
+    numero: "",
+    localidad: "",
+    partido: "",
+    provincia: "",
+    codigo_postal: "",
+    latitud: undefined,
+    longitud: undefined,
+    direccion_validada: false,
+    observaciones_entrega: "",
+  };
 }
 
 function ClientesTab() {
@@ -572,7 +588,23 @@ function ClientesTab() {
   }
   function abrirEdicion(c: Cliente) {
     setEditando(c.id);
-    setForm({ nombre: c.nombre, canal: c.canal, direccion: c.direccion ?? "", telefono: c.telefono ?? "", email: c.email ?? "" });
+    setForm({
+      nombre: c.nombre,
+      canal: c.canal,
+      direccion: c.direccion ?? "",
+      telefono: c.telefono ?? "",
+      email: c.email ?? "",
+      calle: c.calle ?? "",
+      numero: c.numero ?? "",
+      localidad: c.localidad ?? "",
+      partido: c.partido ?? "",
+      provincia: c.provincia ?? "",
+      codigo_postal: c.codigo_postal ?? "",
+      latitud: c.latitud,
+      longitud: c.longitud,
+      direccion_validada: c.direccion_validada ?? false,
+      observaciones_entrega: c.observaciones_entrega ?? "",
+    });
     setModalOpen(true);
   }
   function guardar() {
@@ -672,11 +704,70 @@ function ClientesTab() {
           <Field label="Teléfono">
             <Input value={form.telefono} onChange={(e) => setForm({ ...form, telefono: e.target.value })} />
           </Field>
-          <Field label="Dirección" full>
+          <Field label="Dirección (texto libre)" full>
             <Input value={form.direccion} onChange={(e) => setForm({ ...form, direccion: e.target.value })} />
           </Field>
           <Field label="Email" full>
             <Input value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} />
+          </Field>
+        </FormGrid>
+
+        <div className="mb-1 mt-4 text-[11px] font-semibold uppercase tracking-wide text-text3">
+          Dirección estructurada (para entregas y rutas)
+        </div>
+        <p className="mb-3 text-[12.5px] text-text3">
+          Opcional. El autocompletado y el pin en el mapa se habilitan cuando se configure un proveedor de mapas
+          (Operaciones → Entregas). Por ahora se puede cargar a mano — la dirección de texto libre de arriba nunca se
+          borra ni se reemplaza automáticamente.
+        </p>
+        <FormGrid>
+          <Field label="Calle">
+            <Input value={form.calle} onChange={(e) => setForm({ ...form, calle: e.target.value })} />
+          </Field>
+          <Field label="Número">
+            <Input value={form.numero} onChange={(e) => setForm({ ...form, numero: e.target.value })} />
+          </Field>
+          <Field label="Localidad">
+            <Input value={form.localidad} onChange={(e) => setForm({ ...form, localidad: e.target.value })} />
+          </Field>
+          <Field label="Partido">
+            <Input value={form.partido} onChange={(e) => setForm({ ...form, partido: e.target.value })} />
+          </Field>
+          <Field label="Provincia">
+            <Input value={form.provincia} onChange={(e) => setForm({ ...form, provincia: e.target.value })} />
+          </Field>
+          <Field label="Código postal">
+            <Input value={form.codigo_postal} onChange={(e) => setForm({ ...form, codigo_postal: e.target.value })} />
+          </Field>
+          <Field label="Latitud">
+            <Input
+              type="number"
+              value={form.latitud ?? ""}
+              onChange={(e) => setForm({ ...form, latitud: e.target.value ? Number(e.target.value) : undefined })}
+            />
+          </Field>
+          <Field label="Longitud">
+            <Input
+              type="number"
+              value={form.longitud ?? ""}
+              onChange={(e) => setForm({ ...form, longitud: e.target.value ? Number(e.target.value) : undefined })}
+            />
+          </Field>
+          <Field label="Dirección validada">
+            <Select
+              value={form.direccion_validada ? "si" : "no"}
+              onChange={(e) => setForm({ ...form, direccion_validada: e.target.value === "si" })}
+            >
+              <option value="no">No</option>
+              <option value="si">Sí</option>
+            </Select>
+          </Field>
+          <Field label="Observaciones de entrega" full>
+            <Input
+              value={form.observaciones_entrega}
+              onChange={(e) => setForm({ ...form, observaciones_entrega: e.target.value })}
+              placeholder="Ej: timbre roto, entrar por la puerta lateral…"
+            />
           </Field>
         </FormGrid>
       </Modal>

@@ -34,7 +34,9 @@ import {
   variantesSinFactorReceta,
   ETAPAS_POR_UNIDAD,
 } from "@/lib/calc-v2";
-import type { Canal, EtapaReceta, OperacionAjusteReceta, ProductoVariante } from "@/lib/types-v2";
+import type { Canal, EtapaReceta, OperacionAjusteReceta, ProductoVariante, TipoUnidadVenta } from "@/lib/types-v2";
+
+const TIPOS_UNIDAD_VENTA: TipoUnidadVenta[] = ["caja", "unidad", "pote", "bolsa", "otro"];
 
 const ETAPAS: EtapaReceta[] = ["masa", "relleno", "salsa", "terminacion", "packaging"];
 const OPERACIONES: OperacionAjusteReceta[] = ["sumar", "reemplazar", "restar"];
@@ -46,7 +48,16 @@ const OPERACION_LABEL: Record<OperacionAjusteReceta, string> = {
 const OPERACION_COLOR: Record<OperacionAjusteReceta, "green" | "blue" | "red"> = { sumar: "green", reemplazar: "blue", restar: "red" };
 
 function varianteVacia(): Omit<ProductoVariante, "id" | "producto_id"> {
-  return { nombre: "", canal: "Minorista", presentacion: "", incluye_salsa: undefined, unidades_por_paquete: undefined, precio_venta: 0, activo: true };
+  return {
+    nombre: "",
+    canal: "Minorista",
+    presentacion: "",
+    incluye_salsa: undefined,
+    unidades_por_paquete: undefined,
+    precio_venta: 0,
+    activo: true,
+    tipo_unidad_venta: "caja",
+  };
 }
 
 function FichaProducto({ productoId }: { productoId: string }) {
@@ -105,8 +116,12 @@ function FichaProducto({ productoId }: { productoId: string }) {
       unidades_por_paquete: v.unidades_por_paquete,
       precio_venta: v.precio_venta,
       activo: v.activo,
+      tipo_unidad_venta: v.tipo_unidad_venta ?? "caja",
     });
     setVarianteModalOpen(true);
+  }
+  function actualizarTipoUnidadVenta(id: string, tipo: TipoUnidadVenta) {
+    setData((d) => ({ ...d, producto_variantes: d.producto_variantes.map((v) => (v.id === id ? { ...v, tipo_unidad_venta: tipo } : v)) }));
   }
   function guardarVariante() {
     if (!varianteForm.nombre.trim()) {
@@ -263,6 +278,7 @@ function FichaProducto({ productoId }: { productoId: string }) {
                   <Th>Nombre</Th>
                   <Th>Canal</Th>
                   <Th>Un./paquete</Th>
+                  <Th>Tipo de unidad</Th>
                   <Th>Precio venta</Th>
                   <Th>Costo</Th>
                   <Th>Margen</Th>
@@ -279,6 +295,19 @@ function FichaProducto({ productoId }: { productoId: string }) {
                       <Td>{v.canal ?? "—"}</Td>
                       <Td>
                         {v.unidades_por_paquete ?? (idsSinFactor.has(v.id) ? <Badge color="red">Falta — receta en $0</Badge> : "—")}
+                      </Td>
+                      <Td>
+                        <Select
+                          value={v.tipo_unidad_venta ?? "caja"}
+                          onChange={(e) => actualizarTipoUnidadVenta(v.id, e.target.value as TipoUnidadVenta)}
+                          className="w-28"
+                        >
+                          {TIPOS_UNIDAD_VENTA.map((t) => (
+                            <option key={t} value={t}>
+                              {t}
+                            </option>
+                          ))}
+                        </Select>
                       </Td>
                       <Td>{fARS(v.precio_venta)}</Td>
                       <Td>
@@ -598,7 +627,23 @@ function FichaProducto({ productoId }: { productoId: string }) {
               <option value="no">No</option>
             </Select>
           </Field>
+          <Field label="Tipo de unidad de venta">
+            <Select
+              value={varianteForm.tipo_unidad_venta ?? "caja"}
+              onChange={(e) => setVarianteForm({ ...varianteForm, tipo_unidad_venta: e.target.value as TipoUnidadVenta })}
+            >
+              {TIPOS_UNIDAD_VENTA.map((t) => (
+                <option key={t} value={t}>
+                  {t}
+                </option>
+              ))}
+            </Select>
+          </Field>
         </FormGrid>
+        <p className="mt-3 text-[11px] text-text3">
+          Define qué cuenta esta variante como &ldquo;caja vendida&rdquo; en Analítica de Ventas — por ejemplo, un pote de
+          salsa nunca debería sumarse como caja de pasta aunque se venda junto a un pedido de ravioles.
+        </p>
       </Modal>
     </div>
   );
