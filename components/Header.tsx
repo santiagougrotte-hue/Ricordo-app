@@ -1,13 +1,14 @@
 "use client";
 
-import React from "react";
-import { Menu, ChevronRight, Circle } from "lucide-react";
+import React, { useEffect, useState } from "react";
+import { Menu, ChevronRight, Circle, Search } from "lucide-react";
 import { NAV_LABELS, NAV_GROUPS } from "@/lib/nav";
 import { useRouter } from "@/lib/nav-context";
 import { MESES, usePeriod } from "@/lib/period";
 import { useStoreV2 } from "@/lib/store-v2";
 import { supabaseConfigured } from "@/lib/supabase";
 import { Select } from "./ui";
+import { GlobalSearchModal } from "./GlobalSearchModal";
 
 // Módulos donde el filtro de mes/año del header tiene sentido (los que muestran datos por
 // período): Inicio, Ventas y Finanzas. Productos/Inventario/Operaciones/Configuración no dependen
@@ -30,6 +31,18 @@ export function Header({ onMenuClick }: { onMenuClick?: () => void }) {
   const years = Array.from({ length: 6 }, (_, i) => new Date().getFullYear() - 3 + i);
   const sync = SYNC_LABEL[syncStatus];
   const group = NAV_GROUPS[page];
+  const [busquedaAbierta, setBusquedaAbierta] = useState(false);
+
+  useEffect(() => {
+    function onKeyDown(e: KeyboardEvent) {
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "k") {
+        e.preventDefault();
+        setBusquedaAbierta(true);
+      }
+    }
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, []);
 
   return (
     <div className="sticky top-0 z-40 flex items-center justify-between gap-3 border-b border-border bg-bg/90 px-4 py-3 backdrop-blur sm:px-7">
@@ -54,6 +67,14 @@ export function Header({ onMenuClick }: { onMenuClick?: () => void }) {
         </div>
       </div>
       <div className="flex items-center gap-3">
+        <button
+          onClick={() => setBusquedaAbierta(true)}
+          className="flex items-center gap-1.5 rounded-md border border-border px-2.5 py-1.5 text-[11.5px] text-text3 hover:border-border2 hover:text-text2"
+        >
+          <Search className="h-3.5 w-3.5" />
+          <span className="hidden sm:inline">Buscar</span>
+          <span className="hidden rounded border border-border px-1 text-[10px] sm:inline">⌘K</span>
+        </button>
         {supabaseConfigured && (
           <span className={`hidden items-center gap-1.5 text-[11px] sm:flex ${sync.color}`}>
             <Circle className="h-2 w-2 fill-current" />
@@ -84,6 +105,7 @@ export function Header({ onMenuClick }: { onMenuClick?: () => void }) {
           </div>
         )}
       </div>
+      <GlobalSearchModal open={busquedaAbierta} onClose={() => setBusquedaAbierta(false)} />
     </div>
   );
 }
