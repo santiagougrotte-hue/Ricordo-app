@@ -18,13 +18,14 @@ const SYNC_LABEL: Record<string, { text: string; color: string }> = {
   local: { text: "Solo local", color: "text-text3" },
   syncing: { text: "Guardando…", color: "text-orange" },
   synced: { text: "Sincronizado", color: "text-green" },
-  error: { text: "Error de sincronización", color: "text-red" },
+  error: { text: "Error al guardar", color: "text-red" },
+  conflict: { text: "Conflicto por resolver", color: "text-orange" },
 };
 
 export function Header({ onMenuClick }: { onMenuClick?: () => void }) {
   const { page } = useRouter();
   const { mes, anio, setMes, setAnio } = usePeriod();
-  const { syncStatus } = useStoreV2();
+  const { syncStatus, reintentar } = useStoreV2();
   const showPeriod = PERIOD_PAGES.has(page);
   const years = Array.from({ length: 6 }, (_, i) => new Date().getFullYear() - 3 + i);
   const sync = SYNC_LABEL[syncStatus];
@@ -57,6 +58,11 @@ export function Header({ onMenuClick }: { onMenuClick?: () => void }) {
           <span className={`hidden items-center gap-1.5 text-[11px] sm:flex ${sync.color}`}>
             <Circle className="h-2 w-2 fill-current" />
             {sync.text}
+            {syncStatus === "error" && (
+              <button onClick={reintentar} className="ml-1 rounded border border-current px-1.5 py-0.5 text-[10px] hover:bg-red/10">
+                Reintentar
+              </button>
+            )}
           </span>
         )}
         {showPeriod && (
