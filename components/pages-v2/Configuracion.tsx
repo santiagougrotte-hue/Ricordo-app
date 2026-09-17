@@ -25,7 +25,7 @@ import {
 } from "@/components/ui";
 import { Modal } from "@/components/Modal";
 import { fNum } from "@/lib/calc-v2";
-import type { AmbitoCategoria, EstadoRevisionItem, RevisionItem, RicordoDocument } from "@/lib/types-v2";
+import type { AmbitoCategoria, EstadoRevisionItem, RevisionItem, RicordoDocument, ProveedorMapa, MetodoDistribucionCostoRuta } from "@/lib/types-v2";
 
 const GUIA_SECCION: Record<string, string> = {
   pedidos: "Ventas → Pedidos",
@@ -161,6 +161,76 @@ function GeneralTab() {
               value={data.configuracion.envios.precio_envio_fijo}
               onChange={(e) => setUmbral("envios", { ...data.configuracion.envios, precio_envio_fijo: Number(e.target.value) })}
             />
+          </Field>
+        </FormGrid>
+      </Card>
+
+      <Card title="Entregas y rutas">
+        <p className="mb-3 text-[12.5px] text-text3">
+          Base de operaciones y proveedor de mapas usados por Operaciones → Entregas para calcular
+          distancia, tiempo y costo de las rutas de reparto.
+        </p>
+        <FormGrid>
+          <Field label="Dirección base" full>
+            <Input
+              value={data.configuracion.envios.direccion_base ?? ""}
+              onChange={(e) => setUmbral("envios", { ...data.configuracion.envios, direccion_base: e.target.value })}
+            />
+          </Field>
+          <Field label="Latitud base">
+            <Input
+              type="number"
+              value={data.configuracion.envios.lat_base ?? ""}
+              onChange={(e) => setUmbral("envios", { ...data.configuracion.envios, lat_base: e.target.value ? Number(e.target.value) : undefined })}
+            />
+          </Field>
+          <Field label="Longitud base">
+            <Input
+              type="number"
+              value={data.configuracion.envios.lng_base ?? ""}
+              onChange={(e) => setUmbral("envios", { ...data.configuracion.envios, lng_base: e.target.value ? Number(e.target.value) : undefined })}
+            />
+          </Field>
+          <Field label="Vehículo">
+            <Input
+              value={data.configuracion.envios.vehiculo ?? ""}
+              onChange={(e) => setUmbral("envios", { ...data.configuracion.envios, vehiculo: e.target.value })}
+              placeholder="Ej: Moto, Fiorino…"
+            />
+          </Field>
+          <Field label="Fecha actualización precio combustible">
+            <Input
+              type="date"
+              value={data.configuracion.envios.fecha_actualizacion_combustible ?? ""}
+              onChange={(e) => setUmbral("envios", { ...data.configuracion.envios, fecha_actualizacion_combustible: e.target.value })}
+            />
+          </Field>
+          <Field label="Regresar a base por defecto">
+            <Select
+              value={data.configuracion.envios.regresar_a_base_default === false ? "no" : "si"}
+              onChange={(e) => setUmbral("envios", { ...data.configuracion.envios, regresar_a_base_default: e.target.value === "si" })}
+            >
+              <option value="si">Sí</option>
+              <option value="no">No</option>
+            </Select>
+          </Field>
+          <Field label="Proveedor de mapas">
+            <Select
+              value={data.configuracion.envios.proveedor_mapa ?? "ninguno"}
+              onChange={(e) => setUmbral("envios", { ...data.configuracion.envios, proveedor_mapa: e.target.value as ProveedorMapa })}
+            >
+              <option value="ninguno">Ninguno (sin cálculo de distancia)</option>
+              <option value="haversine">Estimación en línea recta</option>
+            </Select>
+          </Field>
+          <Field label="Método de distribución del costo">
+            <Select
+              value={data.configuracion.envios.metodo_distribucion_costo ?? "equitativo"}
+              onChange={(e) => setUmbral("envios", { ...data.configuracion.envios, metodo_distribucion_costo: e.target.value as MetodoDistribucionCostoRuta })}
+            >
+              <option value="equitativo">Equitativo (partes iguales)</option>
+              <option value="por_distancia_tramo">Proporcional al tramo</option>
+            </Select>
           </Field>
         </FormGrid>
       </Card>

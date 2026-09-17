@@ -25,8 +25,11 @@ import {
 } from "@/components/ui";
 import { Modal } from "@/components/Modal";
 import { fARS, fNum, recetaEfectivaVariante } from "@/lib/calc-v2";
-import type { EstadoPagoCompra } from "@/lib/types-v2";
-import type { Proveedor } from "@/lib/types";
+import { obtenerProveedorMapa, urlNavegacionMultiparada } from "@/lib/mapas";
+import { calcularRuta, calcularCostosRuta, distribuirCostoRuta, paradasSinCoordenadas } from "@/lib/rutas";
+import type { ParadaEntrada } from "@/lib/rutas";
+import type { EstadoPagoCompra, RutaEntrega } from "@/lib/types-v2";
+import type { Proveedor, Cliente } from "@/lib/types";
 
 interface ItemCompraForm {
   insumo_id: string;
@@ -630,11 +633,402 @@ function PlanificacionTab() {
   );
 }
 
+function direccionCliente(cliente: Cliente | undefined): { texto: string; lat: number | null; lng: number | null } {
+  if (!cliente) return { texto: "(cliente eliminado)", lat: null, lng: null };
+  const texto = cliente.direccion?.trim() || [cliente.calle, cliente.numero].filter(Boolean).join(" ") || "Sin dirección cargada";
+  return { texto, lat: cliente.latitud ?? null, lng: cliente.longitud ?? null };
+}
+
+const ESTADO_RUTA_LABEL: Record<RutaEntrega["estado"], string> = {
+  planificada: "Planificada",
+  en_curso: "En curso",
+  completada: "Completada",
+  cancelada: "Cancelada",
+};
+const ESTADO_RUTA_COLOR: Record<RutaEntrega["estado"], "blue" | "orange" | "green" | "red"> = {
+  planificada: "blue",
+  en_curso: "orange",
+  completada: "green",
+  cancelada: "red",
+};
+
+function EntregasTab() {
+  const { data, setData } = useStoreV2();
+  const { toast } = useToast();
+  const envios = data.configuracion.envios;
+  const provider = obtenerProveedorMapa(envios.proveedor_mapa);
+
+  const [seleccionados, setSeleccionados] = useState<string[]>([]);
+  const [construyendo, setConstruyendo] = useState(false);
+  const [fecha, setFecha] = useState(new Date().toISOString().slice(0, 10));
+  const [regresaOrigen, setRegresaOrigen] = useState(envios.regresar_a_base_default ?? true);
+  const [peajes, setPeajes] = useState(0);
+  const [estacionamiento, setEstacionamiento] = useState(0);
+  const [otrosCostos, setOtrosCostos] = useState(0);
+
+  const idsEnRutaActiva = useMemo(() => {
+    const rutasActivas = new Set(data.rutas_entrega.filter((r) => r.estado !== "cancelada").map((r) => r.id));
+    return new Set(data.ruta_paradas.filter((rp) => rutasActivas.has(rp.ruta_id)).map((rp) => rp.pedido_id));
+  }, [data.rutas_entrega, data.ruta_paradas]);
+
+  const pedidosEntregables = useMemo(
+    () =>
+      data.pedidos
+        .filter((p) => (p.estado === "Confirmado" || p.estado === "Produccion") && !idsEnRutaActiva.has(p.id))
+        .sort((a, b) => a.fecha.localeCompare(b.fecha)),
+    [data.pedidos, idsEnRutaActiva]
+  );
+
+  const clienteNombre = (id: string) => data.clientes.find((c) => c.id === id)?.nombre ?? "—";
+  const direccionPedido = (pedidoId: string) => {
+    const pedido = data.pedidos.find((p) => p.id === pedidoId);
+    if (!pedido) return { texto: "—", lat: null, lng: null };
+    if (pedido.direccion_entrega_snapshot) return { texto: pedido.direccion_entrega_snapshot, lat: pedido.latitud_entrega ?? null, lng: pedido.longitud_entrega ?? null };
+    return direccionCliente(data.clientes.find((c) => c.id === pedido.cliente_id));
+  };
+
+  function alternarSeleccion(id: string) {
+    setSeleccionados((s) => (s.includes(id) ? s.filter((x) => x !== id) : [...s, id]));
+  }
+
+  function moverParada(idx: number, delta: number) {
+    setSeleccionados((s) => {
+      const copia = [...s];
+      const destino = idx + delta;
+      if (destino < 0 || destino >= copia.length) return s;
+      [copia[idx], copia[destino]] = [copia[destino], copia[idx]];
+      return copia;
+    });
+  }
+
+  const paradasEntrada: ParadaEntrada[] = useMemo(
+    () =>
+      seleccionados.map((id) => {
+        const dir = direccionPedido(id);
+        return { pedido_id: id, direccion: dir.texto, lat: dir.lat, lng: dir.lng };
+      }),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [seleccionados, data.pedidos, data.clientes]
+  );
+  const sinCoordenadas = paradasSinCoordenadas(paradasEntrada);
+  const origenCoord = envios.lat_base != null && envios.lng_base != null ? { lat: envios.lat_base, lng: envios.lng_base } : null;
+  const rutaCalculada = calcularRuta(origenCoord, paradasEntrada, regresaOrigen, provider);
+  const distanciaTotal = rutaCalculada?.distancia_total_km ?? 0;
+  const duracionTotal = rutaCalculada?.duracion_total_min ?? 0;
+  const tramos = rutaCalculada?.tramos ?? paradasEntrada.map((p) => ({ pedido_id: p.pedido_id, distancia_km: NaN, duracion_min: NaN }));
+  const costos = calcularCostosRuta(distanciaTotal, envios, peajes, estacionamiento, otrosCostos);
+  const metodoDistribucion = envios.metodo_distribucion_costo ?? "equitativo";
+  const reparto = distribuirCostoRuta(tramos, costos.costo_total_ruta, metodoDistribucion);
+
+  function abrirBuilder() {
+    if (seleccionados.length === 0) {
+      toast("Elegí al menos un pedido para planificar la ruta", "error");
+      return;
+    }
+    setConstruyendo(true);
+  }
+
+  function guardarRuta() {
+    const ahora = new Date().toISOString();
+    const rutaId = uid("RUTA");
+    const nuevaRuta: RutaEntrega = {
+      id: rutaId,
+      fecha,
+      estado: "planificada",
+      direccion_origen: envios.direccion_base ?? "",
+      lat_origen: envios.lat_base ?? null,
+      lng_origen: envios.lng_base ?? null,
+      regresa_origen: regresaOrigen,
+      distancia_total_km: Math.round(distanciaTotal * 100) / 100,
+      duracion_estimada_min: Math.round(duracionTotal),
+      precio_litro_snapshot: envios.litro_nafta,
+      consumo_100km_snapshot: envios.consumo_100km,
+      litros_estimados: costos.litros_estimados,
+      costo_nafta_estimado: costos.costo_nafta_estimado,
+      peajes,
+      estacionamiento,
+      otros_costos: otrosCostos,
+      costo_total_ruta: costos.costo_total_ruta,
+      metodo_distribucion_costo: metodoDistribucion,
+      proveedor_mapa: envios.proveedor_mapa ?? "ninguno",
+      created_at: ahora,
+      updated_at: ahora,
+    };
+    const nuevasParadas = seleccionados.map((id, idx) => {
+      const entrada = paradasEntrada.find((p) => p.pedido_id === id)!;
+      const tramo = tramos.find((t) => t.pedido_id === id);
+      return {
+        id: uid("PARADA"),
+        ruta_id: rutaId,
+        pedido_id: id,
+        orden: idx + 1,
+        direccion_snapshot: entrada.direccion,
+        lat: entrada.lat,
+        lng: entrada.lng,
+        distancia_tramo_km: tramo && Number.isFinite(tramo.distancia_km) ? Math.round(tramo.distancia_km * 100) / 100 : 0,
+        duracion_tramo_min: tramo && Number.isFinite(tramo.duracion_min) ? Math.round(tramo.duracion_min) : 0,
+        costo_asignado: reparto.get(id) ?? 0,
+        estado: "pendiente" as const,
+      };
+    });
+
+    setData((d) => ({
+      ...d,
+      rutas_entrega: [...d.rutas_entrega, nuevaRuta],
+      ruta_paradas: [...d.ruta_paradas, ...nuevasParadas],
+      pedidos: d.pedidos.map((p) => {
+        if (!seleccionados.includes(p.id)) return p;
+        const entrada = paradasEntrada.find((e) => e.pedido_id === p.id)!;
+        return {
+          ...p,
+          costo_real_envio: reparto.get(p.id) ?? p.costo_real_envio,
+          direccion_entrega_snapshot: p.direccion_entrega_snapshot ?? entrada.direccion,
+          latitud_entrega: p.latitud_entrega ?? entrada.lat ?? undefined,
+          longitud_entrega: p.longitud_entrega ?? entrada.lng ?? undefined,
+        };
+      }),
+    }));
+    toast("Ruta guardada");
+    setConstruyendo(false);
+    setSeleccionados([]);
+    setPeajes(0);
+    setEstacionamiento(0);
+  }
+
+  function cambiarEstadoRuta(id: string, estado: RutaEntrega["estado"]) {
+    setData((d) => ({ ...d, rutas_entrega: d.rutas_entrega.map((r) => (r.id === id ? { ...r, estado, updated_at: new Date().toISOString() } : r)) }));
+  }
+
+  const rutasOrdenadas = useMemo(() => [...data.rutas_entrega].sort((a, b) => b.fecha.localeCompare(a.fecha)), [data.rutas_entrega]);
+
+  return (
+    <div>
+      {!construyendo ? (
+        <>
+          <p className="mb-4 text-[12.5px] text-text3">
+            Pedidos Confirmados o En producción que todavía necesitan entrega. Seleccioná los que van en la misma
+            salida y armá la ruta — el costo de combustible se calcula con los parámetros de Configuración → Envíos.
+          </p>
+          <Card title="Pedidos para entregar">
+            {pedidosEntregables.length === 0 ? (
+              <EmptyState text="No hay pedidos Confirmados o en Producción pendientes de entrega." />
+            ) : (
+              <TableWrap>
+                <table className="w-full">
+                  <thead>
+                    <tr>
+                      <Th></Th>
+                      <Th>Fecha</Th>
+                      <Th>Cliente</Th>
+                      <Th>Dirección</Th>
+                      <Th>Importe</Th>
+                      <Th>Envío cobrado</Th>
+                      <Th>Estado</Th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {pedidosEntregables.map((p) => {
+                      const dir = direccionPedido(p.id);
+                      return (
+                        <TrHover key={p.id}>
+                          <Td>
+                            <input type="checkbox" checked={seleccionados.includes(p.id)} onChange={() => alternarSeleccion(p.id)} />
+                          </Td>
+                          <Td>{p.fecha}</Td>
+                          <Td main>{clienteNombre(p.cliente_id)}</Td>
+                          <Td className="text-[11px] text-text3">
+                            {dir.texto}
+                            {dir.lat == null && <span className="ml-1 text-orange">(sin coordenadas)</span>}
+                          </Td>
+                          <Td>{fARS(p.total)}</Td>
+                          <Td>{fARS(p.costo_envio)}</Td>
+                          <Td>
+                            <Badge color={p.estado === "Confirmado" ? "blue" : "orange"}>{p.estado}</Badge>
+                          </Td>
+                        </TrHover>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </TableWrap>
+            )}
+            <div className="mt-3 flex justify-end">
+              <Button onClick={abrirBuilder}>Planificar ruta ({seleccionados.length})</Button>
+            </div>
+          </Card>
+        </>
+      ) : (
+        <Card title="Planificar ruta">
+          {provider === null && (
+            <p className="mb-3 rounded-md border border-orange/40 bg-orange-dim/30 p-2.5 text-[12.5px] text-orange">
+              Sin proveedor de mapas configurado (Configuración → Envíos) — no se puede estimar distancia ni tiempo.
+              La ruta se puede guardar igual, solo con los costos fijos que cargues abajo.
+            </p>
+          )}
+          {origenCoord === null && provider !== null && (
+            <p className="mb-3 rounded-md border border-orange/40 bg-orange-dim/30 p-2.5 text-[12.5px] text-orange">
+              Falta la dirección/coordenadas base en Configuración → Envíos — no se puede calcular la ruta.
+            </p>
+          )}
+          {sinCoordenadas.length > 0 && (
+            <p className="mb-3 rounded-md border border-orange/40 bg-orange-dim/30 p-2.5 text-[12.5px] text-orange">
+              {sinCoordenadas.length} parada(s) sin coordenadas — cargá la dirección estructurada del cliente en Ventas
+              → Clientes para incluirla en el cálculo de distancia.
+            </p>
+          )}
+
+          <div className="mb-4 grid grid-cols-1 gap-3 sm:grid-cols-3">
+            <Field label="Fecha de la ruta">
+              <Input type="date" value={fecha} onChange={(e) => setFecha(e.target.value)} />
+            </Field>
+            <Field label="Regresar al origen">
+              <Select value={regresaOrigen ? "si" : "no"} onChange={(e) => setRegresaOrigen(e.target.value === "si")}>
+                <option value="si">Sí</option>
+                <option value="no">No</option>
+              </Select>
+            </Field>
+            <Field label="Peajes">
+              <Input type="number" value={peajes} onChange={(e) => setPeajes(Number(e.target.value))} />
+            </Field>
+            <Field label="Estacionamiento">
+              <Input type="number" value={estacionamiento} onChange={(e) => setEstacionamiento(Number(e.target.value))} />
+            </Field>
+            <Field label="Otros costos">
+              <Input type="number" value={otrosCostos} onChange={(e) => setOtrosCostos(Number(e.target.value))} />
+            </Field>
+          </div>
+
+          <div className="mb-1 text-[11px] font-semibold uppercase tracking-wide text-text3">Orden de paradas</div>
+          <TableWrap>
+            <table className="mb-3 w-full">
+              <thead>
+                <tr>
+                  <Th>#</Th>
+                  <Th>Cliente</Th>
+                  <Th>Dirección</Th>
+                  <Th>Tramo</Th>
+                  <Th>Costo asignado</Th>
+                  <Th></Th>
+                </tr>
+              </thead>
+              <tbody>
+                {seleccionados.map((id, idx) => {
+                  const pedido = data.pedidos.find((p) => p.id === id);
+                  const tramo = tramos.find((t) => t.pedido_id === id);
+                  return (
+                    <TrHover key={id}>
+                      <Td>{idx + 1}</Td>
+                      <Td main>{pedido ? clienteNombre(pedido.cliente_id) : "—"}</Td>
+                      <Td className="text-[11px] text-text3">{direccionPedido(id).texto}</Td>
+                      <Td>{tramo && Number.isFinite(tramo.distancia_km) ? `${fNum(tramo.distancia_km, 1)} km` : "—"}</Td>
+                      <Td>{fARS(reparto.get(id) ?? 0)}</Td>
+                      <Td>
+                        <div className="flex gap-1">
+                          <Button size="sm" variant="ghost" onClick={() => moverParada(idx, -1)} disabled={idx === 0}>
+                            ↑
+                          </Button>
+                          <Button size="sm" variant="ghost" onClick={() => moverParada(idx, 1)} disabled={idx === seleccionados.length - 1}>
+                            ↓
+                          </Button>
+                        </div>
+                      </Td>
+                    </TrHover>
+                  );
+                })}
+              </tbody>
+            </table>
+          </TableWrap>
+
+          <div className="mb-4 grid grid-cols-2 gap-3 sm:grid-cols-4">
+            <div className="rounded-md border border-border p-3">
+              <div className="text-[11px] text-text3">Kilómetros</div>
+              <div className="text-lg font-semibold text-text">{rutaCalculada ? fNum(distanciaTotal, 1) : "—"}</div>
+            </div>
+            <div className="rounded-md border border-border p-3">
+              <div className="text-[11px] text-text3">Litros estimados</div>
+              <div className="text-lg font-semibold text-text">{fNum(costos.litros_estimados, 2)}</div>
+            </div>
+            <div className="rounded-md border border-border p-3">
+              <div className="text-[11px] text-text3">Costo combustible</div>
+              <div className="text-lg font-semibold text-text">{fARS(costos.costo_nafta_estimado)}</div>
+            </div>
+            <div className="rounded-md border border-border p-3">
+              <div className="text-[11px] text-text3">Costo total</div>
+              <div className="text-lg font-semibold text-accent">{fARS(costos.costo_total_ruta)}</div>
+            </div>
+          </div>
+
+          <div className="flex flex-wrap justify-end gap-2">
+            {origenCoord && (
+              <Button
+                variant="ghost"
+                onClick={() => {
+                  const puntos = [origenCoord, ...paradasEntrada.filter((p) => p.lat != null && p.lng != null).map((p) => ({ lat: p.lat!, lng: p.lng! }))];
+                  if (regresaOrigen) puntos.push(origenCoord);
+                  const url = urlNavegacionMultiparada(puntos);
+                  if (url) window.open(url, "_blank");
+                }}
+              >
+                Abrir en navegación
+              </Button>
+            )}
+            <Button variant="ghost" onClick={() => setConstruyendo(false)}>
+              Cancelar
+            </Button>
+            <Button onClick={guardarRuta}>Guardar ruta</Button>
+          </div>
+        </Card>
+      )}
+
+      {rutasOrdenadas.length > 0 && (
+        <Card title="Rutas planificadas" className="mt-4">
+          <TableWrap>
+            <table className="w-full">
+              <thead>
+                <tr>
+                  <Th>Fecha</Th>
+                  <Th>Estado</Th>
+                  <Th>Paradas</Th>
+                  <Th>Km</Th>
+                  <Th>Costo total</Th>
+                  <Th>Cambiar estado</Th>
+                </tr>
+              </thead>
+              <tbody>
+                {rutasOrdenadas.map((r) => (
+                  <TrHover key={r.id}>
+                    <Td>{r.fecha}</Td>
+                    <Td>
+                      <Badge color={ESTADO_RUTA_COLOR[r.estado]}>{ESTADO_RUTA_LABEL[r.estado]}</Badge>
+                    </Td>
+                    <Td>{data.ruta_paradas.filter((rp) => rp.ruta_id === r.id).length}</Td>
+                    <Td>{fNum(r.distancia_total_km, 1)}</Td>
+                    <Td>{fARS(r.costo_total_ruta)}</Td>
+                    <Td>
+                      <Select value={r.estado} onChange={(e) => cambiarEstadoRuta(r.id, e.target.value as RutaEntrega["estado"])} style={{ width: 140 }}>
+                        {(Object.keys(ESTADO_RUTA_LABEL) as RutaEntrega["estado"][]).map((e) => (
+                          <option key={e} value={e}>
+                            {ESTADO_RUTA_LABEL[e]}
+                          </option>
+                        ))}
+                      </Select>
+                    </Td>
+                  </TrHover>
+                ))}
+              </tbody>
+            </table>
+          </TableWrap>
+        </Card>
+      )}
+    </div>
+  );
+}
+
 export function Operaciones() {
   const [tab, setTab] = useState("compras");
   return (
     <div>
-      <PageHeader title="Operaciones" sub="Compras, proveedores, producción y planificación" />
+      <PageHeader title="Operaciones" sub="Compras, proveedores, producción, planificación y entregas" />
       <FilterTabs
         value={tab}
         onChange={setTab}
@@ -643,12 +1037,14 @@ export function Operaciones() {
           { value: "proveedores", label: "Proveedores" },
           { value: "produccion", label: "Producción" },
           { value: "planificacion", label: "Planificación" },
+          { value: "entregas", label: "Entregas" },
         ]}
       />
       {tab === "compras" && <ComprasTab />}
       {tab === "proveedores" && <ProveedoresTab />}
       {tab === "produccion" && <ProduccionTab />}
       {tab === "planificacion" && <PlanificacionTab />}
+      {tab === "entregas" && <EntregasTab />}
     </div>
   );
 }

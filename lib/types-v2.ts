@@ -54,6 +54,12 @@ export interface Pedido {
   fecha_vencimiento?: string;
   notas?: string;
   adjunto?: Adjunto;
+  /** Snapshot de la dirección de entrega tomado al confirmar el pedido — el cliente puede mudarse
+   * después y el pedido histórico debe seguir mostrando dónde se entregó realmente en su momento,
+   * nunca la dirección actual del cliente. */
+  direccion_entrega_snapshot?: string;
+  latitud_entrega?: number;
+  longitud_entrega?: number;
 }
 
 /** Línea de un pedido. `producto_variante_id` puede ser null si la línea vieja no matcheaba
@@ -251,6 +257,58 @@ export interface PlanProduccionMes {
   fecha_guardado: string;
 }
 
+// --- Entregas y rutas -------------------------------------------------------------------------
+
+export type EstadoRuta = "planificada" | "en_curso" | "completada" | "cancelada";
+
+/** Una ruta de reparto de un día — guarda el costo económico real (nafta/peajes/otros), no solo
+ * un link de mapa: eso es lo que permite comparar el costo de entregar contra lo cobrado por
+ * envío (Sección 29). Los campos `*_snapshot` fijan el precio de combustible y consumo del
+ * vehículo vigentes al momento de crear la ruta — si después cambian en Configuración, esta ruta
+ * ya planificada/completada no debe recalcularse sola. */
+export interface RutaEntrega {
+  id: string;
+  fecha: string;
+  estado: EstadoRuta;
+  direccion_origen: string;
+  lat_origen: number | null;
+  lng_origen: number | null;
+  regresa_origen: boolean;
+  distancia_total_km: number;
+  duracion_estimada_min: number;
+  precio_litro_snapshot: number;
+  consumo_100km_snapshot: number;
+  litros_estimados: number;
+  costo_nafta_estimado: number;
+  peajes: number;
+  estacionamiento: number;
+  otros_costos: number;
+  costo_total_ruta: number;
+  metodo_distribucion_costo: MetodoDistribucionCostoRuta;
+  proveedor_mapa: ProveedorMapa;
+  created_at: string;
+  updated_at: string;
+}
+
+/** Una parada de una ruta — `direccion_snapshot`/`lat`/`lng` se copian del pedido (o del cliente
+ * si el pedido no tiene snapshot propio) al armar la ruta, para que un cambio posterior de
+ * dirección del cliente no reescriba una parada ya planificada. */
+export interface RutaParada {
+  id: string;
+  ruta_id: string;
+  pedido_id: string;
+  orden: number;
+  direccion_snapshot: string;
+  lat: number | null;
+  lng: number | null;
+  ventana_desde?: string;
+  ventana_hasta?: string;
+  distancia_tramo_km: number;
+  duracion_tramo_min: number;
+  costo_asignado: number;
+  estado: "pendiente" | "entregado" | "no_entregado";
+}
+
 // --- Finanzas -------------------------------------------------------------------------------------
 
 /** Unifica caja_movimientos, transferencias_internas, costos_fijos, costos_indirectos y
@@ -289,6 +347,16 @@ export interface Activo {
 
 // --- Configuración ---------------------------------------------------------------------------------
 
+/** Sin proveedor real configurado, no se puede geocodificar ni calcular una ruta real — solo se
+ * ofrece una estimación en línea recta (haversine), marcada como tal en toda la UI. Nunca se
+ * inventa una distancia de ruta real sin un proveedor que la calcule. */
+export type ProveedorMapa = "ninguno" | "haversine";
+
+/** Cómo repartir el costo económico de una ruta con varias paradas entre los pedidos que la
+ * componen — nunca se duplica el costo total en cada pedido. "equitativo" divide el costo total
+ * en partes iguales; "por_distancia_tramo" reparte proporcional al tramo de cada parada. */
+export type MetodoDistribucionCostoRuta = "equitativo" | "por_distancia_tramo";
+
 export interface ConfiguracionEnvios {
   litro_nafta: number;
   consumo_100km: number;
@@ -296,6 +364,16 @@ export interface ConfiguracionEnvios {
   margen_fijo: number;
   margen_exacto: number;
   precio_envio_fijo: number;
+  direccion_base?: string;
+  lat_base?: number;
+  lng_base?: number;
+  vehiculo?: string;
+  fecha_actualizacion_combustible?: string;
+  regresar_a_base_default?: boolean;
+  proveedor_mapa?: ProveedorMapa;
+  metodo_distribucion_costo?: MetodoDistribucionCostoRuta;
+  peajes_default?: number;
+  otros_costos_default?: number;
 }
 
 export interface ConfiguracionPlanificacion {
@@ -384,6 +462,8 @@ export interface RicordoDataV2 {
   proveedores: Proveedor[];
   produccion: Produccion[];
   plan_produccion: PlanProduccionMes[];
+  rutas_entrega: RutaEntrega[];
+  ruta_paradas: RutaParada[];
   movimientos_financieros: MovimientoFinanciero[];
   activos: Activo[];
   configuracion: Configuracion;
@@ -420,6 +500,8 @@ export function emptyDataV2(): RicordoDataV2 {
     proveedores: [],
     produccion: [],
     plan_produccion: [],
+    rutas_entrega: [],
+    ruta_paradas: [],
     movimientos_financieros: [],
     activos: [],
     configuracion: {
@@ -430,6 +512,9 @@ export function emptyDataV2(): RicordoDataV2 {
         margen_fijo: 60,
         margen_exacto: 55,
         precio_envio_fijo: 2000,
+        regresar_a_base_default: true,
+        proveedor_mapa: "ninguno",
+        metodo_distribucion_costo: "equitativo",
       },
       planificacion: { ventana_meses_referencia: 3, umbral_desvio_semana_pct: 15 },
       umbral_dias_mayorista_riesgo: 45,
