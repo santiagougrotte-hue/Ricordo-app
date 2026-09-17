@@ -2159,12 +2159,14 @@ const Plan = {
             <label style="display:flex;align-items:center;gap:4px;font-size:12px;">
               <input type="number" min="10" max="600" value="${supRestSec}"
                 style="width:56px;padding:3px 6px;border:1px solid var(--border);border-radius:6px;background:var(--card);color:var(--text);font-size:12px;text-align:center;"
-                onchange="Plan.setSupRest('${bKey}',this.value)">
+                onblur="Plan.setSupRest('${bKey}',this.value)"
+                onkeydown="if(event.key==='Enter'){this.blur();}"
+                >
               s &nbsp;(${fmtSec(supRestSec)})
             </label>
           </div>
           ${curRound<rounds
-            ?`<button class="sup-advance-btn" onclick="Plan.advanceSupRound('${bKey}',${rounds},${b.roundRest||90})">
+            ?`<button id="sup-adv-btn-${bKey}" class="sup-advance-btn" onclick="Plan.advanceSupRound('${bKey}',${rounds},${b.roundRest||90})">
                 ✓ Ronda ${curRound+1} completada — Iniciar descanso ${fmtSec(supRestSec)}
               </button>`
             :`<button class="sup-advance-btn all-done" disabled>✓ Superserie completada</button>`
@@ -2276,9 +2278,17 @@ const Plan = {
     const s = State.data;
     if(!s.supRestOverride) s.supRestOverride = {};
     const v = parseInt(secs);
-    if(!isNaN(v) && v >= 10) s.supRestOverride[bKey] = v;
-    State.save();
-    this.renderBlocks();
+    if(!isNaN(v) && v >= 10){
+      s.supRestOverride[bKey] = v;
+      State.save();
+      // Update button label in-place without re-rendering
+      const btn = document.getElementById('sup-adv-btn-'+bKey);
+      if(btn && !btn.disabled){
+        const cur = (s.supRound||{})[bKey]||0;
+        const fmtSec = s2 => s2>=60 ? Math.floor(s2/60)+'m'+(s2%60?s2%60+'s':'') : s2+'s';
+        btn.textContent = `✓ Ronda ${cur+1} completada — Iniciar descanso ${fmtSec(v)}`;
+      }
+    }
   },
   toggleSetDot(key, setIdx){
     const s = State.data;
