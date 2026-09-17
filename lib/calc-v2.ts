@@ -506,12 +506,27 @@ function margenSeguro(resultado: number, ventasNetas: number): number | null {
   return ventasNetas > 0 ? (resultado / ventasNetas) * 100 : null;
 }
 
+/** Pedidos y líneas marcados como dudosos en `datos_pendientes_revision` (importe $0, neto
+ * negativo, sin producto identificable, etc.) que todavía están "pendiente" — se excluyen de
+ * ventas/EERR/analítica hasta que alguien los revise y los marque resuelto o ignorado (Sección 6:
+ * "los registros dudosos deben poder excluirse de determinadas métricas hasta ser corregidos").
+ * Un caso ya resuelto/ignorado deja de excluirse — la corrección real pasa en la pantalla del
+ * dato (Ventas, Productos, etc.), acá solo se decide si cuenta o no todavía. */
+export function idsExcluidosPorRevision(data: RicordoDataV2): { pedidos: Set<string>; pedido_items: Set<string> } {
+  const pendientes = data.datos_pendientes_revision.filter((r) => (r.estado ?? "pendiente") === "pendiente");
+  return {
+    pedidos: new Set(pendientes.filter((r) => r.seccion === "pedidos" && r.entidad_id).map((r) => r.entidad_id!)),
+    pedido_items: new Set(pendientes.filter((r) => r.seccion === "pedido_items" && r.entidad_id).map((r) => r.entidad_id!)),
+  };
+}
+
 export function calcularEerr(data: RicordoDataV2, desde: string, hasta: string, canal?: Canal): Eerr {
+  const excluidos = idsExcluidosPorRevision(data);
   const pedidosPeriodo = data.pedidos.filter(
-    (p) => p.estado === "Entregado" && p.fecha >= desde && p.fecha <= hasta && (!canal || p.canal === canal)
+    (p) => p.estado === "Entregado" && p.fecha >= desde && p.fecha <= hasta && (!canal || p.canal === canal) && !excluidos.pedidos.has(p.id)
   );
   const idsPedidos = new Set(pedidosPeriodo.map((p) => p.id));
-  const itemsPeriodo = data.pedido_items.filter((i) => idsPedidos.has(i.pedido_id));
+  const itemsPeriodo = data.pedido_items.filter((i) => idsPedidos.has(i.pedido_id) && !excluidos.pedido_items.has(i.id));
   const fechaDePedido = (pedidoId: string) => pedidosPeriodo.find((p) => p.id === pedidoId)?.fecha ?? "";
 
   const ventas_brutas: EerrLinea = {
@@ -877,11 +892,14 @@ export interface MargenItemDetalle {
  * quién mire. Los descuentos generales del pedido (no los de línea) se reparten siempre
  * proporcional a ventas, para no descontar el mismo importe en cada producto. */
 export function calcularMargenPorItem(data: RicordoDataV2, desde: string, hasta: string, canal?: Canal, criterioEnvio: CriterioEnvioPedido = "ventas"): MargenItemDetalle[] {
-  const pedidosPeriodo = data.pedidos.filter((p) => p.estado === "Entregado" && p.fecha >= desde && p.fecha <= hasta && (!canal || p.canal === canal));
+  const excluidos = idsExcluidosPorRevision(data);
+  const pedidosPeriodo = data.pedidos.filter(
+    (p) => p.estado === "Entregado" && p.fecha >= desde && p.fecha <= hasta && (!canal || p.canal === canal) && !excluidos.pedidos.has(p.id)
+  );
   const resultado: MargenItemDetalle[] = [];
 
   for (const pedido of pedidosPeriodo) {
-    const items = data.pedido_items.filter((i) => i.pedido_id === pedido.id);
+    const items = data.pedido_items.filter((i) => i.pedido_id === pedido.id && !excluidos.pedido_items.has(i.id));
     if (items.length === 0) continue;
     const totalBruto = items.reduce((acc, i) => acc + i.precio_unitario * i.cantidad, 0);
     const totalUnidades = items.reduce((acc, i) => acc + i.cantidad, 0);

@@ -2,6 +2,7 @@
 
 import React, { useMemo, useRef, useState } from "react";
 import { useStoreV2 } from "@/lib/store-v2";
+import { useAuth } from "@/lib/auth-context";
 import { useToast } from "@/lib/toast";
 import { uid } from "@/lib/id";
 import {
@@ -12,6 +13,8 @@ import {
   FormGrid,
   Field,
   Input,
+  Select,
+  Textarea,
   TableWrap,
   Th,
   Td,
@@ -20,8 +23,36 @@ import {
   Badge,
   InfoRow,
 } from "@/components/ui";
+import { Modal } from "@/components/Modal";
 import { fNum } from "@/lib/calc-v2";
-import type { AmbitoCategoria, RicordoDocument } from "@/lib/types-v2";
+import type { AmbitoCategoria, EstadoRevisionItem, RevisionItem, RicordoDocument } from "@/lib/types-v2";
+
+const GUIA_SECCION: Record<string, string> = {
+  pedidos: "Ventas → Pedidos",
+  pedido_items: "Ventas → Pedidos",
+  productos: "Productos",
+  producto_variantes: "Productos",
+  recetas: "Productos → Recetas",
+  receta_items: "Productos → Recetas",
+  ajustes_receta_variante: "Productos → Recetas",
+  insumos: "Inventario → Insumos",
+  historial_precios: "Inventario → Insumos",
+  compra_items: "Inventario → Compras",
+  inventario_movimientos: "Inventario → Movimientos",
+  produccion: "Operaciones → Producción",
+  movimientos_financieros: "Finanzas",
+  activos: "Finanzas → Activos e inversiones",
+};
+
+function guiaParaSeccion(seccion: string): string {
+  return GUIA_SECCION[seccion] ?? "Configuración";
+}
+
+const ESTADO_BADGE: Record<EstadoRevisionItem, { texto: string; color: "orange" | "green" | "gold" }> = {
+  pendiente: { texto: "Pendiente", color: "orange" },
+  resuelto: { texto: "Resuelto", color: "green" },
+  ignorado: { texto: "Ignorado", color: "gold" },
+};
 
 function GeneralTab() {
   const { data, setData } = useStoreV2();
@@ -214,35 +245,91 @@ function CategoriasTab() {
   );
 }
 
+type FiltroEstado = EstadoRevisionItem | "todos";
+
 function MigracionTab() {
-  const { data, metadata } = useStoreV2();
+  const { data, setData, metadata } = useStoreV2();
+  const { session } = useAuth();
+  const { toast } = useToast();
   const revision = data.datos_pendientes_revision;
   const legacyClaves = Object.keys(data.legacy ?? {});
 
+  const [filtroEstado, setFiltroEstado] = useState<FiltroEstado>("pendiente");
+  const [filtroSeccion, setFiltroSeccion] = useState<string>("todas");
+  const [accion, setAccion] = useState<{ id: string; tipo: "resuelto" | "ignorado" } | null>(null);
+  const [nota, setNota] = useState("");
+
+  const secciones = useMemo(() => [...new Set(revision.map((r) => r.seccion))].sort(), [revision]);
+
+  const pendientes = useMemo(() => revision.filter((r) => (r.estado ?? "pendiente") === "pendiente"), [revision]);
+
   const porSeccion = useMemo(() => {
     const mapa = new Map<string, number>();
-    for (const r of revision) mapa.set(r.seccion, (mapa.get(r.seccion) ?? 0) + 1);
+    for (const r of pendientes) mapa.set(r.seccion, (mapa.get(r.seccion) ?? 0) + 1);
     return [...mapa.entries()].sort((a, b) => b[1] - a[1]);
-  }, [revision]);
+  }, [pendientes]);
+
+  const filtrados = useMemo(() => {
+    return revision.filter((r) => {
+      const estado = r.estado ?? "pendiente";
+      if (filtroEstado !== "todos" && estado !== filtroEstado) return false;
+      if (filtroSeccion !== "todas" && r.seccion !== filtroSeccion) return false;
+      return true;
+    });
+  }, [revision, filtroEstado, filtroSeccion]);
+
+  function actualizarItem(id: string, cambios: Partial<RevisionItem>) {
+    setData((d) => ({
+      ...d,
+      datos_pendientes_revision: d.datos_pendientes_revision.map((r) => (r.id === id ? { ...r, ...cambios } : r)),
+    }));
+  }
+
+  function abrirAccion(id: string, tipo: "resuelto" | "ignorado") {
+    setAccion({ id, tipo });
+    setNota("");
+  }
+
+  function confirmarAccion() {
+    if (!accion) return;
+    if (accion.tipo === "ignorado" && !nota.trim()) {
+      toast("Para ignorar un caso hay que explicar el motivo", "error");
+      return;
+    }
+    actualizarItem(accion.id, {
+      estado: accion.tipo,
+      resuelto_por: session?.user?.email ?? "usuario",
+      resuelto_en: new Date().toISOString(),
+      nota_resolucion: nota.trim() || undefined,
+    });
+    toast(accion.tipo === "resuelto" ? "Caso marcado como resuelto" : "Caso marcado como ignorado");
+    setAccion(null);
+    setNota("");
+  }
+
+  function reabrir(id: string) {
+    actualizarItem(id, { estado: "pendiente", resuelto_por: undefined, resuelto_en: undefined, nota_resolucion: undefined });
+    toast("Caso reabierto — vuelve a contar como pendiente");
+  }
 
   return (
     <div className="flex flex-col gap-4">
       <Card title="Migración al esquema V2">
         <InfoRow label="Migrado desde esquema" value={`V${metadata.desde_version}`} />
         <InfoRow label="Fecha de migración" value={new Date(metadata.migrado_en).toLocaleString("es-AR")} />
-        <InfoRow label="Casos que requieren revisión manual" value={fNum(revision.length, 0)} />
+        <InfoRow label="Casos pendientes de revisión" value={fNum(pendientes.length, 0)} color={pendientes.length > 0 ? "orange" : "green"} />
+        <InfoRow label="Casos totales (incluye resueltos/ignorados)" value={fNum(revision.length, 0)} />
       </Card>
 
-      <Card title="Pendientes de revisión, por sección">
-        {porSeccion.length === 0 ? (
-          <EmptyState text="No quedaron casos pendientes de revisión." />
-        ) : (
+      {porSeccion.length > 0 && (
+        <Card title="Pendientes, por sección">
           <TableWrap>
-            <table className="mb-3 w-full">
+            <table className="w-full">
               <thead>
                 <tr>
                   <Th>Sección</Th>
                   <Th>Casos</Th>
+                  <Th>Dónde corregirlo</Th>
                 </tr>
               </thead>
               <tbody>
@@ -250,19 +337,84 @@ function MigracionTab() {
                   <TrHover key={seccion}>
                     <Td main>{seccion}</Td>
                     <Td>{n}</Td>
+                    <Td>{guiaParaSeccion(seccion)}</Td>
                   </TrHover>
                 ))}
               </tbody>
             </table>
           </TableWrap>
-        )}
-        {revision.length > 0 && (
+        </Card>
+      )}
+
+      <Card title="Revisión de datos">
+        <p className="mb-3 text-[12.5px] text-text3">
+          Estos son casos que la migración no pudo resolver con certeza: nunca se corrige ni se inventa un valor acá. Corregí
+          el dato en el módulo indicado y después marcá el caso como resuelto, o ignoralo explicando por qué no hace falta
+          corregirlo. Mientras un pedido o línea de pedido esté &ldquo;Pendiente&rdquo;, se excluye de las ventas y el EERR.
+        </p>
+        <div className="mb-3 flex flex-wrap gap-3">
+          <FilterTabs
+            value={filtroEstado}
+            onChange={(v) => setFiltroEstado(v as FiltroEstado)}
+            options={[
+              { value: "pendiente", label: `Pendientes (${revision.filter((r) => (r.estado ?? "pendiente") === "pendiente").length})` },
+              { value: "resuelto", label: "Resueltos" },
+              { value: "ignorado", label: "Ignorados" },
+              { value: "todos", label: "Todos" },
+            ]}
+          />
+          {secciones.length > 1 && (
+            <Select value={filtroSeccion} onChange={(e) => setFiltroSeccion(e.target.value)} style={{ width: 220 }}>
+              <option value="todas">Todas las secciones</option>
+              {secciones.map((s) => (
+                <option key={s} value={s}>
+                  {s}
+                </option>
+              ))}
+            </Select>
+          )}
+        </div>
+
+        {filtrados.length === 0 ? (
+          <EmptyState text="No hay casos con este filtro." />
+        ) : (
           <ul className="flex flex-col gap-2">
-            {revision.slice(0, 50).map((r) => (
-              <li key={r.id} className="rounded-md border border-border bg-surface2/40 p-2.5 text-[12.5px] text-text2">
-                {r.motivo}
-              </li>
-            ))}
+            {filtrados.map((r) => {
+              const estado = r.estado ?? "pendiente";
+              const badge = ESTADO_BADGE[estado];
+              return (
+                <li key={r.id} className="rounded-md border border-border bg-surface2/40 p-3 text-[12.5px]">
+                  <div className="mb-1.5 flex flex-wrap items-center justify-between gap-2">
+                    <Badge color={badge.color}>{badge.texto}</Badge>
+                    <span className="text-text3">Corregir en: {guiaParaSeccion(r.seccion)}</span>
+                  </div>
+                  <div className="text-text2">{r.motivo}</div>
+                  {r.nota_resolucion && (
+                    <div className="mt-1 text-text3">
+                      Nota: {r.nota_resolucion}
+                      {r.resuelto_por && ` — ${r.resuelto_por}`}
+                      {r.resuelto_en && ` (${new Date(r.resuelto_en).toLocaleDateString("es-AR")})`}
+                    </div>
+                  )}
+                  <div className="mt-2 flex gap-2">
+                    {estado === "pendiente" ? (
+                      <>
+                        <Button size="sm" variant="ghost" onClick={() => abrirAccion(r.id, "resuelto")}>
+                          Marcar resuelto
+                        </Button>
+                        <Button size="sm" variant="ghost" onClick={() => abrirAccion(r.id, "ignorado")}>
+                          Ignorar
+                        </Button>
+                      </>
+                    ) : (
+                      <Button size="sm" variant="ghost" onClick={() => reabrir(r.id)}>
+                        Reabrir
+                      </Button>
+                    )}
+                  </div>
+                </li>
+              );
+            })}
           </ul>
         )}
       </Card>
@@ -275,6 +427,27 @@ function MigracionTab() {
           </p>
         </Card>
       )}
+
+      <Modal
+        open={accion !== null}
+        onClose={() => setAccion(null)}
+        title={accion?.tipo === "ignorado" ? "Ignorar caso" : "Marcar caso como resuelto"}
+      >
+        <p className="mb-3 text-[12.5px] text-text3">
+          {accion?.tipo === "ignorado"
+            ? "Explicá por qué este caso no requiere corrección (por ejemplo: es un dato de prueba, o el valor es correcto tal cual está)."
+            : "Confirmá que ya corregiste el dato en el módulo correspondiente. Podés dejar una nota opcional."}
+        </p>
+        <Field label={accion?.tipo === "ignorado" ? "Motivo (obligatorio)" : "Nota (opcional)"}>
+          <Textarea value={nota} onChange={(e) => setNota(e.target.value)} rows={3} />
+        </Field>
+        <div className="mt-4 flex justify-end gap-2">
+          <Button variant="ghost" onClick={() => setAccion(null)}>
+            Cancelar
+          </Button>
+          <Button onClick={confirmarAccion}>Confirmar</Button>
+        </div>
+      </Modal>
     </div>
   );
 }

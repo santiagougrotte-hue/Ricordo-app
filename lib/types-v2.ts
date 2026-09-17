@@ -344,14 +344,25 @@ export interface FondoReposicion {
 
 // --- Pendientes de revisión / legacy -----------------------------------------------------------
 
+export type EstadoRevisionItem = "pendiente" | "resuelto" | "ignorado";
+
 /** Cualquier dato que la migración no pudo resolver con certeza — nunca se corrige ni se
- * inventa un valor, se deja acá con el motivo para revisión humana. */
+ * inventa un valor, se deja acá con el motivo para revisión humana. Sin `estado` (dato migrado
+ * antes de esta pantalla) se trata como "pendiente". */
 export interface RevisionItem {
   id: string;
   seccion: string;
   entidad_id?: string;
   motivo: string;
   detalle?: Record<string, unknown>;
+  estado?: EstadoRevisionItem;
+  /** Quién y cuándo lo resolvió o lo ignoró — nunca se sobreescribe solo, queda como registro. */
+  resuelto_por?: string;
+  resuelto_en?: string;
+  /** Obligatoria para "ignorado" (justificación de por qué no hace falta corregirlo); opcional
+   * para "resuelto" (qué se corrigió y dónde, ya que la corrección real pasa en la pantalla del
+   * dato — Ventas, Productos, etc. — no acá). */
+  nota_resolucion?: string;
 }
 
 export interface RicordoDataV2 {

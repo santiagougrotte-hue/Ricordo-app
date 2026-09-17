@@ -44,6 +44,7 @@ import {
   gananciaNetaDistribuible,
   gananciaNetaPendienteDistribuir,
   estadoDistribucionMes,
+  idsExcluidosPorRevision,
 } from "./calc-v2";
 
 function fixture(): RicordoData {
@@ -79,6 +80,7 @@ function fixture(): RicordoData {
       fecha: "2026-08-01",
       estado: "Entregado",
       canal: "Mayorista",
+      metodo_pago: "Transferencia",
       km_envio: 0,
       costo_envio: 0,
     },
@@ -772,4 +774,48 @@ test("costoUnidadProductoBase: costo de exactamente 1 unidad — solo masa+relle
   assert.equal(costoUnidadProductoBase(data, "PROD-RAVIOL"), 118);
   data.producto_variantes = [];
   assert.equal(costoUnidadProductoBase(data, "PROD-RAVIOL"), 118);
+});
+
+test("idsExcluidosPorRevision: solo junta los casos 'pendiente' de pedidos/pedido_items — resuelto/ignorado ya no cuentan", () => {
+  const data = emptyDataV2();
+  data.datos_pendientes_revision = [
+    { id: "R1", seccion: "pedidos", entidad_id: "PED-1", motivo: "Sin método de pago" }, // sin estado -> pendiente
+    { id: "R2", seccion: "pedido_items", entidad_id: "ITEM-1", motivo: "Importe $0", estado: "pendiente" },
+    { id: "R3", seccion: "pedido_items", entidad_id: "ITEM-2", motivo: "Neto negativo", estado: "resuelto", resuelto_por: "a@a.com", resuelto_en: "2026-01-01" },
+    { id: "R4", seccion: "pedidos", entidad_id: "PED-2", motivo: "Otro caso", estado: "ignorado", nota_resolucion: "Es una venta de prueba, no afecta nada real" },
+    { id: "R5", seccion: "insumos", entidad_id: "INS-1", motivo: "No es un pedido, no debería aparecer acá" },
+  ];
+  const excluidos = idsExcluidosPorRevision(data);
+  assert.equal(excluidos.pedidos.has("PED-1"), true);
+  assert.equal(excluidos.pedidos.has("PED-2"), false); // ya ignorado, no se excluye más
+  assert.equal(excluidos.pedido_items.has("ITEM-1"), true);
+  assert.equal(excluidos.pedido_items.has("ITEM-2"), false); // ya resuelto
+  assert.equal(excluidos.pedidos.size, 1);
+  assert.equal(excluidos.pedido_items.size, 1);
+});
+
+test("calcularEerr/calcularMargenPorItem: un pedido pendiente de revisión no entra en ventas hasta resolverse", () => {
+  const data = emptyDataV2();
+  data.productos = [{ id: "P1", nombre: "Sabor A", activo: true }];
+  data.producto_variantes = [{ id: "V1", producto_id: "P1", nombre: "A", precio_venta: 1000, activo: true }];
+  data.pedidos = [
+    { id: "PED-1", fecha: "2026-01-10", cliente_id: "C1", estado: "Entregado", canal: "Minorista", descuento: 0, costo_envio: 0, total: 1000 },
+    { id: "PED-2", fecha: "2026-01-15", cliente_id: "C1", estado: "Entregado", canal: "Minorista", descuento: 0, costo_envio: 0, total: 500 },
+  ];
+  data.pedido_items = [
+    { id: "I1", pedido_id: "PED-1", producto_variante_id: "V1", nombre_historico: "A", cantidad: 1, precio_unitario: 1000, descuento: 0, subtotal: 1000 },
+    { id: "I2", pedido_id: "PED-2", producto_variante_id: "V1", nombre_historico: "A", cantidad: 1, precio_unitario: 500, descuento: 0, subtotal: 500 },
+  ];
+  data.datos_pendientes_revision = [{ id: "R1", seccion: "pedidos", entidad_id: "PED-2", motivo: "Pedido sin método de pago", estado: "pendiente" }];
+
+  const eerr = calcularEerr(data, "2026-01-01", "2026-01-31");
+  assert.equal(eerr.ventas_netas, 1000); // PED-2 excluido mientras esté pendiente
+
+  const items = calcularMargenPorItem(data, "2026-01-01", "2026-01-31");
+  assert.equal(items.length, 1);
+  assert.equal(items[0].pedido_id, "PED-1");
+
+  // Al marcarlo resuelto, vuelve a contar sin tocar nada más del pedido.
+  data.datos_pendientes_revision[0].estado = "resuelto";
+  assert.equal(calcularEerr(data, "2026-01-01", "2026-01-31").ventas_netas, 1500);
 });
