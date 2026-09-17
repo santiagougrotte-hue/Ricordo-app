@@ -852,6 +852,7 @@ const State = {
     if(!this.data.supRound) this.data.supRound = {};
     if(!this.data.setsLog) this.data.setsLog = {};
     if(!this.data.sessionNums) this.data.sessionNums = {0:1,1:1};
+    if(!this.data.supRestOverride) this.data.supRestOverride = {};
     return this.data;
   },
   save(){ localStorage.setItem(STORE_KEY, JSON.stringify(this.data)); },
@@ -871,6 +872,7 @@ const State = {
       sessionMeta:{}, // key: `d${day}-s${num}-${exId}` -> {rodilla,calidad,obs}
       supRound:{}, // key: `d${day}-s${num}-${blockN}` -> completedRounds
       setsLog:{}, // key: `d${day}-s${num}-${exId}` -> [bool,bool,...]
+      supRestOverride:{}, // key: `d${day}-s${num}-${blockN}` -> seconds override
       cinteState:null
     };
   }
@@ -2110,6 +2112,7 @@ const Plan = {
       } else if(b.type==='superserie'){
         const rounds = parseInt(b.items[0]?.sets) || 3;
         const curRound = (s.supRound||{})[bKey] || 0;
+        const supRestSec = (s.supRestOverride||{})[bKey] ?? (b.roundRest||90);
         const dots = Array.from({length:rounds},(_,i)=>{
           const r=i+1, isDone=r<=curRound, isAct=r===curRound+1;
           return `<div class="sup-round-dot ${isDone?'done':isAct?'active':''}">${r}</div>`;
@@ -2129,6 +2132,11 @@ const Plan = {
           const restSec=Timer.restSeconds(it.id);
           const exNameSafe=ex.name.replace(/'/g,'\\u0027');
           const videoHref='https://www.youtube.com/results?search_query='+encodeURIComponent(ex.video||ex.name);
+          const itSetsLog=(s.setsLog||{})[key]||[];
+          const setDots=Array.from({length:rounds},(_,si)=>{
+            const done=!!itSetsLog[si];
+            return `<div class="set-dot ${done?'done':''}" style="width:20px;height:20px;font-size:10px;display:flex;align-items:center;justify-content:center;">${si+1}</div>`;
+          }).join('');
           if(i>0){
             bodyHtml += `<div class="sup-arrow">${b.transitionRest||'20-30s'} de transición → siguiente ejercicio</div>`;
           }
@@ -2141,14 +2149,23 @@ const Plan = {
             </div>
             <div class="sup-item-name">${ex.name}</div>
             <div class="sup-item-detail">${it.sets} series&nbsp;·&nbsp;${it.reps} reps${hasLoad?' &nbsp;·&nbsp; '+it.load:''}${it.rpe&&it.rpe!=='—'?' &nbsp;·&nbsp; '+it.rpe:''}</div>
+            <div class="set-dots" style="margin:6px 0 4px;">${setDots}</div>
             ${SeriesLog.buildTable(key,it,funcCat||ex.cat,{exName:exNameSafe,restSec,rng:Timer.restRangeOf(it.id)})}
           </div>`;
         });
         bodyHtml += `<div class="sup-round-rest">
-          <div class="sup-round-rest-label">Descanso entre rondas: ${fmtSec(b.roundRest||90)}</div>
+          <div class="sup-round-rest-label" style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
+            <span>Descanso entre rondas:</span>
+            <label style="display:flex;align-items:center;gap:4px;font-size:12px;">
+              <input type="number" min="10" max="600" value="${supRestSec}"
+                style="width:56px;padding:3px 6px;border:1px solid var(--border);border-radius:6px;background:var(--card);color:var(--text);font-size:12px;text-align:center;"
+                onchange="Plan.setSupRest('${bKey}',this.value)">
+              s &nbsp;(${fmtSec(supRestSec)})
+            </label>
+          </div>
           ${curRound<rounds
             ?`<button class="sup-advance-btn" onclick="Plan.advanceSupRound('${bKey}',${rounds},${b.roundRest||90})">
-                ✓ Ronda ${curRound+1} completada — Iniciar descanso ${fmtSec(b.roundRest||90)}
+                ✓ Ronda ${curRound+1} completada — Iniciar descanso ${fmtSec(supRestSec)}
               </button>`
             :`<button class="sup-advance-btn all-done" disabled>✓ Superserie completada</button>`
           }
@@ -2218,18 +2235,49 @@ const Plan = {
 
     this.renderSessionStatus();
   },
-  advanceSupRound(bKey, maxRounds, restSec){
+  advanceSupRound(bKey, maxRounds, defaultRestSec){
     const s = State.data;
     if(!s.supRound) s.supRound = {};
     const cur = s.supRound[bKey] || 0;
     if(cur >= maxRounds) return;
-    s.supRound[bKey] = cur + 1;
+    const newRound = cur + 1;
+    s.supRound[bKey] = newRound;
+
+    // Resolve block items from bKey to auto-mark sets
+    const m = bKey.match(/^d(\d+)-s(\d+)-(\d+)$/);
+    if(m){
+      const blkDay=parseInt(m[1]), blkNum=parseInt(m[2]), blkN=parseInt(m[3]);
+      const blocks = Program.buildDay(blkDay);
+      const block = blocks.find(b=>b.n===blkN);
+      if(block){
+        if(!s.setsLog) s.setsLog = {};
+        if(!s.completedExercises) s.completedExercises = {};
+        block.items.forEach(it=>{
+          const key=`d${blkDay}-s${blkNum}-${it.id}`;
+          if(!s.setsLog[key]) s.setsLog[key]=[];
+          s.setsLog[key][cur] = true; // cur = newRound - 1 (0-indexed)
+          if(newRound >= parseInt(it.sets||maxRounds)){
+            s.completedExercises[key] = true;
+          }
+        });
+      }
+    }
+
+    const restSec = (s.supRestOverride||{})[bKey] ?? defaultRestSec;
     State.save();
-    if(cur + 1 < maxRounds){
+    if(newRound < maxRounds){
       Timer.start(restSec, `Descanso entre rondas · ${Math.floor(restSec/60)}:${String(restSec%60).padStart(2,'0')}`);
     } else {
       Toast.show('✓ ¡Superserie completada!');
     }
+    this.renderBlocks();
+  },
+  setSupRest(bKey, secs){
+    const s = State.data;
+    if(!s.supRestOverride) s.supRestOverride = {};
+    const v = parseInt(secs);
+    if(!isNaN(v) && v >= 10) s.supRestOverride[bKey] = v;
+    State.save();
     this.renderBlocks();
   },
   toggleSetDot(key, setIdx){
