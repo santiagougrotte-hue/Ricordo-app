@@ -28,6 +28,8 @@ import {
   calcularEvolucionMensual,
   calcularVentasPendientes,
 } from "@/lib/analitica-ventas";
+import { generarResumenInteligente } from "@/lib/resumen-inteligente";
+import type { Conclusion } from "@/lib/resumen-inteligente";
 import type { EstadoPedido, Canal } from "@/lib/types-v2";
 
 const ESTADO_COLOR: Record<EstadoPedido, "blue" | "orange" | "green" | "red"> = {
@@ -39,6 +41,37 @@ const ESTADO_COLOR: Record<EstadoPedido, "blue" | "orange" | "green" | "red"> = 
 
 type MetricaEvolucion = "facturacion" | "cajas" | "pedidos";
 const METRICA_LABEL: Record<MetricaEvolucion, string> = { facturacion: "Facturación", cajas: "Cajas", pedidos: "Pedidos" };
+
+const CATEGORIA_COLOR: Record<Conclusion["categoria"], "green" | "red" | "blue"> = { positivo: "green", negativo: "red", neutral: "blue" };
+
+function FilaConclusion({ conclusion }: { conclusion: Conclusion }) {
+  const [expandido, setExpandido] = useState(false);
+  return (
+    <li className="rounded-md border border-border bg-surface2/40 p-3 text-[12.5px]">
+      <div className="flex items-start gap-2">
+        <Badge color={CATEGORIA_COLOR[conclusion.categoria]}>●</Badge>
+        <div className="flex-1 text-text2">{conclusion.texto}</div>
+      </div>
+      <button className="mt-1.5 text-[11px] font-medium text-accent hover:underline" onClick={() => setExpandido((v) => !v)}>
+        {expandido ? "Ocultar datos" : "¿Por qué?"}
+      </button>
+      {expandido && (
+        <TableWrap>
+          <table className="mt-2 w-full">
+            <tbody>
+              {Object.entries(conclusion.datos).map(([clave, valor]) => (
+                <tr key={clave}>
+                  <Td className="text-text3">{clave}</Td>
+                  <Td className="font-medium text-text">{valor === null ? "—" : typeof valor === "number" ? fNum(valor, 2) : valor}</Td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </TableWrap>
+      )}
+    </li>
+  );
+}
 
 export function Inicio() {
   const { data } = useStoreV2();
@@ -65,6 +98,7 @@ export function Inicio() {
   const porCanal = useMemo(() => calcularVentasPorCanal(data, desde, hasta), [data, desde, hasta]);
   const topGustos = useMemo(() => calcularVentasPorGusto(data, desde, hasta, canalParaMetricas).slice(0, 5), [data, desde, hasta, canalParaMetricas]);
   const evolucion = useMemo(() => calcularEvolucionMensual(data, anio, canalParaMetricas), [data, anio, canalParaMetricas]);
+  const resumen = useMemo(() => generarResumenInteligente(data, mes, anio), [data, mes, anio]);
 
   const pedidosDelMes = useMemo(() => data.pedidos.filter((p) => inPeriod(p.fecha, mes, anio)), [data.pedidos, mes, anio]);
   const cmv = useMemo(() => cmvPeriodo(data, pedidosDelMes), [data, pedidosDelMes]);
@@ -129,6 +163,20 @@ export function Inicio() {
         <Alert kind="warning">
           {alertasStock.length} insumo(s) por debajo del stock mínimo: {alertasStock.map(({ insumo }) => insumo.nombre).join(", ")}.
         </Alert>
+      )}
+
+      {resumen.length > 0 && (
+        <Card title="Resumen inteligente" className="mb-4">
+          <p className="mb-3 text-[12.5px] text-text3">
+            Conclusiones calculadas a partir de los datos cargados este mes — nunca inventadas. Cada una tiene un
+            &ldquo;¿Por qué?&rdquo; con los números exactos usados.
+          </p>
+          <ul className="flex flex-col gap-2">
+            {resumen.map((c) => (
+              <FilaConclusion key={c.id} conclusion={c} />
+            ))}
+          </ul>
+        </Card>
       )}
 
       <div className="mb-4 grid grid-cols-1 gap-4 lg:grid-cols-2">

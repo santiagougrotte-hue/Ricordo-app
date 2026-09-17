@@ -26,7 +26,12 @@ import {
 } from "@/components/ui";
 import { Modal } from "@/components/Modal";
 import { fARS, fNum, calcularStock, valorStockInsumos, categoriasPorAmbito } from "@/lib/calc-v2";
+import { calcularAlertasStock } from "@/lib/ia-stock";
+import type { SeveridadAlerta } from "@/lib/ia-stock";
 import type { Insumo, TipoInsumo, TipoInventarioMovimiento } from "@/lib/types-v2";
+
+const SEVERIDAD_LABEL: Record<SeveridadAlerta, string> = { critica: "Crítica", importante: "Importante", informativa: "Informativa" };
+const SEVERIDAD_COLOR: Record<SeveridadAlerta, "red" | "orange" | "blue"> = { critica: "red", importante: "orange", informativa: "blue" };
 
 const TIPOS_MOV: TipoInventarioMovimiento[] = ["compra", "produccion", "consumo", "venta", "conteo", "ajuste", "merma"];
 const MOV_COLOR: Record<TipoInventarioMovimiento, "green" | "red" | "blue" | "orange" | "purple"> = {
@@ -369,6 +374,85 @@ function MovimientosTab() {
   );
 }
 
+function AlertasStockTab() {
+  const { data } = useStoreV2();
+  const hoy = useMemo(() => new Date().toISOString().slice(0, 10), []);
+  const alertas = useMemo(() => calcularAlertasStock(data, hoy), [data, hoy]);
+  const criticas = alertas.filter((a) => a.severidad === "critica");
+  const importantes = alertas.filter((a) => a.severidad === "importante");
+
+  return (
+    <div>
+      <p className="mb-4 text-[12.5px] text-text3">
+        Calculado a partir del libro de movimientos y de los pedidos Confirmado/En producción — nunca compra ni ajusta
+        stock por sí sola, solo calcula días de cobertura y sugiere una cantidad a comprar. La decisión queda siempre
+        del lado humano.
+      </p>
+      <StatGrid>
+        <KpiCard label="Alertas críticas" value={fNum(criticas.length, 0)} color={criticas.length > 0 ? "red" : "green"} />
+        <KpiCard label="Alertas importantes" value={fNum(importantes.length, 0)} color={importantes.length > 0 ? "orange" : "green"} />
+        <KpiCard label="Insumos monitoreados" value={fNum(alertas.length, 0)} color="blue" />
+      </StatGrid>
+      {alertas.length === 0 ? (
+        <EmptyState text="No hay insumos con control de stock activo." />
+      ) : (
+        <TableWrap>
+          <table className="w-full">
+            <thead>
+              <tr>
+                <Th>Insumo</Th>
+                <Th>Severidad</Th>
+                <Th>Stock actual</Th>
+                <Th>Consumo diario prom.</Th>
+                <Th>Días de cobertura</Th>
+                <Th>Necesidad pedidos pendientes</Th>
+                <Th>Sugerido a comprar</Th>
+                <Th>Detalle</Th>
+              </tr>
+            </thead>
+            <tbody>
+              {alertas.map((a) => (
+                <TrHover key={a.insumo_id}>
+                  <Td main>{a.insumo_nombre}</Td>
+                  <Td>
+                    <Badge color={SEVERIDAD_COLOR[a.severidad]}>{SEVERIDAD_LABEL[a.severidad]}</Badge>
+                  </Td>
+                  <Td>
+                    {fNum(a.stock_actual, 2)} {a.unidad}
+                  </Td>
+                  <Td>
+                    {fNum(a.consumo_diario_promedio, 2)} {a.unidad}/día
+                    {a.variacion_consumo_pct !== null && (
+                      <div className={`text-[11px] ${a.variacion_consumo_pct > 0 ? "text-orange" : "text-text3"}`}>
+                        {a.variacion_consumo_pct > 0 ? "↑" : "↓"} {fNum(Math.abs(a.variacion_consumo_pct), 0)}% vs. período anterior
+                      </div>
+                    )}
+                  </Td>
+                  <Td className={a.dias_cobertura !== null && a.dias_cobertura < 7 ? "text-red" : ""}>
+                    {a.dias_cobertura === null ? "—" : `~${Math.floor(a.dias_cobertura)} días`}
+                  </Td>
+                  <Td className={a.faltante_para_pedidos_pendientes > 0 ? "text-red" : ""}>
+                    {fNum(a.necesidad_pedidos_pendientes, 2)} {a.unidad}
+                    {a.faltante_para_pedidos_pendientes > 0 && (
+                      <div className="text-[11px] text-red">
+                        Faltan {fNum(a.faltante_para_pedidos_pendientes, 2)} {a.unidad}
+                      </div>
+                    )}
+                  </Td>
+                  <Td>
+                    {a.cantidad_sugerida_compra > 0 ? `${fNum(a.cantidad_sugerida_compra, 2)} ${a.unidad}` : "—"}
+                  </Td>
+                  <Td className="max-w-[280px] text-[11px] text-text3">{a.mensaje}</Td>
+                </TrHover>
+              ))}
+            </tbody>
+          </table>
+        </TableWrap>
+      )}
+    </div>
+  );
+}
+
 export function Inventario() {
   const [tab, setTab] = useState("stock");
   return (
@@ -380,9 +464,12 @@ export function Inventario() {
         options={[
           { value: "stock", label: "Insumos y stock" },
           { value: "movimientos", label: "Movimientos" },
+          { value: "alertas", label: "Alertas de stock (IA)" },
         ]}
       />
-      {tab === "stock" ? <StockTab /> : <MovimientosTab />}
+      {tab === "stock" && <StockTab />}
+      {tab === "movimientos" && <MovimientosTab />}
+      {tab === "alertas" && <AlertasStockTab />}
     </div>
   );
 }
