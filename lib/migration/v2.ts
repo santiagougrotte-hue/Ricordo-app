@@ -835,6 +835,9 @@ export function migrarAV2(data: RicordoData): { documento: RicordoDocument; repo
         umbral_compras_consumo_red: data.umbral_compras_consumo_red,
         umbral_stock_bajo_producto: data.umbral_stock_bajo_producto,
         tipo_cambio: data.tipo_cambio,
+        // No existía en el esquema v1 — 35% es la alícuota general vigente en Argentina; se puede
+        // ajustar después en Configuración sin tocar el cálculo.
+        alicuota_iigg: 35,
         saldo_inicial_cmv: money(data.saldo_cmv_anterior),
         saldo_inicial_compras: money(data.saldo_compras_anterior),
         fecha_corte_cmv: data.fecha_corte_cmv,

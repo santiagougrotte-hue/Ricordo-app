@@ -46,6 +46,7 @@ import {
   estadoDistribucionMes,
   idsExcluidosPorRevision,
   calcularRentabilidadEnvios,
+  calcularEerrEstructurado,
 } from "./calc-v2";
 
 function fixture(): RicordoData {
@@ -852,4 +853,53 @@ test("calcularRentabilidadEnvios: separa ingreso cobrado del costo real, nunca l
   assert.equal(reporte.ingreso_total, 2000 + 1500 + 1000);
   assert.equal(reporte.costo_real_total, 1200 + 2500 + 1000);
   assert.equal(reporte.resultado_total, 800 - 1000 + 0);
+});
+
+test("calcularEerrEstructurado: reproduce exactamente la estructura pedida (VENTAS/CMV/R.bruto/Gastos adm,comerc./Amortizaciones/Intereses/IIGG/Resultado neto)", () => {
+  const data = emptyDataV2();
+  data.clientes = [{ id: "C1", nombre: "Cliente 1", canal: "Minorista" }];
+  data.insumos = [{ id: "INS-1", nombre: "Insumo caro", tipo: "ingrediente", unidad: "kg", precio_actual: 140000, controla_stock: false, activo: true }];
+  data.productos = [{ id: "P1", nombre: "Producto A", activo: true }];
+  data.recetas = [{ id: "REC-1", producto_id: "P1", nombre: "Receta A", activa: true }];
+  data.receta_items = [{ id: "RI-1", receta_id: "REC-1", insumo_id: "INS-1", etapa: "masa", cantidad: 1 }];
+  data.producto_variantes = [{ id: "V1", producto_id: "P1", nombre: "A", unidades_por_paquete: 1, precio_venta: 300000, activo: true }];
+  data.pedidos = [{ id: "PED-1", fecha: "2026-01-10", cliente_id: "C1", estado: "Entregado", canal: "Minorista", descuento: 0, costo_envio: 0, total: 300000 }];
+  data.pedido_items = [{ id: "I1", pedido_id: "PED-1", producto_variante_id: "V1", nombre_historico: "A", cantidad: 1, precio_unitario: 300000, descuento: 0, subtotal: 300000 }];
+
+  data.categorias = [
+    { id: "CAT-GO", nombre: "Gasto Operativo — Sueldos", ambito: "financiero", activo: true },
+    { id: "CAT-INT", nombre: "Gastos Financieros — Intereses", ambito: "financiero", activo: true },
+  ];
+  data.movimientos_financieros = [
+    { id: "M1", fecha: "2026-01-15", tipo: "egreso", categoria_id: "CAT-GO", concepto: "Sueldos", monto: 40000, estado: "confirmado" },
+    { id: "M2", fecha: "2026-01-20", tipo: "egreso", categoria_id: "CAT-INT", concepto: "Intereses préstamo", monto: 9200, estado: "confirmado" },
+  ];
+  data.activos = [{ id: "A1", nombre: "Máquina", fecha_compra: "2026-01-01", costo: 1200000, vida_util_meses: 24, amortizacion_mensual: 50000, activo: true }];
+
+  const r = calcularEerrEstructurado(data, "2026-01-01", "2026-01-31");
+  assert.equal(r.ventas, 300000);
+  assert.equal(r.cmv.total, 140000);
+  assert.equal(r.resultado_bruto, 160000);
+  assert.equal(r.gastos_adm_comerc.total, 40000);
+  assert.equal(r.resultado_antes_amort_int_impuestos, 120000);
+  assert.equal(r.amortizaciones.total, 50000);
+  assert.equal(r.resultado_antes_intereses_impuestos, 70000);
+  assert.equal(r.intereses.total, 9200);
+  assert.equal(r.resultado_antes_impuestos, 60800);
+  assert.equal(r.alicuota_iigg_pct, 35);
+  assert.equal(r.iigg, 21280);
+  assert.equal(r.resultado_neto, 39520);
+});
+
+test("calcularEerrEstructurado: nunca calcula un IIGG negativo cuando el resultado antes de impuestos es negativo", () => {
+  const data = emptyDataV2();
+  data.clientes = [{ id: "C1", nombre: "Cliente 1", canal: "Minorista" }];
+  data.pedidos = [{ id: "PED-1", fecha: "2026-01-10", cliente_id: "C1", estado: "Entregado", canal: "Minorista", descuento: 0, costo_envio: 0, total: 1000 }];
+  data.categorias = [{ id: "CAT-INT", nombre: "Gastos Financieros — Intereses", ambito: "financiero", activo: true }];
+  data.movimientos_financieros = [{ id: "M1", fecha: "2026-01-20", tipo: "egreso", categoria_id: "CAT-INT", concepto: "Intereses", monto: 5000, estado: "confirmado" }];
+
+  const r = calcularEerrEstructurado(data, "2026-01-01", "2026-01-31");
+  assert.ok(r.resultado_antes_impuestos < 0);
+  assert.equal(r.iigg, 0);
+  assert.equal(r.resultado_neto, r.resultado_antes_impuestos);
 });

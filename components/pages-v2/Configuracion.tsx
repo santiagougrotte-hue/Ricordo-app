@@ -85,6 +85,20 @@ function GeneralTab() {
         </div>
       </Card>
 
+      <Card title="Impuestos">
+        <p className="mb-3 text-[12.5px] text-text3">
+          Alícuota usada por Finanzas → Resultados → Estado de Resultados (formato clásico) para calcular el IIGG
+          sobre el resultado antes de impuestos del período — nunca se hardcodea dentro del cálculo.
+        </p>
+        <Field label="Alícuota de Impuesto a las Ganancias (%)">
+          <Input
+            type="number"
+            value={data.configuracion.alicuota_iigg}
+            onChange={(e) => setUmbral("alicuota_iigg", Number(e.target.value))}
+          />
+        </Field>
+      </Card>
+
       <Card title="Caja">
         <p className="mb-3 text-[12.5px] text-text3">
           Punto de partida del Flujo de caja (Finanzas → Tesorería → Flujo y proyección) antes de sumar cualquier

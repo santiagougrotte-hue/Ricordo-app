@@ -392,6 +392,11 @@ export interface Configuracion {
   umbral_compras_consumo_red: number;
   umbral_stock_bajo_producto: number;
   tipo_cambio: { valor: number; fuente: string };
+  /** Alícuota de Impuesto a las Ganancias (%) usada por el Estado de Resultados con la estructura
+   * pedida (Ventas/CMV/R.bruto/Gastos adm.comerc./Amortizaciones/Intereses/IIGG/Resultado neto) —
+   * configurable porque la alícuota real puede cambiar, nunca se hardcodea el número dentro del
+   * cálculo. */
+  alicuota_iigg: number;
   saldo_inicial_cmv: number;
   saldo_inicial_compras: number;
   fecha_corte_cmv: string | null;
@@ -536,6 +541,7 @@ export function emptyDataV2(): RicordoDataV2 {
       umbral_compras_consumo_red: 40,
       umbral_stock_bajo_producto: 10,
       tipo_cambio: { valor: 1000, fuente: "manual" },
+      alicuota_iigg: 35,
       saldo_inicial_cmv: 0,
       saldo_inicial_compras: 0,
       fecha_corte_cmv: null,

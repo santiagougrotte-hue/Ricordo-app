@@ -58,6 +58,7 @@ import {
   gananciaNetaPendienteDistribuir,
   estadoDistribucionMes,
   calcularRentabilidadEnvios,
+  calcularEerrEstructurado,
 } from "@/lib/calc-v2";
 import type { Eerr, EerrLinea, CriterioEnvioPedido, VistaMargen, CuentaPorCobrar, CuentaPorPagar } from "@/lib/calc-v2";
 import type { Activo } from "@/lib/types-v2";
@@ -350,6 +351,7 @@ const PREFIJOS_GASTO: Record<string, (sub: string) => string> = {
   "Costo Indirecto — Fijo": () => "Costo Indirecto — Fijo",
   "Costo Indirecto — Variable": () => "Costo Indirecto — Variable",
   "Gasto Operativo": (sub) => `Gasto Operativo — ${sub}`,
+  "Gastos Financieros": (sub) => `Gastos Financieros — ${sub}`,
 };
 
 function GastosTab() {
@@ -365,7 +367,7 @@ function GastosTab() {
   });
 
   const gastos = useMemo(() => {
-    const prefijos = ["Costo Fijo — ", "Costo Indirecto — ", "Gasto Operativo — "];
+    const prefijos = ["Costo Fijo — ", "Costo Indirecto — ", "Gasto Operativo — ", "Gastos Financieros — "];
     return data.movimientos_financieros
       .filter((m) => prefijos.some((p) => nombreCategoria(data, m.categoria_id).startsWith(p)))
       .sort((a, b) => b.fecha.localeCompare(a.fecha));
@@ -403,7 +405,7 @@ function GastosTab() {
       <div className="mb-4 flex justify-end">
         <Button onClick={() => setModalOpen(true)}>+ Nuevo gasto</Button>
       </div>
-      <Card title="Costos fijos, indirectos y gastos operativos">
+      <Card title="Costos fijos, indirectos, gastos operativos y financieros">
         {gastos.length === 0 ? (
           <EmptyState text="No hay gastos cargados." />
         ) : (
@@ -456,11 +458,16 @@ function GastosTab() {
               <option value="Costo Indirecto — Fijo">Costo indirecto — fijo (del mes)</option>
               <option value="Costo Indirecto — Variable">Costo indirecto — variable (del mes)</option>
               <option value="Gasto Operativo">Gasto operativo</option>
+              <option value="Gastos Financieros">Gastos financieros (intereses, comisiones…)</option>
             </Select>
           </Field>
-          {(form.grupo === "Costo Fijo" || form.grupo === "Gasto Operativo") && (
+          {(form.grupo === "Costo Fijo" || form.grupo === "Gasto Operativo" || form.grupo === "Gastos Financieros") && (
             <Field label="Subcategoría">
-              <Input value={form.subcategoria} onChange={(e) => setForm({ ...form, subcategoria: e.target.value })} placeholder="Alquiler, Sueldos…" />
+              <Input
+                value={form.subcategoria}
+                onChange={(e) => setForm({ ...form, subcategoria: e.target.value })}
+                placeholder={form.grupo === "Gastos Financieros" ? "Intereses, Comisiones bancarias…" : "Alquiler, Sueldos…"}
+              />
             </Field>
           )}
           <Field label="Concepto" full>
@@ -1772,6 +1779,60 @@ function RentabilidadEnviosVista() {
   );
 }
 
+interface FilaEerrClasico {
+  label: string;
+  valor: number;
+  subtotal?: boolean;
+}
+
+function EerrClasicoVista() {
+  const { data } = useStoreV2();
+  const { mes, anio } = usePeriod();
+  const desde = primerDiaMes(mes, anio);
+  const hasta = ultimoDiaMes(mes, anio);
+  const r = useMemo(() => calcularEerrEstructurado(data, desde, hasta), [data, desde, hasta]);
+
+  const filas: FilaEerrClasico[] = [
+    { label: "VENTAS", valor: r.ventas },
+    { label: "(CMV)", valor: r.cmv.total },
+    { label: "R. bruto", valor: r.resultado_bruto, subtotal: true },
+    { label: "(Gastos adm. y comerc.)", valor: r.gastos_adm_comerc.total },
+    { label: "R. antes de Amortiz., Int. e Impuestos", valor: r.resultado_antes_amort_int_impuestos, subtotal: true },
+    { label: "(Amortizaciones)", valor: r.amortizaciones.total },
+    { label: "Resultado antes de Intereses e Impuestos", valor: r.resultado_antes_intereses_impuestos, subtotal: true },
+    { label: "(Intereses)", valor: r.intereses.total },
+    { label: "Resultado antes de Impuestos", valor: r.resultado_antes_impuestos, subtotal: true },
+    { label: `(IIGG) ${fNum(r.alicuota_iigg_pct, 0)}%`, valor: r.iigg },
+    { label: "Resultado Neto", valor: r.resultado_neto, subtotal: true },
+  ];
+
+  return (
+    <div>
+      <p className="mb-4 text-[12.5px] text-text3">
+        Formato clásico: Ventas / CMV / Resultado bruto / Gastos adm. y comerciales / Amortizaciones / Intereses /
+        IIGG / Resultado neto, en ese orden — es una presentación alternativa sobre los mismos datos del Estado de
+        Resultados detallado (esa vista desglosa &ldquo;Gastos adm. y comerc.&rdquo; en costos fijos, indirectos y
+        operativos por separado; acá van consolidados en una sola línea). La alícuota de IIGG se ajusta en
+        Configuración → General.
+      </p>
+      <Card>
+        <TableWrap>
+          <table className="w-full">
+            <tbody>
+              {filas.map((f) => (
+                <tr key={f.label} className={f.subtotal ? "bg-surface2/60" : ""}>
+                  <Td main={f.subtotal}>{f.label}</Td>
+                  <Td className={f.subtotal ? "font-semibold text-text" : "text-text2"}>{fARS(f.valor)}</Td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </TableWrap>
+      </Card>
+    </div>
+  );
+}
+
 function ResultadosTab() {
   const [subtab, setSubtab] = useState("eerr");
   return (
@@ -1781,12 +1842,14 @@ function ResultadosTab() {
         onChange={setSubtab}
         options={[
           { value: "eerr", label: "Estado de Resultados" },
+          { value: "eerr-clasico", label: "Estado de Resultados (formato clásico)" },
           { value: "balance", label: "Balance General" },
           { value: "margen-sabor-canal", label: "Productos y canales" },
           { value: "envios", label: "Rentabilidad de envíos" },
         ]}
       />
       {subtab === "eerr" && <EstadoResultadosVista />}
+      {subtab === "eerr-clasico" && <EerrClasicoVista />}
       {subtab === "balance" && <BalanceGeneralVista />}
       {subtab === "margen-sabor-canal" && <MargenSaborCanalVista />}
       {subtab === "envios" && <RentabilidadEnviosVista />}

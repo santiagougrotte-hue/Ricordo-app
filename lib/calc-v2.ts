@@ -633,6 +633,74 @@ export function calcularEerr(data: RicordoDataV2, desde: string, hasta: string, 
   };
 }
 
+// --- Estado de Resultados con la estructura pedida (imagen de referencia) ------------------------
+// Vista alternativa de PRESENTACIÓN sobre los mismos números ya calculados por calcularEerr — no
+// reemplaza esa función (de la que dependen Caja Inteligente/ganancia distribuible/etc., que deben
+// seguir funcionando exactamente igual). Agrega dos conceptos que calcularEerr no tenía: Intereses
+// (gastos financieros, categoría "Gastos Financieros — …") e IIGG (Impuesto a las Ganancias, %
+// configurable en Configuración, nunca hardcodeado) — únicos dos casos donde SÍ hay una fuente de
+// datos real y no hace falta seguir dejándolos en cero.
+
+export interface EerrEstructurado {
+  ventas: number;
+  cmv: EerrLinea;
+  resultado_bruto: number;
+  gastos_adm_comerc: EerrLinea;
+  resultado_antes_amort_int_impuestos: number;
+  amortizaciones: EerrLinea;
+  resultado_antes_intereses_impuestos: number;
+  intereses: EerrLinea;
+  resultado_antes_impuestos: number;
+  alicuota_iigg_pct: number;
+  iigg: number;
+  resultado_neto: number;
+}
+
+/** Sección 33/imagen de referencia: VENTAS / (CMV) / R.bruto / (Gastos adm,comerc.) / R.antes de
+ * Amortiz,Int e impuestos / (Amortizaciones) / Resultado antes de Intereses e impuestos /
+ * (Intereses) / Resultado antes de Impuestos / (IIGG) % / Resultado Neto — exactamente esas 11
+ * líneas, en ese orden. "Gastos adm,comerc." consolida costos indirectos variables + costos fijos
+ * + gastos operativos (que calcularEerr ya muestra por separado para quien prefiera ese detalle). */
+export function calcularEerrEstructurado(data: RicordoDataV2, desde: string, hasta: string, canal?: Canal): EerrEstructurado {
+  const eerr = calcularEerr(data, desde, hasta, canal);
+
+  const gastos_adm_comerc: EerrLinea = {
+    total: eerr.costos_indirectos_variables.total + eerr.gastos_operativos.total + eerr.costos_fijos.total,
+    registros: [...eerr.costos_indirectos_variables.registros, ...eerr.gastos_operativos.registros, ...eerr.costos_fijos.registros],
+  };
+  const resultado_antes_amort_int_impuestos = eerr.resultado_bruto - gastos_adm_comerc.total;
+  const resultado_antes_intereses_impuestos = resultado_antes_amort_int_impuestos - eerr.amortizaciones.total;
+
+  const movsIntereses = data.movimientos_financieros.filter(
+    (m) => nombreCategoria(data, m.categoria_id).startsWith("Gastos Financieros — ") && m.fecha >= desde && m.fecha <= hasta
+  );
+  const intereses: EerrLinea = {
+    total: Math.round(movsIntereses.reduce((acc, m) => acc + m.monto, 0)),
+    registros: movsIntereses.map((m) => ({ fecha: m.fecha, concepto: m.concepto, monto: m.monto })),
+  };
+  const resultado_antes_impuestos = resultado_antes_intereses_impuestos - intereses.total;
+
+  const alicuota_iigg_pct = data.configuracion.alicuota_iigg;
+  // Nunca un impuesto negativo: sin ganancia no hay IIGG que calcular sobre esa base.
+  const iigg = resultado_antes_impuestos > 0 ? Math.round(resultado_antes_impuestos * (alicuota_iigg_pct / 100)) : 0;
+  const resultado_neto = resultado_antes_impuestos - iigg;
+
+  return {
+    ventas: eerr.ventas_netas,
+    cmv: eerr.cmv,
+    resultado_bruto: eerr.resultado_bruto,
+    gastos_adm_comerc,
+    resultado_antes_amort_int_impuestos,
+    amortizaciones: eerr.amortizaciones,
+    resultado_antes_intereses_impuestos,
+    intereses,
+    resultado_antes_impuestos,
+    alicuota_iigg_pct,
+    iigg,
+    resultado_neto,
+  };
+}
+
 export interface RentabilidadEnvioPedido {
   pedido_id: string;
   fecha: string;
