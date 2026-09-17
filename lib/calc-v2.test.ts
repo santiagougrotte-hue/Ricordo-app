@@ -45,6 +45,7 @@ import {
   gananciaNetaPendienteDistribuir,
   estadoDistribucionMes,
   idsExcluidosPorRevision,
+  calcularRentabilidadEnvios,
 } from "./calc-v2";
 
 function fixture(): RicordoData {
@@ -818,4 +819,37 @@ test("calcularEerr/calcularMargenPorItem: un pedido pendiente de revisión no en
   // Al marcarlo resuelto, vuelve a contar sin tocar nada más del pedido.
   data.datos_pendientes_revision[0].estado = "resuelto";
   assert.equal(calcularEerr(data, "2026-01-01", "2026-01-31").ventas_netas, 1500);
+});
+
+test("calcularRentabilidadEnvios: separa ingreso cobrado del costo real, nunca los mezcla en una sola cifra", () => {
+  const data = emptyDataV2();
+  data.clientes = [{ id: "C1", nombre: "Cliente 1", canal: "Minorista" }];
+  data.pedidos = [
+    // Envío rentable: se cobró más de lo que costó de verdad.
+    { id: "PED-1", fecha: "2026-01-10", cliente_id: "C1", estado: "Entregado", canal: "Minorista", descuento: 0, costo_envio: 2000, costo_real_envio: 1200, total: 5000 },
+    // Envío a pérdida.
+    { id: "PED-2", fecha: "2026-01-12", cliente_id: "C1", estado: "Entregado", canal: "Minorista", descuento: 0, costo_envio: 1500, costo_real_envio: 2500, total: 3000 },
+    // Sin costo_real_envio cargado -> se aproxima con lo cobrado (resultado 0).
+    { id: "PED-3", fecha: "2026-01-14", cliente_id: "C1", estado: "Entregado", canal: "Minorista", descuento: 0, costo_envio: 1000, total: 2000 },
+    // Sin envío cobrado -> no entra al reporte.
+    { id: "PED-4", fecha: "2026-01-15", cliente_id: "C1", estado: "Entregado", canal: "Minorista", descuento: 0, costo_envio: 0, total: 2000 },
+    // Pedido pendiente (no Entregado) -> no entra, todavía no es una venta realizada.
+    { id: "PED-5", fecha: "2026-01-16", cliente_id: "C1", estado: "Confirmado", canal: "Minorista", descuento: 0, costo_envio: 1000, total: 2000 },
+  ];
+
+  const reporte = calcularRentabilidadEnvios(data, "2026-01-01", "2026-01-31");
+  assert.equal(reporte.pedidos.length, 3);
+  const ped1 = reporte.pedidos.find((p) => p.pedido_id === "PED-1")!;
+  assert.equal(ped1.ingreso_envio, 2000);
+  assert.equal(ped1.costo_real_envio, 1200);
+  assert.equal(ped1.resultado, 800);
+  const ped2 = reporte.pedidos.find((p) => p.pedido_id === "PED-2")!;
+  assert.equal(ped2.resultado, -1000);
+  const ped3 = reporte.pedidos.find((p) => p.pedido_id === "PED-3")!;
+  assert.equal(ped3.costo_real_envio, 1000);
+  assert.equal(ped3.resultado, 0);
+
+  assert.equal(reporte.ingreso_total, 2000 + 1500 + 1000);
+  assert.equal(reporte.costo_real_total, 1200 + 2500 + 1000);
+  assert.equal(reporte.resultado_total, 800 - 1000 + 0);
 });

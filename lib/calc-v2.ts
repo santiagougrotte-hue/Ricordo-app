@@ -633,6 +633,49 @@ export function calcularEerr(data: RicordoDataV2, desde: string, hasta: string, 
   };
 }
 
+export interface RentabilidadEnvioPedido {
+  pedido_id: string;
+  fecha: string;
+  cliente_nombre: string;
+  ingreso_envio: number;
+  costo_real_envio: number;
+  resultado: number;
+}
+
+export interface RentabilidadEnvios {
+  pedidos: RentabilidadEnvioPedido[];
+  ingreso_total: number;
+  costo_real_total: number;
+  resultado_total: number;
+}
+
+/** Sección 29: separa el envío del resto de la venta — "Ingreso por envío" (lo cobrado,
+ * `costo_envio`) contra "Costo real" (`costo_real_envio`, o lo cobrado como aproximación si no se
+ * cargó un costo real todavía) nunca se mezclan en una sola cifra. Solo pedidos Entregado (mismo
+ * criterio que el resto de las métricas realizadas) y con envío cobrado > 0. */
+export function calcularRentabilidadEnvios(data: RicordoDataV2, desde: string, hasta: string, canal?: Canal): RentabilidadEnvios {
+  const pedidos = data.pedidos.filter(
+    (p) => p.estado === "Entregado" && p.fecha >= desde && p.fecha <= hasta && (!canal || p.canal === canal) && p.costo_envio > 0
+  );
+  const filas: RentabilidadEnvioPedido[] = pedidos
+    .map((p) => {
+      const costo_real_envio = p.costo_real_envio ?? p.costo_envio;
+      return {
+        pedido_id: p.id,
+        fecha: p.fecha,
+        cliente_nombre: data.clientes.find((c) => c.id === p.cliente_id)?.nombre ?? "(cliente eliminado)",
+        ingreso_envio: p.costo_envio,
+        costo_real_envio,
+        resultado: p.costo_envio - costo_real_envio,
+      };
+    })
+    .sort((a, b) => b.fecha.localeCompare(a.fecha));
+
+  const ingreso_total = Math.round(filas.reduce((acc, f) => acc + f.ingreso_envio, 0));
+  const costo_real_total = Math.round(filas.reduce((acc, f) => acc + f.costo_real_envio, 0));
+  return { pedidos: filas, ingreso_total, costo_real_total, resultado_total: ingreso_total - costo_real_total };
+}
+
 // --- Compras, CMV e Inventario (conciliación) -----------------------------------------------------
 // Explica la diferencia entre "cuánto se compró" y "cuánto costaron los productos vendidos" a
 // través del libro único de inventario — una compra nunca se toma directamente como CMV (alimenta

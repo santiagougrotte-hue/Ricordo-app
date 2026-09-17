@@ -57,6 +57,7 @@ import {
   mesReferencia,
   gananciaNetaPendienteDistribuir,
   estadoDistribucionMes,
+  calcularRentabilidadEnvios,
 } from "@/lib/calc-v2";
 import type { Eerr, EerrLinea, CriterioEnvioPedido, VistaMargen, CuentaPorCobrar, CuentaPorPagar } from "@/lib/calc-v2";
 import type { Activo } from "@/lib/types-v2";
@@ -1701,6 +1702,76 @@ function BalanceGeneralVista() {
   );
 }
 
+function RentabilidadEnviosVista() {
+  const { data } = useStoreV2();
+  const { mes, anio } = usePeriod();
+  const [canal, setCanal] = useState<"todos" | "Minorista" | "Mayorista">("todos");
+
+  const desde = primerDiaMes(mes, anio);
+  const hasta = ultimoDiaMes(mes, anio);
+  const reporte = useMemo(
+    () => calcularRentabilidadEnvios(data, desde, hasta, canal === "todos" ? undefined : canal),
+    [data, desde, hasta, canal]
+  );
+
+  return (
+    <div>
+      <p className="mb-4 text-[12.5px] text-text3">
+        Ingreso por envío (lo cobrado al cliente) y costo real de envío nunca se mezclan en una sola cifra — acá se
+        ven separados, pedido por pedido. Solo pedidos Entregados con envío cobrado {">"} 0.
+      </p>
+      <div className="mb-4">
+        <FilterTabs
+          value={canal}
+          onChange={(v) => setCanal(v as typeof canal)}
+          options={[
+            { value: "todos", label: "Todos" },
+            { value: "Minorista", label: "Minorista" },
+            { value: "Mayorista", label: "Mayorista" },
+          ]}
+        />
+      </div>
+      <StatGrid>
+        <KpiCard label="Ingreso por envío" value={fARS(reporte.ingreso_total)} color="gold" />
+        <KpiCard label="Costo real de envío" value={fARS(reporte.costo_real_total)} color="orange" />
+        <KpiCard
+          label="Resultado del envío"
+          value={fARS(reporte.resultado_total)}
+          color={reporte.resultado_total >= 0 ? "green" : "red"}
+        />
+      </StatGrid>
+      {reporte.pedidos.length === 0 ? (
+        <EmptyState text="No hay pedidos entregados con envío cobrado en este período." />
+      ) : (
+        <TableWrap>
+          <table className="w-full">
+            <thead>
+              <tr>
+                <Th>Fecha</Th>
+                <Th>Cliente</Th>
+                <Th>Ingreso por envío</Th>
+                <Th>Costo real</Th>
+                <Th>Resultado</Th>
+              </tr>
+            </thead>
+            <tbody>
+              {reporte.pedidos.map((p) => (
+                <TrHover key={p.pedido_id}>
+                  <Td>{p.fecha}</Td>
+                  <Td main>{p.cliente_nombre}</Td>
+                  <Td>{fARS(p.ingreso_envio)}</Td>
+                  <Td>{fARS(p.costo_real_envio)}</Td>
+                  <Td className={p.resultado >= 0 ? "text-green" : "text-red"}>{fARS(p.resultado)}</Td>
+                </TrHover>
+              ))}
+            </tbody>
+          </table>
+        </TableWrap>
+      )}
+    </div>
+  );
+}
+
 function ResultadosTab() {
   const [subtab, setSubtab] = useState("eerr");
   return (
@@ -1712,11 +1783,13 @@ function ResultadosTab() {
           { value: "eerr", label: "Estado de Resultados" },
           { value: "balance", label: "Balance General" },
           { value: "margen-sabor-canal", label: "Productos y canales" },
+          { value: "envios", label: "Rentabilidad de envíos" },
         ]}
       />
       {subtab === "eerr" && <EstadoResultadosVista />}
       {subtab === "balance" && <BalanceGeneralVista />}
       {subtab === "margen-sabor-canal" && <MargenSaborCanalVista />}
+      {subtab === "envios" && <RentabilidadEnviosVista />}
     </div>
   );
 }
