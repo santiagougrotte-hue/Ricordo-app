@@ -848,6 +848,9 @@ export function migrarAV2(data: RicordoData): { documento: RicordoDocument; repo
         caja_inteligente: { ...data.caja_inteligente, distribuciones: data.caja_inteligente.distribuciones ?? [], cargas_historicas: data.caja_inteligente.cargas_historicas ?? [] },
         // No existía en el esquema v1 — arranca vacío, es una decisión manual del usuario.
         fondo_reposicion: { aportes: [], usos: [] },
+        // No existía en el esquema v1 — arranca con el tema oscuro/violeta que ya se venía usando,
+        // así la migración no le cambia la apariencia a nadie sin que lo pida.
+        apariencia: { tema: "oscuro", acento_preset: "violeta", acento_hex: "#8b5cf6" },
       },
       datos_pendientes_revision: reporte.todas,
       legacy,

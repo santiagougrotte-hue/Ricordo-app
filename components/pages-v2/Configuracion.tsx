@@ -25,7 +25,8 @@ import {
 } from "@/components/ui";
 import { Modal } from "@/components/Modal";
 import { fNum } from "@/lib/calc-v2";
-import type { AmbitoCategoria, EstadoRevisionItem, RevisionItem, RicordoDocument, ProveedorMapa, MetodoDistribucionCostoRuta } from "@/lib/types-v2";
+import { PRESETS_ACENTO, hexValido, luminanciaRelativa } from "@/lib/tema";
+import type { AmbitoCategoria, EstadoRevisionItem, RevisionItem, RicordoDocument, ProveedorMapa, MetodoDistribucionCostoRuta, Tema } from "@/lib/types-v2";
 
 const GUIA_SECCION: Record<string, string> = {
   pedidos: "Ventas → Pedidos",
@@ -577,23 +578,103 @@ function BackupTab() {
   );
 }
 
+function AparienciaTab() {
+  const { data, setData } = useStoreV2();
+  const apariencia = data.configuracion.apariencia;
+  const [hexInput, setHexInput] = useState(apariencia.acento_hex);
+
+  function actualizar(cambios: Partial<typeof apariencia>) {
+    setData((d) => ({ ...d, configuracion: { ...d.configuracion, apariencia: { ...d.configuracion.apariencia, ...cambios } } }));
+  }
+
+  function elegirPreset(presetId: string, hex: string) {
+    actualizar({ acento_preset: presetId, acento_hex: hex });
+    setHexInput(hex);
+  }
+
+  function aplicarHexPersonalizado() {
+    if (!hexValido(hexInput)) return;
+    actualizar({ acento_preset: "personalizado", acento_hex: hexInput });
+  }
+
+  return (
+    <div className="flex flex-col gap-4">
+      <Card title="Tema">
+        <FormGrid>
+          <Field label="Tema">
+            <Select value={apariencia.tema} onChange={(e) => actualizar({ tema: e.target.value as Tema })}>
+              <option value="oscuro">Oscuro</option>
+              <option value="claro">Claro</option>
+              <option value="sistema">Sistema (según el dispositivo)</option>
+            </Select>
+          </Field>
+        </FormGrid>
+      </Card>
+
+      <Card title="Color de acento">
+        <p className="mb-3 text-[12.5px] text-text3">
+          Solo cambia el color de acento (botones, resaltados, gráficos) — nunca los colores de éxito/error/atención,
+          que se mantienen siempre verde/rojo/naranja independientemente de esta elección.
+        </p>
+        <div className="mb-4 flex flex-wrap gap-2">
+          {PRESETS_ACENTO.map((preset) => (
+            <button
+              key={preset.id}
+              onClick={() => elegirPreset(preset.id, preset.hex)}
+              className={`flex items-center gap-2 rounded-md border px-3 py-2 text-[12.5px] transition-colors ${
+                apariencia.acento_preset === preset.id ? "border-accent bg-accent-dim text-accent" : "border-border text-text2 hover:bg-surface2"
+              }`}
+            >
+              <span className="h-3.5 w-3.5 rounded-full" style={{ background: preset.hex }} />
+              {preset.nombre}
+            </button>
+          ))}
+        </div>
+        <div className="flex flex-wrap items-end gap-3">
+          <Field label="Color personalizado (HEX)">
+            <div className="flex items-center gap-2">
+              <input
+                type="color"
+                value={hexValido(hexInput) ? hexInput : "#8b5cf6"}
+                onChange={(e) => setHexInput(e.target.value)}
+                className="h-9 w-11 cursor-pointer rounded border border-border bg-transparent p-0.5"
+              />
+              <Input value={hexInput} onChange={(e) => setHexInput(e.target.value)} className="w-28" placeholder="#8b5cf6" />
+            </div>
+          </Field>
+          <Button onClick={aplicarHexPersonalizado} disabled={!hexValido(hexInput)}>
+            Aplicar
+          </Button>
+        </div>
+        {hexValido(hexInput) && luminanciaRelativa(hexInput) > 0.6 && (
+          <p className="mt-2 text-[11px] text-orange">
+            Este color es muy claro — puede verse con bajo contraste sobre el tema oscuro.
+          </p>
+        )}
+      </Card>
+    </div>
+  );
+}
+
 export function Configuracion() {
   const [tab, setTab] = useState("general");
   return (
     <div>
-      <PageHeader title="Configuración" sub="Parámetros generales, categorías, migración y respaldo" />
+      <PageHeader title="Configuración" sub="Parámetros generales, categorías, apariencia, migración y respaldo" />
       <FilterTabs
         value={tab}
         onChange={setTab}
         options={[
           { value: "general", label: "General" },
           { value: "categorias", label: "Categorías" },
+          { value: "apariencia", label: "Apariencia" },
           { value: "migracion", label: "Migración" },
           { value: "backup", label: "Backup" },
         ]}
       />
       {tab === "general" && <GeneralTab />}
       {tab === "categorias" && <CategoriasTab />}
+      {tab === "apariencia" && <AparienciaTab />}
       {tab === "migracion" && <MigracionTab />}
       {tab === "backup" && <BackupTab />}
     </div>

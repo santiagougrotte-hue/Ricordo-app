@@ -406,6 +406,20 @@ export interface Configuracion {
    * gasto económico del EERR, no una salida de caja). Reservar acá es una decisión manual, nunca
    * automática. */
   fondo_reposicion: FondoReposicion;
+  apariencia: ConfiguracionApariencia;
+}
+
+export type Tema = "oscuro" | "claro" | "sistema";
+
+/** Personalización de apariencia (Sección 34) — solo cambia tema y color de acento, nunca los
+ * colores semánticos (verde=correcto, rojo=error/crítico, naranja/amarillo=atención), que viven
+ * aparte en app/globals.css y no se tocan desde acá. */
+export interface ConfiguracionApariencia {
+  tema: Tema;
+  /** id de un preset de PRESETS_ACENTO (lib/tema.ts), o "personalizado" si `acento_hex` fue
+   * elegido a mano con el selector de color. */
+  acento_preset: string;
+  acento_hex: string;
 }
 
 export interface FondoInternoMovimiento {
@@ -539,6 +553,7 @@ export function emptyDataV2(): RicordoDataV2 {
         usos_seguridad: [],
       },
       fondo_reposicion: { aportes: [], usos: [] },
+      apariencia: { tema: "oscuro", acento_preset: "violeta", acento_hex: "#8b5cf6" },
     },
     datos_pendientes_revision: [],
     legacy: {},

@@ -9,6 +9,7 @@ import { AuthProvider, useAuth } from "@/lib/auth-context";
 import { supabaseConfigured } from "@/lib/supabase";
 import { Login } from "@/components/Login";
 import { SyncConflictModal } from "@/components/SyncConflictModal";
+import { ThemeApplier } from "@/components/ThemeApplier";
 
 function AuthGate({ children }: { children: React.ReactNode }) {
   const { session, ready } = useAuth();
@@ -22,6 +23,7 @@ function AuthGate({ children }: { children: React.ReactNode }) {
 
   return (
     <StoreV2Provider>
+      <ThemeApplier />
       <ToastProvider>
         <PeriodProvider>
           <RouterProvider>{children}</RouterProvider>
