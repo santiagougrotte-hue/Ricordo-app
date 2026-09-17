@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { X } from "lucide-react";
 import { useStoreV2 } from "@/lib/store-v2";
 import { useToast } from "@/lib/toast";
@@ -27,7 +27,7 @@ import { Modal } from "@/components/Modal";
 import { fARS, fNum, recetaEfectivaVariante } from "@/lib/calc-v2";
 import { obtenerProveedorMapa, urlNavegacionMultiparada } from "@/lib/mapas";
 import { calcularRuta, calcularCostosRuta, distribuirCostoRuta, paradasSinCoordenadas } from "@/lib/rutas";
-import type { ParadaEntrada } from "@/lib/rutas";
+import type { ParadaEntrada, RutaCalculada } from "@/lib/rutas";
 import type { EstadoPagoCompra, RutaEntrega } from "@/lib/types-v2";
 import type { Proveedor, Cliente } from "@/lib/types";
 
@@ -711,11 +711,45 @@ function EntregasTab() {
     [seleccionados, data.pedidos, data.clientes]
   );
   const sinCoordenadas = paradasSinCoordenadas(paradasEntrada);
-  const origenCoord = envios.lat_base != null && envios.lng_base != null ? { lat: envios.lat_base, lng: envios.lng_base } : null;
-  const rutaCalculada = calcularRuta(origenCoord, paradasEntrada, regresaOrigen, provider);
+  const origenCoord = useMemo(
+    () => (envios.lat_base != null && envios.lng_base != null ? { lat: envios.lat_base, lng: envios.lng_base } : null),
+    [envios.lat_base, envios.lng_base]
+  );
+
+  // El proveedor real (OSRM) calcula cada tramo con una llamada de red — se recalcula cada vez que
+  // cambian las paradas/el orden/el origen/si regresa, con un contador para poder reintentar a
+  // mano si el proveedor falló (servidor caído, sin conexión) sin tener que tocar nada más.
+  const [rutaCalculada, setRutaCalculada] = useState<RutaCalculada | null>(null);
+  const [calculandoRuta, setCalculandoRuta] = useState(false);
+  const [fallaRuta, setFallaRuta] = useState(false);
+  const [reintentoNonce, setReintentoNonce] = useState(0);
+
+  useEffect(() => {
+    // Sin paradas no hay nada que calcular — no puede pasar mientras el builder está abierto (hace
+    // falta al menos un pedido seleccionado para abrirlo), así que no hace falta resetear nada acá.
+    if (paradasEntrada.length === 0) return;
+    let cancelado = false;
+    async function calcular() {
+      setCalculandoRuta(true);
+      setFallaRuta(false);
+      const r = await calcularRuta(origenCoord, paradasEntrada, regresaOrigen, provider);
+      if (cancelado) return;
+      setRutaCalculada(r);
+      setCalculandoRuta(false);
+      // provider !== null pero r === null solo puede pasar si calcularRuta lo rechazó por otra
+      // razón (ej. sin origen) — no es "el servidor falló", eso ya queda reflejado tramo a tramo.
+      setFallaRuta(provider !== null && r === null);
+    }
+    void calcular();
+    return () => {
+      cancelado = true;
+    };
+  }, [origenCoord, paradasEntrada, regresaOrigen, provider, reintentoNonce]);
+
   const distanciaTotal = rutaCalculada?.distancia_total_km ?? 0;
   const duracionTotal = rutaCalculada?.duracion_total_min ?? 0;
   const tramos = rutaCalculada?.tramos ?? paradasEntrada.map((p) => ({ pedido_id: p.pedido_id, distancia_km: NaN, duracion_min: NaN }));
+  const tramosFallidos = tramos.filter((t) => Number.isNaN(t.distancia_km)).length;
   const costos = calcularCostosRuta(distanciaTotal, envios, peajes, estacionamiento, otrosCostos);
   const metodoDistribucion = envios.metodo_distribucion_costo ?? "equitativo";
   const reparto = distribuirCostoRuta(tramos, costos.costo_total_ruta, metodoDistribucion);
@@ -875,6 +909,23 @@ function EntregasTab() {
               {sinCoordenadas.length} parada(s) sin coordenadas — cargá la dirección estructurada del cliente en Ventas
               → Clientes para incluirla en el cálculo de distancia.
             </p>
+          )}
+          {provider && provider.esEstimacion === false && calculandoRuta && (
+            <p className="mb-3 rounded-md border border-border bg-surface2/40 p-2.5 text-[12.5px] text-text3">
+              Calculando ruta real con {provider.nombre}…
+            </p>
+          )}
+          {provider && (tramosFallidos > 0 || fallaRuta) && !calculandoRuta && (
+            <div className="mb-3 flex items-center justify-between gap-3 rounded-md border border-orange/40 bg-orange-dim/30 p-2.5 text-[12.5px] text-orange">
+              <span>
+                {provider.esEstimacion
+                  ? "No se pudo calcular algún tramo."
+                  : `${provider.nombre} no respondió para ${tramosFallidos || "algún"} tramo(s) — puede ser el servidor público gratuito, sin garantía de disponibilidad.`}
+              </span>
+              <Button size="sm" variant="ghost" onClick={() => setReintentoNonce((n) => n + 1)}>
+                Reintentar cálculo
+              </Button>
+            </div>
           )}
 
           <div className="mb-4 grid grid-cols-1 gap-3 sm:grid-cols-3">

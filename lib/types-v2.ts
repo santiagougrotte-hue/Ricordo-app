@@ -348,9 +348,11 @@ export interface Activo {
 // --- Configuración ---------------------------------------------------------------------------------
 
 /** Sin proveedor real configurado, no se puede geocodificar ni calcular una ruta real — solo se
- * ofrece una estimación en línea recta (haversine), marcada como tal en toda la UI. Nunca se
- * inventa una distancia de ruta real sin un proveedor que la calcule. */
-export type ProveedorMapa = "ninguno" | "haversine";
+ * ofrece una estimación en línea recta (haversine), marcada como tal en toda la UI. "osrm" calcula
+ * ruta real por calles usando el servidor público de demostración de OSRM (Open Source Routing
+ * Machine, project-osrm.org) — no requiere API key. Nunca se inventa una distancia de ruta real
+ * sin un proveedor que la calcule. */
+export type ProveedorMapa = "ninguno" | "haversine" | "osrm";
 
 /** Cómo repartir el costo económico de una ruta con varias paradas entre los pedidos que la
  * componen — nunca se duplica el costo total en cada pedido. "equitativo" divide el costo total

@@ -27,6 +27,7 @@ import {
 import { Modal } from "@/components/Modal";
 import { AnaliticaVentasTab } from "./AnaliticaVentas";
 import { fARS, fNum, inPeriod, costoVariante, margenVariante, productosConVariantes, estadoCobroPedido } from "@/lib/calc-v2";
+import { geocodificarDireccion } from "@/lib/mapas";
 import type { EstadoCobro } from "@/lib/calc-v2";
 import type { Canal, EstadoPedido, Pedido, PedidoItem, ProductoVariante } from "@/lib/types-v2";
 import type { Cliente } from "@/lib/types";
@@ -575,6 +576,25 @@ function ClientesTab() {
   const [modalOpen, setModalOpen] = useState(false);
   const [editando, setEditando] = useState<string | null>(null);
   const [form, setForm] = useState(clienteVacio());
+  const [geocodificando, setGeocodificando] = useState(false);
+
+  async function geocodificarFormCliente() {
+    const partes = [form.calle && form.numero ? `${form.calle} ${form.numero}` : form.calle, form.localidad, form.partido, form.provincia].filter(Boolean);
+    const direccion = partes.join(", ") || form.direccion;
+    if (!direccion || direccion.trim().length < 3) {
+      toast("Cargá calle/localidad o la dirección en texto libre primero", "error");
+      return;
+    }
+    setGeocodificando(true);
+    const coords = await geocodificarDireccion(direccion);
+    setGeocodificando(false);
+    if (!coords) {
+      toast("No se encontraron coordenadas para esa dirección — se puede cargar lat/lng a mano", "error");
+      return;
+    }
+    setForm((f) => ({ ...f, latitud: coords.lat, longitud: coords.lng }));
+    toast("Coordenadas encontradas — revisalas y marcá \"Dirección validada\" si son correctas");
+  }
 
   const filtrados = useMemo(
     () => data.clientes.filter((c) => !search || c.nombre.toLowerCase().includes(search.toLowerCase())),
@@ -738,6 +758,11 @@ function ClientesTab() {
           </Field>
           <Field label="Código postal">
             <Input value={form.codigo_postal} onChange={(e) => setForm({ ...form, codigo_postal: e.target.value })} />
+          </Field>
+          <Field label="Buscar coordenadas" full>
+            <Button variant="ghost" onClick={geocodificarFormCliente} disabled={geocodificando}>
+              {geocodificando ? "Buscando…" : "Buscar coordenadas por dirección (Nominatim/OSM, sin API key)"}
+            </Button>
           </Field>
           <Field label="Latitud">
             <Input

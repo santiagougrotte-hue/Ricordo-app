@@ -26,6 +26,7 @@ import {
 import { Modal } from "@/components/Modal";
 import { fNum } from "@/lib/calc-v2";
 import { PRESETS_ACENTO, hexValido, luminanciaRelativa } from "@/lib/tema";
+import { geocodificarDireccion } from "@/lib/mapas";
 import type { AmbitoCategoria, EstadoRevisionItem, RevisionItem, RicordoDocument, ProveedorMapa, MetodoDistribucionCostoRuta, Tema } from "@/lib/types-v2";
 
 const GUIA_SECCION: Record<string, string> = {
@@ -59,6 +60,7 @@ function GeneralTab() {
   const { data, setData } = useStoreV2();
   const { toast } = useToast();
   const [tc, setTc] = useState(data.configuracion.tipo_cambio);
+  const [geocodificando, setGeocodificando] = useState(false);
 
   function guardarTipoCambio() {
     setData((d) => ({ ...d, configuracion: { ...d.configuracion, tipo_cambio: tc } }));
@@ -67,6 +69,23 @@ function GeneralTab() {
 
   function setUmbral<K extends keyof typeof data.configuracion>(key: K, value: (typeof data.configuracion)[K]) {
     setData((d) => ({ ...d, configuracion: { ...d.configuracion, [key]: value } }));
+  }
+
+  async function geocodificarBase() {
+    const direccion = data.configuracion.envios.direccion_base;
+    if (!direccion || direccion.trim().length < 3) {
+      toast("Cargá primero la dirección base", "error");
+      return;
+    }
+    setGeocodificando(true);
+    const coords = await geocodificarDireccion(direccion);
+    setGeocodificando(false);
+    if (!coords) {
+      toast("No se encontraron coordenadas para esa dirección — se puede cargar lat/lng a mano", "error");
+      return;
+    }
+    setUmbral("envios", { ...data.configuracion.envios, lat_base: coords.lat, lng_base: coords.lng });
+    toast("Coordenadas encontradas");
   }
 
   return (
@@ -187,10 +206,19 @@ function GeneralTab() {
         </p>
         <FormGrid>
           <Field label="Dirección base" full>
-            <Input
-              value={data.configuracion.envios.direccion_base ?? ""}
-              onChange={(e) => setUmbral("envios", { ...data.configuracion.envios, direccion_base: e.target.value })}
-            />
+            <div className="flex gap-2">
+              <Input
+                value={data.configuracion.envios.direccion_base ?? ""}
+                onChange={(e) => setUmbral("envios", { ...data.configuracion.envios, direccion_base: e.target.value })}
+              />
+              <Button variant="ghost" onClick={geocodificarBase} disabled={geocodificando}>
+                {geocodificando ? "Buscando…" : "Buscar coordenadas"}
+              </Button>
+            </div>
+            <p className="mt-1 text-[11px] text-text3">
+              Usa Nominatim (OpenStreetMap), sin API key — completa latitud/longitud automáticamente si encuentra la
+              dirección. También se pueden cargar a mano.
+            </p>
           </Field>
           <Field label="Latitud base">
             <Input
@@ -236,6 +264,7 @@ function GeneralTab() {
             >
               <option value="ninguno">Ninguno (sin cálculo de distancia)</option>
               <option value="haversine">Estimación en línea recta</option>
+              <option value="osrm">OSRM — ruta real por calles (gratis, sin API key)</option>
             </Select>
           </Field>
           <Field label="Método de distribución del costo">

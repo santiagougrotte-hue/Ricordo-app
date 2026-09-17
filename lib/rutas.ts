@@ -27,15 +27,17 @@ export interface RutaCalculada {
 }
 
 /** Calcula los tramos origen → parada 1 → parada 2 → ... → (origen, si regresa) con el proveedor
- * dado. Devuelve null si falta el origen o si el proveedor no puede calcular (sin proveedor
- * conectado) — nunca inventa una distancia. Si a una parada puntual le faltan coordenadas, ese
- * tramo queda marcado con NaN y se excluye del total (ver `paradasSinCoordenadas`). */
-export function calcularRuta(
+ * dado — async porque un proveedor real (OSRM) hace una llamada de red por tramo. Devuelve null si
+ * falta el origen o si no hay proveedor conectado — nunca inventa una distancia. Si a una parada le
+ * faltan coordenadas, o si el proveedor no pudo calcular ese tramo puntual (servidor caído, sin
+ * red), el tramo queda marcado con NaN y se excluye del total (ver `paradasSinCoordenadas`) en vez
+ * de inventar un valor o interrumpir el resto de la ruta. */
+export async function calcularRuta(
   origen: Coordenadas | null,
   paradas: ParadaEntrada[],
   regresaOrigen: boolean,
   provider: MapProvider | null
-): RutaCalculada | null {
+): Promise<RutaCalculada | null> {
   if (!origen || !provider || paradas.length === 0) return null;
 
   const puntos: (Coordenadas | null)[] = paradas.map((p) => (p.lat != null && p.lng != null ? { lat: p.lat, lng: p.lng } : null));
@@ -50,7 +52,12 @@ export function calcularRuta(
       tramos.push({ pedido_id: paradas[i].pedido_id, distancia_km: NaN, duracion_min: NaN });
       continue;
     }
-    const tramo = provider.calcularTramo(anterior, punto);
+    const tramo = await provider.calcularTramo(anterior, punto);
+    if (!tramo) {
+      tramos.push({ pedido_id: paradas[i].pedido_id, distancia_km: NaN, duracion_min: NaN });
+      anterior = punto;
+      continue;
+    }
     tramos.push({ pedido_id: paradas[i].pedido_id, distancia_km: tramo.distancia_km, duracion_min: tramo.duracion_min });
     distancia_total_km += tramo.distancia_km;
     duracion_total_min += tramo.duracion_min;
@@ -58,9 +65,11 @@ export function calcularRuta(
   }
 
   if (regresaOrigen) {
-    const vuelta = provider.calcularTramo(anterior, origen);
-    distancia_total_km += vuelta.distancia_km;
-    duracion_total_min += vuelta.duracion_min;
+    const vuelta = await provider.calcularTramo(anterior, origen);
+    if (vuelta) {
+      distancia_total_km += vuelta.distancia_km;
+      duracion_total_min += vuelta.duracion_min;
+    }
   }
 
   return { distancia_total_km, duracion_total_min, tramos };
