@@ -1,4 +1,4 @@
-const CACHE = 'apexfc-v10';
+const CACHE = 'apexfc-v11';
 const ASSETS = [
   './',
   './index.html',
@@ -28,6 +28,17 @@ self.addEventListener('fetch', e => {
         const clone = r.clone();
         caches.open(CACHE).then(c => c.put(e.request, clone));
         return r;
+      }).catch(() => caches.match(e.request))
+    );
+    return;
+  }
+  // index.html: network first so updates are picked up immediately
+  if (e.request.mode === 'navigate' || e.request.url.endsWith('index.html') || e.request.url.endsWith('/')) {
+    e.respondWith(
+      fetch(e.request).then(res => {
+        const clone = res.clone();
+        caches.open(CACHE).then(c => c.put(e.request, clone));
+        return res;
       }).catch(() => caches.match(e.request))
     );
     return;
