@@ -428,8 +428,10 @@ svg.chart{width:100%; height:150px; overflow:visible;}
 /* ===== Individual exercise card (fuerza/plyo/olimpico/core) ===== */
 .solo-ex-card{border:1px solid var(--border);border-radius:12px;padding:14px;background:var(--surface-2);}
 .solo-ex-name{font-size:16px;font-weight:700;margin-bottom:4px;}
-.solo-ex-scheme{font-size:13px;color:var(--text-muted);margin-bottom:10px;}
+.solo-ex-scheme{font-size:13px;color:var(--text-muted);margin-bottom:4px;}
 .solo-ex-rest{font-size:12px;color:var(--text-faint);margin-bottom:10px;}
+.edit-num{width:42px;padding:2px 5px;border:1px solid var(--border);border-radius:6px;background:var(--surface);color:var(--text);font-size:12px;text-align:center;font-family:var(--font-mono);-moz-appearance:textfield;}
+.edit-num::-webkit-inner-spin-button,.edit-num::-webkit-outer-spin-button{-webkit-appearance:none;}
 .set-dots{display:flex;gap:7px;margin:8px 0;}
 .set-dot{width:26px;height:26px;border-radius:50%;background:var(--surface);border:2px solid var(--border);cursor:pointer;transition:all .15s;display:flex;align-items:center;justify-content:center;}
 .set-dot.done{background:var(--accent);border-color:var(--accent);}
@@ -853,6 +855,9 @@ const State = {
     if(!this.data.setsLog) this.data.setsLog = {};
     if(!this.data.sessionNums) this.data.sessionNums = {0:1,1:1};
     if(!this.data.supRestOverride) this.data.supRestOverride = {};
+    if(!this.data.setsOverride) this.data.setsOverride = {};
+    if(!this.data.restOverride) this.data.restOverride = {};
+    if(!this.data.supRoundsOverride) this.data.supRoundsOverride = {};
     return this.data;
   },
   save(){ localStorage.setItem(STORE_KEY, JSON.stringify(this.data)); },
@@ -873,6 +878,9 @@ const State = {
       supRound:{}, // key: `d${day}-s${num}-${blockN}` -> completedRounds
       setsLog:{}, // key: `d${day}-s${num}-${exId}` -> [bool,bool,...]
       supRestOverride:{}, // key: `d${day}-s${num}-${blockN}` -> seconds override
+      supRoundsOverride:{}, // key: `d${day}-s${num}-${blockN}` -> rounds override
+      setsOverride:{}, // key: `d${day}-s${num}-${exId}` -> sets count override
+      restOverride:{}, // key: `d${day}-s${num}-${exId}` -> rest seconds override
       cinteState:null
     };
   }
@@ -2110,7 +2118,7 @@ const Plan = {
 
       /* ---- SUPERSERIE: round tracker + flow items ---- */
       } else if(b.type==='superserie'){
-        const rounds = parseInt(b.items[0]?.sets) || 3;
+        const rounds = (s.supRoundsOverride||{})[bKey] || parseInt(b.items[0]?.sets) || 3;
         const curRound = (s.supRound||{})[bKey] || 0;
         const supRestSec = (s.supRestOverride||{})[bKey] ?? (b.roundRest||90);
         const dots = Array.from({length:rounds},(_,i)=>{
@@ -2118,8 +2126,15 @@ const Plan = {
           return `<div class="sup-round-dot ${isDone?'done':isAct?'active':''}">${r}</div>`;
         }).join('');
         bodyHtml += `<div class="sup-round-tracker">
-          <div class="sup-round-label">${curRound<rounds?`Ronda ${curRound+1} de ${rounds}`:'✓ Superserie completada'}</div>
-          <div class="sup-round-dots">${dots}</div>
+          <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
+            <div class="sup-round-label" style="margin-bottom:0;">${curRound<rounds?`Ronda ${curRound+1} de ${rounds}`:'✓ Superserie completada'}</div>
+            <label style="display:flex;align-items:center;gap:4px;font-size:11px;color:var(--text-faint);">
+              Rondas:&nbsp;<input type="number" class="edit-num" min="1" max="8" value="${rounds}"
+                onblur="Plan.saveSupRoundsOverride('${bKey}',this.value)"
+                onkeydown="if(event.key==='Enter')this.blur();">
+            </label>
+          </div>
+          <div class="sup-round-dots" style="margin-top:8px;">${dots}</div>
         </div>`;
         if(b.supNote){
           bodyHtml += `<div class="sup-note">⚠ ${b.supNote}</div>`;
@@ -2132,8 +2147,10 @@ const Plan = {
           const restSec=Timer.restSeconds(it.id);
           const exNameSafe=ex.name.replace(/'/g,'\\u0027');
           const videoHref='https://www.youtube.com/results?search_query='+encodeURIComponent(ex.video||ex.name);
+          const itRounds = Math.min(parseInt(it.sets)||rounds, rounds);
+          const itEff = {...it, sets: String(itRounds)};
           const itSetsLog=(s.setsLog||{})[key]||[];
-          const setDots=Array.from({length:rounds},(_,si)=>{
+          const setDots=Array.from({length:itRounds},(_,si)=>{
             const done=!!itSetsLog[si];
             return `<div class="set-dot ${done?'done':''}" style="width:20px;height:20px;font-size:10px;display:flex;align-items:center;justify-content:center;">${si+1}</div>`;
           }).join('');
@@ -2148,21 +2165,19 @@ const Plan = {
               </a>
             </div>
             <div class="sup-item-name">${ex.name}</div>
-            <div class="sup-item-detail">${it.sets} series&nbsp;·&nbsp;${it.reps} reps${hasLoad?' &nbsp;·&nbsp; '+it.load:''}${it.rpe&&it.rpe!=='—'?' &nbsp;·&nbsp; '+it.rpe:''}</div>
+            <div class="sup-item-detail">${itRounds} series&nbsp;·&nbsp;${it.reps} reps${hasLoad?' &nbsp;·&nbsp; '+it.load:''}${it.rpe&&it.rpe!=='—'?' &nbsp;·&nbsp; '+it.rpe:''}</div>
             <div class="set-dots" style="margin:6px 0 4px;">${setDots}</div>
-            ${SeriesLog.buildTable(key,it,funcCat||ex.cat,{exName:exNameSafe,restSec,rng:Timer.restRangeOf(it.id)})}
+            ${SeriesLog.buildTable(key,itEff,funcCat||ex.cat,{exName:exNameSafe,restSec,rng:Timer.restRangeOf(it.id)})}
           </div>`;
         });
         bodyHtml += `<div class="sup-round-rest">
           <div class="sup-round-rest-label" style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
             <span>Descanso entre rondas:</span>
             <label style="display:flex;align-items:center;gap:4px;font-size:12px;">
-              <input type="number" min="10" max="600" value="${supRestSec}"
-                style="width:56px;padding:3px 6px;border:1px solid var(--border);border-radius:6px;background:var(--card);color:var(--text);font-size:12px;text-align:center;"
+              <input type="number" class="edit-num" style="width:56px;" min="10" max="600" value="${supRestSec}"
                 onblur="Plan.setSupRest('${bKey}',this.value)"
-                onkeydown="if(event.key==='Enter'){this.blur();}"
-                >
-              s &nbsp;(${fmtSec(supRestSec)})
+                onkeydown="if(event.key==='Enter')this.blur();">
+              s &nbsp;<span style="color:var(--text-faint);">(${fmtSec(supRestSec)})</span>
             </label>
           </div>
           ${curRound<rounds
@@ -2186,12 +2201,14 @@ const Plan = {
           const key=`d${day}-s${num}-${it.id}`;
           const funcCat=FUNC_CAT[it.id];
           const done=!!s.completedExercises[key];
-          const restSec=Timer.restSeconds(it.id);
+          const baseRestSec=Timer.restSeconds(it.id);
+          const effectiveRestSec=(s.restOverride||{})[key]??baseRestSec;
+          const effectiveSets=(s.setsOverride||{})[key]||parseInt(it.sets)||2;
+          const itEff={...it, sets:String(effectiveSets)};
           const exNameSafe=ex.name.replace(/'/g,'\\u0027');
           const videoHref='https://www.youtube.com/results?search_query='+encodeURIComponent(ex.video||ex.name);
-          const numSets=parseInt(it.sets)||2;
           const setsLog=(s.setsLog||{})[key]||[];
-          const dots=Array.from({length:numSets},(_,i)=>`<div class="set-dot ${setsLog[i]?'done':''}" onclick="Plan.toggleSetDot('${key}',${i})"></div>`).join('');
+          const dots=Array.from({length:effectiveSets},(_,i)=>`<div class="set-dot ${setsLog[i]?'done':''}" onclick="Plan.toggleSetDot('${key}',${i})"></div>`).join('');
           bodyHtml += `<div class="solo-ex-card">
             <div style="display:flex;align-items:flex-start;gap:10px;margin-bottom:8px;">
               <div class="ex-check ${done?'done':''}" onclick="Plan.toggleDone(event,'${key}')" style="flex:none;margin-top:2px;">
@@ -2199,8 +2216,25 @@ const Plan = {
               </div>
               <div style="flex:1;">
                 <div class="solo-ex-name ${done?'done-text':''}">${ex.name}</div>
-                <div class="solo-ex-scheme">${it.sets} series&nbsp;·&nbsp;${it.reps}${it.load&&it.load!=='—'&&it.load!=='libre'?' &nbsp;·&nbsp; '+it.load:''}${it.rpe&&it.rpe!=='—'?' &nbsp;·&nbsp; '+it.rpe:''}</div>
-                <div class="solo-ex-rest">Descanso: ${it.rest!=='—'?it.rest:fmtSec(restSec)}</div>
+                <div class="solo-ex-scheme" style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;">
+                  <label style="display:flex;align-items:center;gap:3px;">
+                    <input type="number" class="edit-num" min="1" max="10" value="${effectiveSets}"
+                      onblur="Plan.saveSetsOverride('${key}',this.value)"
+                      onkeydown="if(event.key==='Enter')this.blur();">
+                    <span>series</span>
+                  </label>
+                  <span style="color:var(--border);">·</span>
+                  <span>${it.reps}${it.load&&it.load!=='—'&&it.load!=='libre'?' · '+it.load:''}${it.rpe&&it.rpe!=='—'?' · '+it.rpe:''}</span>
+                </div>
+                <div class="solo-ex-rest" style="display:flex;align-items:center;gap:6px;">
+                  <span>Descanso:</span>
+                  <label style="display:flex;align-items:center;gap:3px;">
+                    <input type="number" class="edit-num" style="width:52px;" min="5" max="600" value="${effectiveRestSec}"
+                      onblur="Plan.saveRestOverride('${key}',this.value)"
+                      onkeydown="if(event.key==='Enter')this.blur();">
+                    <span>s &nbsp;<span style="color:var(--text-faint);">(${fmtSec(effectiveRestSec)})</span></span>
+                  </label>
+                </div>
               </div>
               <a href="${videoHref}" target="_blank" rel="noopener" style="color:var(--text-faint);flex:none;padding:4px;" title="Ver video">
                 <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="5 3 19 12 5 21 5 3"/></svg>
@@ -2208,7 +2242,7 @@ const Plan = {
             </div>
             <div style="font-size:11px;color:var(--text-faint);margin-bottom:4px;">Series completadas:</div>
             <div class="set-dots">${dots}</div>
-            ${SeriesLog.buildTable(key,it,funcCat||ex.cat,{exName:exNameSafe,restSec,rng:Timer.restRangeOf(it.id)})}
+            ${SeriesLog.buildTable(key,itEff,funcCat||ex.cat,{exName:exNameSafe,restSec:effectiveRestSec,rng:Timer.restRangeOf(it.id)})}
           </div>`;
         });
       }
@@ -2240,8 +2274,10 @@ const Plan = {
   advanceSupRound(bKey, maxRounds, defaultRestSec){
     const s = State.data;
     if(!s.supRound) s.supRound = {};
+    const effectiveMax = (s.supRoundsOverride||{})[bKey] || maxRounds;
     const cur = s.supRound[bKey] || 0;
-    if(cur >= maxRounds) return;
+    if(cur >= effectiveMax) return;
+    maxRounds = effectiveMax;
     const newRound = cur + 1;
     s.supRound[bKey] = newRound;
 
@@ -2275,19 +2311,45 @@ const Plan = {
     this.renderBlocks();
   },
   setSupRest(bKey, secs){
-    const s = State.data;
-    if(!s.supRestOverride) s.supRestOverride = {};
     const v = parseInt(secs);
     if(!isNaN(v) && v >= 10){
+      const s = State.data;
+      if(!s.supRestOverride) s.supRestOverride = {};
       s.supRestOverride[bKey] = v;
       State.save();
-      // Update button label in-place without re-rendering
-      const btn = document.getElementById('sup-adv-btn-'+bKey);
-      if(btn && !btn.disabled){
-        const cur = (s.supRound||{})[bKey]||0;
-        const fmtSec = s2 => s2>=60 ? Math.floor(s2/60)+'m'+(s2%60?s2%60+'s':'') : s2+'s';
-        btn.textContent = `✓ Ronda ${cur+1} completada — Iniciar descanso ${fmtSec(v)}`;
-      }
+      this.renderBlocks();
+    }
+  },
+  saveSetsOverride(key, val){
+    const v = parseInt(val);
+    if(!isNaN(v) && v >= 1 && v <= 10){
+      const s = State.data;
+      if(!s.setsOverride) s.setsOverride = {};
+      s.setsOverride[key] = v;
+      State.save();
+      this.renderBlocks();
+    }
+  },
+  saveRestOverride(key, val){
+    const v = parseInt(val);
+    if(!isNaN(v) && v >= 5){
+      const s = State.data;
+      if(!s.restOverride) s.restOverride = {};
+      s.restOverride[key] = v;
+      State.save();
+      this.renderBlocks();
+    }
+  },
+  saveSupRoundsOverride(bKey, val){
+    const v = parseInt(val);
+    if(!isNaN(v) && v >= 1 && v <= 8){
+      const s = State.data;
+      if(!s.supRoundsOverride) s.supRoundsOverride = {};
+      s.supRoundsOverride[bKey] = v;
+      // Reset round progress if new rounds < current progress
+      if((s.supRound||{})[bKey] > v) s.supRound[bKey] = v;
+      State.save();
+      this.renderBlocks();
     }
   },
   toggleSetDot(key, setIdx){
