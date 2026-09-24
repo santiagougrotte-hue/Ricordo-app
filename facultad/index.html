@@ -591,8 +591,23 @@ a{color:inherit;}
         <input type="text" id="f-materia-nombre" required placeholder="Ej: Análisis Matemático II">
       </div>
       <div class="field">
+        <label class="check-item" style="padding:2px 0;">
+          <input type="checkbox" id="f-materia-intensiva" onchange="Materias.onIntensivaChange()">
+          <span>Materia intensiva (se rinde en una semana, no pertenece a un cuatrimestre)</span>
+        </label>
+      </div>
+      <div class="field" id="f-materia-cuatrimestre-field">
         <label>Cuatrimestre del plan (ej: 3 = 3er cuatrimestre)</label>
         <input type="number" id="f-materia-cuatrimestre" min="0" placeholder="Dejalo vacío si no está asignado">
+      </div>
+      <div class="field" id="f-materia-mes-field" style="display:none;">
+        <label>Mes en el que se cursa</label>
+        <select id="f-materia-mes">
+          <option value="1">Enero</option><option value="2">Febrero</option><option value="3">Marzo</option>
+          <option value="4">Abril</option><option value="5">Mayo</option><option value="6">Junio</option>
+          <option value="7">Julio</option><option value="8">Agosto</option><option value="9">Septiembre</option>
+          <option value="10">Octubre</option><option value="11">Noviembre</option><option value="12">Diciembre</option>
+        </select>
       </div>
       <div class="field">
         <label>Estado</label>
@@ -1272,20 +1287,28 @@ const Materias = {
       html+='<p class="empty">No se encontraron materias con ese filtro.</p>';
     } else {
       const groups={};
-      list.forEach(m=>{ const k=m.planCuatrimestre||0; (groups[k]=groups[k]||[]).push(m); });
+      const intensivas=[];
+      list.forEach(m=>{
+        if(m.intensiva){ intensivas.push(m); return; }
+        const k=m.planCuatrimestre||0; (groups[k]=groups[k]||[]).push(m);
+      });
       const cols=Object.keys(groups).map(Number).sort((a,b)=>a-b);
       html+='<div class="plan-grid">';
       cols.forEach(c=>{
         const items=groups[c].slice().sort((a,b)=>a.nombre.localeCompare(b.nombre));
         html+=`<div class="plan-col"><h3>${c===0?'Sin cuatrimestre asignado':ordinal(c)}</h3><div class="plan-col-items">${items.map(Materias.cardHTML).join('')}</div></div>`;
       });
+      if(intensivas.length){
+        const items=intensivas.slice().sort((a,b)=>(a.mesIntensiva||0)-(b.mesIntensiva||0) || a.nombre.localeCompare(b.nombre));
+        html+=`<div class="plan-col"><h3>Intensivas</h3><div class="plan-col-items">${items.map(Materias.cardHTML).join('')}</div></div>`;
+      }
       html+='</div>';
     }
     const aprobadas=all.filter(m=>m.estado==='aprobada').sort((a,b)=>(b.fechaAprobacion||'').localeCompare(a.fechaAprobacion||''));
     if(aprobadas.length){
       html+=`<div class="aprobadas-block"><h3>Materias aprobadas</h3><table class="table-aprobadas">
         <thead><tr><th>Materia</th><th>Cuatrimestre</th><th>Fecha</th><th>Nota</th></tr></thead>
-        <tbody>${aprobadas.map(m=>`<tr><td>${esc(m.nombre)}</td><td>${m.planCuatrimestre?ordinal(m.planCuatrimestre):'—'}</td><td>${fmtDate(m.fechaAprobacion)}</td><td>${m.nota}</td></tr>`).join('')}</tbody>
+        <tbody>${aprobadas.map(m=>`<tr><td>${esc(m.nombre)}</td><td>${m.intensiva?'Intensiva · '+MESES[m.mesIntensiva-1]:(m.planCuatrimestre?ordinal(m.planCuatrimestre):'—')}</td><td>${fmtDate(m.fechaAprobacion)}</td><td>${m.nota}</td></tr>`).join('')}</tbody>
       </table></div>`;
     }
     return html;
@@ -1299,6 +1322,7 @@ const Materias = {
         <h4 class="${m.estado==='aprobada'?'strike':''}">${esc(m.nombre)}</h4>
         <span class="badge badge-${m.estado}">${ESTADO_SHORT[m.estado]}</span>
       </div>
+      ${m.intensiva?`<div class="materia-meta">📌 Intensiva · ${MESES[m.mesIntensiva-1]}</div>`:''}
       ${blocked?'<div class="lock-note">🔒 Correlativas de cursada incompletas</div>':''}
       ${finalBlocked?'<div class="lock-note">🔒 Final bloqueado por correlativas</div>':''}
       ${m.estado==='aprobada'?`<div class="materia-meta">Nota ${m.nota} · ${fmtDate(m.fechaAprobacion)}</div>`:''}
@@ -1392,9 +1416,9 @@ const Materias = {
     const all=State.data.materias;
     if(!all.length) return `<div class="empty-state"><p>Todavía no cargaste materias de tu plan de estudios.</p><button class="btn btn-primary" onclick="Materias.openForm()">+ Agregar tu primera materia</button></div>`;
     const q=(Materias.filterText||'').toLowerCase();
-    const pending = all.filter(m=>(m.estado==='no_cursada'||m.estado==='libre') && m.nombre.toLowerCase().includes(q));
-    if(!all.some(m=>m.estado==='no_cursada'||m.estado==='libre')){
-      return '<p class="empty">No tenés materias pendientes de cursar — están todas cursando, con final pendiente o aprobadas. 🎉</p>';
+    const pending = all.filter(m=>(m.estado==='no_cursada'||m.estado==='libre') && !m.intensiva && m.nombre.toLowerCase().includes(q));
+    if(!all.some(m=>(m.estado==='no_cursada'||m.estado==='libre') && !m.intensiva)){
+      return '<p class="empty">No tenés materias pendientes de cursar por cuatrimestre — están todas cursando, con final pendiente, aprobadas o son intensivas. 🎉</p>';
     }
     const terms=upcomingTerms(6);
     const byKey={}; terms.forEach(t=>byKey[t.key]=[]);
@@ -1436,16 +1460,24 @@ const Materias = {
 
   openForm(id){
     const editing=!!id;
-    const m = editing ? byId(id) : {nombre:'', planCuatrimestre:'', correlativasCursar:[], correlativasFinal:[]};
+    const m = editing ? byId(id) : {nombre:'', planCuatrimestre:'', intensiva:false, mesIntensiva:null, correlativasCursar:[], correlativasFinal:[]};
     document.getElementById('modal-materia-title').textContent = editing ? 'Editar materia' : 'Nueva materia';
     document.getElementById('f-materia-id').value = id||'';
     document.getElementById('f-materia-nombre').value = m.nombre;
     document.getElementById('f-materia-cuatrimestre').value = m.planCuatrimestre || '';
+    document.getElementById('f-materia-intensiva').checked = !!m.intensiva;
+    document.getElementById('f-materia-mes').value = m.mesIntensiva || 1;
     document.getElementById('f-materia-estado').value = m.estado || 'no_cursada';
     document.getElementById('f-materia-cursar').innerHTML = Materias.checkboxes(m.correlativasCursar||[], id);
     document.getElementById('f-materia-final').innerHTML = Materias.checkboxes(m.correlativasFinal||[], id);
     document.getElementById('btn-eliminar-materia').style.display = editing ? 'inline-flex' : 'none';
+    Materias.onIntensivaChange();
     Modal.open('modal-materia');
+  },
+  onIntensivaChange(){
+    const on=document.getElementById('f-materia-intensiva').checked;
+    document.getElementById('f-materia-cuatrimestre-field').style.display = on ? 'none' : 'block';
+    document.getElementById('f-materia-mes-field').style.display = on ? 'block' : 'none';
   },
   checkboxes(selected, excludeId){
     const items=State.data.materias.filter(m=>m.id!==excludeId);
@@ -1457,18 +1489,20 @@ const Materias = {
     const id=document.getElementById('f-materia-id').value || uid();
     const nombre=document.getElementById('f-materia-nombre').value.trim();
     if(!nombre){ Toast.show('Ingresá un nombre'); return; }
-    const planCuatrimestre=parseInt(document.getElementById('f-materia-cuatrimestre').value)||0;
+    const intensiva=document.getElementById('f-materia-intensiva').checked;
+    const mesIntensiva=intensiva ? parseInt(document.getElementById('f-materia-mes').value) : null;
+    const planCuatrimestre=intensiva ? 0 : (parseInt(document.getElementById('f-materia-cuatrimestre').value)||0);
     const estadoSel=document.getElementById('f-materia-estado').value;
     const cursar=[...document.querySelectorAll('#f-materia-cursar input:checked')].map(i=>i.value);
     const final=[...document.querySelectorAll('#f-materia-final input:checked')].map(i=>i.value);
     const existing=byId(id);
     let target;
     if(existing){
-      existing.nombre=nombre; existing.planCuatrimestre=planCuatrimestre;
+      existing.nombre=nombre; existing.planCuatrimestre=planCuatrimestre; existing.intensiva=intensiva; existing.mesIntensiva=mesIntensiva;
       existing.correlativasCursar=cursar; existing.correlativasFinal=final; existing.lastTouched=Date.now();
       target=existing;
     } else {
-      target={id, nombre, planCuatrimestre, correlativasCursar:cursar, correlativasFinal:final, estado:'no_cursada', nota:null, fechaAprobacion:null, planTerm:null, lastTouched:Date.now()};
+      target={id, nombre, planCuatrimestre, intensiva, mesIntensiva, correlativasCursar:cursar, correlativasFinal:final, estado:'no_cursada', nota:null, fechaAprobacion:null, planTerm:null, lastTouched:Date.now()};
       State.data.materias.push(target);
     }
     if(estadoSel==='aprobada' && target.estado!=='aprobada'){
