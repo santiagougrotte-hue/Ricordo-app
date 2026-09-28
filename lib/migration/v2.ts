@@ -838,6 +838,9 @@ export function migrarAV2(data: RicordoData): { documento: RicordoDocument; repo
         // No existía en el esquema v1 — 35% es la alícuota general vigente en Argentina; se puede
         // ajustar después en Configuración sin tocar el cálculo.
         alicuota_iigg: 35,
+        // No existía en el esquema v1 — arranca en 0 (sin costo de mano de obra) hasta que se
+        // cargue explícitamente en Configuración, nunca se inventa una tarifa.
+        costo_mano_obra_hora: 0,
         saldo_inicial_cmv: money(data.saldo_cmv_anterior),
         saldo_inicial_compras: money(data.saldo_compras_anterior),
         fecha_corte_cmv: data.fecha_corte_cmv,

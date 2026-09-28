@@ -6,6 +6,7 @@ import { emptyDataV2 } from "./types-v2";
 import { migrarAV2 } from "./migration/v2";
 import {
   costoVariante,
+  costoManoDeObraVariante,
   calcularStock,
   saldoCaja,
   cmvPeriodo,
@@ -776,6 +777,44 @@ test("costoUnidadProductoBase: costo de exactamente 1 unidad — solo masa+relle
   assert.equal(costoUnidadProductoBase(data, "PROD-RAVIOL"), 118);
   data.producto_variantes = [];
   assert.equal(costoUnidadProductoBase(data, "PROD-RAVIOL"), 118);
+});
+
+test("costoManoDeObraVariante: sin minutos cargados o sin costo por hora configurado, da 0 — nunca inventa un tiempo", () => {
+  const data = fixtureRecetaPorUnidad();
+  assert.equal(costoManoDeObraVariante(data, "VAR-CAJA10"), 0);
+  data.configuracion.costo_mano_obra_hora = 6000;
+  // Sigue en 0: no hay minutos_por_unidad cargado en la receta.
+  assert.equal(costoManoDeObraVariante(data, "VAR-CAJA10"), 0);
+});
+
+test("costoManoDeObraVariante: receta compartida — los minutos escalan × unidades_por_paquete, igual que masa/relleno", () => {
+  const data = fixtureRecetaPorUnidad();
+  data.recetas[0].minutos_por_unidad = 2; // 2 minutos por raviol individual
+  data.configuracion.costo_mano_obra_hora = 6000; // $6000/hora = $100/minuto
+  // Caja de 10: 2 min × 10 = 20 min = 1/3 hora × $6000 = $2000
+  assert.equal(costoManoDeObraVariante(data, "VAR-CAJA10"), 2000);
+  // Caja de 12: 2 min × 12 = 24 min = 0.4 hora × $6000 = $2400
+  assert.equal(costoManoDeObraVariante(data, "VAR-CAJA12"), 2400);
+});
+
+test("costoVariante: incluye el costo de mano de obra sumado al de insumos/packaging", () => {
+  const data = fixtureRecetaPorUnidad();
+  data.recetas[0].minutos_por_unidad = 2;
+  data.configuracion.costo_mano_obra_hora = 6000;
+  // 1230 (insumos+packaging, ver test de arriba) + 2000 (mano de obra) = 3230
+  assert.equal(costoVariante(data, "VAR-CAJA10"), 3230);
+});
+
+test("costoManoDeObraVariante: receta propia/standalone (no compartida) — los minutos NO escalan, ya representan el total de la presentación", () => {
+  const data = emptyDataV2();
+  data.productos = [{ id: "P1", nombre: "Sabor viejo", activo: true }];
+  data.producto_variantes = [{ id: "VAR-VIEJA", producto_id: "P1", nombre: "Presentación única", unidades_por_paquete: 20, precio_venta: 1000, activo: true }];
+  // Receta "propia" de la variante — producto_id apunta al id de la VARIANTE, no del producto base
+  // (mismo criterio que recetaEfectivaVariante para el caso standalone no migrado).
+  data.recetas = [{ id: "REC-VIEJA", producto_id: "VAR-VIEJA", nombre: "Receta vieja", activa: true, minutos_por_unidad: 30 }];
+  data.configuracion.costo_mano_obra_hora = 6000;
+  // 30 minutos = 0.5 hora × $6000 = $3000 — nunca × 20 (unidades_por_paquete no aplica acá).
+  assert.equal(costoManoDeObraVariante(data, "VAR-VIEJA"), 3000);
 });
 
 test("idsExcluidosPorRevision: solo junta los casos 'pendiente' de pedidos/pedido_items — resuelto/ignorado ya no cuentan", () => {

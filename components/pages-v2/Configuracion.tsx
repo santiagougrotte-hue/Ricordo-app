@@ -118,6 +118,21 @@ function GeneralTab() {
         </Field>
       </Card>
 
+      <Card title="Mano de obra">
+        <p className="mb-3 text-[12.5px] text-text3">
+          Costo por hora usado por el costeo de productos (Productos → ficha del producto → Receta por unidad) para
+          sumar mano de obra al costo de cada variante, según los minutos que cargues ahí — nunca se inventa un
+          tiempo ni un costo si no lo cargás.
+        </p>
+        <Field label="Costo de mano de obra por hora">
+          <Input
+            type="number"
+            value={data.configuracion.costo_mano_obra_hora}
+            onChange={(e) => setUmbral("costo_mano_obra_hora", Number(e.target.value))}
+          />
+        </Field>
+      </Card>
+
       <Card title="Caja">
         <p className="mb-3 text-[12.5px] text-text3">
           Punto de partida del Flujo de caja (Finanzas → Tesorería → Flujo y proyección) antes de sumar cualquier

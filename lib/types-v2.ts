@@ -128,6 +128,11 @@ export interface Receta {
   rendimiento?: number;
   unidad_rendimiento?: string;
   activa: boolean;
+  /** Minutos de mano de obra para producir 1 unidad individual (mismo criterio que masa/relleno:
+   * si la receta es compartida, escala × unidades_por_paquete de cada variante; si es una receta
+   * propia/standalone de una variante vieja no migrada, el valor ya representa el total de esa
+   * presentación y no vuelve a escalar). Se convierte a costo con configuracion.costo_mano_obra_hora. */
+  minutos_por_unidad?: number;
 }
 
 export interface RecetaItem {
@@ -399,6 +404,10 @@ export interface Configuracion {
    * configurable porque la alícuota real puede cambiar, nunca se hardcodea el número dentro del
    * cálculo. */
   alicuota_iigg: number;
+  /** Costo de mano de obra por hora — se usa en el costeo de productos (Receta.minutos_por_unidad)
+   * para calcular un costo de mano de obra por variante, además de insumos/packaging. Default 0:
+   * nunca se inventa un valor, hasta que se cargue explícitamente no suma nada al costeo. */
+  costo_mano_obra_hora: number;
   saldo_inicial_cmv: number;
   saldo_inicial_compras: number;
   fecha_corte_cmv: string | null;
@@ -544,6 +553,7 @@ export function emptyDataV2(): RicordoDataV2 {
       umbral_stock_bajo_producto: 10,
       tipo_cambio: { valor: 1000, fuente: "manual" },
       alicuota_iigg: 35,
+      costo_mano_obra_hora: 0,
       saldo_inicial_cmv: 0,
       saldo_inicial_compras: 0,
       fecha_corte_cmv: null,

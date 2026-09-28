@@ -29,6 +29,7 @@ import {
   fNum,
   costoVariante,
   costoUnidadProductoBase,
+  costoManoDeObraVariante,
   margenVariante,
   recetaEfectivaVariante,
   categoriasPorAmbito,
@@ -182,6 +183,20 @@ function FichaProducto({ productoId }: { productoId: string }) {
     setData((d) => ({ ...d, receta_items: d.receta_items.map((i) => (i.id === id ? { ...i, cantidad } : i)) }));
   }
 
+  function actualizarMinutosManoObra(minutos: number) {
+    if (minutos < 0) return;
+    setData((d) => {
+      const existente = d.recetas.find((r) => r.producto_id === productoId);
+      if (existente) {
+        return { ...d, recetas: d.recetas.map((r) => (r.id === existente.id ? { ...r, minutos_por_unidad: minutos } : r)) };
+      }
+      return {
+        ...d,
+        recetas: [...d.recetas, { id: uid("REC"), producto_id: productoId, nombre: `Receta de ${nombreProducto}`, activa: true, minutos_por_unidad: minutos }],
+      };
+    });
+  }
+
   function agregarAjuste() {
     if (!varianteSeleccionadaAjustes || !nuevoAjuste.insumo_id) {
       toast("Elegí una variante y un insumo", "error");
@@ -319,6 +334,9 @@ function FichaProducto({ productoId }: { productoId: string }) {
                             Receta base: {fARS(costoUnidad)} × {v.unidades_por_paquete} = {fARS(costoUnidad * v.unidades_por_paquete)}
                           </div>
                         )}
+                        {costoManoDeObraVariante(data, v.id) > 0 && (
+                          <div className="text-[11px] text-text3">Mano de obra: {fARS(costoManoDeObraVariante(data, v.id))}</div>
+                        )}
                       </Td>
                       <Td className={margen >= 0 ? "text-green" : "text-red"}>{fNum(margen, 1)}%</Td>
                       <Td>
@@ -403,6 +421,25 @@ function FichaProducto({ productoId }: { productoId: string }) {
         <div className="mb-3 rounded-md border border-border bg-surface2/40 p-2.5 text-[13px]">
           <span className="text-text2">Costo de 1 unidad (masa + relleno): </span>
           <span className="font-semibold text-text">{fARS(costoUnidad)}</span>
+        </div>
+        <div className="mb-3 flex flex-wrap items-center gap-3 rounded-md border border-border bg-surface2/40 p-2.5">
+          <Field label="Minutos de mano de obra por unidad">
+            <Input
+              type="number"
+              className="w-28"
+              value={receta?.minutos_por_unidad ?? 0}
+              onChange={(e) => actualizarMinutosManoObra(Number(e.target.value))}
+            />
+          </Field>
+          <div className="text-[13px]">
+            <span className="text-text2">Costo de mano de obra por unidad: </span>
+            <span className="font-semibold text-text">
+              {fARS(Math.round(((receta?.minutos_por_unidad ?? 0) / 60) * data.configuracion.costo_mano_obra_hora))}
+            </span>
+            {data.configuracion.costo_mano_obra_hora === 0 && (
+              <span className="ml-1.5 text-[11px] text-orange">(cargá el costo por hora en Configuración → General)</span>
+            )}
+          </div>
         </div>
         <div className="flex flex-wrap items-end gap-2 rounded-md border border-border bg-surface2/40 p-2.5">
           <div className="w-full sm:w-auto sm:flex-[2]">

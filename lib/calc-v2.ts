@@ -91,6 +91,25 @@ export function recetaEfectivaVariante(data: RicordoDataV2, variante: ProductoVa
   return items;
 }
 
+/** Costo de mano de obra de una variante: minutos de la receta (Receta.minutos_por_unidad)
+ * convertidos a horas × configuracion.costo_mano_obra_hora — mismo criterio de escala que
+ * masa/relleno (recetaEfectivaVariante): si la receta es compartida, escala × unidades_por_paquete;
+ * si es una receta propia/standalone (variante vieja no migrada al modelo de producto base), los
+ * minutos ya representan el total de esa presentación y no vuelven a escalar. 0 si no hay minutos
+ * cargados — nunca se inventa un tiempo de mano de obra. */
+export function costoManoDeObraVariante(data: RicordoDataV2, varianteId: string): number {
+  const variante = data.producto_variantes.find((v) => v.id === varianteId);
+  if (!variante) return 0;
+  const recetaCompartida = data.recetas.find((r) => r.producto_id === variante.producto_id);
+  const recetaPropia = recetaCompartida ? undefined : data.recetas.find((r) => r.producto_id === variante.id);
+  const receta = recetaCompartida ?? recetaPropia;
+  const minutos = receta?.minutos_por_unidad ?? 0;
+  if (minutos <= 0) return 0;
+  const factor = recetaCompartida ? (variante.unidades_por_paquete ?? 0) : 1;
+  const horas = (minutos * factor) / 60;
+  return Math.round(horas * data.configuracion.costo_mano_obra_hora);
+}
+
 export function costoVariante(data: RicordoDataV2, varianteId: string): number {
   const variante = data.producto_variantes.find((v) => v.id === varianteId);
   if (!variante) return 0;
@@ -98,7 +117,7 @@ export function costoVariante(data: RicordoDataV2, varianteId: string): number {
     const insumo = data.insumos.find((i) => i.id === item.insumo_id);
     return acc + item.cantidad * (insumo?.precio_actual ?? 0);
   }, 0);
-  return Math.round(total);
+  return Math.round(total) + costoManoDeObraVariante(data, varianteId);
 }
 
 /** Costo de fabricar exactamente 1 unidad individual del producto base: solo los insumos de masa
