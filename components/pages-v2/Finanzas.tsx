@@ -776,6 +776,24 @@ function EstadoResultadosVista() {
       favorable: "mayorMejor",
     },
     {
+      id: "mod",
+      label: "− Mano de obra directa",
+      linea: eerr.mano_de_obra_directa,
+      actual: -eerr.mano_de_obra_directa.total,
+      anterior: eerrAnt ? -eerrAnt.mano_de_obra_directa.total : undefined,
+      favorable: "menorMejor",
+    },
+    {
+      id: "rdmo",
+      label: "= Resultado después de mano de obra",
+      actual: eerr.resultado_despues_mano_obra,
+      anterior: eerrAnt?.resultado_despues_mano_obra,
+      esSubtotal: true,
+      margenActual: eerr.margen_despues_mano_obra_pct,
+      margenAnterior: eerrAnt?.margen_despues_mano_obra_pct,
+      favorable: "mayorMejor",
+    },
+    {
       id: "civ",
       label: "− Costos indirectos variables (incl. envío real)",
       linea: eerr.costos_indirectos_variables,
@@ -836,8 +854,10 @@ function EstadoResultadosVista() {
       <Card title="Estado de Resultados (EERR)" className="mb-4">
         <p className="mb-3 text-[12.5px] text-text3">
           Resultado económico devengado, no de caja: las ventas salen de pedidos Entregados (no de cobros), el CMV sale de
-          la receta de cada producto (no de las compras del período), y los costos fijos/amortización se prorratean por
-          mes. Otros ingresos/gastos e impuestos quedan en $0 — todavía no hay una fuente de datos para esas dos líneas.
+          la receta de cada producto (solo materia prima y packaging, no de las compras del período), la mano de obra
+          directa tiene su propia línea (minutos de cada variante × costo por hora), y los costos fijos/amortización se
+          prorratean por mes. Otros ingresos/gastos e impuestos quedan en $0 — todavía no hay una fuente de datos para
+          esas dos líneas.
         </p>
         <div className="flex flex-wrap items-end gap-3">
           <FilterTabs
@@ -907,6 +927,29 @@ function EstadoResultadosVista() {
             </tbody>
           </table>
         </TableWrap>
+      </Card>
+
+      <Card title="Tu sueldo del período" className="mb-4">
+        <p className="mb-3 text-[12.5px] text-text3">
+          Misma ganancia del período, mirada como reparto entre tu trabajo y el negocio en sí — no es una línea contable
+          nueva, es la mano de obra directa y el resultado neto de arriba, sumados.
+        </p>
+        <div className="grid grid-cols-1 gap-3.5 sm:grid-cols-3">
+          <div>
+            <div className="text-[11px] text-text3">Pago por tu trabajo</div>
+            <div className="text-xl font-semibold text-text">{fARS2(eerr.sueldo_periodo.pago_por_tu_trabajo)}</div>
+          </div>
+          <div>
+            <div className="text-[11px] text-text3">Ganancia del negocio</div>
+            <div className={`text-xl font-semibold ${eerr.sueldo_periodo.ganancia_del_negocio >= 0 ? "text-green" : "text-red"}`}>
+              {fARS2(eerr.sueldo_periodo.ganancia_del_negocio)}
+            </div>
+          </div>
+          <div>
+            <div className="text-[11px] text-text3">Total disponible para vos</div>
+            <div className="text-xl font-semibold text-accent">{fARS2(eerr.sueldo_periodo.total_disponible)}</div>
+          </div>
+        </div>
       </Card>
 
       <Card title={`Punto de equilibrio — ${MESES[mes - 1]} ${anio}`}>
@@ -1796,6 +1839,8 @@ function EerrClasicoVista() {
     { label: "VENTAS", valor: r.ventas },
     { label: "(CMV)", valor: r.cmv.total },
     { label: "R. bruto", valor: r.resultado_bruto, subtotal: true },
+    { label: "(Mano de obra directa)", valor: r.mano_de_obra_directa.total },
+    { label: "R. después de mano de obra", valor: r.resultado_despues_mano_obra, subtotal: true },
     { label: "(Gastos adm. y comerc.)", valor: r.gastos_adm_comerc.total },
     { label: "R. antes de Amortiz., Int. e Impuestos", valor: r.resultado_antes_amort_int_impuestos, subtotal: true },
     { label: "(Amortizaciones)", valor: r.amortizaciones.total },
@@ -1809,7 +1854,7 @@ function EerrClasicoVista() {
   return (
     <div>
       <p className="mb-4 text-[12.5px] text-text3">
-        Formato clásico: Ventas / CMV / Resultado bruto / Gastos adm. y comerciales / Amortizaciones / Intereses /
+        Formato clásico: Ventas / CMV / Resultado bruto / Mano de obra directa / Gastos adm. y comerciales / Amortizaciones / Intereses /
         IIGG / Resultado neto, en ese orden — es una presentación alternativa sobre los mismos datos del Estado de
         Resultados detallado (esa vista desglosa &ldquo;Gastos adm. y comerc.&rdquo; en costos fijos, indirectos y
         operativos por separado; acá van consolidados en una sola línea). La alícuota de IIGG se ajusta en

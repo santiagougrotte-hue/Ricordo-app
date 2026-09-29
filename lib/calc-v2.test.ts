@@ -7,6 +7,8 @@ import { migrarAV2 } from "./migration/v2";
 import {
   costoVariante,
   costoManoDeObraVariante,
+  costoPedidoItem,
+  manoDeObraPedidoItem,
   calcularStock,
   saldoCaja,
   cmvPeriodo,
@@ -803,6 +805,44 @@ test("costoVariante: incluye el costo de mano de obra sumado al de insumos/packa
   data.configuracion.costo_mano_obra_hora = 6000;
   // 1230 (insumos+packaging, ver test de arriba) + 2000 (mano de obra) = 3230
   assert.equal(costoVariante(data, "VAR-CAJA10"), 3230);
+});
+
+test("costoPedidoItem/manoDeObraPedidoItem: el CMV de una línea vendida excluye la mano de obra, aunque costoVariante la incluya", () => {
+  const data = fixtureRecetaPorUnidad();
+  data.recetas[0].minutos_por_unidad = 2;
+  data.configuracion.costo_mano_obra_hora = 6000;
+  const item = { id: "I1", pedido_id: "PED-1", producto_variante_id: "VAR-CAJA10", nombre_historico: "Caja de 10", cantidad: 3, precio_unitario: 3000, descuento: 0, subtotal: 9000 };
+  // costoVariante(VAR-CAJA10) = 3230 (1230 insumos+packaging + 2000 mano de obra, ver test de arriba).
+  // costoPedidoItem resta la mano de obra: (3230 - 2000) × 3 = 3690.
+  assert.equal(costoPedidoItem(data, item), 3690);
+  // manoDeObraPedidoItem toma exactamente lo que costoPedidoItem excluyó: 2000 × 3 = 6000.
+  assert.equal(manoDeObraPedidoItem(data, item), 6000);
+});
+
+test("calcularEerr: la mano de obra sale del CMV y pasa a su propia línea — resultado operativo/neto no cambian de valor", () => {
+  const data = fixtureRecetaPorUnidad();
+  data.recetas[0].minutos_por_unidad = 2;
+  data.configuracion.costo_mano_obra_hora = 6000;
+  data.productos = [{ id: "PROD-RAVIOL", nombre: "Ravioles", activo: true }];
+  data.pedidos = [{ id: "PED-1", fecha: "2026-01-05", cliente_id: "C1", estado: "Entregado", canal: "Minorista", descuento: 0, costo_envio: 0, total: 6000 }];
+  data.pedido_items = [
+    { id: "I1", pedido_id: "PED-1", producto_variante_id: "VAR-CAJA10", nombre_historico: "Caja de 10", cantidad: 2, precio_unitario: 3000, descuento: 0, subtotal: 6000 },
+  ];
+
+  const eerr = calcularEerr(data, "2026-01-01", "2026-01-31");
+  // CMV = 1230 (insumos+packaging de 1 caja) × 2 = 2460 — sin mano de obra.
+  assert.equal(eerr.cmv.total, 2460);
+  assert.equal(eerr.resultado_bruto, 6000 - 2460);
+  // Mano de obra directa = 2000 (mano de obra de 1 caja) × 2 = 4000.
+  assert.equal(eerr.mano_de_obra_directa.total, 4000);
+  assert.equal(eerr.resultado_despues_mano_obra, eerr.resultado_bruto - 4000);
+  // Sin costos indirectos/fijos/amortizaciones cargados: resultado operativo/neto = resultado después de mano de obra
+  // — el total no cambia por mover la mano de obra a su propia línea, solo dónde se ve.
+  assert.equal(eerr.resultado_operativo, eerr.resultado_despues_mano_obra);
+  assert.equal(eerr.resultado_neto, eerr.resultado_operativo);
+  assert.equal(eerr.sueldo_periodo.pago_por_tu_trabajo, 4000);
+  assert.equal(eerr.sueldo_periodo.ganancia_del_negocio, eerr.resultado_neto);
+  assert.equal(eerr.sueldo_periodo.total_disponible, 4000 + eerr.resultado_neto);
 });
 
 test("costoManoDeObraVariante: receta propia/standalone (no compartida) — los minutos NO escalan, ya representan el total de la presentación", () => {

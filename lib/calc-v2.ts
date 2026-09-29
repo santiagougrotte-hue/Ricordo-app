@@ -293,9 +293,22 @@ export function totalCostoEnvio(pedidos: Pedido[]): number {
 
 export const ESTADOS_CMV: Pedido["estado"][] = ["Entregado"];
 
+/** Costo de insumos (materia prima + packaging) de esta línea vendida — a propósito NO incluye
+ * mano de obra: es lo que alimenta el CMV del EERR (ver `calcularEerr`), que la muestra separada
+ * en su propia línea "Mano de obra directa". El costeo de producto (`costoVariante`, Productos/
+ * Simulador/Punto de equilibrio) sigue mostrando el costo total con mano de obra incluida — son
+ * dos vistas distintas del mismo dato, a propósito. */
 export function costoPedidoItem(data: RicordoDataV2, item: PedidoItem): number {
   if (!item.producto_variante_id) return 0;
-  return costoVariante(data, item.producto_variante_id) * item.cantidad;
+  return (costoVariante(data, item.producto_variante_id) - costoManoDeObraVariante(data, item.producto_variante_id)) * item.cantidad;
+}
+
+/** Mano de obra directa de esta línea vendida = costo de mano de obra de 1 unidad de la variante
+ * (`costoManoDeObraVariante`) × cantidad. Única fuente de mano de obra en toda la app — nunca se
+ * calcula de otra forma en ningún otro lado. */
+export function manoDeObraPedidoItem(data: RicordoDataV2, item: PedidoItem): number {
+  if (!item.producto_variante_id) return 0;
+  return costoManoDeObraVariante(data, item.producto_variante_id) * item.cantidad;
 }
 
 export function cmvPeriodo(data: RicordoDataV2, pedidos: Pedido[]): number {
@@ -471,6 +484,13 @@ export interface Eerr {
   cmv: EerrLinea;
   resultado_bruto: number;
   margen_bruto_pct: number | null;
+  /** Mano de obra directa de lo vendido en el período (minutos de cada variante × costo por hora
+   * / 60 × cantidad, ver `manoDeObraPedidoItem`) — antes iba mezclada adentro del CMV, ahora tiene
+   * su propia línea para no esconder cuánto de la venta corresponde a materia prima/packaging y
+   * cuánto a trabajo. El monto total no cambia, solo dónde se resta. */
+  mano_de_obra_directa: EerrLinea;
+  resultado_despues_mano_obra: number;
+  margen_despues_mano_obra_pct: number | null;
   costos_indirectos_variables: EerrLinea;
   gastos_operativos: EerrLinea;
   costos_fijos: EerrLinea;
@@ -481,6 +501,14 @@ export interface Eerr {
   impuestos: EerrLinea;
   resultado_neto: number;
   margen_neto_pct: number | null;
+  /** Lectura "sueldo del dueño" del mismo resultado: cuánto de lo que generó el negocio te
+   * corresponde por tu propio trabajo (mano de obra directa) y cuánto es ganancia del negocio en
+   * sí (resultado neto) — el total es simplemente la suma de ambos, no un tercer número nuevo. */
+  sueldo_periodo: {
+    pago_por_tu_trabajo: number;
+    ganancia_del_negocio: number;
+    total_disponible: number;
+  };
 }
 
 /** Meses (mes/año) que un rango de fechas toca, aunque sea parcialmente — un costo fijo recurrente
@@ -577,6 +605,15 @@ export function calcularEerr(data: RicordoDataV2, desde: string, hasta: string, 
   const resultado_bruto = ventas_netas - cmv.total;
   const margen_bruto_pct = margenSeguro(resultado_bruto, ventas_netas);
 
+  const mano_de_obra_directa: EerrLinea = {
+    total: Math.round(itemsPeriodo.reduce((acc, i) => acc + manoDeObraPedidoItem(data, i), 0)),
+    registros: itemsPeriodo
+      .filter((i) => i.producto_variante_id && manoDeObraPedidoItem(data, i) > 0)
+      .map((i) => ({ fecha: fechaDePedido(i.pedido_id), concepto: `Mano de obra — ${i.nombre_historico}`, monto: manoDeObraPedidoItem(data, i) })),
+  };
+  const resultado_despues_mano_obra = resultado_bruto - mano_de_obra_directa.total;
+  const margen_despues_mano_obra_pct = margenSeguro(resultado_despues_mano_obra, ventas_netas);
+
   const movsIndirectosVariables = data.movimientos_financieros.filter(
     (m) => nombreCategoria(data, m.categoria_id).startsWith("Costo Indirecto — Variable") && m.fecha >= desde && m.fecha <= hasta
   );
@@ -621,7 +658,8 @@ export function calcularEerr(data: RicordoDataV2, desde: string, hasta: string, 
     ),
   };
 
-  const resultado_operativo = resultado_bruto - costos_indirectos_variables.total - gastos_operativos.total - costos_fijos.total - amortizaciones.total;
+  const resultado_operativo =
+    resultado_despues_mano_obra - costos_indirectos_variables.total - gastos_operativos.total - costos_fijos.total - amortizaciones.total;
   const margen_operativo_pct = margenSeguro(resultado_operativo, ventas_netas);
 
   // Sin fuente de datos todavía — nunca se inventa un valor, quedan en cero hasta que exista un
@@ -631,6 +669,12 @@ export function calcularEerr(data: RicordoDataV2, desde: string, hasta: string, 
   const resultado_neto = resultado_operativo + otros_ingresos_gastos.total - impuestos.total;
   const margen_neto_pct = margenSeguro(resultado_neto, ventas_netas);
 
+  const sueldo_periodo = {
+    pago_por_tu_trabajo: mano_de_obra_directa.total,
+    ganancia_del_negocio: resultado_neto,
+    total_disponible: mano_de_obra_directa.total + resultado_neto,
+  };
+
   return {
     ventas_brutas,
     descuentos,
@@ -639,6 +683,9 @@ export function calcularEerr(data: RicordoDataV2, desde: string, hasta: string, 
     cmv,
     resultado_bruto,
     margen_bruto_pct,
+    mano_de_obra_directa,
+    resultado_despues_mano_obra,
+    margen_despues_mano_obra_pct,
     costos_indirectos_variables,
     gastos_operativos,
     costos_fijos,
@@ -649,6 +696,7 @@ export function calcularEerr(data: RicordoDataV2, desde: string, hasta: string, 
     impuestos,
     resultado_neto,
     margen_neto_pct,
+    sueldo_periodo,
   };
 }
 
@@ -664,6 +712,8 @@ export interface EerrEstructurado {
   ventas: number;
   cmv: EerrLinea;
   resultado_bruto: number;
+  mano_de_obra_directa: EerrLinea;
+  resultado_despues_mano_obra: number;
   gastos_adm_comerc: EerrLinea;
   resultado_antes_amort_int_impuestos: number;
   amortizaciones: EerrLinea;
@@ -687,7 +737,7 @@ export function calcularEerrEstructurado(data: RicordoDataV2, desde: string, has
     total: eerr.costos_indirectos_variables.total + eerr.gastos_operativos.total + eerr.costos_fijos.total,
     registros: [...eerr.costos_indirectos_variables.registros, ...eerr.gastos_operativos.registros, ...eerr.costos_fijos.registros],
   };
-  const resultado_antes_amort_int_impuestos = eerr.resultado_bruto - gastos_adm_comerc.total;
+  const resultado_antes_amort_int_impuestos = eerr.resultado_despues_mano_obra - gastos_adm_comerc.total;
   const resultado_antes_intereses_impuestos = resultado_antes_amort_int_impuestos - eerr.amortizaciones.total;
 
   const movsIntereses = data.movimientos_financieros.filter(
@@ -708,6 +758,8 @@ export function calcularEerrEstructurado(data: RicordoDataV2, desde: string, has
     ventas: eerr.ventas_netas,
     cmv: eerr.cmv,
     resultado_bruto: eerr.resultado_bruto,
+    mano_de_obra_directa: eerr.mano_de_obra_directa,
+    resultado_despues_mano_obra: eerr.resultado_despues_mano_obra,
     gastos_adm_comerc,
     resultado_antes_amort_int_impuestos,
     amortizaciones: eerr.amortizaciones,
