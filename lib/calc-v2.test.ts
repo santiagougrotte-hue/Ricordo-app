@@ -819,6 +819,27 @@ test("costoPedidoItem/manoDeObraPedidoItem: el CMV de una línea vendida excluye
   assert.equal(manoDeObraPedidoItem(data, item), 6000);
 });
 
+test("costoPedidoItem/manoDeObraPedidoItem: con costo_unitario_historico/mano_obra_unitaria_historica cargados, usan esos valores congelados en vez de recalcular en vivo", () => {
+  const data = fixtureRecetaPorUnidad();
+  // Precio de insumos sube después de la venta — el ítem ya vendido no debe verse afectado.
+  data.insumos.find((i) => i.id === "INS-PREMEZCLA")!.precio_actual = 999999;
+  data.configuracion.costo_mano_obra_hora = 6000;
+  const item = {
+    id: "I1",
+    pedido_id: "PED-1",
+    producto_variante_id: "VAR-CAJA10",
+    nombre_historico: "Caja de 10",
+    cantidad: 3,
+    precio_unitario: 3000,
+    descuento: 0,
+    subtotal: 9000,
+    costo_unitario_historico: 1230,
+    mano_obra_unitaria_historica: 2000,
+  };
+  assert.equal(costoPedidoItem(data, item), 1230 * 3);
+  assert.equal(manoDeObraPedidoItem(data, item), 2000 * 3);
+});
+
 test("calcularEerr: la mano de obra sale del CMV y pasa a su propia línea — resultado operativo/neto no cambian de valor", () => {
   const data = fixtureRecetaPorUnidad();
   data.recetas[0].minutos_por_unidad = 2;

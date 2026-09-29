@@ -26,10 +26,10 @@ import {
 } from "@/components/ui";
 import { Modal } from "@/components/Modal";
 import { AnaliticaVentasTab } from "./AnaliticaVentas";
-import { fARS, fNum, inPeriod, costoVariante, margenVariante, productosConVariantes, estadoCobroPedido } from "@/lib/calc-v2";
+import { fARS, fNum, inPeriod, costoVariante, costoManoDeObraVariante, margenVariante, productosConVariantes, estadoCobroPedido } from "@/lib/calc-v2";
 import { geocodificarDireccion } from "@/lib/mapas";
 import type { EstadoCobro } from "@/lib/calc-v2";
-import type { Canal, EstadoPedido, Pedido, PedidoItem, ProductoVariante } from "@/lib/types-v2";
+import type { Canal, EstadoPedido, Pedido, PedidoItem, ProductoVariante, RicordoDataV2 } from "@/lib/types-v2";
 import type { Cliente } from "@/lib/types";
 
 const ESTADOS: EstadoPedido[] = ["Confirmado", "Produccion", "Entregado", "Cancelado"];
@@ -50,10 +50,27 @@ interface ItemForm {
   cantidad: number;
   precio_unitario: number;
   descuento: number;
+  /** Frascos de salsa adicional para esta fila (solo tiene efecto en canal Mayorista, y solo si
+   * hay una variante de salsa configurada en Configuración → General). Al guardar se descompone
+   * en su propio PedidoItem — no es un campo que se persista tal cual. */
+  salsaFrascos: number;
 }
 
 function itemVacio(canal: Canal): ItemForm {
-  return { canal, productoBaseId: "", producto_variante_id: "", cantidad: 1, precio_unitario: 0, descuento: 0 };
+  return { canal, productoBaseId: "", producto_variante_id: "", cantidad: 1, precio_unitario: 0, descuento: 0, salsaFrascos: 0 };
+}
+
+function varianteSalsaAdicional(data: RicordoDataV2): ProductoVariante | undefined {
+  const id = data.configuracion.variante_salsa_adicional_id;
+  return id ? data.producto_variantes.find((v) => v.id === id) : undefined;
+}
+
+/** Costo de la salsa adicional cargada en la fila (solo Mayorista) — se suma al subtotal de la
+ * fila para que se vea en vivo, aunque al guardar termine siendo un PedidoItem aparte. */
+function costoSalsaItem(data: RicordoDataV2, it: ItemForm): number {
+  if (it.canal !== "Mayorista" || !it.salsaFrascos) return 0;
+  const variante = varianteSalsaAdicional(data);
+  return variante ? it.salsaFrascos * variante.precio_venta : 0;
 }
 
 interface PedidoForm {
@@ -88,8 +105,8 @@ function subtotalItem(i: ItemForm): number {
   return i.precio_unitario * i.cantidad - i.descuento;
 }
 
-function totalPedido(form: PedidoForm): number {
-  return form.items.reduce((acc, i) => acc + subtotalItem(i), 0) - form.descuento + form.costo_envio;
+function totalPedido(form: PedidoForm, data: RicordoDataV2): number {
+  return form.items.reduce((acc, i) => acc + subtotalItem(i) + costoSalsaItem(data, i), 0) - form.descuento + form.costo_envio;
 }
 
 /** Registrar una entrega genera, de forma idempotente (por `origen_id`), el movimiento de salida
@@ -134,6 +151,7 @@ function PedidosTab() {
   const [modalOpen, setModalOpen] = useState(false);
   const [editando, setEditando] = useState<string | null>(null);
   const [form, setForm] = useState<PedidoForm>(formVacio());
+  const varianteSalsa = varianteSalsaAdicional(data);
 
   const clienteNombre = (id: string) => data.clientes.find((c) => c.id === id)?.nombre ?? "—";
   const varianteNombre = (id: string | null) => {
@@ -185,6 +203,7 @@ function PedidosTab() {
           cantidad: i.cantidad,
           precio_unitario: i.precio_unitario,
           descuento: i.descuento,
+          salsaFrascos: 0,
         };
       }),
     });
@@ -197,12 +216,27 @@ function PedidosTab() {
   function agregarItem() {
     setForm((f) => ({ ...f, items: [...f.items, itemVacio(f.canal)] }));
   }
-  function saboresDelCanal(canal: Canal) {
-    return data.productos.filter((p) => data.producto_variantes.some((v) => v.activo && v.producto_id === p.id && v.canal === canal));
+  // `incluirProductoId` asegura que, al EDITAR un pedido viejo cuyo sabor ya no tiene ninguna
+  // variante activa en este canal, el selector lo siga mostrando (marcado aparte) en vez de
+  // quedar vacío — sin eso, nunca se podría abrir esa fila para revisarla o borrarla.
+  function saboresDelCanal(canal: Canal, incluirProductoId?: string) {
+    const base = data.productos.filter((p) => data.producto_variantes.some((v) => v.activo && v.producto_id === p.id && v.canal === canal));
+    if (incluirProductoId && !base.some((p) => p.id === incluirProductoId)) {
+      const extra = data.productos.find((p) => p.id === incluirProductoId);
+      if (extra) return [...base, extra];
+    }
+    return base;
   }
-  function variantesDeCanalYSabor(canal: Canal, productoBaseId: string) {
+  // Mismo criterio que `saboresDelCanal`: `incluirVarianteId` mantiene visible la variante ya
+  // elegida en un pedido viejo aunque ahora esté inactiva.
+  function variantesDeCanalYSabor(canal: Canal, productoBaseId: string, incluirVarianteId?: string) {
     if (!productoBaseId) return [];
-    return data.producto_variantes.filter((v) => v.activo && v.canal === canal && v.producto_id === productoBaseId);
+    const base = data.producto_variantes.filter((v) => v.activo && v.canal === canal && v.producto_id === productoBaseId);
+    if (incluirVarianteId && !base.some((v) => v.id === incluirVarianteId)) {
+      const extra = data.producto_variantes.find((v) => v.id === incluirVarianteId);
+      if (extra) return [...base, extra];
+    }
+    return base;
   }
   // Cambiar el canal invalida el sabor y la variante elegidos (spec: "limpiar el sabor si deja de
   // ser válido, limpiar la variante, actualizar las opciones disponibles").
@@ -239,7 +273,41 @@ function PedidosTab() {
     }
 
     const pedidoId = editando ?? uid("PED");
-    const total = totalPedido(form);
+    // Costo unitario (materia prima+packaging) y mano de obra unitaria de una variante, congelados
+    // tal como están AHORA — quedan guardados en el ítem para que el CMV/mano de obra directa del
+    // Estado de Resultados no cambien después si suben los precios de los insumos o la hora.
+    const costeoHistoricoVariante = (varianteId: string) => ({
+      costo_unitario_historico: costoVariante(data, varianteId) - costoManoDeObraVariante(data, varianteId),
+      mano_obra_unitaria_historica: costoManoDeObraVariante(data, varianteId),
+    });
+    const nuevosItems: PedidoItem[] = itemsValidos.flatMap((i) => {
+      const variante = data.producto_variantes.find((v) => v.id === i.producto_variante_id);
+      const item: PedidoItem = {
+        id: uid("PI"),
+        pedido_id: pedidoId,
+        producto_variante_id: i.producto_variante_id,
+        nombre_historico: variante?.nombre ?? "",
+        cantidad: i.cantidad,
+        precio_unitario: i.precio_unitario,
+        descuento: i.descuento,
+        subtotal: subtotalItem(i),
+        ...costeoHistoricoVariante(i.producto_variante_id),
+      };
+      if (i.canal !== "Mayorista" || !i.salsaFrascos || !varianteSalsa) return [item];
+      const itemSalsa: PedidoItem = {
+        id: uid("PI"),
+        pedido_id: pedidoId,
+        producto_variante_id: varianteSalsa.id,
+        nombre_historico: varianteSalsa.nombre,
+        cantidad: i.salsaFrascos,
+        precio_unitario: varianteSalsa.precio_venta,
+        descuento: 0,
+        subtotal: varianteSalsa.precio_venta * i.salsaFrascos,
+        ...costeoHistoricoVariante(varianteSalsa.id),
+      };
+      return [item, itemSalsa];
+    });
+    const total = nuevosItems.reduce((acc, i) => acc + i.subtotal, 0) - form.descuento + form.costo_envio;
     const nuevoPedido: Pedido = {
       id: pedidoId,
       fecha: form.fecha,
@@ -253,19 +321,6 @@ function PedidosTab() {
       total,
       notas: form.notas || undefined,
     };
-    const nuevosItems: PedidoItem[] = itemsValidos.map((i) => {
-      const variante = data.producto_variantes.find((v) => v.id === i.producto_variante_id);
-      return {
-        id: uid("PI"),
-        pedido_id: pedidoId,
-        producto_variante_id: i.producto_variante_id,
-        nombre_historico: variante?.nombre ?? "",
-        cantidad: i.cantidad,
-        precio_unitario: i.precio_unitario,
-        descuento: i.descuento,
-        subtotal: subtotalItem(i),
-      };
-    });
 
     setData((d) => {
       const otrosItems = d.pedido_items.filter((i) => i.pedido_id !== pedidoId);
@@ -485,8 +540,12 @@ function PedidosTab() {
             </Button>
           </div>
           {form.items.map((it, idx) => {
-            const variantesDisponibles = variantesDeCanalYSabor(it.canal, it.productoBaseId);
+            const sabores = saboresDelCanal(it.canal, it.productoBaseId);
+            const variantesDisponibles = [...variantesDeCanalYSabor(it.canal, it.productoBaseId, it.producto_variante_id)].sort(
+              (a, b) => (b.unidades_por_paquete ?? 0) - (a.unidades_por_paquete ?? 0)
+            );
             const mostrarPresentacion = variantesDisponibles.length > 1;
+            const mostrarSalsa = it.canal === "Mayorista" && !!varianteSalsa;
             return (
             <div key={idx} className="mb-2 flex flex-wrap items-end gap-2 rounded-md border border-border bg-surface2/40 p-2.5">
               <Select value={it.canal} onChange={(e) => actualizarCanalItem(idx, e.target.value as Canal)} className="w-full sm:w-32">
@@ -495,26 +554,27 @@ function PedidosTab() {
               </Select>
               <Select value={it.productoBaseId} onChange={(e) => actualizarSaborItem(idx, e.target.value)} className="w-full sm:w-40">
                 <option value="">Sabor…</option>
-                {saboresDelCanal(it.canal).map((p) => (
+                {sabores.map((p) => (
                   <option key={p.id} value={p.id}>
                     {p.nombre}
                   </option>
                 ))}
               </Select>
               {mostrarPresentacion && (
-                <Select value={it.producto_variante_id} onChange={(e) => actualizarVarianteItem(idx, e.target.value)} className="w-full sm:w-36">
+                <Select value={it.producto_variante_id} onChange={(e) => actualizarVarianteItem(idx, e.target.value)} className="w-full sm:w-40">
                   <option value="">Presentación…</option>
                   {variantesDisponibles.map((v) => (
                     <option key={v.id} value={v.id}>
-                      {v.presentacion || v.nombre}
+                      {v.unidades_por_paquete ? `${v.unidades_por_paquete} unidades` : v.presentacion || v.nombre} — {fARS(v.precio_venta)}
+                      {!v.activo ? " (inactiva)" : ""}
                     </option>
                   ))}
                 </Select>
               )}
               <Input
                 type="number"
-                placeholder="Cant."
-                className="w-[calc(50%-4px)] sm:w-20"
+                placeholder="Cantidad"
+                className="w-[calc(50%-4px)] sm:w-24"
                 value={it.cantidad}
                 onChange={(e) => actualizarItem(idx, { cantidad: Number(e.target.value) })}
               />
@@ -527,12 +587,23 @@ function PedidosTab() {
               />
               <Input
                 type="number"
-                placeholder="Desc. $"
+                placeholder="Descuento"
                 className="w-[calc(50%-4px)] sm:w-24"
                 value={it.descuento}
                 onChange={(e) => actualizarItem(idx, { descuento: Number(e.target.value) })}
               />
-              <div className="w-[calc(50%-4px)] shrink-0 text-right text-[12.5px] font-medium text-accent sm:w-28">{fARS(subtotalItem(it))}</div>
+              {mostrarSalsa && (
+                <Input
+                  type="number"
+                  placeholder="Salsa (frascos)"
+                  className="w-[calc(50%-4px)] sm:w-28"
+                  value={it.salsaFrascos}
+                  onChange={(e) => actualizarItem(idx, { salsaFrascos: Number(e.target.value) })}
+                />
+              )}
+              <div className="w-[calc(50%-4px)] shrink-0 text-right text-[12.5px] font-medium text-accent sm:w-28">
+                {fARS(subtotalItem(it) + costoSalsaItem(data, it))}
+              </div>
               <button onClick={() => quitarItem(idx)} disabled={form.items.length === 1} className="text-red hover:text-red/70 disabled:opacity-30">
                 <X className="h-4 w-4" />
               </button>
@@ -541,7 +612,7 @@ function PedidosTab() {
           })}
           <div className="mt-2 flex justify-end text-sm">
             <span className="text-text3">Total del pedido:&nbsp;</span>
-            <span className="font-semibold text-accent">{fARS(totalPedido(form))}</span>
+            <span className="font-semibold text-accent">{fARS(totalPedido(form, data))}</span>
           </div>
         </div>
       </Modal>

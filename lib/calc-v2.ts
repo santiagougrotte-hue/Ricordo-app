@@ -297,18 +297,26 @@ export const ESTADOS_CMV: Pedido["estado"][] = ["Entregado"];
  * mano de obra: es lo que alimenta el CMV del EERR (ver `calcularEerr`), que la muestra separada
  * en su propia línea "Mano de obra directa". El costeo de producto (`costoVariante`, Productos/
  * Simulador/Punto de equilibrio) sigue mostrando el costo total con mano de obra incluida — son
- * dos vistas distintas del mismo dato, a propósito. */
+ * dos vistas distintas del mismo dato, a propósito.
+ *
+ * Usa `item.costo_unitario_historico` (congelado al vender, ver Ventas → Pedidos) cuando existe —
+ * así el CMV de una venta vieja no cambia si después suben los precios de los insumos. Los ítems
+ * sin ese campo (pedidos guardados antes de que existiera) siguen recalculando en vivo con el
+ * costo ACTUAL de la receta, mismo comportamiento que antes. */
 export function costoPedidoItem(data: RicordoDataV2, item: PedidoItem): number {
   if (!item.producto_variante_id) return 0;
-  return (costoVariante(data, item.producto_variante_id) - costoManoDeObraVariante(data, item.producto_variante_id)) * item.cantidad;
+  const costoUnitario = item.costo_unitario_historico ?? costoVariante(data, item.producto_variante_id) - costoManoDeObraVariante(data, item.producto_variante_id);
+  return costoUnitario * item.cantidad;
 }
 
 /** Mano de obra directa de esta línea vendida = costo de mano de obra de 1 unidad de la variante
- * (`costoManoDeObraVariante`) × cantidad. Única fuente de mano de obra en toda la app — nunca se
- * calcula de otra forma en ningún otro lado. */
+ * × cantidad. Única fuente de mano de obra en toda la app — nunca se calcula de otra forma en
+ * ningún otro lado. Usa `item.mano_obra_unitaria_historica` (congelada al vender) cuando existe,
+ * con el mismo criterio de fallback que `costoPedidoItem`. */
 export function manoDeObraPedidoItem(data: RicordoDataV2, item: PedidoItem): number {
   if (!item.producto_variante_id) return 0;
-  return costoManoDeObraVariante(data, item.producto_variante_id) * item.cantidad;
+  const manoObraUnitaria = item.mano_obra_unitaria_historica ?? costoManoDeObraVariante(data, item.producto_variante_id);
+  return manoObraUnitaria * item.cantidad;
 }
 
 export function cmvPeriodo(data: RicordoDataV2, pedidos: Pedido[]): number {

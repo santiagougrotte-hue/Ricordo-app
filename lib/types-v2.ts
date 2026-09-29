@@ -75,6 +75,16 @@ export interface PedidoItem {
   precio_unitario: number;
   descuento: number;
   subtotal: number;
+  /** Costo de 1 unidad (materia prima + packaging, sin mano de obra) de la variante en el momento
+   * de la venta — congelado al guardar el pedido (ver Ventas → Pedidos). Si no está cargado (ítems
+   * viejos, de antes de que existiera este campo) el CMV lo recalcula en vivo con el costo ACTUAL
+   * de la receta, como se hacía antes — nunca se inventa un valor para completar este campo
+   * después del hecho. */
+  costo_unitario_historico?: number;
+  /** Mano de obra de 1 unidad de la variante en el momento de la venta — mismo criterio que
+   * `costo_unitario_historico`: congelado al guardar, con fallback al cálculo en vivo
+   * (`costoManoDeObraVariante`) si el ítem no lo tiene. */
+  mano_obra_unitaria_historica?: number;
 }
 
 // --- Productos --------------------------------------------------------------------------------
@@ -408,6 +418,11 @@ export interface Configuracion {
    * para calcular un costo de mano de obra por variante, además de insumos/packaging. Default 0:
    * nunca se inventa un valor, hasta que se cargue explícitamente no suma nada al costeo. */
   costo_mano_obra_hora: number;
+  /** `id` de la `ProductoVariante` que representa un frasco de salsa adicional en ventas
+   * Mayorista (Ventas → Pedidos, sección Productos) — nunca se busca por nombre ni se hardcodea
+   * un precio: el campo "Salsa" de la fila solo aparece cuando esto está configurado, y usa
+   * siempre el `precio_venta` real de la variante elegida acá. */
+  variante_salsa_adicional_id?: string;
   saldo_inicial_cmv: number;
   saldo_inicial_compras: number;
   fecha_corte_cmv: string | null;

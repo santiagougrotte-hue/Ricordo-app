@@ -24,7 +24,7 @@ import {
   InfoRow,
 } from "@/components/ui";
 import { Modal } from "@/components/Modal";
-import { fNum } from "@/lib/calc-v2";
+import { fNum, fARS } from "@/lib/calc-v2";
 import { PRESETS_ACENTO, hexValido, luminanciaRelativa } from "@/lib/tema";
 import { geocodificarDireccion } from "@/lib/mapas";
 import type { AmbitoCategoria, EstadoRevisionItem, RevisionItem, RicordoDocument, ProveedorMapa, MetodoDistribucionCostoRuta, Tema } from "@/lib/types-v2";
@@ -130,6 +130,30 @@ function GeneralTab() {
             value={data.configuracion.costo_mano_obra_hora}
             onChange={(e) => setUmbral("costo_mano_obra_hora", Number(e.target.value))}
           />
+        </Field>
+      </Card>
+
+      <Card title="Ventas mayoristas">
+        <p className="mb-3 text-[12.5px] text-text3">
+          Variante que representa un frasco de salsa adicional — al elegirla acá, Ventas → Pedidos habilita un campo
+          &ldquo;Salsa&rdquo; en las filas de canal Mayorista que agrega un ítem de esta variante (a su precio actual)
+          por cada frasco, para que descuente stock y sume al CMV como cualquier otro producto vendido. Sin elegir
+          nada acá, ese campo no aparece.
+        </p>
+        <Field label="Variante de salsa adicional">
+          <Select
+            value={data.configuracion.variante_salsa_adicional_id ?? ""}
+            onChange={(e) => setUmbral("variante_salsa_adicional_id", e.target.value || undefined)}
+          >
+            <option value="">Sin configurar</option>
+            {data.producto_variantes
+              .filter((v) => v.activo)
+              .map((v) => (
+                <option key={v.id} value={v.id}>
+                  {v.nombre} — {fARS(v.precio_venta)}
+                </option>
+              ))}
+          </Select>
         </Field>
       </Card>
 
