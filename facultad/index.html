@@ -563,10 +563,16 @@ a{color:inherit;}
       <section class="view" id="view-sueldo">
         <div class="cal-toolbar">
           <div class="cal-toolbar-left">
-            <button class="icon-btn" onclick="Sueldo.navigate(-1)">‹</button>
-            <div class="cal-period-label" id="sueldo-period-label"></div>
-            <button class="icon-btn" onclick="Sueldo.navigate(1)">›</button>
-            <button class="btn btn-sm" onclick="Sueldo.goToday()">Este mes</button>
+            <div class="seg">
+              <button id="seg-sueldo-mes" class="active" onclick="Sueldo.setMode('mes')">Mes actual</button>
+              <button id="seg-sueldo-plan" onclick="Sueldo.setMode('planificacion')">Planificación</button>
+            </div>
+            <div id="sueldo-month-nav" style="display:flex; align-items:center; gap:10px;">
+              <button class="icon-btn" onclick="Sueldo.navigate(-1)">‹</button>
+              <div class="cal-period-label" id="sueldo-period-label"></div>
+              <button class="icon-btn" onclick="Sueldo.navigate(1)">›</button>
+              <button class="btn btn-sm" onclick="Sueldo.goToday()">Este mes</button>
+            </div>
           </div>
           <div style="display:flex; gap:8px;">
             <button class="btn" onclick="Ingresos.openForm()">+ Ingreso</button>
@@ -2145,6 +2151,13 @@ const Notas = {
 /* ---------- Sueldo (ingresos y gastos) ---------- */
 const Sueldo = {
   cursor:new Date(),
+  mode:'mes',
+  setMode(mode){
+    Sueldo.mode=mode;
+    document.getElementById('seg-sueldo-mes').classList.toggle('active', mode==='mes');
+    document.getElementById('seg-sueldo-plan').classList.toggle('active', mode==='planificacion');
+    Sueldo.render();
+  },
   navigate(n){ Sueldo.cursor=new Date(Sueldo.cursor.getFullYear(), Sueldo.cursor.getMonth()+n, 1); Sueldo.render(); },
   goToday(){ Sueldo.cursor=new Date(); Sueldo.render(); },
 
@@ -2167,6 +2180,14 @@ const Sueldo = {
   },
 
   render(){
+    document.getElementById('seg-sueldo-mes').classList.toggle('active', Sueldo.mode==='mes');
+    document.getElementById('seg-sueldo-plan').classList.toggle('active', Sueldo.mode==='planificacion');
+    document.getElementById('sueldo-month-nav').style.display = Sueldo.mode==='planificacion' ? 'none' : 'flex';
+    if(Sueldo.mode==='planificacion'){ Sueldo.renderPlanificacion(); return; }
+    Sueldo.renderMes();
+  },
+
+  renderMes(){
     const mk=monthKey(Sueldo.cursor);
     document.getElementById('sueldo-period-label').textContent=formatMonthLabel(mk);
     const ingresos=Sueldo.ingresosDelMes(mk).sort((a,b)=>a.descripcion.localeCompare(b.descripcion));
@@ -2194,6 +2215,46 @@ const Sueldo = {
       ${Sueldo.sectionHTML('Gastos variables (este mes)', variables, mk, 'gasto')}
       ${Sueldo.sectionHTML('Compras en cuotas', cuotas, mk, 'gasto')}
     `;
+  },
+
+  renderPlanificacion(){
+    const fijos=(State.data.sueldo.gastos||[]).filter(g=>g.tipo==='fijo').sort((a,b)=>a.descripcion.localeCompare(b.descripcion));
+    const cuotas=(State.data.sueldo.gastos||[]).filter(g=>g.tipo==='cuota').sort((a,b)=>a.descripcion.localeCompare(b.descripcion));
+    const totalFijos=fijos.reduce((s,g)=>s+g.monto,0);
+    const totalCuotas=cuotas.reduce((s,g)=>s+g.monto/g.cuotas,0);
+    const root=document.getElementById('sueldo-root');
+    root.innerHTML=`
+      <p class="muted small" style="margin-bottom:14px;">Lista fija de gastos fijos y compras en cuotas: se aplican solas a cualquier mes. Agregalos o sacalos de acá a medida que cambien — no hace falta recargarlos mes a mes.</p>
+      <div class="stat-grid" style="grid-template-columns:repeat(2,1fr); max-width:480px; margin-bottom:20px;">
+        <div class="card stat-card"><div class="num">${formatMoney(totalFijos)}</div><div class="lbl">Total gastos fijos / mes</div></div>
+        <div class="card stat-card"><div class="num">${formatMoney(totalCuotas)}</div><div class="lbl">Total cuotas activas / mes</div></div>
+      </div>
+      ${Sueldo.planSectionHTML('Gastos fijos', fijos)}
+      ${Sueldo.planSectionHTML('Compras en cuotas', cuotas)}
+    `;
+  },
+  planSectionHTML(title, items){
+    return `<div class="sueldo-section">
+      <div class="sueldo-section-title"><h3>${title}</h3></div>
+      ${items.length ? items.map(Sueldo.planRowHTML).join('') : '<p class="empty">Nada cargado todavía.</p>'}
+    </div>`;
+  },
+  planRowHTML(g){
+    const monto = g.tipo==='cuota' ? g.monto/g.cuotas : g.monto;
+    const meta = g.tipo==='cuota'
+      ? `${g.cuotas} cuotas de ${formatMoney(monto)} · desde ${formatMonthLabel(g.mes)}${g.categoria?' · '+esc(g.categoria):''}`
+      : `Desde ${formatMonthLabel(g.mes)}${g.categoria?' · '+esc(g.categoria):''}`;
+    return `<div class="gasto-row">
+      <div class="desc">
+        <div class="t">${esc(g.descripcion)}</div>
+        <div class="m">${meta}</div>
+      </div>
+      <div class="monto expense">-${formatMoney(monto)}</div>
+      <div class="row-actions">
+        <button class="icon-btn" title="Editar" onclick="Gastos.openForm('${g.id}')">✎</button>
+        <button class="icon-btn" title="Eliminar" onclick="Gastos.quickDelete('${g.id}')">🗑</button>
+      </div>
+    </div>`;
   },
 
   sectionHTML(title, items, mk, kind){
@@ -2332,6 +2393,13 @@ const Gastos = {
     State.data.sueldo.gastos = State.data.sueldo.gastos.filter(g=>g.id!==id);
     State.save();
     Modal.close('modal-gasto');
+    Toast.show('Gasto eliminado');
+    Sueldo.render();
+  },
+  quickDelete(id){
+    if(!confirm('¿Eliminar este gasto? Se va a borrar de todos los meses (fijo/cuotas incluidos).')) return;
+    State.data.sueldo.gastos = State.data.sueldo.gastos.filter(g=>g.id!==id);
+    State.save();
     Toast.show('Gasto eliminado');
     Sueldo.render();
   }
