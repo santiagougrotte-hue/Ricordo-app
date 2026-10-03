@@ -31,7 +31,7 @@ import { AnaliticaVentasTab } from "./AnaliticaVentas";
 import { fARS, fNum, inPeriod, costoVariante, costoManoDeObraVariante, margenVariante, productosConVariantes, estadoCobroPedido } from "@/lib/calc-v2";
 import { geocodificarDireccion } from "@/lib/mapas";
 import type { EstadoCobro } from "@/lib/calc-v2";
-import type { Canal, EstadoPedido, Pedido, PedidoItem, ProductoVariante, RicordoDataV2 } from "@/lib/types-v2";
+import type { Canal, EstadoPedido, Pedido, PedidoItem, ProductoVariante, Reserva, RicordoDataV2 } from "@/lib/types-v2";
 import type { Cliente } from "@/lib/types";
 
 const ESTADOS: EstadoPedido[] = ["Confirmado", "Produccion", "Entregado", "Cancelado"];
@@ -181,6 +181,36 @@ function conMovimientosDeEntrega(
   return {
     inventario_movimientos: [...d.inventario_movimientos, ...nuevosMovStock],
   };
+}
+
+/** Reservas de producto terminado del pedido — Sección 8: confirmar un pedido reserva lo que
+ * vendió (sin descontarlo del stock físico todavía); despachar (Entregado) consume esa reserva al
+ * mismo tiempo que el movimiento físico real ya la descuenta de verdad; cancelar la libera. Se
+ * resincroniza siempre con los ítems ACTUALES del pedido (libera lo viejo, crea lo nuevo) para
+ * que editar cantidades o cambiar de producto en un pedido Confirmado/En producción nunca deje
+ * una reserva vieja huérfana. */
+function reservasActualizadasParaPedido(d: ReturnType<typeof useStoreV2>["data"], pedido: Pedido, items: PedidoItem[]): Reserva[] {
+  const activasPrevias = new Set(d.reservas.filter((r) => r.origen_tipo === "pedido" && r.origen_id === pedido.id && r.estado === "activa").map((r) => r.id));
+  if (pedido.estado === "Entregado") {
+    return d.reservas.map((r) => (activasPrevias.has(r.id) ? { ...r, estado: "consumida" } : r));
+  }
+  if (pedido.estado === "Cancelado") {
+    return d.reservas.map((r) => (activasPrevias.has(r.id) ? { ...r, estado: "liberada" } : r));
+  }
+  const liberadas = d.reservas.map((r) => (activasPrevias.has(r.id) ? { ...r, estado: "liberada" as const } : r));
+  const nuevas: Reserva[] = items
+    .filter((i) => i.producto_variante_id)
+    .map((i) => ({
+      id: uid("RSV"),
+      item_tipo: "producto_variante" as const,
+      item_id: i.producto_variante_id!,
+      cantidad: i.cantidad,
+      origen_tipo: "pedido" as const,
+      origen_id: pedido.id,
+      estado: "activa" as const,
+      fecha: pedido.fecha,
+    }));
+  return [...liberadas, ...nuevas];
 }
 
 function PedidosTab() {
@@ -393,10 +423,11 @@ function PedidosTab() {
       const otrosItems = d.pedido_items.filter((i) => i.pedido_id !== pedidoId);
       const otrosPedidos = d.pedidos.filter((p) => p.id !== pedidoId);
       const base = { ...d, pedidos: [...otrosPedidos, nuevoPedido], pedido_items: [...otrosItems, ...nuevosItems] };
+      const conReservas = { ...base, reservas: reservasActualizadasParaPedido(base, nuevoPedido, nuevosItems) };
       if (nuevoPedido.estado === "Entregado") {
-        return { ...base, ...conMovimientosDeEntrega(base, nuevoPedido, nuevosItems) };
+        return { ...conReservas, ...conMovimientosDeEntrega(conReservas, nuevoPedido, nuevosItems) };
       }
-      return base;
+      return conReservas;
     });
     toast(editando ? "Pedido actualizado" : "Pedido creado");
     if (editando === null) borrarBorradorPedido();
@@ -408,11 +439,12 @@ function PedidosTab() {
     setData((d) => {
       const pedidos = d.pedidos.map((p) => (p.id === pedido.id ? { ...p, estado } : p));
       const base = { ...d, pedidos };
+      const items = d.pedido_items.filter((i) => i.pedido_id === pedido.id);
+      const conReservas = { ...base, reservas: reservasActualizadasParaPedido(base, { ...pedido, estado }, items) };
       if (estado === "Entregado") {
-        const items = d.pedido_items.filter((i) => i.pedido_id === pedido.id);
-        return { ...base, ...conMovimientosDeEntrega(base, { ...pedido, estado }, items) };
+        return { ...conReservas, ...conMovimientosDeEntrega(conReservas, { ...pedido, estado }, items) };
       }
-      return base;
+      return conReservas;
     });
     toast(`Estado → ${estado}`);
   }
