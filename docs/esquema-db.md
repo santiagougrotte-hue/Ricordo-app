@@ -26,7 +26,7 @@
 | `delivery_windows` | Turnos de entrega | día de la semana, horario, `cutoff_hours` (hasta cuántas horas antes se puede pedir), si vale para envío y/o retiro |
 | `orders` | Pedidos | `number` desde **1001**, `delivery_method`, `delivery_date` + `delivery_window_label` ("Viernes a la noche 09/10 · 20 a 23 h"), `postal_code_raw`, `zone_name` (copia), `payment_status`, `stock_returned` |
 | `order_items` | Líneas | copia de `product_name` y `units_per_box`, `unit_price` al momento, `line_total` calculado |
-| `store_settings` | Configuración (una sola fila) | retiro on/off y mínimo, dirección del local, WhatsApp, email de aviso (privado), MP on/off |
+| `store_settings` | Configuración (una sola fila) | retiro on/off y mínimo, dirección del local, WhatsApp, alias de transferencia, email de aviso (privado), MP on/off |
 | `admins` | Quién es admin | `user_id` de Supabase Auth |
 
 ## Cómo se crea un pedido

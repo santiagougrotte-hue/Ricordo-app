@@ -59,7 +59,7 @@
   /* ── Tipografía ── */
   --font-display: "Gloock", "Abril Fatface", Georgia, serif;
   --font-label: "Oswald", "Arial Narrow", sans-serif;
-  --font-ui: "DM Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-ui: "DM Sans Variable", "DM Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
   --font-hand: "Reenie Beanie", "Bradley Hand", cursive;   /* solo ≥ 28px, nunca info crítica sola */
 
   --text-display-hero: clamp(4rem, 14.5vw, 11.5rem);

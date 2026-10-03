@@ -1,0 +1,105 @@
+import type { Product, ShippingZone, StoreSettings } from '../types';
+import type { DeliveryWindow } from '../slots';
+
+// Datos de ejemplo — los mismos que supabase/seed.sql. Precios, rellenos y CPs son ilustrativos.
+export const SEED_PRODUCTS: Product[] = [
+  {
+    id: '00000000-0000-4000-8000-000000000001',
+    slug: 'sorrentinos-jamon-muzza-nuez',
+    name: 'Jamón, muzza y nuez',
+    pastaType: 'sorrentinos',
+    filling: 'Jamón cocido, muzzarella y nuez',
+    description: 'Los más pedidos. Masa fina de arroz y mandioca, relleno cremoso con nuez picada a cuchillo.',
+    unitsPerBox: 12,
+    price: 9800,
+    stock: 14,
+    lowStockThreshold: 3,
+    featured: true,
+    sortOrder: 1,
+    media: [],
+    shotNote: 'sorrentinos en la tabla, enharinados, ¾ desde arriba',
+  },
+  {
+    id: '00000000-0000-4000-8000-000000000002',
+    slug: 'ravioles-ricota-espinaca',
+    name: 'Ricota y espinaca',
+    pastaType: 'ravioles',
+    filling: 'Ricota, espinaca y parmesano',
+    description: 'El clásico de los domingos. Ricota bien escurrida, espinaca salteada y un toque de nuez moscada.',
+    unitsPerBox: 12,
+    price: 8500,
+    stock: 2,
+    lowStockThreshold: 3,
+    featured: true,
+    sortOrder: 2,
+    media: [],
+    shotNote: 'ravioles crudos en la caja abierta, cenital',
+  },
+  {
+    id: '00000000-0000-4000-8000-000000000003',
+    slug: 'cappellacci-zapallo',
+    name: 'Zapallo y nuez moscada',
+    pastaType: 'cappellacci',
+    filling: 'Zapallo asado, queso y nuez moscada',
+    description: 'Zapallo asado al horno hasta que se carameliza. Van perfectos con manteca y salvia.',
+    unitsPerBox: 12,
+    price: 10200,
+    stock: 9,
+    lowStockThreshold: 3,
+    featured: true,
+    sortOrder: 3,
+    media: [],
+    shotNote: 'cappellacci cerrados en fila, luz de ventana',
+  },
+  {
+    id: '00000000-0000-4000-8000-000000000004',
+    slug: 'sorrentinos-calabaza-queso-azul',
+    name: 'Calabaza y queso azul',
+    pastaType: 'sorrentinos',
+    filling: 'Calabaza, queso azul y cebolla caramelizada',
+    description: 'Para los que se animan: dulce de la calabaza, fuerte del azul.',
+    unitsPerBox: 12,
+    price: 10500,
+    stock: 0,
+    lowStockThreshold: 3,
+    featured: false,
+    sortOrder: 4,
+    media: [],
+    shotNote: 'sorrentino cortado al medio mostrando el relleno',
+  },
+  {
+    id: '00000000-0000-4000-8000-000000000005',
+    slug: 'ravioles-verdura-pollo',
+    name: 'Verdura y pollo',
+    pastaType: 'ravioles',
+    filling: 'Pollo, acelga y queso',
+    description: 'Suaves, para toda la familia. Pollo desmenuzado a mano con acelga.',
+    unitsPerBox: 12,
+    price: 8900,
+    stock: 20,
+    lowStockThreshold: 3,
+    featured: false,
+    sortOrder: 5,
+    media: [],
+    shotNote: 'plato servido con salsa fileto, mesa de madera',
+  },
+];
+
+export const SEED_ZONES: ShippingZone[] = [
+  { id: 'zone-bera', name: 'Berazategui', postalCodes: ['1884', '1885', '1886'], shippingCost: 1500, minOrder: 15000, freeShippingFrom: 30000 },
+  { id: 'zone-quilmes', name: 'Quilmes y Bernal', postalCodes: ['1876', '1878', '1879', '1881', '1882'], shippingCost: 2500, minOrder: 20000, freeShippingFrom: 40000 },
+  { id: 'zone-varela', name: 'Florencio Varela', postalCodes: ['1888', '1889', '1891'], shippingCost: 3000, minOrder: 20000, freeShippingFrom: null },
+];
+
+export const SEED_SETTINGS: StoreSettings = {
+  pickupEnabled: true,
+  pickupMinOrder: 0,
+  pickupAddress: 'Berazategui (te pasamos la dirección por WhatsApp)',
+  whatsappPhone: '5491100000000',
+  transferInfo: 'Alias: RICORDO.PASTAS (dato de ejemplo)',
+};
+
+export const SEED_WINDOWS: DeliveryWindow[] = [
+  { id: 'win-vie', label: 'Viernes a la noche', weekday: 5, startsAt: '20:00', endsAt: '23:00', cutoffHours: 24, forDelivery: true, forPickup: true, active: true },
+  { id: 'win-sab', label: 'Sábado a la mañana', weekday: 6, startsAt: '09:00', endsAt: '13:00', cutoffHours: 24, forDelivery: true, forPickup: true, active: true },
+];
