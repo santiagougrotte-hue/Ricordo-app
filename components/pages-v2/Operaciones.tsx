@@ -3,6 +3,7 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { X } from "lucide-react";
 import { useStoreV2 } from "@/lib/store-v2";
+import { useRouter } from "@/lib/nav-context";
 import { useToast } from "@/lib/toast";
 import { uid } from "@/lib/id";
 import {
@@ -1076,7 +1077,8 @@ function EntregasTab() {
 }
 
 export function Operaciones() {
-  const [tab, setTab] = useState("compras");
+  const { tab: tabInicial } = useRouter();
+  const [tab, setTab] = useState(tabInicial ?? "compras");
   return (
     <div>
       <PageHeader title="Operaciones" sub="Compras, proveedores, producción, planificación y entregas" />

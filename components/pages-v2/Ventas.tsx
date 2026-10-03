@@ -1,8 +1,9 @@
 "use client";
 
-import React, { useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { X } from "lucide-react";
 import { useStoreV2 } from "@/lib/store-v2";
+import { useRouter } from "@/lib/nav-context";
 import { usePeriod } from "@/lib/period";
 import { useToast } from "@/lib/toast";
 import { uid } from "@/lib/id";
@@ -17,6 +18,7 @@ import {
   TrHover,
   EmptyState,
   Badge,
+  Alert,
   FormGrid,
   Field,
   Input,
@@ -101,6 +103,48 @@ function formVacio(): PedidoForm {
   };
 }
 
+/** true si el formulario todavía no tiene nada que valga la pena recuperar — evita ofrecer un
+ * "borrador" vacío apenas se abre el modal por primera vez. */
+function formVacioDeContenido(form: PedidoForm): boolean {
+  return !form.cliente_id && !form.notas && form.items.every((i) => !i.producto_variante_id && !i.cantidad);
+}
+
+const DRAFT_KEY_PEDIDO_NUEVO = "ricordo_borrador_pedido_nuevo";
+
+/** Borrador de "nuevo pedido" en localStorage — por diseño, solo para pedidos nuevos (no edición
+ * de uno existente, que ya tiene su propio registro guardado). Sobrevive a un cierre accidental
+ * de la pestaña o una reconexión; se borra apenas el pedido se guarda de verdad o se cancela a
+ * propósito. Nunca se sincroniza a Supabase — es solo texto en edición, no un dato del negocio. */
+function guardarBorradorPedido(form: PedidoForm) {
+  try {
+    if (formVacioDeContenido(form)) {
+      window.localStorage.removeItem(DRAFT_KEY_PEDIDO_NUEVO);
+      return;
+    }
+    window.localStorage.setItem(DRAFT_KEY_PEDIDO_NUEVO, JSON.stringify(form));
+  } catch {
+    /* storage lleno/no disponible — el formulario sigue funcionando sin borrador */
+  }
+}
+
+function leerBorradorPedido(): PedidoForm | null {
+  try {
+    const raw = window.localStorage.getItem(DRAFT_KEY_PEDIDO_NUEVO);
+    if (!raw) return null;
+    return JSON.parse(raw) as PedidoForm;
+  } catch {
+    return null;
+  }
+}
+
+function borrarBorradorPedido() {
+  try {
+    window.localStorage.removeItem(DRAFT_KEY_PEDIDO_NUEVO);
+  } catch {
+    /* ignorar */
+  }
+}
+
 function subtotalItem(i: ItemForm): number {
   return i.precio_unitario * i.cantidad - i.descuento;
 }
@@ -151,7 +195,16 @@ function PedidosTab() {
   const [modalOpen, setModalOpen] = useState(false);
   const [editando, setEditando] = useState<string | null>(null);
   const [form, setForm] = useState<PedidoForm>(formVacio());
+  const [borradorRecuperado, setBorradorRecuperado] = useState(false);
   const varianteSalsa = varianteSalsaAdicional(data);
+
+  // Guarda el formulario de un pedido NUEVO (no edición) como borrador recuperable mientras el
+  // modal sigue abierto — si se corta la conexión, se recarga la página o se cierra la pestaña por
+  // error, lo que se estaba escribiendo no se pierde.
+  useEffect(() => {
+    if (!modalOpen || editando !== null) return;
+    guardarBorradorPedido(form);
+  }, [modalOpen, editando, form]);
 
   const clienteNombre = (id: string) => data.clientes.find((c) => c.id === id)?.nombre ?? "—";
   const varianteNombre = (id: string | null) => {
@@ -177,8 +230,22 @@ function PedidosTab() {
 
   function abrirNuevo() {
     setEditando(null);
-    setForm(formVacio());
+    const borrador = leerBorradorPedido();
+    if (borrador) {
+      setForm(borrador);
+      setBorradorRecuperado(true);
+      toast("Recuperamos un borrador de pedido sin guardar");
+    } else {
+      setForm(formVacio());
+      setBorradorRecuperado(false);
+    }
     setModalOpen(true);
+  }
+
+  function cerrarModalSinGuardar() {
+    if (editando === null) borrarBorradorPedido();
+    setBorradorRecuperado(false);
+    setModalOpen(false);
   }
 
   function abrirEdicion(p: Pedido) {
@@ -332,6 +399,8 @@ function PedidosTab() {
       return base;
     });
     toast(editando ? "Pedido actualizado" : "Pedido creado");
+    if (editando === null) borrarBorradorPedido();
+    setBorradorRecuperado(false);
     setModalOpen(false);
   }
 
@@ -465,18 +534,23 @@ function PedidosTab() {
 
       <Modal
         open={modalOpen}
-        onClose={() => setModalOpen(false)}
+        onClose={cerrarModalSinGuardar}
         title={editando ? "Editar pedido" : "Nuevo pedido"}
         wide
         footer={
           <>
-            <Button variant="ghost" onClick={() => setModalOpen(false)}>
+            <Button variant="ghost" onClick={cerrarModalSinGuardar}>
               Cancelar
             </Button>
             <Button onClick={guardar}>Guardar</Button>
           </>
         }
       >
+        {borradorRecuperado && (
+          <Alert kind="info">
+            Recuperamos un borrador que habías empezado a escribir y no se había guardado. Revisalo antes de continuar.
+          </Alert>
+        )}
         <FormGrid>
           <Field label="Cliente">
             <Select value={form.cliente_id} onChange={(e) => setForm({ ...form, cliente_id: e.target.value })}>
@@ -987,7 +1061,8 @@ function EntregasTab() {
 }
 
 export function Ventas() {
-  const [tab, setTab] = useState("pedidos");
+  const { tab: tabInicial } = useRouter();
+  const [tab, setTab] = useState(tabInicial ?? "pedidos");
   return (
     <div>
       <PageHeader title="Ventas" sub="Pedidos, clientes, lista de precios y entregas" />

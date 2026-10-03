@@ -575,6 +575,37 @@ export function idsExcluidosPorRevision(data: RicordoDataV2): { pedidos: Set<str
   };
 }
 
+/** Plata realmente cobrada en el período (ingresos de caja con origen "venta_pedido"), a
+ * diferencia de `ventas_brutas`/`ventas_netas` (lo facturado, devengado) — pueden diferir porque
+ * el cobro puede llegar antes, después, o nunca, respecto de la fecha de venta. Nunca se asume
+ * que una venta entregada ya está cobrada. */
+export function cobrosPeriodo(data: RicordoDataV2, desde: string, hasta: string): number {
+  return Math.round(
+    data.movimientos_financieros
+      .filter((m) => m.tipo === "ingreso" && m.origen_tipo === "venta_pedido" && m.fecha >= desde && m.fecha <= hasta)
+      .reduce((acc, m) => acc + m.monto, 0)
+  );
+}
+
+/** Ítems vendidos en el período cuyo costo no se pudo determinar — sin variante resuelta
+ * (producto eliminado/no migrado), o con variante activa pero SIN ninguna receta cargada todavía
+ * (`costoVariante` da 0 por falta de dato, no porque el producto sea gratis). Se usa para avisar
+ * que un margen/ganancia mostrado es parcial — nunca para inventar un costo donde no lo hay. */
+export function itemsSinCostoDeterminado(data: RicordoDataV2, desde: string, hasta: string, canal?: Canal): PedidoItem[] {
+  const excluidos = idsExcluidosPorRevision(data);
+  const pedidosPeriodo = data.pedidos.filter(
+    (p) => p.estado === "Entregado" && p.fecha >= desde && p.fecha <= hasta && (!canal || p.canal === canal) && !excluidos.pedidos.has(p.id)
+  );
+  const idsPedidos = new Set(pedidosPeriodo.map((p) => p.id));
+  const itemsPeriodo = data.pedido_items.filter((i) => idsPedidos.has(i.pedido_id) && !excluidos.pedido_items.has(i.id));
+  return itemsPeriodo.filter((i) => {
+    if (!i.producto_variante_id) return true;
+    const variante = data.producto_variantes.find((v) => v.id === i.producto_variante_id);
+    if (!variante) return true;
+    return recetaEfectivaVariante(data, variante).length === 0;
+  });
+}
+
 export function calcularEerr(data: RicordoDataV2, desde: string, hasta: string, canal?: Canal): Eerr {
   const excluidos = idsExcluidosPorRevision(data);
   const pedidosPeriodo = data.pedidos.filter(

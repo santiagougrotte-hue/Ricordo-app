@@ -18,6 +18,8 @@ import {
   puntoEquilibrio,
   valorStockInsumos,
   calcularEerr,
+  cobrosPeriodo,
+  itemsSinCostoDeterminado,
   calcularComprasCmvInventario,
   calcularMargenPorItem,
   agruparMargen,
@@ -453,6 +455,41 @@ test("calcularEerr/calcularMargenPorItem: costo_real_envio distinto de costo_env
   assert.equal(items[0].costo_envio, 80);
   assert.equal(items[0].ventas_netas, 150);
   assert.equal(items[0].margen_contribucion, 150 - 0 - 80);
+
+  // Esta misma variante no tiene ninguna receta cargada (fixture de arriba) — su costo ($0) no es
+  // un dato real, es la ausencia de uno: debe quedar marcada como "sin costo determinado".
+  const sinCosto = itemsSinCostoDeterminado(data, "2026-01-01", "2026-01-31");
+  assert.equal(sinCosto.length, 1);
+  assert.equal(sinCosto[0].id, "I1");
+});
+
+test("itemsSinCostoDeterminado: con receta cargada, o sin producto_variante_id vinculado", () => {
+  const data = fixtureRecetaPorUnidad();
+  data.pedidos = [
+    { id: "PED-1", fecha: "2026-01-05", cliente_id: "C1", estado: "Entregado", canal: "Minorista", descuento: 0, costo_envio: 0, total: 3000 },
+  ];
+  data.pedido_items = [
+    { id: "I1", pedido_id: "PED-1", producto_variante_id: "VAR-CAJA10", nombre_historico: "Caja de 10", cantidad: 1, precio_unitario: 3000, descuento: 0, subtotal: 3000 },
+    { id: "I2", pedido_id: "PED-1", producto_variante_id: null, nombre_historico: "Ítem viejo sin vincular", cantidad: 1, precio_unitario: 500, descuento: 0, subtotal: 500 },
+  ];
+  const sinCosto = itemsSinCostoDeterminado(data, "2026-01-01", "2026-01-31");
+  // I1 tiene receta cargada (fixture) -> costo SÍ determinado, no aparece. I2 no tiene variante
+  // vinculada -> costo indeterminable, sí aparece.
+  assert.equal(sinCosto.length, 1);
+  assert.equal(sinCosto[0].id, "I2");
+});
+
+test("cobrosPeriodo: suma solo ingresos de caja con origen venta_pedido en el rango de fechas, nunca lo facturado", () => {
+  const data = emptyDataV2();
+  data.movimientos_financieros = [
+    { id: "M1", fecha: "2026-01-10", tipo: "ingreso", concepto: "Cobro pedido A", monto: 1000, origen_tipo: "venta_pedido", origen_id: "PED-1", estado: "confirmado" },
+    { id: "M2", fecha: "2026-01-20", tipo: "ingreso", concepto: "Cobro pedido B", monto: 500, origen_tipo: "venta_pedido", origen_id: "PED-2", estado: "confirmado" },
+    // Fuera de rango, de otro origen, o egreso — ninguno debe sumar.
+    { id: "M3", fecha: "2026-02-01", tipo: "ingreso", concepto: "Cobro fuera de mes", monto: 999, origen_tipo: "venta_pedido", origen_id: "PED-3", estado: "confirmado" },
+    { id: "M4", fecha: "2026-01-15", tipo: "ingreso", concepto: "Aporte del dueño", monto: 200, origen_tipo: "aporte_dueno", estado: "confirmado" },
+    { id: "M5", fecha: "2026-01-15", tipo: "egreso", concepto: "Reintegro", monto: 100, origen_tipo: "venta_pedido", origen_id: "PED-1", estado: "confirmado" },
+  ];
+  assert.equal(cobrosPeriodo(data, "2026-01-01", "2026-01-31"), 1500);
 });
 
 test("estadoCobroPedido: Pendiente/Parcial/Cobrado se calculan desde los movimientos ya registrados, nunca desde 'Entregado'", () => {

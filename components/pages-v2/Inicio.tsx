@@ -1,13 +1,16 @@
 "use client";
 
 import React, { useMemo, useState } from "react";
+import { ShoppingCart, PackagePlus, Factory, ClipboardList, Receipt } from "lucide-react";
 import { useStoreV2 } from "@/lib/store-v2";
+import { useRouter } from "@/lib/nav-context";
 import { usePeriod, MESES } from "@/lib/period";
 import {
   PageHeader,
   Card,
   StatGrid,
   KpiCard,
+  QuickActionButton,
   TableWrap,
   Th,
   Td,
@@ -19,7 +22,19 @@ import {
   Select,
 } from "@/components/ui";
 import { GraficoLinea, IndicadorCrecimiento } from "@/components/charts";
-import { cmvPeriodo, saldoCaja, calcularStock, fARS, fNum, inPeriod, primerDiaMes, ultimoDiaMes, mesAnterior } from "@/lib/calc-v2";
+import {
+  cmvPeriodo,
+  saldoCaja,
+  calcularStock,
+  cobrosPeriodo,
+  itemsSinCostoDeterminado,
+  fARS,
+  fNum,
+  inPeriod,
+  primerDiaMes,
+  ultimoDiaMes,
+  mesAnterior,
+} from "@/lib/calc-v2";
 import {
   pctCambio,
   calcularMetricasVentas,
@@ -75,6 +90,7 @@ function FilaConclusion({ conclusion }: { conclusion: Conclusion }) {
 
 export function Inicio() {
   const { data } = useStoreV2();
+  const router = useRouter();
   const { mes, anio } = usePeriod();
   const [canalFiltro, setCanalFiltro] = useState<Canal | "todos">("todos");
   const [metricaEvolucion, setMetricaEvolucion] = useState<MetricaEvolucion>("facturacion");
@@ -104,11 +120,42 @@ export function Inicio() {
   const cmv = useMemo(() => cmvPeriodo(data, pedidosDelMes), [data, pedidosDelMes]);
   const margenBruto = metricas.ventas_totales > 0 ? ((metricas.ventas_totales - cmv) / metricas.ventas_totales) * 100 : 0;
   const caja = useMemo(() => saldoCaja(data), [data]);
+  const cobros = useMemo(() => cobrosPeriodo(data, desde, hasta), [data, desde, hasta]);
+  // Si hay ventas del período cuyo costo no se pudo determinar (producto sin receta cargada, o sin
+  // variante vinculada), el margen/ganancia que se muestra está incompleto — nunca se inventa el
+  // costo faltante, se avisa en vez de mostrar un número que parece completo sin serlo.
+  const itemsSinCosto = useMemo(() => itemsSinCostoDeterminado(data, desde, hasta, canalParaMetricas), [data, desde, hasta, canalParaMetricas]);
+  const productosSinCosto = useMemo(
+    () => Array.from(new Set(itemsSinCosto.map((i) => i.nombre_historico))),
+    [itemsSinCosto]
+  );
 
   const pedidosPendientes = useMemo(
     () => data.pedidos.filter((p) => p.estado === "Confirmado" || p.estado === "Produccion").sort((a, b) => a.fecha.localeCompare(b.fecha)),
     [data.pedidos]
   );
+  // Proxy de "producción pendiente" con lo que existe hoy: pedidos ya marcados "En producción"
+  // (Ventas → Pedidos) y sus líneas — todavía no hay un tablero de producción propio con estados
+  // Pendiente/En elaboración/Terminado por preparación, eso es una mejora más grande aparte.
+  const pedidosEnProduccion = useMemo(
+    () => data.pedidos.filter((p) => p.estado === "Produccion").sort((a, b) => a.fecha.localeCompare(b.fecha)),
+    [data.pedidos]
+  );
+  const itemsEnProduccion = useMemo(() => {
+    const idsPedidos = new Set(pedidosEnProduccion.map((p) => p.id));
+    const items = data.pedido_items.filter((i) => idsPedidos.has(i.pedido_id));
+    const porVariante = new Map<string, { nombre: string; cantidad: number; pedidos: Set<string> }>();
+    for (const item of items) {
+      const clave = item.producto_variante_id ?? item.id;
+      const actual = porVariante.get(clave) ?? { nombre: item.nombre_historico, cantidad: 0, pedidos: new Set<string>() };
+      actual.cantidad += item.cantidad;
+      actual.pedidos.add(item.pedido_id);
+      porVariante.set(clave, actual);
+    }
+    return Array.from(porVariante.values())
+      .map((v) => ({ nombre: v.nombre, cantidad: v.cantidad, pedidos: v.pedidos.size }))
+      .sort((a, b) => b.cantidad - a.cantidad);
+  }, [data.pedido_items, pedidosEnProduccion]);
 
   const comprasPendientes = useMemo(() => data.compras.filter((c) => c.estado_pago === "pendiente"), [data.compras]);
   const totalComprasPendientes = comprasPendientes.reduce((acc, c) => acc + c.total, 0);
@@ -130,6 +177,13 @@ export function Inicio() {
     <div>
       <PageHeader title="Inicio" sub={`Resumen de ${MESES[mes - 1]} ${anio}`} />
 
+      <div className="mb-4 flex flex-wrap gap-2.5">
+        <QuickActionButton icon={ShoppingCart} label="Nuevo pedido / venta" onClick={() => router.go("ventas", "pedidos")} />
+        <QuickActionButton icon={PackagePlus} label="Cargar compra" onClick={() => router.go("operaciones", "compras")} />
+        <QuickActionButton icon={Factory} label="Planificar producción" onClick={() => router.go("operaciones", "produccion")} />
+        <QuickActionButton icon={ClipboardList} label="Ver pedidos pendientes" onClick={() => router.go("ventas", "pedidos")} />
+      </div>
+
       <div className="mb-4 flex flex-wrap items-center gap-3">
         <span className="text-[11px] font-semibold uppercase tracking-wide text-text3">Canal</span>
         <FilterTabs
@@ -144,19 +198,26 @@ export function Inicio() {
       </div>
 
       <StatGrid>
-        <KpiCard label="Facturación del mes" value={fARS(metricas.ventas_totales)} color="gold" />
-        <KpiCard label="Pedidos entregados" value={fNum(metricas.cantidad_pedidos, 0)} color="blue" />
-        <KpiCard label="Cajas vendidas" value={fNum(metricas.cajas_vendidas, 0)} color="blue" />
+        <KpiCard label="Facturación del mes" value={fARS(metricas.ventas_totales)} color="gold" icon={Receipt} />
+        <KpiCard label="Cobrado del mes" value={fARS(cobros)} sub="Caja real, no lo facturado" color="gold" icon={Receipt} />
+        <KpiCard label="Pedidos entregados" value={fNum(metricas.cantidad_pedidos, 0)} color="blue" icon={ShoppingCart} />
+        <KpiCard label="Cajas vendidas" value={fNum(metricas.cajas_vendidas, 0)} color="blue" icon={ShoppingCart} />
         <KpiCard label="Ticket promedio" value={fARS(metricas.ticket_promedio)} color="gold" />
-        <KpiCard label="Margen bruto" value={fNum(margenBruto, 1) + "%"} color={margenBruto >= 0 ? "green" : "red"} />
+        <KpiCard
+          label="Margen bruto"
+          value={fNum(margenBruto, 1) + "%"}
+          sub={productosSinCosto.length > 0 ? `Parcial: sin costo cargado para ${productosSinCosto.join(", ")}` : undefined}
+          color={productosSinCosto.length > 0 ? "orange" : margenBruto >= 0 ? "green" : "red"}
+        />
         <KpiCard label="Saldo de caja" value={fARS(caja)} color={caja >= 0 ? "green" : "red"} />
         <KpiCard
           label="Pedidos pendientes"
           value={fNum(pedidosPendientes.length, 0)}
           sub={`Facturación comprometida: ${fARS(facturacionPendiente)}`}
           color="orange"
+          icon={ClipboardList}
         />
-        <KpiCard label="Compras sin pagar" value={fARS(totalComprasPendientes)} sub={`${comprasPendientes.length} compra(s)`} color="orange" />
+        <KpiCard label="Compras sin pagar" value={fARS(totalComprasPendientes)} sub={`${comprasPendientes.length} compra(s)`} color="orange" icon={PackagePlus} />
       </StatGrid>
 
       {alertasStock.length > 0 && (
@@ -299,6 +360,37 @@ export function Inicio() {
           )}
         </Card>
       </div>
+
+      <Card title="Producción pendiente" className="mb-4">
+        <p className="mb-3 text-[12.5px] text-text3">
+          Pedidos marcados &ldquo;En producción&rdquo; (Ventas → Pedidos) y lo que falta elaborar para completarlos —
+          todavía no hay un tablero de producción con lotes/rellenos propio; eso es una mejora más grande, pendiente.
+        </p>
+        {itemsEnProduccion.length === 0 ? (
+          <EmptyState text="No hay pedidos en producción en este momento." />
+        ) : (
+          <TableWrap>
+            <table className="w-full">
+              <thead>
+                <tr>
+                  <Th>Producto</Th>
+                  <Th>Cantidad</Th>
+                  <Th>Pedidos</Th>
+                </tr>
+              </thead>
+              <tbody>
+                {itemsEnProduccion.map((it) => (
+                  <TrHover key={it.nombre}>
+                    <Td main>{it.nombre}</Td>
+                    <Td>{fNum(it.cantidad, 0)}</Td>
+                    <Td className="text-text3">{it.pedidos}</Td>
+                  </TrHover>
+                ))}
+              </tbody>
+            </table>
+          </TableWrap>
+        )}
+      </Card>
 
       <Card title="Stock bajo mínimo">
         {alertasStock.length === 0 ? (

@@ -7,7 +7,7 @@ import React from "react";
 import { fNum } from "@/lib/calc-v2";
 
 function fPctFirmado(n: number | null): string {
-  if (n === null) return "—";
+  if (n === null) return "Sin base de comparación";
   const signo = n > 0 ? "+" : "";
   return `${signo}${fNum(n, 1)}%`;
 }
@@ -18,7 +18,7 @@ export function IndicadorCrecimiento({ label, valor }: { label: string; valor: n
   return (
     <div className="rounded-[var(--radius-card)] border border-border p-3">
       <div className="text-[11px] text-text3">{label}</div>
-      <div className={`text-lg font-semibold ${color}`}>
+      <div className={`font-semibold ${color} ${valor === null ? "text-[12.5px]" : "text-lg"}`}>
         {flecha}
         {fPctFirmado(valor)}
       </div>
