@@ -21,6 +21,7 @@ import type {
   Canal,
   Compra,
   TipoUnidadVenta,
+  TipoItemStock,
 } from "./types-v2";
 import type { DistribucionGanancia } from "./types";
 import { fARS, fFechaCorta, fNum, fPct, inPeriod, inYear, isAfter } from "./calc";
@@ -110,14 +111,119 @@ export function costoManoDeObraVariante(data: RicordoDataV2, varianteId: string)
   return Math.round(horas * data.configuracion.costo_mano_obra_hora);
 }
 
+// --- Preparaciones intermedias (rellenos) vinculadas a una variante -------------------------------
+// Sección 5/6: una variante puede declarar que su relleno viene de una `Preparacion` ya elaborada
+// aparte (con su propio stock y lote), en vez de tenerlo como insumos directos en la receta
+// compartida. Sin ese link (`ProductoVariante.preparacion_relleno_id`), nada de lo que sigue
+// cambia ningún costo existente — comportamiento 100% igual al de antes de esta sección.
+
+/** Convierte a gramos SOLO si la unidad es "g" o "kg" (cualquier capitalización/alias simple) —
+ * ninguna otra unidad (litro, unidad, etc.) tiene una equivalencia de peso verificable sin un dato
+ * adicional, así que devuelve null en vez de inventar una conversión. */
+export function aGramos(cantidad: number, unidad: string): number | null {
+  const u = unidad.trim().toLowerCase();
+  if (u === "g" || u === "gr" || u === "gramo" || u === "gramos") return cantidad;
+  if (u === "kg" || u === "kilo" || u === "kilos") return cantidad * 1000;
+  return null;
+}
+
+export function deGramos(gramos: number, unidadDestino: string): number | null {
+  const u = unidadDestino.trim().toLowerCase();
+  if (u === "g" || u === "gr" || u === "gramo" || u === "gramos") return gramos;
+  if (u === "kg" || u === "kilo" || u === "kilos") return gramos / 1000;
+  return null;
+}
+
+/** Cuánto queda de un lote puntual — suma de todos los movimientos de inventario que lo
+ * referencian (el que lo creó, +cantidad_obtenida, más cualquier consumo/merma/ajuste posterior,
+ * negativos). Nunca se lee `cantidad_obtenida` sola como "lo que queda". */
+export function stockRestanteLote(data: RicordoDataV2, loteId: string): number {
+  return data.inventario_movimientos.filter((m) => m.lote_id === loteId).reduce((acc, m) => acc + m.cantidad, 0);
+}
+
+export interface LoteConStock {
+  lote: RicordoDataV2["lotes_preparacion"][number];
+  restante: number;
+}
+
+/** Lotes de una preparación con stock > 0, ordenados por vencimiento ascendente (los que vencen
+ * antes, primero) — vencimiento sin cargar queda al final, nunca se asume uno. Base para sugerir
+ * "usar primero" (FEFO) sin forzarlo: el llamador decide si sigue la sugerencia. */
+export function lotesConStockOrdenados(data: RicordoDataV2, preparacionId: string): LoteConStock[] {
+  return data.lotes_preparacion
+    .filter((l) => l.preparacion_id === preparacionId)
+    .map((lote) => ({ lote, restante: stockRestanteLote(data, lote.id) }))
+    .filter((l) => l.restante > 0)
+    .sort((a, b) => {
+      if (!a.lote.vencimiento && !b.lote.vencimiento) return 0;
+      if (!a.lote.vencimiento) return 1;
+      if (!b.lote.vencimiento) return -1;
+      return a.lote.vencimiento.localeCompare(b.lote.vencimiento);
+    });
+}
+
+/** Costo por kilo "vigente" de una preparación: promedio ponderado por lo que queda de cada lote
+ * con stock disponible (refleja qué cuesta ahora mismo lo que hay para usar). Si no queda stock en
+ * ningún lote, usa el último lote elaborado (referencia histórica). Si nunca se elaboró ningún
+ * lote, null — nunca se inventa un costo. */
+export function costoPromedioPorKgPreparacion(data: RicordoDataV2, preparacionId: string): number | null {
+  const preparacion = data.preparaciones.find((p) => p.id === preparacionId);
+  if (!preparacion) return null;
+  // `restante`/`cantidad_obtenida` están en la unidad de Preparacion (g o kg) — se convierte a kg
+  // explícitamente, nunca se asume gramos.
+  const enKg = (cantidadEnUnidadPreparacion: number) => {
+    const g = aGramos(cantidadEnUnidadPreparacion, preparacion.unidad);
+    return g === null ? null : g / 1000;
+  };
+
+  const conStock = lotesConStockOrdenados(data, preparacionId);
+  if (conStock.length > 0) {
+    let kgTotales = 0;
+    let costoTotal = 0;
+    for (const { lote, restante } of conStock) {
+      const kgRestante = enKg(restante);
+      const kgObtenidos = enKg(lote.cantidad_obtenida);
+      if (kgRestante === null || kgObtenidos === null || kgObtenidos <= 0) continue;
+      const costoPorKgLote = lote.costo_total / kgObtenidos;
+      kgTotales += kgRestante;
+      costoTotal += costoPorKgLote * kgRestante;
+    }
+    return kgTotales > 0 ? costoTotal / kgTotales : null;
+  }
+  const todos = data.lotes_preparacion.filter((l) => l.preparacion_id === preparacionId).sort((a, b) => b.fecha_elaboracion.localeCompare(a.fecha_elaboracion));
+  const ultimo = todos[0];
+  if (!ultimo || ultimo.cantidad_obtenida <= 0) return null;
+  const kgObtenidos = enKg(ultimo.cantidad_obtenida);
+  if (kgObtenidos === null || kgObtenidos <= 0) return null;
+  return ultimo.costo_total / kgObtenidos;
+}
+
+/** Costo del relleno de una variante cuando viene de una preparación vinculada — gramos por caja
+ * (ya cargados en la variante) convertidos a costo vía el costo/kg vigente de la preparación.
+ * null si falta cualquier dato real (link, gramos, o costo de la preparación) — nunca se inventa
+ * un costo de relleno a mitad de camino. */
+export function costoRellenoPreparacionVariante(data: RicordoDataV2, variante: ProductoVariante): number | null {
+  if (!variante.preparacion_relleno_id) return null;
+  const gramosPorCaja = variante.gramos_relleno_por_caja;
+  if (!gramosPorCaja || gramosPorCaja <= 0) return null;
+  const costoPorKg = costoPromedioPorKgPreparacion(data, variante.preparacion_relleno_id);
+  if (costoPorKg === null) return null;
+  return (gramosPorCaja / 1000) * costoPorKg;
+}
+
 export function costoVariante(data: RicordoDataV2, varianteId: string): number {
   const variante = data.producto_variantes.find((v) => v.id === varianteId);
   if (!variante) return 0;
-  const total = recetaEfectivaVariante(data, variante).reduce((acc, item) => {
+  // Con una preparación de relleno vinculada: esa etapa se excluye de los insumos directos (ya se
+  // consumió/costeó al elaborar el lote) y se reemplaza por el costo vía preparación — nunca las
+  // dos cosas a la vez, para no duplicar el costo del relleno.
+  const costoRelleno = costoRellenoPreparacionVariante(data, variante);
+  const items = recetaEfectivaVariante(data, variante).filter((item) => costoRelleno === null || item.etapa !== "relleno");
+  const total = items.reduce((acc, item) => {
     const insumo = data.insumos.find((i) => i.id === item.insumo_id);
     return acc + item.cantidad * (insumo?.precio_actual ?? 0);
   }, 0);
-  return Math.round(total) + costoManoDeObraVariante(data, varianteId);
+  return Math.round(total + (costoRelleno ?? 0)) + costoManoDeObraVariante(data, varianteId);
 }
 
 /** Costo de fabricar exactamente 1 unidad individual del producto base: solo los insumos de masa
@@ -181,7 +287,7 @@ export function productosConVariantes(data: RicordoDataV2): ProductoConVariantes
  * (compra +, producción +, consumo/venta -, ajuste con su signo) se suma desde ahí en adelante. */
 export function calcularStock(
   data: RicordoDataV2,
-  itemTipo: "insumo" | "producto_variante",
+  itemTipo: TipoItemStock,
   itemId: string,
   hastaFecha?: string
 ): number {

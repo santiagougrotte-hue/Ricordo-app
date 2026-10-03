@@ -124,6 +124,13 @@ export interface ProductoVariante {
   gramos_masa_por_caja?: number;
   gramos_relleno_por_caja?: number;
   tipo_unidad_venta?: TipoUnidadVenta;
+  /** Si esta variante usa un relleno producido aparte (Preparacion) en vez de cargarlo como
+   * insumos directos en su receta compartida — al estar seteado, `gramos_relleno_por_caja` pasa a
+   * significar "consumo de esa preparación por caja", el costeo descuenta ese relleno del stock de
+   * preparaciones (ya producido, con su propio costo) en vez de recalcularlo desde insumos crudos,
+   * y la etapa "relleno" de la receta compartida se ignora en el costeo para no duplicar el costo
+   * (los insumos de esa etapa ya se consumieron/costearon al elaborar el lote de relleno). */
+  preparacion_relleno_id?: string;
 }
 
 // --- Recetas ------------------------------------------------------------------------------------
@@ -210,12 +217,16 @@ export interface InventarioMovimiento {
    * con `origen_id` da trazabilidad completa hacia el registro que lo originó. */
   origen_tipo?: string;
   origen_id?: string;
-  item_tipo: "insumo" | "producto_variante";
+  item_tipo: TipoItemStock;
   item_id: string;
   /** Signo: positivo entra al stock, negativo sale. */
   cantidad: number;
   unidad?: string;
   notas?: string;
+  /** Si item_tipo === "preparacion": a qué lote pertenece este movimiento (el que lo generó, o
+   * uno de consumo/merma/ajuste posterior) — permite saber cuánto queda de CADA lote, no solo el
+   * total de la preparación. */
+  lote_id?: string;
 }
 
 export interface HistorialPrecio {
@@ -488,6 +499,106 @@ export interface RevisionItem {
   nota_resolucion?: string;
 }
 
+// --- Preparaciones intermedias (rellenos, masas, salsas base) --------------------------------
+// Stock propio, independiente de insumos (materia prima) y de producto_variante (producto
+// terminado vendible) — un tercer tipo de ítem de inventario (ver `TipoItemStock`). Se produce
+// con su propia receta de insumos (PreparacionRecetaItem) y se consume después al elaborar
+// cajas de un producto que la usa (ProductoVariante.preparacion_relleno_id).
+
+export type TipoItemStock = "insumo" | "preparacion" | "producto_variante";
+
+export interface Preparacion {
+  id: string;
+  nombre: string;
+  /** Unidad de stock — "g" o "kg" normalmente, nunca se asume volumen = peso sin esta carga. */
+  unidad: string;
+  controla_stock: boolean;
+  stock_minimo?: number;
+  activo: boolean;
+}
+
+/** Ingredientes para producir `Preparacion.rendimiento_referencia` (en `Preparacion.unidad`) de
+ * esta preparación — mismo criterio que `RecetaItem`, pero para una preparación en vez de un
+ * producto base. Se escala proporcionalmente al planificar una cantidad distinta. */
+export interface PreparacionRecetaItem {
+  id: string;
+  preparacion_id: string;
+  insumo_id: string;
+  cantidad: number;
+  unidad?: string;
+}
+
+export interface PreparacionReceta {
+  id: string;
+  preparacion_id: string;
+  /** Rendimiento de referencia de las cantidades cargadas en PreparacionRecetaItem — nunca
+   * asumido, se carga a mano (ej. "estas cantidades rinden 5000 g de relleno"). */
+  rendimiento_referencia: number;
+}
+
+/** Un lote físico de preparación ya elaborada — unidad de trazabilidad (de dónde salió, cuándo,
+ * con qué costo) y la unidad que `calcularStock`/reservas usan para descontar consumo real. */
+export interface LotePreparacion {
+  id: string;
+  preparacion_id: string;
+  fecha_elaboracion: string;
+  /** Cantidad realmente obtenida (puede diferir de la planificada por cocción/merma) — nunca se
+   * asume igual a lo planificado. */
+  cantidad_obtenida: number;
+  /** Costo total del lote (consumo real de insumos × precio al momento de elaborar), congelado —
+   * no cambia si después sube el precio de un insumo. */
+  costo_total: number;
+  ubicacion?: string;
+  vencimiento?: string;
+  orden_produccion_id?: string;
+  notas?: string;
+}
+
+export type EstadoReserva = "activa" | "liberada" | "consumida";
+
+/** Cantidad de un ítem de stock comprometida para una orden de producción o un pedido, SIN
+ * descontarla todavía del stock físico — `calcularStockDisponible` = físico − reservas activas.
+ * Cancelar lo que la originó libera la reserva (nunca se borra, queda como registro); confirmarlo
+ * la marca consumida (y ahí sí se genera el movimiento de stock real, una sola vez). */
+export interface Reserva {
+  id: string;
+  item_tipo: TipoItemStock;
+  item_id: string;
+  cantidad: number;
+  origen_tipo: "orden_produccion" | "pedido";
+  origen_id: string;
+  estado: EstadoReserva;
+  fecha: string;
+}
+
+export type EstadoOrdenProduccion = "pendiente" | "en_elaboracion" | "terminado" | "cancelado";
+
+/** Tablero de producción (Pendiente → En elaboración → Terminado) — reemplaza, para lo que se
+ * planifica desde ahora, al log plano `Produccion` (que se conserva tal cual para no romper el
+ * historial ya cargado). Cada orden es de una preparación (relleno) o de un producto terminado
+ * (cajas), nunca ambos a la vez. */
+export interface OrdenProduccion {
+  id: string;
+  tipo: "preparacion" | "producto_terminado";
+  item_id: string;
+  cantidad_planeada: number;
+  unidad: string;
+  estado: EstadoOrdenProduccion;
+  fecha_prevista: string;
+  fecha_creacion: string;
+  pedidos_asociados?: string[];
+  notas?: string;
+  responsable?: string;
+  /** Se completan solo al confirmar (estado -> terminado). */
+  cantidad_real?: number;
+  fecha_confirmacion?: string;
+  /** Si tipo === "producto_terminado" y la receta usa relleno de una preparación: de qué lote(s)
+   * se consumió, para trazabilidad (Sección 6: "relacioná las cajas con los lotes utilizados"). */
+  lotes_relleno_consumidos?: { lote_id: string; cantidad: number }[];
+  /** Si tipo === "preparacion": el lote que esta orden generó al confirmarse. */
+  lote_generado_id?: string;
+}
+
 export interface RicordoDataV2 {
   categorias: Categoria[];
   clientes: Cliente[];
@@ -507,6 +618,12 @@ export interface RicordoDataV2 {
   proveedores: Proveedor[];
   produccion: Produccion[];
   plan_produccion: PlanProduccionMes[];
+  preparaciones: Preparacion[];
+  preparacion_recetas: PreparacionReceta[];
+  preparacion_receta_items: PreparacionRecetaItem[];
+  lotes_preparacion: LotePreparacion[];
+  reservas: Reserva[];
+  ordenes_produccion: OrdenProduccion[];
   rutas_entrega: RutaEntrega[];
   ruta_paradas: RutaParada[];
   movimientos_financieros: MovimientoFinanciero[];
@@ -545,6 +662,12 @@ export function emptyDataV2(): RicordoDataV2 {
     proveedores: [],
     produccion: [],
     plan_produccion: [],
+    preparaciones: [],
+    preparacion_recetas: [],
+    preparacion_receta_items: [],
+    lotes_preparacion: [],
+    reservas: [],
+    ordenes_produccion: [],
     rutas_entrega: [],
     ruta_paradas: [],
     movimientos_financieros: [],

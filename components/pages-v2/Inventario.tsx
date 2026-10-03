@@ -28,7 +28,7 @@ import { Modal } from "@/components/Modal";
 import { fARS, fNum, calcularStock, valorStockInsumos, categoriasPorAmbito } from "@/lib/calc-v2";
 import { calcularAlertasStock } from "@/lib/ia-stock";
 import type { SeveridadAlerta } from "@/lib/ia-stock";
-import type { Insumo, TipoInsumo, TipoInventarioMovimiento } from "@/lib/types-v2";
+import type { Insumo, TipoInsumo, TipoInventarioMovimiento, TipoItemStock } from "@/lib/types-v2";
 
 const SEVERIDAD_LABEL: Record<SeveridadAlerta, string> = { critica: "Crítica", importante: "Importante", informativa: "Informativa" };
 const SEVERIDAD_COLOR: Record<SeveridadAlerta, "red" | "orange" | "blue"> = { critica: "red", importante: "orange", informativa: "blue" };
@@ -255,8 +255,9 @@ function MovimientosTab() {
     [data.inventario_movimientos, tipoFiltro]
   );
 
-  function nombreItem(itemTipo: "insumo" | "producto_variante", itemId: string) {
+  function nombreItem(itemTipo: TipoItemStock, itemId: string) {
     if (itemTipo === "insumo") return data.insumos.find((i) => i.id === itemId)?.nombre ?? "(eliminado)";
+    if (itemTipo === "preparacion") return data.preparaciones.find((p) => p.id === itemId)?.nombre ?? "(eliminada)";
     return data.producto_variantes.find((v) => v.id === itemId)?.nombre ?? "(eliminado)";
   }
 
