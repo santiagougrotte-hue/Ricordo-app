@@ -34,6 +34,7 @@ import {
   primerDiaMes,
   ultimoDiaMes,
   mesAnterior,
+  sumarDias,
 } from "@/lib/calc-v2";
 import {
   pctCambio,
@@ -44,6 +45,7 @@ import {
   calcularVentasPendientes,
 } from "@/lib/analitica-ventas";
 import { generarResumenInteligente } from "@/lib/resumen-inteligente";
+import { necesidadCajas, stockRestanteLote } from "@/lib/produccion-v2";
 import type { Conclusion } from "@/lib/resumen-inteligente";
 import type { EstadoPedido, Canal } from "@/lib/types-v2";
 
@@ -169,6 +171,38 @@ export function Inicio() {
     [data]
   );
 
+  // Alertas de producción (Sección 9) — reglas verificables sobre datos reales, nunca una
+  // estimación inventada: faltante de relleno recalculado en vivo sobre cada orden activa, lotes
+  // con vencimiento cargado dentro de 7 días, y pedidos de mañana sin entregar.
+  const alertasRellenoFaltante = useMemo(() => {
+    const resultado: { ordenId: string; nombreVariante: string; nombrePreparacion: string; faltanteG: number }[] = [];
+    for (const orden of data.ordenes_produccion) {
+      if (orden.tipo !== "producto_terminado" || (orden.estado !== "pendiente" && orden.estado !== "en_elaboracion")) continue;
+      const variante = data.producto_variantes.find((v) => v.id === orden.item_id);
+      if (!variante) continue;
+      const necesidad = necesidadCajas(data, variante, orden.cantidad_planeada);
+      if (necesidad.relleno && necesidad.relleno.faltante_g > 0) {
+        const preparacion = data.preparaciones.find((p) => p.id === necesidad.relleno!.preparacion_id);
+        resultado.push({ ordenId: orden.id, nombreVariante: variante.nombre, nombrePreparacion: preparacion?.nombre ?? "(preparación)", faltanteG: necesidad.relleno.faltante_g });
+      }
+    }
+    return resultado;
+  }, [data]);
+
+  const lotesPorVencer = useMemo(() => {
+    const hoy = new Date().toISOString().slice(0, 10);
+    const en7Dias = sumarDias(hoy, 7);
+    return data.lotes_preparacion
+      .filter((l) => l.vencimiento && l.vencimiento <= en7Dias)
+      .map((l) => ({ lote: l, restante: stockRestanteLote(data, l.id), preparacion: data.preparaciones.find((p) => p.id === l.preparacion_id) }))
+      .filter((l) => l.restante > 0);
+  }, [data]);
+
+  const pedidosMananaSinEntregar = useMemo(() => {
+    const manana = sumarDias(new Date().toISOString().slice(0, 10), 1);
+    return data.pedidos.filter((p) => p.fecha === manana && (p.estado === "Confirmado" || p.estado === "Produccion"));
+  }, [data]);
+
   const clienteNombre = (id: string) => data.clientes.find((c) => c.id === id)?.nombre ?? "—";
   const valorEvolucion = (e: (typeof evolucion)[number]) => (metricaEvolucion === "facturacion" ? e.facturacion : metricaEvolucion === "cajas" ? e.cajas : e.pedidos);
   const formatoEvolucion = (v: number) => (metricaEvolucion === "facturacion" ? fARS(v) : fNum(v, 0));
@@ -224,6 +258,33 @@ export function Inicio() {
         <Alert kind="warning">
           {alertasStock.length} insumo(s) por debajo del stock mínimo: {alertasStock.map(({ insumo }) => insumo.nombre).join(", ")}.
         </Alert>
+      )}
+
+      {alertasRellenoFaltante.map((a) => (
+        <button key={a.ordenId} className="mb-2.5 block w-full text-left" onClick={() => router.go("operaciones", "produccion")}>
+          <Alert kind="danger">
+            Falta {a.nombrePreparacion.toLowerCase().startsWith("relleno") ? a.nombrePreparacion : `relleno de ${a.nombrePreparacion}`} para completar la producción
+            planificada de {a.nombreVariante} — faltan {fNum(a.faltanteG, 0)} g. Tocá para ver la orden en Operaciones → Producción.
+          </Alert>
+        </button>
+      ))}
+
+      {lotesPorVencer.map(({ lote, restante, preparacion }) => (
+        <button key={lote.id} className="mb-2.5 block w-full text-left" onClick={() => router.go("inventario", "preparaciones")}>
+          <Alert kind="warning">
+            Este lote de {preparacion?.nombre ?? "preparación"} ({fNum(restante, 0)} {preparacion?.unidad ?? ""} restantes) se acerca a su
+            vencimiento ({lote.vencimiento}). Tocá para ver el lote en Inventario → Preparaciones.
+          </Alert>
+        </button>
+      ))}
+
+      {pedidosMananaSinEntregar.length > 0 && (
+        <button className="mb-2.5 block w-full text-left" onClick={() => router.go("ventas", "pedidos")}>
+          <Alert kind="warning">
+            Hay {pedidosMananaSinEntregar.length} pedido(s) para mañana todavía sin marcar Entregado — revisá si la producción
+            está lista. Tocá para ver Ventas → Pedidos.
+          </Alert>
+        </button>
       )}
 
       {resumen.length > 0 && (
