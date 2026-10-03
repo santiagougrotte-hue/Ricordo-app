@@ -1,61 +1,81 @@
-# Esquema de base de datos — propuesta v1
+# Esquema de base de datos — propuesta v2
 
 > **Estado: propuesta para aprobar.** No se creó nada en Supabase todavía.
 > SQL completo: [`esquema-propuesto.sql`](./esquema-propuesto.sql) (probado contra Postgres 16 con stubs de `auth`/`storage`).
 
+## Decisiones incorporadas en la v2
+
+| Decisión | Cómo quedó |
+|---|---|
+| Retiro en local sin compra mínima | `store_settings.pickup_min_order = 0`. Se puede cambiar desde el panel sin tocar código. |
+| Mercado Pago en la v2, no en la v1 | Checkout solo con transferencia y efectivo. `mercadopago_enabled = false` y `create_order` rechaza MP (`RC005`). Ya están las columnas `payment_status`, `mp_preference_id` y `mp_payment_id` para sumarlo después. |
+| Confirmar pagos a mano | Todo pedido entra `new` con `payment_status = pending`. El admin lo marca pagado. |
+| Turnstile | El navegador **no** puede crear pedidos. Los crea una función de Netlify que primero valida el token de Turnstile con Cloudflare y después llama a `create_order` con la service key. |
+| Alerta de stock bajo | `products.low_stock_threshold` por producto (por defecto 3). |
+
 ## Tablas
 
-| Tabla | Para qué | Campos clave (además de los pedidos) |
+| Tabla | Para qué | Campos clave |
 |---|---|---|
-| `products` | Catálogo | `slug` (URL linda), `featured` (destacados del Home), `stock` **en cajas**, `price` en pesos enteros |
-| `product_media` | Fotos y videos | `kind` photo/video, `alt` (accesibilidad), **una sola portada por producto** (índice único) |
-| `shipping_zones` | Envío por CP | `postal_codes text[]` siempre de 4 dígitos (validado), `free_shipping_from` opcional |
-| `orders` | Pedidos | `number` empieza en **1001**, `delivery_method` (envío / retiro en local), `postal_code_raw` (lo que tipeó el cliente), `zone_name` (copia), `stock_returned` |
-| `order_items` | Líneas del pedido | copia de `product_name` y `units_per_box`, `unit_price` al momento, `line_total` calculado |
+| `products` | Catálogo | `slug`, `featured` (destacados del Home), `stock` **en cajas**, `low_stock_threshold`, `price` en pesos enteros |
+| `product_media` | Fotos y videos | `kind` photo/video, `alt`, **una sola portada por producto** |
+| `shipping_zones` | Envío por CP | `postal_codes text[]` de 4 dígitos (validado), `min_order`, `free_shipping_from` opcional |
+| `orders` | Pedidos | `number` desde **1001**, `delivery_method`, `postal_code_raw`, `zone_name` (copia), `payment_status`, `stock_returned` |
+| `order_items` | Líneas | copia de `product_name` y `units_per_box`, `unit_price` al momento, `line_total` calculado |
+| `store_settings` | Configuración (una sola fila) | retiro on/off y mínimo, dirección del local, WhatsApp, email de aviso (privado), MP on/off |
 | `admins` | Quién es admin | `user_id` de Supabase Auth |
 
-Montos en **pesos enteros** (sin centavos) para evitar errores de redondeo.
+## Cómo se crea un pedido
 
-## Lógica en el servidor (RPC)
+```
+Navegador ── checkout + token Turnstile ──▶ Netlify Function /api/create-order
+                                              1. valida el token con Cloudflare (secret en Netlify)
+                                              2. llama create_order() con la service key
+                                                 └─ en una transacción, en Postgres:
+                                                    bloquea stock → valida → recalcula precios,
+                                                    envío y total → crea pedido + items → descuenta stock
+                                              3. dispara el aviso al dueño (email; Telegram opcional)
+Navegador ◀── nº de pedido / error traducido ──┘
+```
 
-- **`normalize_postal_code(text)`**: `1884`, `B1884ABC`, `b 1884 abc` y `1884-ABC` dan `1884`. Cualquier otra cosa da `null`.
-- **`quote_shipping(cp, subtotal)`**: lo usa el carrito. Devuelve la zona, el costo, cuánto falta para el mínimo y cuánto para el envío gratis. Si el CP no está en ninguna zona devuelve `found = false`, no un error.
-- **`create_order(...)`**: todo en una transacción.
-  1. Bloquea las filas de producto y valida el stock.
-  2. Recalcula precios, envío y total con los datos de la base.
-  3. Crea el pedido y sus items.
-  4. Descuenta el stock.
+Si algo falla, no se crea nada y el error trae un código para mostrar un mensaje claro:
+- `RC001`: sin stock. Dice qué producto y cuántas cajas quedan.
+- `RC002`: CP fuera de zona. Ofrece retiro en el local y WhatsApp.
+- `RC003`: no llega al mínimo. Dice cuánto falta.
+- `RC004`: datos inválidos.
+- `RC005`: método de pago o retiro no disponible.
 
-  Si falla, no se crea nada y devuelve un código que el front traduce a un mensaje claro:
-  - `RC001`: sin stock. Incluye qué producto falló y cuántas cajas quedan.
-  - `RC002`: CP fuera de zona.
-  - `RC003`: no llega al mínimo. Incluye cuánto falta.
-  - `RC004`: datos inválidos.
-- **`set_order_status(id, estado)`**: solo para el admin. Al cancelar devuelve el stock **una sola vez**, aunque se cancele dos veces. Un pedido cancelado no se puede reabrir.
+## Otras funciones
+
+- **`normalize_postal_code`**: `1884`, `B1884ABC`, `b 1884 abc` y `1884-ABC` dan `1884`.
+- **`quote_shipping(cp, subtotal)`**: la cotización del carrito, es pública. Si el CP no está devuelve `found = false`, nunca un error.
+- **`store_public_settings()`**: datos públicos de la tienda, sin el email de aviso.
+- **`set_order_status(id, estado)`**: solo admin. Al cancelar devuelve el stock **una sola vez**. Un pedido cancelado no se reabre.
 
 ## Seguridad (RLS)
 
-- **Clientes (anon):** solo ven los productos, fotos y zonas **activos**. No pueden leer pedidos ni insertarlos directo. El único camino es `create_order()`, que revalida todo.
-- **Admin:** acceso total, pero solo si su `user_id` está en `admins`. Estar logueado no alcanza, así nadie que se registre por su cuenta entra al panel. Igual conviene **desactivar los registros** en Supabase Auth.
-- **Storage:** el bucket `product-media` es de lectura pública y solo el admin puede subir, editar o borrar.
-- **Realtime:** `orders` está en la publicación. Como RLS filtra, solo el admin recibe los pedidos nuevos.
+- **Clientes (anon):** leen solo productos, fotos y zonas **activos**, y los datos públicos de la tienda. No leen pedidos ni pueden crearlos sin pasar por Turnstile.
+- **Admin:** acceso total, solo si su `user_id` está en `admins`. Además, **desactivar los registros** en Supabase Auth.
+- **Storage:** bucket `product-media` de lectura pública. Solo el admin sube, edita o borra.
+- **Realtime:** `orders` está publicado y RLS deja que solo el admin reciba los pedidos nuevos.
 
-## Lo probé así
+## Pruebas (Postgres 16)
 
 | Caso | Resultado |
 |---|---|
-| Pedido con envío a `B1884ABC`, 2 cajas de $9.800 | Pedido #1001, total $22.100 ($2.500 de envío), stock 5 → 3 |
-| Pedido con un producto sin stock | `RC001` dice que hay 1 caja de Ravioles espinaca y pidió 3. **No se creó nada** |
-| CP 1900 | `RC002` |
-| Subtotal $8.500 con mínimo de $15.000 | `RC003`, faltan $6.500 |
-| Anon lee pedidos / inserta pedido / cambia estado | 0 filas / denegado / denegado |
-| Admin cancela #1001 dos veces | Stock devuelto una sola vez (3 → 5) |
+| Anon llama `create_order` | **Denegado** (solo `service_role`) |
+| Anon lee la configuración | Ve los datos públicos. La tabla con el email da 0 filas |
+| Pago con Mercado Pago | `RC005`, todavía no disponible |
+| Retiro sin mínimo, $8.500 | Pedido #1001, envío $0 |
+| Retiro con mínimo de $20.000 configurado | `RC003` |
+| Envío a `B1884ABC`, 2 cajas de $9.800, transferencia | #1002, total $22.100, pago `pending` |
+| Producto sin stock | `RC001` con el detalle. **No se creó nada** |
+| CP 1900 / bajo el mínimo de la zona | `RC002` / `RC003` (faltan $6.500) |
+| Admin cancela dos veces | Stock devuelto una sola vez |
+| Stock ≤ umbral | `alerta = true` (para el panel) |
 
-## Preguntas abiertas
+## Preguntas que siguen abiertas
 
-1. **¿El retiro en local tiene compra mínima?** Hoy no tiene mínimo ni costo.
-2. **¿El stock se cuenta en cajas?** Así está propuesto.
-3. **Tipos de pasta:** ravioles, sorrentinos y cappellacci están fijos en un `enum`. Si van a sumar ñoquis, lasagna, etc., conviene una tabla `pasta_types` editable desde el panel.
-4. **Mercado Pago:** para cobrar online hace falta una función en el servidor (Netlify o Supabase Edge) que cree la preferencia y reciba el webhook. Sumaría `payment_status` y `mp_preference_id` a `orders`. ¿Va en esta primera versión o arrancamos con "te mandamos el link por WhatsApp"?
-5. **Spam:** cualquiera puede llamar a `create_order` y reservar stock con pedidos falsos. Ya hay un límite de 30 items y 99 cajas por item. ¿Sumamos Cloudflare Turnstile (captcha invisible y gratis) en el checkout?
-6. **¿Horario de corte o días de entrega?** Por ejemplo "pedí hasta el jueves y llega el sábado". Si existe, se agrega como campo de la zona o como configuración general.
+1. **¿El stock se cuenta en cajas?** Así está propuesto: "quedan 3 cajas". La otra opción sería contar unidades sueltas, que complica todo.
+2. **¿Los tipos de pasta son fijos?** Ravioles, sorrentinos y cappellacci están en un `enum`. Si piensan sumar ñoquis, lasagna u otros, conviene una tabla editable desde el panel. ¿Fijo o editable?
+3. **¿Hay días de entrega u horario de corte?** Por ejemplo "pedí hasta el jueves a las 20 y llega el sábado". Si existe, lo agrego a `store_settings` o a cada zona y la tienda lo muestra en el carrito y en la confirmación.

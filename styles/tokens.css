@@ -1,14 +1,17 @@
-/* Ricordo — design tokens (v1, propuesta pendiente de aprobación).
+/* Ricordo — design tokens (v2 "la caja", propuesta pendiente de aprobación).
    Fuente de verdad: docs/brand-board.html. El sitio usa SOLO estas variables.
-   Fuentes: Gloock (display), Oswald (etiquetas), DM Sans (UI) — Google Fonts. */
+   Fuentes (Google Fonts): Gloock (display), DM Sans (texto),
+   Oswald (rótulos de etiqueta), Reenie Beanie (anotaciones en lápiz). */
 
 :root {
   /* ── Paleta base (no usar directo en componentes; usar los roles) ── */
   --ricordo-sfoglia: #F5EDE0;
   --ricordo-farina: #FBF8F2;
   --ricordo-crosta: #E9DCC6;
+  --ricordo-cartone: #D2B48C;
   --ricordo-inchiostro: #231A15;
   --ricordo-nocciola: #5C4E44;
+  --ricordo-matita: #4A4038;
   --ricordo-bordo: #7A1E2A;
   --ricordo-bordo-hondo: #5E1520;
   --ricordo-tuorlo: #E9A23B;
@@ -21,14 +24,23 @@
   --ricordo-tostato-2: #221A15;
   --ricordo-tostato-3: #2E241D;
   --ricordo-tostato-line: #3A2E25;
+  --ricordo-tostato-cartone: #3A2C20;
 
   /* ── Roles: modo claro ── */
   --color-bg: var(--ricordo-sfoglia);
   --color-surface: var(--ricordo-farina);
   --color-surface-sunken: var(--ricordo-crosta);
+  --color-kraft: var(--ricordo-cartone);
+  --color-on-kraft: var(--ricordo-inchiostro);
+  --color-kraft-ink: var(--ricordo-bordo-hondo);
+  --color-placeholder: var(--ricordo-crosta);
   --color-line: var(--ricordo-crosta);
+  --color-rule: var(--ricordo-inchiostro);   /* filetes de etiqueta */
   --color-text: var(--ricordo-inchiostro);
   --color-text-muted: var(--ricordo-nocciola);
+  --color-pencil: var(--ricordo-matita);
+  --color-stamp: var(--ricordo-bordo);
+  --color-tape: rgb(210 180 140 / 0.82);
   --color-primary: var(--ricordo-bordo);
   --color-primary-hover: var(--ricordo-bordo-hondo);
   --color-on-primary: var(--ricordo-farina);
@@ -48,9 +60,12 @@
   --font-display: "Gloock", "Abril Fatface", Georgia, serif;
   --font-label: "Oswald", "Arial Narrow", sans-serif;
   --font-ui: "DM Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-hand: "Reenie Beanie", "Bradley Hand", cursive;   /* solo ≥ 28px, nunca info crítica sola */
 
-  --text-display-xl: clamp(2.5rem, 8vw, 4.5rem);
-  --text-display-l: clamp(2rem, 5vw, 2.5rem);
+  --text-display-hero: clamp(4rem, 14.5vw, 11.5rem);
+  --text-display-xxl: clamp(3.5rem, 13vw, 10.5rem);
+  --text-display-xl: clamp(2.5rem, 8vw, 6rem);
+  --text-display-l: clamp(1.875rem, 5vw, 3.25rem);
   --text-display-m: 1.75rem;
   --text-display-s: 1.5rem;
   --text-body-l: 1.125rem;
@@ -58,6 +73,7 @@
   --text-small: 0.875rem;
   --text-caption: 0.8125rem;
   --text-label: 0.8125rem;
+  --text-hand: 1.875rem;
 
   --leading-tight: 1.05;
   --leading-snug: 1.2;
@@ -82,27 +98,36 @@
   --gutter: var(--space-4);
   --container: 70rem;
 
-  /* ── Radios ── */
-  --radius-s: 8px;
-  --radius-m: 16px;
-  --radius-l: 28px;
-  --radius-pill: 999px;
+  /* ── Radios: cada objeto tiene el suyo (no un radio único para todo) ── */
+  --radius-paper: 0;        /* fotos, bandas, carrito */
+  --radius-label: 2px;      /* etiquetas de producto */
+  --radius-button: 4px;     /* botones de imprenta, inputs */
+  --radius-round: 999px;    /* sellos, contador de cantidad, chips de filtro */
 
-  /* ── Sombras (cálidas, nunca negras puras) ── */
-  --shadow-s: 0 1px 2px rgb(35 26 21 / 0.06), 0 2px 6px rgb(35 26 21 / 0.06);
-  --shadow-m: 0 6px 20px rgb(35 26 21 / 0.10);
-  --shadow-l: 0 18px 48px rgb(35 26 21 / 0.18);
+  /* ── Sombras: papel apoyado (suave) e imprenta (dura, desplazada) ── */
+  --shadow-paper: 0 1px 0 var(--color-line), 0 18px 40px -24px rgb(35 26 21 / 0.5);
+  --shadow-print: 3px 3px 0 var(--color-text);
+  --shadow-print-pressed: 1px 1px 0 var(--color-text);
+
+  /* ── Detalles hechos a mano ── */
+  --rotate-label: -0.8deg;   /* etiquetas: entre -1.2° y 1.2° */
+  --rotate-stamp: -8deg;     /* sellos: entre -12° y -6°, nunca derechos */
+  --rule-label: 1.5px;       /* filete de etiqueta = trazo de íconos */
+  --icon-stroke: 1.5px;
+  --grain-opacity: 0.28;     /* textura: PNG 180×180 en /tienda/public, no filtro SVG en vivo */
 
   /* ── Tamaños táctiles ── */
   --tap-min: 48px;
 
-  /* ── Movimiento ── */
-  --ease-out: cubic-bezier(0.2, 0.7, 0.2, 1);
-  --ease-in-out: cubic-bezier(0.65, 0, 0.35, 1);
-  --ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
-  --dur-fast: 150ms;
-  --dur-base: 300ms;
-  --dur-slow: 700ms;
+  /* ── Movimiento: tres gestos, cada uno con su curva ── */
+  --ease-sello: cubic-bezier(0.55, -0.3, 0.25, 1.45);  /* baja, golpea, rebota apenas */
+  --ease-papel: cubic-bezier(0.16, 0.84, 0.3, 1);      /* cae y se asienta */
+  --ease-lapiz: cubic-bezier(0.6, 0.05, 0.35, 0.95);   /* trazo: lento-rápido-lento */
+  --dur-sello: 500ms;
+  --dur-papel: 800ms;
+  --dur-lapiz: 900ms;
+  --dur-ui: 180ms;          /* hover, foco, cambios de estado */
+  --stagger: 70ms;
 
   /* ── Capas ── */
   --z-header: 10;
@@ -120,6 +145,15 @@
     --color-surface: var(--ricordo-tostato-2);
     --color-surface-sunken: var(--ricordo-tostato-3);
     --color-line: var(--ricordo-tostato-line);
+    --color-kraft: var(--ricordo-tostato-cartone);
+    --color-on-kraft: var(--ricordo-sfoglia);
+    --color-kraft-ink: #E07A80;
+    --color-placeholder: var(--ricordo-tostato-2);
+    --color-rule: var(--ricordo-sfoglia);
+    --color-pencil: #D9CBB6;
+    --color-stamp: #E07A80;
+    --color-tape: rgb(90 70 52 / 0.85);
+    --grain-opacity: 0.18;
     --color-text: var(--ricordo-sfoglia);
     --color-text-muted: #C9BBA8;
     --color-primary: #E07A80;
@@ -136,9 +170,7 @@
     --color-focus: #F2B85C;
     --color-logo: var(--ricordo-sfoglia);
     --color-scrim: rgb(0 0 0 / 0.6);
-    --shadow-s: 0 1px 2px rgb(0 0 0 / 0.3);
-    --shadow-m: 0 6px 20px rgb(0 0 0 / 0.4);
-    --shadow-l: 0 18px 48px rgb(0 0 0 / 0.5);
+    --shadow-paper: 0 18px 40px -24px rgb(0 0 0 / 0.7);
     color-scheme: dark;
   }
 }
@@ -149,6 +181,15 @@
   --color-surface: var(--ricordo-tostato-2);
   --color-surface-sunken: var(--ricordo-tostato-3);
   --color-line: var(--ricordo-tostato-line);
+  --color-kraft: var(--ricordo-tostato-cartone);
+  --color-on-kraft: var(--ricordo-sfoglia);
+  --color-kraft-ink: #E07A80;
+  --color-placeholder: var(--ricordo-tostato-2);
+  --color-rule: var(--ricordo-sfoglia);
+  --color-pencil: #D9CBB6;
+  --color-stamp: #E07A80;
+  --color-tape: rgb(90 70 52 / 0.85);
+  --grain-opacity: 0.18;
   --color-text: var(--ricordo-sfoglia);
   --color-text-muted: #C9BBA8;
   --color-primary: #E07A80;
@@ -165,16 +206,16 @@
   --color-focus: #F2B85C;
   --color-logo: var(--ricordo-sfoglia);
   --color-scrim: rgb(0 0 0 / 0.6);
-  --shadow-s: 0 1px 2px rgb(0 0 0 / 0.3);
-  --shadow-m: 0 6px 20px rgb(0 0 0 / 0.4);
-  --shadow-l: 0 18px 48px rgb(0 0 0 / 0.5);
+  --shadow-paper: 0 18px 40px -24px rgb(0 0 0 / 0.7);
   color-scheme: dark;
 }
 
 @media (prefers-reduced-motion: reduce) {
   :root {
-    --dur-fast: 0ms;
-    --dur-base: 0ms;
-    --dur-slow: 0ms;
+    --dur-sello: 0ms;
+    --dur-papel: 0ms;
+    --dur-lapiz: 0ms;
+    --dur-ui: 0ms;
+    --stagger: 0ms;
   }
 }

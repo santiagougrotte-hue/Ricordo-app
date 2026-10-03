@@ -1,5 +1,5 @@
 -- ════════════════════════════════════════════════════════════════════
--- RICORDO · Tienda + Panel admin — ESQUEMA PROPUESTO (v1)
+-- RICORDO · Tienda + Panel admin — ESQUEMA PROPUESTO (v2)
 -- ⚠️  PROPUESTA PARA REVISAR. Todavía no se ejecutó en ningún proyecto.
 --     Ver docs/esquema-db.md para el resumen y las preguntas abiertas.
 -- Montos en pesos enteros (ARS, sin centavos).
@@ -11,6 +11,7 @@ create type media_kind      as enum ('photo', 'video');
 create type delivery_method as enum ('delivery', 'pickup');
 create type payment_method  as enum ('transfer', 'cash', 'mercadopago');
 create type order_status    as enum ('new', 'confirmed', 'preparing', 'shipped', 'delivered', 'cancelled');
+create type payment_status  as enum ('pending', 'paid', 'refunded');
 
 -- ── Admins ───────────────────────────────────────────────────────────
 -- "Logueado" no alcanza: si alguien se registra en Auth sería "authenticated".
@@ -25,6 +26,19 @@ language sql stable security definer set search_path = public as $$
   select exists (select 1 from admins where user_id = auth.uid());
 $$;
 
+-- ── Configuración de la tienda (una sola fila) ──────────────────────
+create table store_settings (
+  id                   boolean primary key default true check (id),   -- fuerza fila única
+  pickup_enabled       boolean not null default true,
+  pickup_min_order     int not null default 0 check (pickup_min_order >= 0),   -- v1: sin mínimo
+  pickup_address       text not null default '',
+  whatsapp_phone       text not null default '',      -- formato internacional: 5491155551234
+  notify_email         text,                          -- privado: a dónde llega el aviso de pedido
+  mercadopago_enabled  boolean not null default false, -- v2
+  updated_at           timestamptz not null default now()
+);
+insert into store_settings default values;
+
 -- ── Productos ────────────────────────────────────────────────────────
 create table products (
   id             uuid primary key default gen_random_uuid(),
@@ -36,6 +50,7 @@ create table products (
   units_per_box  int  not null check (units_per_box > 0),
   price          int  not null check (price >= 0),
   stock          int  not null default 0 check (stock >= 0),   -- en cajas
+  low_stock_threshold int not null default 3 check (low_stock_threshold >= 0),  -- alerta en el panel
   active         boolean not null default true,
   featured       boolean not null default false,               -- "destacados" del Home
   sort_order     int  not null default 0,
@@ -94,6 +109,9 @@ create table orders (
   shipping_cost    int not null check (shipping_cost >= 0),
   total            int not null check (total = subtotal + shipping_cost),
   payment_method   payment_method not null,
+  payment_status   payment_status not null default 'pending',  -- el admin marca "pagado" a mano
+  mp_preference_id text,                     -- reservado para Mercado Pago (v2)
+  mp_payment_id    text,                     -- reservado para Mercado Pago (v2)
   status           order_status not null default 'new',
   stock_returned   boolean not null default false,   -- evita devolver stock dos veces
   created_at       timestamptz not null default now(),
@@ -125,6 +143,7 @@ begin new.updated_at := now(); return new; end $$;
 create trigger t_products_touch before update on products       for each row execute function touch_updated_at();
 create trigger t_zones_touch    before update on shipping_zones for each row execute function touch_updated_at();
 create trigger t_orders_touch   before update on orders         for each row execute function touch_updated_at();
+create trigger t_settings_touch before update on store_settings for each row execute function touch_updated_at();
 
 -- ════════════════════════════════════════════════════════════════════
 -- LÓGICA EN EL SERVIDOR
@@ -134,6 +153,15 @@ create trigger t_orders_touch   before update on orders         for each row exe
 create function normalize_postal_code(raw text) returns text
 language sql immutable as $$
   select substring(upper(regexp_replace(coalesce(raw, ''), '[\s\-\.]', '', 'g')) from '^[A-Z]?([0-9]{4})(?:[A-Z]{3})?$');
+$$;
+
+-- Datos públicos de la tienda (sin el email de aviso).
+create function store_public_settings()
+returns table (pickup_enabled boolean, pickup_min_order int, pickup_address text,
+               whatsapp_phone text, mercadopago_enabled boolean)
+language sql stable security definer set search_path = public as $$
+  select pickup_enabled, pickup_min_order, pickup_address, whatsapp_phone, mercadopago_enabled
+  from store_settings limit 1;
 $$;
 
 -- Cotización para el carrito (informativa; el valor real lo fija create_order).
@@ -159,10 +187,13 @@ language sql stable security definer set search_path = public as $$
 $$;
 
 -- Crear pedido: una sola transacción. Si algo falla, no se crea nada.
+-- NO se llama desde el navegador: la llama la función de Netlify /api/create-order
+-- después de validar el token de Cloudflare Turnstile, con la service key.
 -- p_items = [{"product_id": "...", "quantity": 2}, ...]
 -- Errores con código propio (el front los traduce a mensajes amables):
 --   RC001 sin stock (detail = JSON con productos y stock disponible)
 --   RC002 CP fuera de zona · RC003 no llega al mínimo · RC004 datos inválidos
+--   RC005 método de pago o retiro no disponible
 create function create_order(
   p_customer_name text, p_customer_phone text, p_customer_email text,
   p_delivery_method delivery_method, p_address text, p_postal_code text,
@@ -171,8 +202,16 @@ create function create_order(
 language plpgsql security definer set search_path = public as $$
 declare
   v_cp text; v_zone shipping_zones; v_subtotal int := 0; v_shipping int := 0;
-  v_order orders; v_short jsonb;
+  v_order orders; v_short jsonb; v_cfg store_settings;
 begin
+  select * into v_cfg from store_settings limit 1;
+  if p_payment_method = 'mercadopago' and not v_cfg.mercadopago_enabled then
+    raise exception 'Mercado Pago todavía no está disponible' using errcode = 'RC005';
+  end if;
+  if p_delivery_method = 'pickup' and not v_cfg.pickup_enabled then
+    raise exception 'El retiro en el local no está disponible' using errcode = 'RC005';
+  end if;
+
   if p_items is null or jsonb_typeof(p_items) <> 'array'
      or jsonb_array_length(p_items) = 0 or jsonb_array_length(p_items) > 30 then
     raise exception 'Carrito vacío o inválido' using errcode = 'RC004';
@@ -219,6 +258,9 @@ begin
     end if;
     v_shipping := case when v_zone.free_shipping_from is not null and v_subtotal >= v_zone.free_shipping_from
                        then 0 else v_zone.shipping_cost end;
+  elsif v_subtotal < v_cfg.pickup_min_order then
+    raise exception 'No alcanza la compra mínima para retiro' using errcode = 'RC003',
+      detail = json_build_object('min_order', v_cfg.pickup_min_order, 'missing', v_cfg.pickup_min_order - v_subtotal)::text;
   end if;
 
   -- 3) Crear pedido + items
@@ -265,6 +307,7 @@ end $$;
 -- ROW LEVEL SECURITY
 -- ════════════════════════════════════════════════════════════════════
 alter table admins         enable row level security;
+alter table store_settings enable row level security;
 alter table products       enable row level security;
 alter table product_media  enable row level security;
 alter table shipping_zones enable row level security;
@@ -282,12 +325,16 @@ create policy admins_self_read     on admins         for select using (user_id =
 create policy products_admin_all   on products       for all using (is_admin()) with check (is_admin());
 create policy media_admin_all      on product_media  for all using (is_admin()) with check (is_admin());
 create policy zones_admin_all      on shipping_zones for all using (is_admin()) with check (is_admin());
+create policy settings_admin_all   on store_settings for all using (is_admin()) with check (is_admin());
 create policy orders_admin_all     on orders         for all using (is_admin()) with check (is_admin());
 create policy items_admin_all      on order_items    for all using (is_admin()) with check (is_admin());
 
--- Los clientes NO insertan directo en orders/order_items: solo vía create_order().
-revoke all on function create_order(text, text, text, delivery_method, text, text, text, payment_method, jsonb) from public;
-grant execute on function create_order(text, text, text, delivery_method, text, text, text, payment_method, jsonb) to anon, authenticated;
+-- Nadie inserta directo en orders/order_items. create_order() solo la ejecuta el servidor
+-- (service_role, desde la función de Netlify que valida Turnstile): un bot con la anon key
+-- no puede crear pedidos ni vaciar el stock.
+revoke all on function create_order(text, text, text, delivery_method, text, text, text, payment_method, jsonb) from public, anon, authenticated;
+grant execute on function create_order(text, text, text, delivery_method, text, text, text, payment_method, jsonb) to service_role;
+grant execute on function store_public_settings()          to anon, authenticated;
 grant execute on function quote_shipping(text, int)       to anon, authenticated;
 grant execute on function normalize_postal_code(text)     to anon, authenticated;
 revoke all on function set_order_status(uuid, order_status) from public, anon;
