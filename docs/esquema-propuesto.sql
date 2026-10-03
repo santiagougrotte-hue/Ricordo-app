@@ -1,8 +1,8 @@
 -- ════════════════════════════════════════════════════════════════════
--- RICORDO · Tienda + Panel admin — ESQUEMA PROPUESTO (v2)
+-- RICORDO · Tienda + Panel admin — ESQUEMA PROPUESTO (v3)
 -- ⚠️  PROPUESTA PARA REVISAR. Todavía no se ejecutó en ningún proyecto.
 --     Ver docs/esquema-db.md para el resumen y las preguntas abiertas.
--- Montos en pesos enteros (ARS, sin centavos).
+-- Montos en pesos enteros (ARS, sin centavos). Horarios en America/Argentina/Buenos_Aires.
 -- ════════════════════════════════════════════════════════════════════
 
 -- ── Tipos ────────────────────────────────────────────────────────────
@@ -47,7 +47,7 @@ create table products (
   pasta_type     pasta_type not null,
   filling        text not null,
   description    text not null default '',
-  units_per_box  int  not null check (units_per_box > 0),
+  units_per_box  int  not null default 12 check (units_per_box = 12),   -- todas las cajas son de 12
   price          int  not null check (price >= 0),
   stock          int  not null default 0 check (stock >= 0),   -- en cajas
   low_stock_threshold int not null default 3 check (low_stock_threshold >= 0),  -- alerta en el panel
@@ -89,6 +89,26 @@ create table shipping_zones (
 );
 create index shipping_zones_cp_idx on shipping_zones using gin (postal_codes);
 
+-- ── Turnos de entrega ────────────────────────────────────────────────
+-- Viernes a la noche y sábado a la mañana. Editables desde el panel.
+create table delivery_windows (
+  id            uuid primary key default gen_random_uuid(),
+  label         text not null,                                  -- "Viernes a la noche"
+  weekday       smallint not null check (weekday between 0 and 6), -- 0 = domingo … 5 = viernes, 6 = sábado
+  starts_at     time not null,
+  ends_at       time not null,
+  cutoff_hours  int not null default 24 check (cutoff_hours >= 0),  -- se puede pedir hasta N horas antes
+  for_delivery  boolean not null default true,
+  for_pickup    boolean not null default true,
+  active        boolean not null default true,
+  sort_order    int not null default 0,
+  constraint window_range check (ends_at > starts_at)
+);
+-- Horarios a confirmar por el dueño
+insert into delivery_windows (label, weekday, starts_at, ends_at, sort_order) values
+  ('Viernes a la noche', 5, '20:00', '23:00', 1),
+  ('Sábado a la mañana', 6, '09:00', '13:00', 2);
+
 -- ── Pedidos ──────────────────────────────────────────────────────────
 create sequence order_number_seq start 1001;
 
@@ -104,6 +124,9 @@ create table orders (
   postal_code_raw  text,                     -- lo que escribió el cliente (B1884ABC)
   zone_id          uuid references shipping_zones (id) on delete set null,
   zone_name        text,                     -- copia al momento del pedido
+  delivery_date    date not null,            -- día del turno elegido
+  delivery_window_id uuid references delivery_windows (id) on delete set null,
+  delivery_window_label text not null,       -- copia: "Viernes 10/10 · 20 a 23 h"
   notes            text check (length(notes) <= 1000),
   subtotal         int not null check (subtotal >= 0),
   shipping_cost    int not null check (shipping_cost >= 0),
@@ -123,6 +146,7 @@ create table orders (
 );
 create index orders_status_created_idx on orders (status, created_at desc);
 create index orders_created_idx on orders (created_at desc);
+create index orders_delivery_idx on orders (delivery_date, status);   -- "qué sale el viernes"
 
 create table order_items (
   id             uuid primary key default gen_random_uuid(),
@@ -186,6 +210,23 @@ language sql stable security definer set search_path = public as $$
   from (select 1) one left join z on true;
 $$;
 
+-- Próximos turnos disponibles (para el checkout). Excluye los que ya cerraron.
+create function available_delivery_slots(p_method delivery_method default 'delivery', p_days int default 14)
+returns table (window_id uuid, delivery_date date, label text, starts_at time, ends_at time, closes_at timestamptz)
+language sql stable security definer set search_path = public as $$
+  select w.id, d::date, w.label, w.starts_at, w.ends_at,
+         ((d::date + w.starts_at) at time zone 'America/Argentina/Buenos_Aires') - make_interval(hours => w.cutoff_hours)
+  from delivery_windows w
+  cross join generate_series((now() at time zone 'America/Argentina/Buenos_Aires')::date,
+                             (now() at time zone 'America/Argentina/Buenos_Aires')::date + least(greatest(p_days, 1), 60),
+                             interval '1 day') d
+  where w.active
+    and extract(dow from d) = w.weekday
+    and (case when p_method = 'delivery' then w.for_delivery else w.for_pickup end)
+    and ((d::date + w.starts_at) at time zone 'America/Argentina/Buenos_Aires') - make_interval(hours => w.cutoff_hours) > now()
+  order by d, w.starts_at;
+$$;
+
 -- Crear pedido: una sola transacción. Si algo falla, no se crea nada.
 -- NO se llama desde el navegador: la llama la función de Netlify /api/create-order
 -- después de validar el token de Cloudflare Turnstile, con la service key.
@@ -193,16 +234,17 @@ $$;
 -- Errores con código propio (el front los traduce a mensajes amables):
 --   RC001 sin stock (detail = JSON con productos y stock disponible)
 --   RC002 CP fuera de zona · RC003 no llega al mínimo · RC004 datos inválidos
---   RC005 método de pago o retiro no disponible
+--   RC005 método de pago o retiro no disponible · RC006 turno de entrega inválido o ya cerrado
 create function create_order(
   p_customer_name text, p_customer_phone text, p_customer_email text,
   p_delivery_method delivery_method, p_address text, p_postal_code text,
-  p_notes text, p_payment_method payment_method, p_items jsonb
+  p_notes text, p_payment_method payment_method, p_items jsonb,
+  p_delivery_date date, p_delivery_window_id uuid
 ) returns table (order_id uuid, order_number bigint, total int)
 language plpgsql security definer set search_path = public as $$
 declare
   v_cp text; v_zone shipping_zones; v_subtotal int := 0; v_shipping int := 0;
-  v_order orders; v_short jsonb; v_cfg store_settings;
+  v_order orders; v_short jsonb; v_cfg store_settings; v_slot record;
 begin
   select * into v_cfg from store_settings limit 1;
   if p_payment_method = 'mercadopago' and not v_cfg.mercadopago_enabled then
@@ -263,13 +305,24 @@ begin
       detail = json_build_object('min_order', v_cfg.pickup_min_order, 'missing', v_cfg.pickup_min_order - v_subtotal)::text;
   end if;
 
+  -- Turno: tiene que ser uno de los disponibles ahora mismo
+  select * into v_slot from available_delivery_slots(p_delivery_method, 60) s
+   where s.window_id = p_delivery_window_id and s.delivery_date = p_delivery_date;
+  if v_slot.window_id is null then
+    raise exception 'Ese turno de entrega ya cerró o no existe' using errcode = 'RC006';
+  end if;
+
   -- 3) Crear pedido + items
   insert into orders (customer_name, customer_phone, customer_email, delivery_method, address,
                       postal_code, postal_code_raw, zone_id, zone_name, notes,
+                      delivery_date, delivery_window_id, delivery_window_label,
                       subtotal, shipping_cost, total, payment_method)
   values (trim(p_customer_name), trim(p_customer_phone), nullif(trim(p_customer_email), ''), p_delivery_method,
           case when p_delivery_method = 'delivery' then trim(p_address) end,
           v_cp, p_postal_code, v_zone.id, v_zone.name, nullif(trim(p_notes), ''),
+          p_delivery_date, v_slot.window_id,
+          v_slot.label || ' ' || to_char(p_delivery_date, 'DD/MM') || ' · '
+            || to_char(v_slot.starts_at, 'FMHH24') || ' a ' || to_char(v_slot.ends_at, 'FMHH24') || ' h',
           v_subtotal, v_shipping, v_subtotal + v_shipping, p_payment_method)
   returning * into v_order;
 
@@ -308,6 +361,7 @@ end $$;
 -- ════════════════════════════════════════════════════════════════════
 alter table admins         enable row level security;
 alter table store_settings enable row level security;
+alter table delivery_windows enable row level security;
 alter table products       enable row level security;
 alter table product_media  enable row level security;
 alter table shipping_zones enable row level security;
@@ -326,15 +380,18 @@ create policy products_admin_all   on products       for all using (is_admin()) 
 create policy media_admin_all      on product_media  for all using (is_admin()) with check (is_admin());
 create policy zones_admin_all      on shipping_zones for all using (is_admin()) with check (is_admin());
 create policy settings_admin_all   on store_settings for all using (is_admin()) with check (is_admin());
+create policy windows_public_read  on delivery_windows for select using (active);
+create policy windows_admin_all    on delivery_windows for all using (is_admin()) with check (is_admin());
 create policy orders_admin_all     on orders         for all using (is_admin()) with check (is_admin());
 create policy items_admin_all      on order_items    for all using (is_admin()) with check (is_admin());
 
 -- Nadie inserta directo en orders/order_items. create_order() solo la ejecuta el servidor
 -- (service_role, desde la función de Netlify que valida Turnstile): un bot con la anon key
 -- no puede crear pedidos ni vaciar el stock.
-revoke all on function create_order(text, text, text, delivery_method, text, text, text, payment_method, jsonb) from public, anon, authenticated;
-grant execute on function create_order(text, text, text, delivery_method, text, text, text, payment_method, jsonb) to service_role;
+revoke all on function create_order(text, text, text, delivery_method, text, text, text, payment_method, jsonb, date, uuid) from public, anon, authenticated;
+grant execute on function create_order(text, text, text, delivery_method, text, text, text, payment_method, jsonb, date, uuid) to service_role;
 grant execute on function store_public_settings()          to anon, authenticated;
+grant execute on function available_delivery_slots(delivery_method, int) to anon, authenticated;
 grant execute on function quote_shipping(text, int)       to anon, authenticated;
 grant execute on function normalize_postal_code(text)     to anon, authenticated;
 revoke all on function set_order_status(uuid, order_status) from public, anon;
