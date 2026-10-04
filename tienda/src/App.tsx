@@ -9,6 +9,7 @@ import { Home } from './pages/Home';
 import { Catalog } from './pages/Catalog';
 import { ProductPage } from './pages/ProductPage';
 import { NotFound } from './pages/NotFound';
+import { useSmoothScroll } from './motion/useMotion';
 
 const Checkout = lazy(() => import('./pages/Checkout').then((m) => ({ default: m.Checkout })));
 const Confirmation = lazy(() => import('./pages/Confirmation').then((m) => ({ default: m.Confirmation })));
@@ -17,7 +18,10 @@ const AdminRoot = lazy(() => import('./admin/AdminRoot').then((m) => ({ default:
 function ScrollToTop() {
   const { pathname, hash } = useLocation();
   useEffect(() => {
-    if (hash) document.getElementById(hash.slice(1))?.scrollIntoView();
+    const lenis = (window as Window & { __lenis?: { scrollTo: (t: number | HTMLElement, o?: object) => void } }).__lenis;
+    const target = hash ? document.getElementById(hash.slice(1)) : null;
+    if (lenis) lenis.scrollTo(target ?? 0, { immediate: !target, offset: -120 });
+    else if (target) target.scrollIntoView();
     else window.scrollTo(0, 0);
   }, [pathname, hash]);
   return null;
@@ -26,8 +30,10 @@ function ScrollToTop() {
 export function App() {
   const { status, reload, announce } = useStore();
   const { pathname } = useLocation();
+  const isAdmin = pathname === '/admin' || pathname.startsWith('/admin/');
+  useSmoothScroll(!isAdmin);
   // El panel vive aparte: sin header/footer/carrito de la tienda y en su propio chunk (supabase-js completo va solo ahí).
-  if (pathname === '/admin' || pathname.startsWith('/admin/')) {
+  if (isAdmin) {
     return (
       <Suspense fallback={<p className="wrap sec muted">Cargando el panel…</p>}>
         <Routes>

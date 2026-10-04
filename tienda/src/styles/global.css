@@ -29,6 +29,8 @@ button, input, textarea, select { font: inherit; color: inherit; }
 h1, h2, h3, p { margin: 0; }
 :focus-visible { outline: 3px solid var(--color-focus); outline-offset: 3px; }
 main:focus { outline: none; }
+/* El footer nunca queda a la vista mientras carga una página: nada salta (CLS). */
+#main { min-height: 100dvh; }
 
 .wrap { width: 100%; max-width: var(--container); margin-inline: auto; padding-inline: var(--gutter); }
 @media (min-width: 760px) { .wrap { padding-inline: var(--space-10); } }
@@ -111,6 +113,15 @@ textarea.input { resize: vertical; }
 .ph::after { content: ""; position: absolute; inset: var(--space-3); border: 1px solid var(--color-line); pointer-events: none; }
 .ph.has-photo::after { display: none; }
 .ph img { width: 100%; height: 100%; object-fit: cover; }
+.ph-video { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
+
+/* Entrada del hero en CSS: no espera JS y no parpadea. Reducir movimiento la apaga (regla global). */
+.hero-brand .hero-kicker, .hero-brand .stack-row { animation: rise var(--dur-papel) var(--ease-papel) both; }
+.hero-brand .stack-row { animation-delay: 120ms; }
+.hero-tag .tag-box { animation: apoyar var(--dur-papel) var(--ease-papel) 250ms both; }
+.hero-stamp { animation: sellar var(--dur-sello) var(--ease-sello) 950ms both; }
+@keyframes rise { from { opacity: 0; transform: translateY(18px); } }
+@keyframes apoyar { from { opacity: 0; transform: translateY(-46px) rotate(-6deg); } }
 .ph-note { font: var(--weight-regular) var(--text-hand) / 1.05 var(--font-hand); color: var(--color-pencil); text-align: center; padding: var(--space-6); max-width: 18ch; }
 
 /* ── Header + franja de CP ────────────────────────────── */
@@ -214,6 +225,12 @@ textarea.input { resize: vertical; }
 .hero { display: grid; gap: var(--space-12); padding-block: var(--space-10) var(--space-24); }
 @media (min-width: 900px) { .hero { grid-template-columns: 1.35fr 1fr; align-items: end; padding-block: var(--space-16) var(--space-24); } }
 .hero-logo { width: 100%; color: var(--color-logo); }
+.hero-logo-wrap { position: relative; }
+/* El canvas cubre la zona del wordmark (740/1132 del alto del logo) con aire para que gire */
+.hero-canvas { position: absolute; left: 0; top: -12%; width: 100%; height: calc(65.4% + 24%); opacity: 0; pointer-events: none; transition: opacity var(--dur-papel) var(--ease-papel); }
+.hero-logo-wrap .hero-logo path:first-child { transition: opacity var(--dur-papel) var(--ease-papel); }
+.hero-logo-wrap.is-3d .hero-canvas { opacity: 1; }
+.hero-logo-wrap.is-3d .hero-logo path:first-child { opacity: 0; }
 .hero-kicker { margin-top: var(--space-6); max-width: 24ch; font: var(--weight-regular) var(--text-display-m) / var(--leading-snug) var(--font-display); }
 .hero-brand .stack-row { margin-top: var(--space-6); }
 .hero-tag { position: relative; justify-self: end; width: 100%; max-width: 26rem; }
@@ -264,6 +281,11 @@ textarea.input { resize: vertical; }
 .price-l { font-size: var(--text-display-l); }
 .low { font-size: var(--text-hand); color: var(--color-warning); transform: rotate(-2deg); }
 .sold-out .ph { filter: grayscale(0.6); opacity: 0.75; }
+.prod-skeleton .ph::after { display: none; }
+.sk { display: block; height: var(--space-4); margin: var(--space-2) 0; background: var(--color-placeholder); border-radius: var(--radius-label); }
+.sk-s { width: 40%; height: var(--space-3); }
+.sk-l { width: 80%; height: var(--space-8); }
+.sk-m { width: 55%; height: var(--space-6); }
 .sold-note { font-weight: var(--weight-medium); color: var(--color-text-muted); }
 .stamp-out { position: absolute; right: calc(-1 * var(--space-4)); top: var(--space-4); width: 7rem; color: var(--color-error); }
 

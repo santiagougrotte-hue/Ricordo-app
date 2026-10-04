@@ -40,7 +40,7 @@ export function Sheet({ open, onClose, title, side = 'right', children, footer }
             <Icon name="cerrar" />
           </button>
         </header>
-        <div className="sheet-body">{children}</div>
+        <div className="sheet-body" data-lenis-prevent>{children}</div>
         {footer && <footer className="sheet-foot">{footer}</footer>}
       </div>
     </dialog>

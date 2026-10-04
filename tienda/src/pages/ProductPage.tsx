@@ -10,15 +10,24 @@ import { Stamp } from '../components/Stamp';
 import { ProductLabel } from '../components/ProductLabel';
 import { useDocumentTitle } from './useDocumentTitle';
 import { NotFound } from './NotFound';
+import { useReveal } from '../motion/useMotion';
 
 export function ProductPage() {
   const { slug } = useParams();
   const { products, status, quantityOf, add, openCart } = useStore();
   const product = products.find((p) => p.slug === slug);
   const [qty, setQty] = useState(1);
+  useReveal(`${status}-${slug}`);
   useDocumentTitle(product ? `${PASTA_LABEL[product.pastaType]} de ${product.name} · Ricordo` : 'Ricordo');
 
-  if (status === 'loading') return <p className="wrap sec muted">Cargando…</p>;
+  if (status === 'loading') {
+    return (
+      <div className="wrap pdp" aria-busy="true" style={{ paddingTop: 'var(--space-16)' }}>
+        <div className="pdp-media"><div className="ph" style={{ aspectRatio: '4 / 5' }} /></div>
+        <div className="pdp-info" aria-hidden="true"><span className="sk sk-s" /><span className="sk sk-l" /><span className="sk sk-m" /><span className="sk sk-l" /></div>
+      </div>
+    );
+  }
   if (!product) return <NotFound />;
 
   const inCart = quantityOf(product.id);
@@ -43,7 +52,7 @@ export function ProductPage() {
           <p className="pdp-filling">{product.filling}</p>
           <p className="pdp-desc">{product.description}</p>
 
-          <div className="tag-box pdp-tag">
+          <div className="tag-box pdp-tag" data-reveal="paper">
             <div className="tag-in">
               <div className="tag-row"><span className="label">Unidades</span><span className="fill">12 por caja</span></div>
               <div className="tag-row"><span className="label">Conservación</span><span className="fill">freezer, hasta 3 meses</span></div>

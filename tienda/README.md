@@ -76,7 +76,7 @@ En modo demo, el panel está en `/admin`: cualquier email y la contraseña `rico
 | 3. Tienda: catálogo, CP, carrito, checkout | ✅ funciona en modo demo |
 | 4. Pedido en el servidor (Netlify Function + Turnstile) | ✅ probado contra Postgres real, incluida concurrencia |
 | 5. Panel admin (`/admin`) | ✅ pedidos en tiempo real con aviso, ventas, stock, productos con fotos, zonas, turnos, CSV |
-| 6. Capa visual: logo 3D, GSAP, videos | pendiente |
+| 6. Capa visual: logo 3D, GSAP + ScrollTrigger, Lenis, videos | ✅ diferida y solo en equipos capaces; Lighthouse mobile 96–99 |
 | 7. Auditoría | pendiente |
 
 ## Estructura
@@ -92,6 +92,21 @@ netlify/        functions/create-order.mts
   pages/        Home, Catalog, ProductPage, Checkout, Confirmation
 supabase/       migración + seed
 ```
+
+## Capa visual (etapa 6)
+
+- **Logo 3D** (`src/motion/logo3d.ts`):
+  - three.js extruye el mismo SVG del logo, con luz cálida de cocina, vaivén lento y reacción al mouse, al giroscopio o al dedo. Al scrollear se aleja hacia el catálogo.
+  - Se carga recién con la primera interacción, solo con WebGL, 4 GB o más de memoria, 4 núcleos o más y sin ahorro de datos. Dibuja a 30 cuadros por segundo y se pausa fuera de pantalla.
+  - El logo 2D queda siempre debajo como respaldo.
+  - Para usar un modelo propio: poné `logo.glb` en `public/` y `VITE_LOGO_GLB=/logo.glb`.
+- **Movimiento** (`src/motion/motion.ts`):
+  - GSAP + ScrollTrigger con tres curvas propias: sellar, apoyar y anotar.
+  - Solo anima lo que está debajo del pliegue. Nunca oculta algo que ya se vio.
+  - Lo que espera su animación sigue siendo enfocable con teclado.
+- **Lenis:** scroll suave solo con mouse. En pantallas táctiles queda el scroll nativo.
+- **Videos de producto:** sin sonido, en loop, solo mientras la tarjeta está en pantalla (`preload="none"`).
+- **Reducir movimiento:** apaga todo y el sitio queda completo y estático.
 
 ## Textos y datos a confirmar
 

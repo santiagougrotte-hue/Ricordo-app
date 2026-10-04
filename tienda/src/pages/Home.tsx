@@ -3,13 +3,14 @@ import { useStore } from '../state/store';
 import { useSlots } from '../state/useSlots';
 import { money } from '../lib/money';
 import { slotDay, slotDeadline, slotDeadlineShort, slotHours, slotPart } from '../lib/slots';
-import { Logo } from '../components/Logo';
+import { HeroLogo } from '../components/HeroLogo';
 import { Icon } from '../components/Icon';
 import { Stamp } from '../components/Stamp';
-import { ProductLabel } from '../components/ProductLabel';
+import { ProductLabel, ProductSkeleton } from '../components/ProductLabel';
 import { PostalForm } from '../components/PostalForm';
 import { Placeholder } from '../components/Placeholder';
 import { useDocumentTitle } from './useDocumentTitle';
+import { useReveal } from '../motion/useMotion';
 
 export function Home() {
   useDocumentTitle('Ricordo · Pasta rellena sin TACC en Berazategui');
@@ -17,12 +18,13 @@ export function Home() {
   const { slots } = useSlots('delivery');
   const next = slots?.[0];
   const featured = products.filter((p) => p.featured).slice(0, 3);
+  useReveal(status);
 
   return (
     <>
       <section className="hero wrap">
         <div className="hero-brand">
-          <Logo tagline className="hero-logo" />
+          <HeroLogo />
           <p className="hero-kicker">Pasta rellena hecha a mano, sin TACC. En cajas de 12, directo a tu freezer.</p>
           <div className="stack-row">
             <Link to="/cajas" className="btn btn-yema btn-big">Ver las cajas <Icon name="flecha" size={20} /></Link>
@@ -43,25 +45,25 @@ export function Home() {
       </section>
 
       <section className="sec wrap" aria-labelledby="h-dest">
-        <header className="sec-head">
+        <header className="sec-head" data-reveal="rise">
           <span className="sec-n" aria-hidden="true">01</span>
           <div>
             <h2 id="h-dest" className="d-xl">Las que más salen</h2>
             <p className="lede">Cada caja trae 12. Se cocinan del freezer a la olla, sin descongelar.</p>
           </div>
         </header>
-        {status === 'loading' && <p className="muted">Cargando las cajas…</p>}
-        <div className="featured">
+        <div className="featured" aria-busy={status === 'loading'}>
+          {status === 'loading' && [0, 1, 2].map((i) => <ProductSkeleton key={i} size={i === 0 ? 'l' : 'm'} />)}
           {featured.map((p, i) => (
-            <ProductLabel key={p.id} product={p} size={i === 0 ? 'l' : 'm'} eager={i === 0} />
+            <ProductLabel key={p.id} product={p} size={i === 0 ? 'l' : 'm'} eager={i === 0} parallax={i === 0} />
           ))}
         </div>
-        <p className="more-link"><Link to="/cajas" className="link-big">Ver todos los gustos <Icon name="flecha" /></Link></p>
+        <p className="more-link" data-reveal="rise"><Link to="/cajas" className="link-big">Ver todos los gustos <Icon name="flecha" /></Link></p>
       </section>
 
       <section id="como-pedir" className="sec band-kraft" aria-labelledby="h-como">
         <div className="wrap">
-          <header className="sec-head">
+          <header className="sec-head" data-reveal="rise">
             <span className="sec-n" aria-hidden="true">02</span>
             <div>
               <h2 id="h-como" className="d-xl">Cómo pedir</h2>
@@ -69,31 +71,31 @@ export function Home() {
             </div>
           </header>
           <ol className="steps">
-            <li>
+            <li data-reveal="rise">
               <Icon name="caja" size={32} />
               <h3>Armá tu pedido</h3>
               <p>Elegí los gustos y cuántas cajas. Si mezclás, mejor.</p>
             </li>
-            <li>
+            <li data-reveal="rise">
               <Icon name="reloj" size={32} />
               <h3>Elegí el turno</h3>
               <p>Viernes a la noche o sábado a la mañana. {next && <>El próximo cierra el {slotDeadline(next)}.</>}</p>
             </li>
-            <li>
+            <li data-reveal="rise">
               <Icon name="transfer" size={32} />
               <h3>Pagás como prefieras</h3>
               <p>Transferencia o efectivo. Te confirmamos por WhatsApp.</p>
             </li>
           </ol>
           <div className="cook">
-            <Placeholder note="manos cerrando sorrentinos sobre la mesada" ratio="16 / 10" />
-            <p className="hand cook-note">del freezer a la olla: agua hirviendo con sal, 4 a 6 minutos y listo.</p>
+            <div data-parallax><Placeholder note="manos cerrando sorrentinos sobre la mesada" ratio="16 / 10" /></div>
+            <p className="hand cook-note" data-reveal="hand">del freezer a la olla: agua hirviendo con sal, 4 a 6 minutos y listo.</p>
           </div>
         </div>
       </section>
 
       <section id="zonas" className="sec wrap" aria-labelledby="h-zonas">
-        <header className="sec-head">
+        <header className="sec-head" data-reveal="rise">
           <span className="sec-n" aria-hidden="true">03</span>
           <div>
             <h2 id="h-zonas" className="d-xl">¿Llegamos a tu casa?</h2>
@@ -101,10 +103,10 @@ export function Home() {
           </div>
         </header>
         <div className="zones">
-          <div className="zones-form">
+          <div className="zones-form" data-reveal="rise">
             <PostalForm />
           </div>
-          <table className="zone-table">
+          <table className="zone-table" data-reveal="rise">
             <caption className="sr">Zonas de entrega, costo y compra mínima</caption>
             <thead>
               <tr><th scope="col">Zona</th><th scope="col">Envío</th><th scope="col">Mínimo</th></tr>

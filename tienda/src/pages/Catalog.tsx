@@ -1,8 +1,9 @@
 import { useSearchParams } from 'react-router-dom';
 import { useStore } from '../state/store';
 import { PASTA_LABEL, type PastaType } from '../lib/types';
-import { ProductLabel } from '../components/ProductLabel';
+import { ProductLabel, ProductSkeleton } from '../components/ProductLabel';
 import { useDocumentTitle } from './useDocumentTitle';
+import { useReveal } from '../motion/useMotion';
 
 const TYPES: PastaType[] = ['ravioles', 'sorrentinos', 'cappellacci'];
 
@@ -14,11 +15,12 @@ export function Catalog() {
   const active = TYPES.includes(raw as PastaType) ? (raw as PastaType) : null;
   const list = products.filter((p) => !active || p.pastaType === active);
   // Primero lo que hay; lo agotado al final.
+  useReveal(`${status}-${active}`);
   const sorted = [...list].sort((a, b) => Number(a.stock <= 0) - Number(b.stock <= 0) || a.sortOrder - b.sortOrder);
 
   return (
     <section className="sec wrap catalog" aria-labelledby="h-cat">
-      <header className="sec-head">
+      <header className="sec-head" data-reveal="rise">
         <span className="sec-n" aria-hidden="true">{String(sorted.length).padStart(2, '0')}</span>
         <div>
           <h1 id="h-cat" className="d-xl">{active ? PASTA_LABEL[active] : 'Las cajas'}</h1>
@@ -35,9 +37,9 @@ export function Catalog() {
           </button>
         ))}
       </nav>
-      {status === 'loading' && <p className="muted">Cargando las cajas…</p>}
       {status === 'ready' && sorted.length === 0 && <p className="hand">no hay cajas de este tipo por ahora</p>}
-      <div className="cat-grid" aria-live="polite">
+      <div className="cat-grid" aria-live="polite" aria-busy={status === 'loading'}>
+        {status === 'loading' && [0, 1, 2, 3, 4].map((i) => <ProductSkeleton key={i} size={i === 0 ? 'l' : 'm'} />)}
         {sorted.map((p, i) => (
           <ProductLabel key={p.id} product={p} size={i % 5 === 0 ? 'l' : 'm'} eager={i < 2} level={2} />
         ))}

@@ -10,7 +10,7 @@ export function Footer() {
   return (
     <footer className="site-foot">
       <p className="troquel wrap" aria-hidden="true"><Icon name="tijera" size={20} /></p>
-      <div className="wrap foot-grid">
+      <div className="wrap foot-grid" data-reveal="rise">
         <Logo tagline className="foot-logo" />
         <div>
           <p className="label">Entregas</p>
