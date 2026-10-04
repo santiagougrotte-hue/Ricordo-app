@@ -19,7 +19,7 @@ En modo demo, el panel está en `/admin`: cualquier email y la contraseña `rico
 ## Panel (`/admin`)
 
 - **Pedidos:**
-  - Lista en tiempo real (Supabase Realtime) con filtro por estado y por día de entrega.
+  - Lista que se actualiza sola (cada 8 s) con filtro por estado y por día de entrega.
   - "Qué preparar": cajas por gusto para cada entrega.
   - Detalle con WhatsApp al cliente, mapa, avance de estado y marcar pagado.
   - Cancelar devuelve el stock.
@@ -81,7 +81,7 @@ src/
   lib/          lógica pura y testeada: postal, shipping, slots, money, whatsapp
 server/         createOrder.ts: lógica de la función de Netlify (testeada)
 netlify/        functions/create-order.mts
-  lib/api/      demo.ts (sin backend) · supabase.ts (postgrest-js, liviano) · seed-data.ts
+  lib/api/      demo.ts (sin backend) · netlify.ts / adminNetlify.ts (funciones) · seed-data.ts
   state/        carrito, CP y modalidad de entrega
   components/   piezas de "la caja": Logo, Stamp, ProductLabel, Placeholder, Ruler, Sheet…
   pages/        Home, Catalog, ProductPage, Checkout, Confirmation
