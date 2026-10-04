@@ -39,6 +39,8 @@ const PATHS = {
   cerrar: <path d="M6 6l12 12M18 6 6 18" />,
   flecha: <path d="M4 12h15M13.5 6.5 19 12l-5.5 5.5" />,
   volver: <path d="M20 12H5M10.5 6.5 5 12l5.5 5.5" />,
+  arriba: <path d="M12 20V5M6.5 10.5 12 5l5.5 5.5" />,
+  abajo: <path d="M12 4v15M6.5 13.5 12 19l5.5-5.5" />,
   ok: <path d="M5 12.5 9.5 17 19 7.5" />,
   tijera: (
     <>

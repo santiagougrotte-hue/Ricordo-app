@@ -14,13 +14,37 @@ npm run build      # chequeo de tipos + build de producción
 
 Sin variables de entorno corre en **modo demo**, con 5 productos y 3 zonas de ejemplo. Los pedidos se simulan en el navegador con las mismas reglas que la base: stock, mínimo, envío gratis y turnos.
 
+En modo demo, el panel está en `/admin`: cualquier email y la contraseña `ricordo`. Abrilo en una pestaña y comprá en otra: el pedido aparece al instante.
+
+## Panel (`/admin`)
+
+- **Pedidos:**
+  - Lista en tiempo real (Supabase Realtime) con filtro por estado y por día de entrega.
+  - "Qué preparar": cajas por gusto para cada entrega.
+  - Detalle con WhatsApp al cliente, mapa, avance de estado y marcar pagado.
+  - Cancelar devuelve el stock.
+- **Aviso de pedido nuevo:**
+  - Sonido, notificación del navegador ("Activar avisos"), contador en la pestaña y cartel en pantalla.
+  - Email y/o Telegram desde el servidor.
+- **Ventas:** día, 7 días y mes, con vendido, pedidos, ticket promedio y cajas. Gráficos por día, por gusto y por zona, con tabla accesible.
+- **Stock:** edición rápida, umbral de aviso por producto, mostrar u ocultar.
+- **Productos:** alta y edición. Las fotos se comprimen a WebP en el navegador antes de subir. Videos MP4/WebM de hasta 25 MB.
+- **Zonas:** códigos postales (acepta 1884 o B1884ABC), costo, mínimo y envío gratis, con aviso de CP repetidos.
+- **Ajustes:** WhatsApp, alias de transferencia, email de aviso, retiro en el local y turnos de entrega.
+- **Exportar:** pedidos y ventas a CSV (se abren bien en Excel en español).
+
 ## Conectar Supabase
 
 1. Creá el proyecto en Supabase.
 2. En **SQL Editor**, ejecutá `supabase/migrations/20261003000000_schema.sql`. Crea tablas, funciones, RLS, realtime y el bucket `product-media`.
 3. Opcional: ejecutá `supabase/seed.sql` para cargar los datos de ejemplo.
-4. En **Authentication → Providers → Email**, desactivá los registros (*Allow new users to sign up*). El admin se crea a mano y se agrega a la tabla `admins`. Eso llega en la etapa 5.
-5. Copiá `.env.example` a `.env` y completá `VITE_SUPABASE_URL` y `VITE_SUPABASE_ANON_KEY`.
+4. En **Authentication → Providers → Email**, desactivá los registros (*Allow new users to sign up*).
+5. Creá el usuario admin: **Authentication → Users → Add user** (tu email y una contraseña). Después, en **SQL Editor**:
+   ```sql
+   insert into admins (user_id) select id from auth.users where email = 'tu@email.com';
+   ```
+   Estar logueado no alcanza: solo los usuarios de la tabla `admins` ven y editan pedidos (RLS).
+6. Copiá `.env.example` a `.env` y completá `VITE_SUPABASE_URL` y `VITE_SUPABASE_ANON_KEY`.
 
 ## Deploy en Netlify
 
@@ -51,7 +75,7 @@ Sin variables de entorno corre en **modo demo**, con 5 productos y 3 zonas de ej
 | 2. Esquema + seguridad | ✅ `supabase/migrations` |
 | 3. Tienda: catálogo, CP, carrito, checkout | ✅ funciona en modo demo |
 | 4. Pedido en el servidor (Netlify Function + Turnstile) | ✅ probado contra Postgres real, incluida concurrencia |
-| 5. Panel admin | pendiente |
+| 5. Panel admin (`/admin`) | ✅ pedidos en tiempo real con aviso, ventas, stock, productos con fotos, zonas, turnos, CSV |
 | 6. Capa visual: logo 3D, GSAP, videos | pendiente |
 | 7. Auditoría | pendiente |
 

@@ -12,7 +12,7 @@ import { NotFound } from './pages/NotFound';
 
 const Checkout = lazy(() => import('./pages/Checkout').then((m) => ({ default: m.Checkout })));
 const Confirmation = lazy(() => import('./pages/Confirmation').then((m) => ({ default: m.Confirmation })));
-const AdminSoon = lazy(() => import('./pages/AdminSoon').then((m) => ({ default: m.AdminSoon })));
+const AdminRoot = lazy(() => import('./admin/AdminRoot').then((m) => ({ default: m.AdminRoot })));
 
 function ScrollToTop() {
   const { pathname, hash } = useLocation();
@@ -25,6 +25,17 @@ function ScrollToTop() {
 
 export function App() {
   const { status, reload, announce } = useStore();
+  const { pathname } = useLocation();
+  // El panel vive aparte: sin header/footer/carrito de la tienda y en su propio chunk (supabase-js completo va solo ahí).
+  if (pathname === '/admin' || pathname.startsWith('/admin/')) {
+    return (
+      <Suspense fallback={<p className="wrap sec muted">Cargando el panel…</p>}>
+        <Routes>
+          <Route path="/admin/*" element={<AdminRoot />} />
+        </Routes>
+      </Suspense>
+    );
+  }
   return (
     <>
       <ScrollToTop />
@@ -47,7 +58,6 @@ export function App() {
               <Route path="/cajas/:slug" element={<ProductPage />} />
               <Route path="/checkout" element={<Checkout />} />
               <Route path="/pedido/:number" element={<Confirmation />} />
-              <Route path="/admin/*" element={<AdminSoon />} />
               <Route path="*" element={<NotFound />} />
             </Routes>
           </Suspense>
