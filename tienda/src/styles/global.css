@@ -353,3 +353,5 @@ textarea.input { resize: vertical; }
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation: none !important; transition: none !important; }
 }
+
+.turnstile:empty { display: none; }

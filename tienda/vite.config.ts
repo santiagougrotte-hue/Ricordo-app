@@ -6,5 +6,5 @@ export default defineConfig({
   // styles/tokens.css vive en la raíz del repo (fuente de verdad del brand board).
   server: { fs: { allow: ['..'] } },
   build: { target: 'es2020', cssCodeSplit: true },
-  test: { environment: 'node', include: ['src/**/*.test.ts'] },
+  test: { environment: 'node', include: ['src/**/*.test.ts', 'server/**/*.test.ts'] },
 });

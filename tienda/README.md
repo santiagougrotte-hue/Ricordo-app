@@ -25,7 +25,23 @@ Sin variables de entorno corre en **modo demo**, con 5 productos y 3 zonas de ej
 ## Deploy en Netlify
 
 - **Base directory:** `tienda`. El resto está en `netlify.toml`: build, publish `dist`, redirects SPA y `/api/*`.
-- **Variables:** `VITE_SUPABASE_URL` y `VITE_SUPABASE_ANON_KEY`. La etapa 4 suma `SUPABASE_SERVICE_ROLE_KEY` y `TURNSTILE_SECRET_KEY`, que van solo en el servidor.
+- **Variables públicas** (las ve el navegador): `VITE_SUPABASE_URL`, `VITE_SUPABASE_ANON_KEY` y `VITE_TURNSTILE_SITE_KEY`.
+- **Variables secretas** (solo la función del servidor, **nunca** con prefijo `VITE_`): `SUPABASE_SERVICE_ROLE_KEY` y `TURNSTILE_SECRET_KEY`.
+- **Opcionales para el aviso de pedido nuevo:**
+  - Email: `RESEND_API_KEY` y `NOTIFY_FROM`. El destinatario se carga en el panel, en Configuración → email de aviso.
+  - Telegram: `TELEGRAM_BOT_TOKEN` y `TELEGRAM_CHAT_ID`.
+
+### Cómo se crea un pedido
+
+`POST /api/create-order` (`netlify/functions/create-order.mts` → `server/createOrder.ts`):
+
+1. Valida el token de **Turnstile** con Cloudflare. Sin `TURNSTILE_SECRET_KEY` no acepta pedidos (falla cerrado).
+2. Valida la forma del pedido. No acepta precios ni totales del navegador.
+3. Llama a `create_order()` con la service key. En una sola transacción: bloquea stock, valida, recalcula precios, envío y total, crea el pedido y descuenta stock.
+4. Devuelve el comprobante con lo que quedó guardado.
+5. Avisa al dueño por email y/o Telegram. Si el aviso falla, el pedido queda igual.
+
+**Para probar sin cuenta de Cloudflare**, usá sus claves de test: sitio `1x00000000000000000000AA`, secreto `1x0000000000000000000000000000000AA`.
 
 ## Estado
 
@@ -34,7 +50,7 @@ Sin variables de entorno corre en **modo demo**, con 5 productos y 3 zonas de ej
 | 1. Brand board y tokens | ✅ |
 | 2. Esquema + seguridad | ✅ `supabase/migrations` |
 | 3. Tienda: catálogo, CP, carrito, checkout | ✅ funciona en modo demo |
-| 4. Pedido en el servidor (Netlify Function + Turnstile) | pendiente: en modo Supabase, "Confirmar pedido" todavía no tiene a quién llamar |
+| 4. Pedido en el servidor (Netlify Function + Turnstile) | ✅ probado contra Postgres real, incluida concurrencia |
 | 5. Panel admin | pendiente |
 | 6. Capa visual: logo 3D, GSAP, videos | pendiente |
 | 7. Auditoría | pendiente |
@@ -44,6 +60,8 @@ Sin variables de entorno corre en **modo demo**, con 5 productos y 3 zonas de ej
 ```
 src/
   lib/          lógica pura y testeada: postal, shipping, slots, money, whatsapp
+server/         createOrder.ts: lógica de la función de Netlify (testeada)
+netlify/        functions/create-order.mts
   lib/api/      demo.ts (sin backend) · supabase.ts (postgrest-js, liviano) · seed-data.ts
   state/        carrito, CP y modalidad de entrega
   components/   piezas de "la caja": Logo, Stamp, ProductLabel, Placeholder, Ruler, Sheet…

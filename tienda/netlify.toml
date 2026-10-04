@@ -4,10 +4,7 @@
   publish = "dist"
   functions = "netlify/functions"
 
-[[redirects]]
-  from = "/api/*"
-  to = "/.netlify/functions/:splat"
-  status = 200
+# /api/create-order lo declara la propia función (config.path en netlify/functions/create-order.mts).
 
 # SPA: todas las rutas sirven index.html
 [[redirects]]

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type FormEvent } from 'react';
+import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useStore } from '../state/store';
 import { useSlots } from '../state/useSlots';
@@ -10,6 +10,11 @@ import { slotDay, slotDeadline, slotHours, slotPart } from '../lib/slots';
 import type { OrderError, PaymentMethod } from '../lib/types';
 import { Icon } from '../components/Icon';
 import { MethodToggle } from '../components/MethodToggle';
+import { Turnstile, type TurnstileHandle } from '../components/Turnstile';
+
+const TURNSTILE_KEY = import.meta.env.VITE_TURNSTILE_SITE_KEY as string | undefined;
+// En modo demo no hay servidor que valide, así que no se carga el captcha.
+const NEEDS_CAPTCHA = api.mode === 'supabase';
 import { useDocumentTitle } from './useDocumentTitle';
 
 interface Form {
@@ -32,6 +37,8 @@ export function Checkout() {
   const [errors, setErrors] = useState<Errors>({});
   const [serverError, setServerError] = useState<string | null>(null);
   const [sending, setSending] = useState(false);
+  const [token, setToken] = useState<string | null>(null);
+  const captcha = useRef<TurnstileHandle>(null);
 
   // El CP del checkout manda: recalcula zona y envío en vivo.
   const lookup = useMemo(() => findZone(zones, f.postalCode), [zones, f.postalCode]);
@@ -109,6 +116,12 @@ export function Checkout() {
       document.getElementById(`f-${first}`)?.focus();
       return;
     }
+    if (NEEDS_CAPTCHA && !token) {
+      setServerError(TURNSTILE_KEY
+        ? 'Estamos verificando que no sos un robot. Esperá un segundo y tocá "Confirmar" de nuevo.'
+        : 'La tienda todavía no tiene configurado el captcha (VITE_TURNSTILE_SITE_KEY).');
+      return;
+    }
     const [windowId, date] = f.slot.split('|');
     setSending(true);
     const res = await api.createOrder({
@@ -116,9 +129,11 @@ export function Checkout() {
       deliveryMethod: method, address: method === 'delivery' ? f.address : '', postalCode: method === 'delivery' ? f.postalCode : '',
       notes: f.notes, paymentMethod: f.payment as PaymentMethod, deliveryDate: date, deliveryWindowId: windowId,
       items: items.map((i) => ({ productId: i.product.id, quantity: i.quantity })),
+      turnstileToken: token ?? undefined,
     });
     setSending(false);
     if (!res.ok) {
+      captcha.current?.reset(); // el token de Turnstile sirve una sola vez
       setServerError(explain(res.error));
       requestAnimationFrame(() => document.getElementById('server-error')?.focus());
       return;
@@ -240,6 +255,7 @@ export function Checkout() {
               )}
             </div>
           </div>
+          {NEEDS_CAPTCHA && TURNSTILE_KEY && <Turnstile ref={captcha} siteKey={TURNSTILE_KEY} onToken={setToken} />}
           {serverError && <p id="server-error" className="server-error" tabIndex={-1} role="alert">{serverError}</p>}
           <button type="submit" className="btn btn-ink btn-wide btn-big" disabled={sending} aria-busy={sending}>
             {sending ? 'Enviando…' : <>Confirmar pedido {total !== null && `· ${money(total)}`}</>}
