@@ -20,7 +20,7 @@ export function AdminRoot() {
     void adminApi.getSession().then(setSession);
   }, []);
 
-  if (session === undefined) return <p className="adm-wrap muted">Cargando…</p>;
+  if (session === undefined) return <main className="adm-wrap muted">Cargando…</main>;
   if (!session) return <Login onDone={(email) => setSession({ email })} />;
   return (
     <AdminProvider>
@@ -53,7 +53,7 @@ function Shell({ email, onSignOut }: { email: string; onSignOut: () => void }) {
         </nav>
       </header>
       {adminApi.mode === 'demo' && (
-        <p className="demo-bar">Panel en modo demo: los pedidos que hagas en la tienda (en otra pestaña) aparecen acá al instante.</p>
+        <aside className="demo-bar" aria-label="Aviso">Panel en modo demo: los pedidos que hagas en la tienda (en otra pestaña) aparecen acá al instante.</aside>
       )}
       <main className="adm-wrap adm-main" id="main">
         <Routes>

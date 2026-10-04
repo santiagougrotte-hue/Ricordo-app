@@ -144,3 +144,12 @@
 .adm-login-box { width: min(26rem, 100%); }
 .adm-login-box .tag-in { display: grid; gap: var(--space-4); padding: var(--space-6); }
 .adm-login-logo { width: 9rem; color: var(--color-logo); }
+
+@media (max-width: 639px) {
+  .adm-chart-head h2 { font-size: var(--text-display-s); }
+  .adm-chart-head .link { white-space: nowrap; }
+  .hbars li { grid-template-columns: 1fr auto; grid-template-areas: 'label value' 'track track'; row-gap: var(--space-1); }
+  .hbars-label { grid-area: label; white-space: normal; }
+  .hbars-v { grid-area: value; min-width: 0; }
+  .hbars-track { grid-area: track; }
+}

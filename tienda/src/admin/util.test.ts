@@ -13,6 +13,9 @@ describe('arWhatsapp', () => {
 it('arDay usa la hora de Buenos Aires', () => {
   expect(arDay('2026-10-04T02:30:00Z')).toBe('2026-10-03'); // 23:30 del sábado en AR
 });
+it('CSV: un texto que empieza con = no se ejecuta como fórmula', () => {
+  expect(toCsv([['=HYPERLINK("x")', -5]])).toBe('\uFEFF"\'=HYPERLINK(""x"")";-5');
+});
 it('CSV con ; y comillas', () => {
   expect(toCsv([['a;b', 'dijo "hola"', 3]])).toBe('﻿"a;b";"dijo ""hola""";3');
 });

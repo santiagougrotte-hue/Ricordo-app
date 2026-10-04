@@ -8,7 +8,7 @@ import type { Logo3D } from '../motion/logo3d';
  * En equipos capaces, cuando el navegador está libre, se monta el 3D encima y el 2D se desvanece.
  */
 export function HeroLogo() {
-  const wrap = useRef<HTMLDivElement>(null);
+  const wrap = useRef<HTMLHeadingElement>(null);
   const canvas = useRef<HTMLCanvasElement>(null);
   const [ready, setReady] = useState(false);
 
@@ -81,9 +81,9 @@ export function HeroLogo() {
   }, []);
 
   return (
-    <div ref={wrap} className={'hero-logo-wrap' + (ready ? ' is-3d' : '')}>
+    <h1 ref={wrap} className={'hero-logo-wrap' + (ready ? ' is-3d' : '')}>
       <Logo tagline className="hero-logo" />
       <canvas ref={canvas} className="hero-canvas" aria-hidden="true" />
-    </div>
+    </h1>
   );
 }

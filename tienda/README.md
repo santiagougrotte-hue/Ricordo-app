@@ -77,7 +77,7 @@ En modo demo, el panel está en `/admin`: cualquier email y la contraseña `rico
 | 4. Pedido en el servidor (Netlify Function + Turnstile) | ✅ probado contra Postgres real, incluida concurrencia |
 | 5. Panel admin (`/admin`) | ✅ pedidos en tiempo real con aviso, ventas, stock, productos con fotos, zonas, turnos, CSV |
 | 6. Capa visual: logo 3D, GSAP + ScrollTrigger, Lenis, videos | ✅ diferida y solo en equipos capaces; Lighthouse mobile 96–99 |
-| 7. Auditoría | pendiente |
+| 7. Auditoría | ✅ ver [`docs/AUDITORIA.md`](../docs/AUDITORIA.md) |
 
 ## Estructura
 

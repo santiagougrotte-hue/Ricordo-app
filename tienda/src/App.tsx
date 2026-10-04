@@ -46,7 +46,7 @@ export function App() {
     <>
       <ScrollToTop />
       {api.mode === 'demo' && (
-        <p className="demo-bar">Modo demo: datos de ejemplo, los pedidos no se guardan en ningún lado.</p>
+        <aside className="demo-bar" aria-label="Aviso">Modo demo: datos de ejemplo, los pedidos no se guardan en ningún lado.</aside>
       )}
       <Header />
       <main id="main" tabIndex={-1}>

@@ -48,7 +48,9 @@ export function arWhatsapp(phone: string): string | null {
 
 // ── CSV (separador ";" y BOM para que Excel en español lo abra bien) ──
 function cell(v: unknown): string {
-  const s = v === null || v === undefined ? '' : String(v);
+  let s = v === null || v === undefined ? '' : String(v);
+  // Evita inyección de fórmulas en Excel: un nombre como "=HYPERLINK(...)" queda como texto.
+  if (typeof v === 'string' && /^[=+\-@\t\r]/.test(s)) s = "'" + s;
   return /[";\n\r]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
 }
 export function toCsv(rows: unknown[][]): string {
