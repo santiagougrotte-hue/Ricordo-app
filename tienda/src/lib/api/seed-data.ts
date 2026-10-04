@@ -9,6 +9,8 @@ import fotoOsobuco from '../../assets/fotos/osobuco-mano.webp';
 import fotoOsobucoIng from '../../assets/fotos/osobuco-ingredientes.webp';
 import fotoEspinaca from '../../assets/fotos/espinaca-mano.webp';
 import fotoEspinacaIng from '../../assets/fotos/espinaca-ingredientes.webp';
+import fotoJyq from '../../assets/fotos/jamon-queso-mano.webp';
+import fotoJyqIng from '../../assets/fotos/jamon-queso-ingredientes.webp';
 
 // Datos de ejemplo — los mismos que netlify/database/migrations/*_example-data. Precios, rellenos y CPs son ilustrativos.
 // Gusto real (igual que netlify/database/migrations/*_gusto-cabutia).
@@ -74,6 +76,26 @@ export const ESPINACA: Product = {
   ],
 };
 
+// Igual que netlify/database/migrations/*_gusto-jamon-queso.
+export const JAMON_QUESO: Product = {
+  id: '00000000-0000-4000-8000-000000000013',
+  slug: 'sorrentinos-jamon-queso',
+  name: 'Jamón y queso',
+  pastaType: 'sorrentinos',
+  filling: 'Jamón cocido, muzzarella y queso sardo',
+  description: 'Sorrentinos de jamón cocido, muzzarella y queso sardo. Cada caja trae 12 sorrentinos.',
+  unitsPerBox: 12,
+  price: 11000,
+  stock: 20,
+  lowStockThreshold: 4,
+  featured: true,
+  sortOrder: 4,
+  media: [
+    { id: 'm-jyq-1', url: fotoJyq, kind: 'photo', alt: 'Sorrentino de jamón y queso en la mano, sobre la bandeja enharinada', isCover: true, sortOrder: 0 },
+    { id: 'm-jyq-2', url: fotoJyqIng, kind: 'photo', alt: 'Lo que lleva: jamón cocido y muzzarella, alrededor de un sorrentino', isCover: false, sortOrder: 1 },
+  ],
+};
+
 /** Productos de ejemplo: ocultos en la tienda (sirven de modelo en el panel). */
 export const EXAMPLE_IDS = [1, 2, 3, 4, 5].map((n) => `00000000-0000-4000-8000-00000000000${n}`);
 
@@ -81,6 +103,7 @@ export const SEED_PRODUCTS: Product[] = [
   CABUTIA,
   OSOBUCO,
   ESPINACA,
+  JAMON_QUESO,
   {
     id: '00000000-0000-4000-8000-000000000001',
     slug: 'sorrentinos-jamon-muzza-nuez',

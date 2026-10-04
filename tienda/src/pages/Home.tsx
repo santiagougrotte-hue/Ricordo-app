@@ -21,11 +21,11 @@ export function Home() {
   const { products, zones, settings, status } = useStore();
   const { slots } = useSlots('delivery');
   const next = slots?.[0];
-  const featured = products.filter((p) => p.featured).slice(0, 3);
+  const featured = products.filter((p) => p.featured).slice(0, 4);
   // Con un solo gusto destacado, la sección se arma como nota editorial alrededor de ese gusto.
   const single = featured.length === 1 ? featured[0] : null;
-  // Dos gustos: van parejos, en dos columnas escalonadas y los dos con descripción.
-  const pair = featured.length === 2;
+  // Dos o cuatro gustos: van parejos, en dos columnas escalonadas y todos con descripción.
+  const pair = featured.length === 2 || featured.length === 4;
   // Si todos los gustos están destacados, la sección es la carta completa y no hace falta "ver todos".
   const all = featured.length > 0 && featured.length === products.length;
   const second = single?.media.filter((m) => m.kind === 'photo')[1];
@@ -93,7 +93,7 @@ export function Home() {
             </div>
           )}
         </div>
-        {!single && !pair && !all && <p className="more-link" data-reveal="rise"><Link to="/cajas" className="link-big">Ver todos los gustos <Icon name="flecha" /></Link></p>}
+        {!single && !all && <p className="more-link" data-reveal="rise"><Link to="/cajas" className="link-big">Ver todos los gustos <Icon name="flecha" /></Link></p>}
       </section>
 
       <section id="como-pedir" className="sec band-kraft" aria-labelledby="h-como">
