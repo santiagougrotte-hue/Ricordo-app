@@ -41,49 +41,36 @@ npm run build:html   # → dist-html/index.html
 
 Es la tienda entera en modo demo, panel incluido (`#/admin`, contraseña `ricordo`), en un solo `.html` que se abre con doble clic, sin servidor. Sirve para mostrarla o probarla en el celular. Hay una copia en [`docs/ricordo-tienda-demo.html`](../docs/ricordo-tienda-demo.html).
 
-## Conectar Supabase
+## Publicar en Netlify (todo en Netlify: web, base de datos y fotos)
 
-1. Creá el proyecto en Supabase.
-2. En **SQL Editor**, ejecutá `supabase/migrations/20261003000000_schema.sql`. Crea tablas, funciones, RLS, realtime y el bucket `product-media`.
-3. Opcional: ejecutá `supabase/seed.sql` para cargar los datos de ejemplo.
-4. En **Authentication → Providers → Email**, desactivá los registros (*Allow new users to sign up*).
-5. Creá el usuario admin: **Authentication → Users → Add user** (tu email y una contraseña). Después, en **SQL Editor**:
-   ```sql
-   insert into admins (user_id) select id from auth.users where email = 'tu@email.com';
-   ```
-   Estar logueado no alcanza: solo los usuarios de la tabla `admins` ven y editan pedidos (RLS).
-6. Copiá `.env.example` a `.env` y completá `VITE_SUPABASE_URL` y `VITE_SUPABASE_ANON_KEY`.
+No hay que crear ninguna base a mano: **Netlify Database** (Postgres) se crea sola en el primer deploy y aplica las migraciones de `netlify/database/migrations/` (esquema + datos de ejemplo). Las fotos y videos van a **Netlify Blobs**.
 
-## Deploy en Netlify
+1. En app.netlify.com → proyecto **ricordo-pastas** → *Site configuration → Build & deploy → Link repository* → GitHub `santiagougrotte-hue/Ricordo-app`.
+   - **Base directory:** `tienda` · **Branch:** la que quieras publicar (por ejemplo `main` después de mergear).
+   - El resto lo toma de `netlify.toml`. Cada push publica solo.
+2. Variables (*Site configuration → Environment variables*), ya cargadas en ricordo-pastas:
+   - `ADMIN_EMAIL`, `ADMIN_PASSWORD` (secreta): acceso al panel `/admin`.
+   - `SESSION_SECRET` (secreta): firma la sesión del panel.
+   - `VITE_TURNSTILE_SITE_KEY` / `TURNSTILE_SECRET_KEY`: captcha. Hoy están las **claves de prueba** de Cloudflare (siempre pasan). Reemplazalas por las tuyas (gratis en Cloudflare → Turnstile) para tener protección real contra bots.
+   - Opcionales: `RESEND_API_KEY` + `NOTIFY_FROM` (email de pedido nuevo), `TELEGRAM_BOT_TOKEN` + `TELEGRAM_CHAT_ID`.
+3. Entrá a `/admin` y cargá tus datos reales: productos y fotos, zonas, WhatsApp, alias, email de aviso y turnos.
 
-- **Base directory:** `tienda`. El resto está en `netlify.toml`: build, publish `dist`, redirects SPA y `/api/*`.
-- **Variables públicas** (las ve el navegador): `VITE_SUPABASE_URL`, `VITE_SUPABASE_ANON_KEY` y `VITE_TURNSTILE_SITE_KEY`.
-- **Variables secretas** (solo la función del servidor, **nunca** con prefijo `VITE_`): `SUPABASE_SERVICE_ROLE_KEY` y `TURNSTILE_SECRET_KEY`.
-- **Opcionales para el aviso de pedido nuevo:**
-  - Email: `RESEND_API_KEY` y `NOTIFY_FROM`. El destinatario se carga en el panel, en Configuración → email de aviso.
-  - Telegram: `TELEGRAM_BOT_TOKEN` y `TELEGRAM_CHAT_ID`.
+### Probar el backend en local
 
-### Cómo se crea un pedido
-
-`POST /api/create-order` (`netlify/functions/create-order.mts` → `server/createOrder.ts`):
-
-1. Valida el token de **Turnstile** con Cloudflare. Sin `TURNSTILE_SECRET_KEY` no acepta pedidos (falla cerrado).
-2. Valida la forma del pedido. No acepta precios ni totales del navegador.
-3. Llama a `create_order()` con la service key. En una sola transacción: bloquea stock, valida, recalcula precios, envío y total, crea el pedido y descuenta stock.
-4. Devuelve el comprobante con lo que quedó guardado.
-5. Avisa al dueño por email y/o Telegram. Si el aviso falla, el pedido queda igual.
-
-**Para probar sin cuenta de Cloudflare**, usá sus claves de test: sitio `1x00000000000000000000AA`, secreto `1x0000000000000000000000000000000AA`.
+```bash
+npm run test:db      # pruebas contra un Postgres real (TEST_DATABASE_URL)
+DATABASE_URL=postgres://... ADMIN_EMAIL=... ADMIN_PASSWORD=... SESSION_SECRET=... npx tsx server/localServer.mts
+```
 
 ## Estado
 
 | Etapa | |
 |---|---|
 | 1. Brand board y tokens | ✅ |
-| 2. Esquema + seguridad | ✅ `supabase/migrations` |
+| 2. Esquema + seguridad | ✅ `netlify/database/migrations` (Netlify Database) |
 | 3. Tienda: catálogo, CP, carrito, checkout | ✅ funciona en modo demo |
-| 4. Pedido en el servidor (Netlify Function + Turnstile) | ✅ probado contra Postgres real, incluida concurrencia |
-| 5. Panel admin (`/admin`) | ✅ pedidos en tiempo real con aviso, ventas, stock, productos con fotos, zonas, turnos, CSV |
+| 4. Pedido en el servidor (Netlify Function + Turnstile) | ✅ probado contra Postgres real: concurrencia, límites por IP |
+| 5. Panel admin (`/admin`) | ✅ pedidos (aviso a los ~8 s), ventas, stock, productos con fotos, zonas, turnos, CSV |
 | 6. Capa visual: logo 3D, GSAP + ScrollTrigger, Lenis, videos | ✅ diferida y solo en equipos capaces; Lighthouse mobile 96–99 |
 | 7. Auditoría | ✅ ver [`docs/AUDITORIA.md`](../docs/AUDITORIA.md) |
 
@@ -98,7 +85,8 @@ netlify/        functions/create-order.mts
   state/        carrito, CP y modalidad de entrega
   components/   piezas de "la caja": Logo, Stamp, ProductLabel, Placeholder, Ruler, Sheet…
   pages/        Home, Catalog, ProductPage, Checkout, Confirmation
-supabase/       migración + seed
+netlify/        functions/ (catalog, create-order, admin, media) · database/migrations/
+server/         lógica de las funciones (testeada contra Postgres real)
 ```
 
 ## Capa visual (etapa 6)
