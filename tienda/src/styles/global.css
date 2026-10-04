@@ -20,7 +20,7 @@ body::before {
   inset: 0;
   z-index: var(--z-toast);
   pointer-events: none;
-  background: url('/grain.webp') repeat;
+  background: url('../assets/grain.webp') repeat;
   opacity: var(--grain-opacity);
 }
 img, video, svg { display: block; max-width: 100%; }

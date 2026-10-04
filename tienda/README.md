@@ -33,6 +33,14 @@ En modo demo, el panel está en `/admin`: cualquier email y la contraseña `rico
 - **Ajustes:** WhatsApp, alias de transferencia, email de aviso, retiro en el local y turnos de entrega.
 - **Exportar:** pedidos y ventas a CSV (se abren bien en Excel en español).
 
+### Versión de un solo archivo
+
+```bash
+npm run build:html   # → dist-html/index.html
+```
+
+Es la tienda entera en modo demo, panel incluido (`#/admin`, contraseña `ricordo`), en un solo `.html` que se abre con doble clic, sin servidor. Sirve para mostrarla o probarla en el celular. Hay una copia en [`docs/ricordo-tienda-demo.html`](../docs/ricordo-tienda-demo.html).
+
 ## Conectar Supabase
 
 1. Creá el proyecto en Supabase.

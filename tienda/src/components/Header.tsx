@@ -24,8 +24,8 @@ export function Header() {
           </Link>
           <nav className="head-nav" aria-label="Principal">
             <NavLink to="/cajas">Las cajas</NavLink>
-            <a href="/#como-pedir">Cómo pedir</a>
-            <a href="/#zonas">Zonas</a>
+            <Link to="/#como-pedir">Cómo pedir</Link>
+            <Link to="/#zonas">Zonas</Link>
           </nav>
           <button type="button" className="cart-btn" onClick={openCart} aria-label={`Tu pedido, ${count} ${count === 1 ? 'caja' : 'cajas'}`}>
             <Icon name="bolsa" />
