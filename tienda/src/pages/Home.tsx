@@ -8,7 +8,11 @@ import { Icon } from '../components/Icon';
 import { Stamp } from '../components/Stamp';
 import { ProductLabel, ProductSkeleton } from '../components/ProductLabel';
 import { PostalForm } from '../components/PostalForm';
-import { Placeholder } from '../components/Placeholder';
+import { srcSet, InViewVideo as AutoVideo } from '../components/ProductMediaView';
+import { PASTA_LABEL } from '../lib/types';
+import fotoIngredientes from '../assets/fotos/cabutia-ingredientes.webp';
+import videoAmasado from '../assets/fotos/amasado-masa-nero.mp4';
+import posterAmasado from '../assets/fotos/amasado-masa-nero-poster.webp';
 import { useDocumentTitle } from './useDocumentTitle';
 import { useReveal } from '../motion/useMotion';
 
@@ -18,6 +22,9 @@ export function Home() {
   const { slots } = useSlots('delivery');
   const next = slots?.[0];
   const featured = products.filter((p) => p.featured).slice(0, 3);
+  // Con un solo gusto destacado, la sección se arma como nota editorial alrededor de ese gusto.
+  const single = featured.length === 1 ? featured[0] : null;
+  const second = single?.media.filter((m) => m.kind === 'photo')[1];
   useReveal(status);
 
   return (
@@ -48,17 +55,41 @@ export function Home() {
         <header className="sec-head" data-reveal="rise">
           <span className="sec-n" aria-hidden="true">01</span>
           <div>
-            <h2 id="h-dest" className="d-xl">Las que más salen</h2>
-            <p className="lede">Cada caja trae 12. Se cocinan del freezer a la olla, sin descongelar.</p>
+            <h2 id="h-dest" className="d-xl">{single ? `${PASTA_LABEL[single.pastaType]} de ${single.name.toLowerCase()}` : 'Las que más salen'}</h2>
+            <p className="lede">{single ? `${single.filling}. Caja de 12.` : 'Cada caja trae 12. Se cocinan del freezer a la olla, sin descongelar.'}</p>
           </div>
         </header>
-        <div className="featured" aria-busy={status === 'loading'}>
+        <div className={'featured' + (single ? ' featured-single' : '')} aria-busy={status === 'loading'}>
           {status === 'loading' && [0, 1, 2].map((i) => <ProductSkeleton key={i} size={i === 0 ? 'l' : 'm'} />)}
           {featured.map((p, i) => (
             <ProductLabel key={p.id} product={p} size={i === 0 ? 'l' : 'm'} eager={i === 0} parallax={i === 0} />
           ))}
+          {single && (
+            <div className="feature-side">
+              <p className="hand feature-note" data-reveal="hand">¿ya los probaste?</p>
+              {second && (
+                <figure className="taped feature-cut" data-reveal="paper">
+                  <span className="tape" aria-hidden="true" />
+                  <img src={second.url} srcSet={srcSet(second.url)} sizes="(min-width: 900px) 30vw, 80vw" alt={second.alt} loading="lazy" decoding="async" />
+                </figure>
+              )}
+              {single.slug === 'sorrentinos-cabutia' && (
+                <figure className="taped feature-collage" data-reveal="paper" data-parallax>
+                  <span className="tape" aria-hidden="true" />
+                  <img
+                    src={fotoIngredientes}
+                    srcSet={srcSet('/fotos/cabutia-ingredientes.webp')}
+                    sizes="(min-width: 900px) 28vw, 70vw"
+                    alt="Lo que lleva: cabutia asada, sardo, almendras, muzzarella y ajo asado, alrededor de un sorrentino de masa nero"
+                    loading="lazy"
+                    decoding="async"
+                  />
+                </figure>
+              )}
+            </div>
+          )}
         </div>
-        <p className="more-link" data-reveal="rise"><Link to="/cajas" className="link-big">Ver todos los gustos <Icon name="flecha" /></Link></p>
+        {!single && <p className="more-link" data-reveal="rise"><Link to="/cajas" className="link-big">Ver todos los gustos <Icon name="flecha" /></Link></p>}
       </section>
 
       <section id="como-pedir" className="sec band-kraft" aria-labelledby="h-como">
@@ -88,7 +119,10 @@ export function Home() {
             </li>
           </ol>
           <div className="cook">
-            <div data-parallax><Placeholder note="manos cerrando sorrentinos sobre la mesada" ratio="16 / 10" /></div>
+            <figure className="taped cook-video" data-parallax>
+              <span className="tape" aria-hidden="true" />
+              <AutoVideo src={videoAmasado} poster={posterAmasado} label="Amasando la masa nero a mano y sorrentinos recién cerrados" />
+            </figure>
             <p className="hand cook-note" data-reveal="hand">del freezer a la olla: agua hirviendo con sal, 4 a 6 minutos y listo.</p>
           </div>
         </div>

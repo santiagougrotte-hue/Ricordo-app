@@ -11,7 +11,7 @@ export function mapProduct(r: Row): Product & { active: boolean } {
     unitsPerBox: r.units_per_box, price: r.price, stock: r.stock, lowStockThreshold: r.low_stock_threshold,
     featured: r.featured, sortOrder: r.sort_order, active: r.active,
     media: ((r.media ?? []) as Row[])
-      .map((m) => ({ id: m.id, url: `/media/${m.url}`, kind: m.kind, alt: m.alt, isCover: m.is_cover, sortOrder: m.sort_order }))
+      .map((m) => ({ id: m.id, url: String(m.url).startsWith('/') ? m.url : `/media/${m.url}`, kind: m.kind, alt: m.alt, isCover: m.is_cover, sortOrder: m.sort_order }))
       .sort((a, b) => Number(b.isCover) - Number(a.isCover) || a.sortOrder - b.sortOrder),
   };
 }

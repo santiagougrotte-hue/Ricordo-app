@@ -13,6 +13,8 @@ export function Catalog() {
   const [params, setParams] = useSearchParams();
   const raw = params.get('tipo');
   const active = TYPES.includes(raw as PastaType) ? (raw as PastaType) : null;
+  // Solo los tipos que tienen gustos cargados (sin filtros vacíos).
+  const present = TYPES.filter((t) => products.some((p) => p.pastaType === t));
   const list = products.filter((p) => !active || p.pastaType === active);
   // Primero lo que hay; lo agotado al final.
   useReveal(`${status}-${active}`);
@@ -27,16 +29,16 @@ export function Catalog() {
           <p className="lede">Todas de 12 unidades, sin TACC. Se guardan en el freezer hasta 3 meses.</p>
         </div>
       </header>
-      <nav className="filters" aria-label="Filtrar por tipo de pasta">
+      {present.length > 1 && <nav className="filters" aria-label="Filtrar por tipo de pasta">
         <button type="button" aria-pressed={!active} onClick={() => setParams({})}>
           Todas <span>{products.length}</span>
         </button>
-        {TYPES.map((t) => (
+        {present.map((t) => (
           <button key={t} type="button" aria-pressed={active === t} onClick={() => setParams({ tipo: t })}>
             {PASTA_LABEL[t]} <span>{products.filter((p) => p.pastaType === t).length}</span>
           </button>
         ))}
-      </nav>
+      </nav>}
       {status === 'ready' && sorted.length === 0 && <p className="hand">no hay cajas de este tipo por ahora</p>}
       <div className="cat-grid" aria-live="polite" aria-busy={status === 'loading'}>
         {status === 'loading' && [0, 1, 2, 3, 4].map((i) => <ProductSkeleton key={i} size={i === 0 ? 'l' : 'm'} />)}

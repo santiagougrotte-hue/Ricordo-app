@@ -2,10 +2,10 @@
 // así lo que se compra en la tienda aparece en el panel y lo que se edita en el panel se ve en la tienda.
 import type { Product, ShippingZone, StoreSettings } from '../types';
 import type { DeliveryWindow } from '../slots';
-import { SEED_PRODUCTS, SEED_SETTINGS, SEED_WINDOWS, SEED_ZONES } from './seed-data';
+import { EXAMPLE_IDS, SEED_PRODUCTS, SEED_SETTINGS, SEED_WINDOWS, SEED_ZONES } from './seed-data';
 import type { AdminOrder, AdminSettings } from './adminTypes';
 
-const KEY = 'ricordo-demo-db-v1';
+const KEY = 'ricordo-demo-db-v2';
 const CHANNEL = 'ricordo-demo';
 
 export interface DemoDb {
@@ -27,7 +27,7 @@ function fresh(): DemoDb {
     settings: { ...(SEED_SETTINGS as StoreSettings), notifyEmail: '' },
     orders: [],
     nextNumber: 1001,
-    inactive: [],
+    inactive: [...EXAMPLE_IDS],
   };
 }
 

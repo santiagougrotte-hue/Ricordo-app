@@ -1,8 +1,38 @@
 import type { Product, ShippingZone, StoreSettings } from '../types';
 import type { DeliveryWindow } from '../slots';
+import fotoMano from '../../assets/fotos/cabutia-mano.webp';
+import fotoCorte from '../../assets/fotos/cabutia-corte.webp';
+import fotoNero from '../../assets/fotos/cabutia-masa-nero.webp';
+import videoAmasado from '../../assets/fotos/amasado-masa-nero.mp4';
 
 // Datos de ejemplo — los mismos que netlify/database/migrations/*_example-data. Precios, rellenos y CPs son ilustrativos.
+// Gusto real (igual que netlify/database/migrations/*_gusto-cabutia).
+export const CABUTIA: Product = {
+  id: '00000000-0000-4000-8000-000000000010',
+  slug: 'sorrentinos-cabutia',
+  name: 'Cabutia',
+  pastaType: 'sorrentinos',
+  filling: 'Cabutia asada, ajo asado, muzzarella, sardo y almendras picadas',
+  description: 'Nueva masa nero: negra por fuera, naranja por dentro. Cada caja trae 12 sorrentinos.',
+  unitsPerBox: 12,
+  price: 11500,
+  stock: 20,
+  lowStockThreshold: 4,
+  featured: true,
+  sortOrder: 1,
+  media: [
+    { id: 'm-cab-1', url: fotoMano, kind: 'photo', alt: 'Sorrentino de masa nero en la mano, sobre la bandeja enharinada', isCover: true, sortOrder: 0 },
+    { id: 'm-cab-2', url: fotoCorte, kind: 'photo', alt: 'Sorrentino de cabutia cortado al medio, con el relleno naranja a la vista', isCover: false, sortOrder: 1 },
+    { id: 'm-cab-3', url: fotoNero, kind: 'photo', alt: 'Sorrentinos de masa nero enharinados sobre la mesada', isCover: false, sortOrder: 2 },
+    { id: 'm-cab-4', url: videoAmasado, kind: 'video', alt: 'Amasando la masa nero y sorrentinos recién hechos', isCover: false, sortOrder: 3 },
+  ],
+};
+
+/** Productos de ejemplo: ocultos en la tienda (sirven de modelo en el panel). */
+export const EXAMPLE_IDS = [1, 2, 3, 4, 5].map((n) => `00000000-0000-4000-8000-00000000000${n}`);
+
 export const SEED_PRODUCTS: Product[] = [
+  CABUTIA,
   {
     id: '00000000-0000-4000-8000-000000000001',
     slug: 'sorrentinos-jamon-muzza-nuez',

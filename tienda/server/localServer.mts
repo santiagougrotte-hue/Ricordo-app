@@ -11,7 +11,7 @@ import { memoryMedia } from './media';
 
 const DIST = new URL('../dist/', import.meta.url).pathname;
 const media = memoryMedia();
-const TYPES: Record<string, string> = { '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/css', '.woff2': 'font/woff2', '.woff': 'font/woff', '.svg': 'image/svg+xml', '.webp': 'image/webp', '.txt': 'text/plain' };
+const TYPES: Record<string, string> = { '.mp4': 'video/mp4', '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/css', '.woff2': 'font/woff2', '.woff': 'font/woff', '.svg': 'image/svg+xml', '.webp': 'image/webp', '.txt': 'text/plain' };
 // Turnstile local: acepta solo el token de prueba de Cloudflare.
 const fakeFetch = (async (url: string | URL | Request, init?: RequestInit) => {
   if (String(url).includes('siteverify')) return Response.json({ success: new URLSearchParams(String(init?.body)).get('response') === 'XXXX.DUMMY.TOKEN.XXXX' });
@@ -32,6 +32,10 @@ createServer(async (nreq, nres) => {
       res = Response.json(r.body, { status: r.status });
     } else if (url.pathname.startsWith('/api/admin/')) {
       res = await handleAdmin(req, url.pathname.replace(/^\/api\/admin\/?/, ''), process.env, { query, media: async () => media, ip: '127.0.0.1', secure: false });
+    } else if (url.pathname === '/.netlify/images') {
+      // Sustituto del Image CDN: devuelve el original sin redimensionar.
+      const src = url.searchParams.get('url') ?? '';
+      res = new Response(null, { status: 302, headers: { Location: src } });
     } else if (url.pathname.startsWith('/media/')) {
       const f = await media.get(url.pathname.slice(7));
       res = f ? new Response(f.data, { headers: { 'Content-Type': f.contentType } }) : new Response('404', { status: 404 });

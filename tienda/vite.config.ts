@@ -1,7 +1,7 @@
 import { defineConfig } from 'vitest/config';
 import react from '@vitejs/plugin-react';
 import type { Plugin } from 'vite';
-import { readFileSync } from 'node:fs';
+import { cpSync, readFileSync } from 'node:fs';
 import { viteSingleFile } from 'vite-plugin-singlefile';
 
 // `npm run build:html` → dist-html/index.html: la tienda entera (modo demo) en un solo archivo.
@@ -22,6 +22,17 @@ function preloadFonts(): Plugin {
   };
 }
 
+/** Fotos y videos reales de los gustos: la base los referencia como /fotos/... (se copian tal cual al build). */
+function copyFotos(): Plugin {
+  return {
+    name: 'ricordo-copy-fotos',
+    apply: 'build',
+    closeBundle() {
+      cpSync(new URL('./src/assets/fotos', import.meta.url), new URL('./dist/fotos', import.meta.url), { recursive: true });
+    },
+  };
+}
+
 /** En el archivo único, el ícono de la pestaña va embebido (no hay /favicon.svg al lado). */
 function inlineFavicon(): Plugin {
   return {
@@ -37,7 +48,7 @@ function inlineFavicon(): Plugin {
 }
 
 export default defineConfig({
-  plugins: SINGLE ? [react(), viteSingleFile(), inlineFavicon()] : [react(), preloadFonts()],
+  plugins: SINGLE ? [react(), viteSingleFile(), inlineFavicon()] : [react(), preloadFonts(), copyFotos()],
   // styles/tokens.css vive en la raíz del repo (fuente de verdad del brand board).
   server: { fs: { allow: ['..'] } },
   // El chunk 3D (three.js) pesa ~590 KB sin comprimir: se carga diferido y solo en equipos capaces.

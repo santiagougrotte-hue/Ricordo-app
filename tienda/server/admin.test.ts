@@ -138,3 +138,18 @@ describe.skipIf(!TEST_DB)('API del panel contra Netlify Database (Postgres real)
     expect(r.setCookie).toMatch(/Max-Age=0/);
   });
 });
+
+describe.skipIf(!TEST_DB)('migraciones: gusto real cargado', () => {
+  it('la tienda muestra solo la cabutia, a $11.500, con fotos y video; los ejemplos quedan ocultos', async () => {
+    const { q, pool } = await freshDb(false);
+    const c = await getCatalog(q);
+    expect(c.products.map((p) => p.name)).toEqual(['Cabutia']);
+    expect(c.products[0]).toMatchObject({ price: 11500, unitsPerBox: 12, pastaType: 'sorrentinos', featured: true });
+    expect(c.products[0].filling).toBe('Cabutia asada, ajo asado, muzzarella, sardo y almendras picadas');
+    expect(c.products[0].media.map((m) => m.url)).toEqual(['/fotos/cabutia-mano.webp', '/fotos/cabutia-corte.webp', '/fotos/cabutia-masa-nero.webp', '/fotos/amasado-masa-nero.mp4']);
+    const [{ n }] = await q<{ n: number }>('select count(*)::int n from products where not active');
+    expect(n).toBe(5);
+    await pool.end();
+  });
+});
+

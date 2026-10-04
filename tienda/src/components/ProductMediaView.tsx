@@ -1,6 +1,7 @@
 import { useEffect, useRef } from 'react';
 import type { Product } from '../lib/types';
 import { canAnimate } from '../motion/capability';
+import { DEMO } from '../lib/api';
 import { Placeholder } from './Placeholder';
 
 /** Portada del producto: foto real si existe, si no el placeholder con la nota para la sesión de fotos. */
@@ -12,9 +13,9 @@ export function ProductCover({ product, ratio = '4 / 5', sizes = '(min-width: 90
   if (!cover && !video) return <Placeholder note={product.shotNote ?? `${product.name}, plano cenital`} ratio={ratio} tape={tape} />;
   if (!cover && video) return <div className="ph has-photo" style={{ aspectRatio: ratio }}><InViewVideo src={video.url} label={product.name} /></div>;
   if (!cover) return null;
+  // En las tarjetas va la foto (vende más que el video); el video vive en la galería del producto.
   return (
     <div className="ph has-photo" style={{ aspectRatio: ratio }}>
-      {video && <InViewVideo src={video.url} poster={cover.url} label={product.name} />}
       <img
         src={cover.url}
         srcSet={srcSet(cover.url)}
@@ -30,7 +31,7 @@ export function ProductCover({ product, ratio = '4 / 5', sizes = '(min-width: 90
 
 /** Netlify Image CDN: versiones redimensionadas (y en AVIF/WebP según el navegador) de las fotos de /media/. */
 export function srcSet(url: string): string | undefined {
-  if (!url.startsWith('/media/') || !/\.(webp|jpg|png)$/.test(url)) return undefined;
+  if (DEMO || !/^\/(media|fotos)\//.test(url) || !/\.(webp|jpg|png)$/.test(url)) return undefined;
   return [480, 800, 1200].map((w) => `/.netlify/images?url=${encodeURIComponent(url)}&w=${w}&q=72 ${w}w`).join(', ');
 }
 
@@ -52,3 +53,5 @@ function InViewVideo({ src, poster, label }: { src: string; poster?: string; lab
   }, []);
   return <video ref={ref} className="ph-video" src={src} poster={poster} muted loop playsInline preload="none" aria-label={`Video: ${label}`} />;
 }
+
+export { InViewVideo };
