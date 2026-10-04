@@ -55,13 +55,13 @@ export async function createLogo3D(canvas: HTMLCanvasElement, onReady: () => voi
   const front = new MeshStandardMaterial({ roughness: 0.55, metalness: 0.04 });
   const side = new MeshStandardMaterial({ roughness: 0.7, metalness: 0.02 });
 
-  // Luz de cocina: ambiente cálido, ventana arriba a la izquierda y un rebote dorado abajo.
+  // Luz de cocina: ambiente cálido, ventana arriba a la izquierda y un rebote cálido abajo.
   const hemi = new HemisphereLight(0xfff0dc, 0x3a2418, 1.1);
   const key = new DirectionalLight(0xffd8a3, 2.4);
   key.position.set(-900, 1200, 1400);
   const rim = new DirectionalLight(0xffe9c9, 1.2);
   rim.position.set(1600, 300, -800);
-  const bounce = new PointLight(0xe9a23b, 1.4, 0, 0);
+  const bounce = new PointLight(0xff9a8a, 1.4, 0, 0);
   bounce.position.set(0, -900, 900);
   scene.add(hemi, key, rim, bounce);
 
@@ -87,8 +87,8 @@ export async function createLogo3D(canvas: HTMLCanvasElement, onReady: () => voi
   ro.observe(canvas);
 
   function setTheme(dark: boolean) {
-    front.color = cssColor('--color-logo', dark ? '#F5EDE0' : '#7A1E2A');
-    side.color = dark ? new Color('#C9BBA8') : cssColor('--ricordo-bordo-hondo', '#5E1520').multiplyScalar(0.8);
+    front.color = cssColor('--color-logo', dark ? '#F0675F' : '#DA3833');
+    side.color = cssColor('--ricordo-rosso-hondo', '#A8231E').multiplyScalar(dark ? 0.9 : 0.8);
     hemi.intensity = dark ? 0.7 : 1.1;
   }
   setTheme(matchMedia('(prefers-color-scheme: dark)').matches);

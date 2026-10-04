@@ -5,6 +5,7 @@
 .adm-head-row { display: flex; justify-content: space-between; align-items: center; gap: var(--space-3); min-height: calc(var(--tap-min) + var(--space-2)); }
 .adm-logo { display: flex; align-items: center; gap: var(--space-2); color: var(--color-logo); text-decoration: none; }
 .adm-logo svg { width: 6.5rem; }
+.adm-logo .label { color: var(--color-primary); }
 .adm-head-actions { display: flex; gap: var(--space-2); }
 .adm-chip { white-space: nowrap; min-height: var(--tap-min); padding: 0 var(--space-3); display: inline-flex; align-items: center; gap: var(--space-1); border: 1.5px solid var(--color-rule); border-radius: var(--radius-button); background: var(--color-surface); cursor: pointer; font-weight: var(--weight-medium); font-size: var(--text-small); }
 .adm-chip.on { background: var(--color-success); color: var(--color-on-success); border-color: var(--color-success); }
@@ -95,7 +96,8 @@
 .adm-table th, .adm-table td { text-align: left; padding: var(--space-2) var(--space-2) var(--space-2) 0; border-bottom: 1px dashed var(--color-text-muted); vertical-align: middle; }
 .adm-table thead th { font: var(--weight-medium) var(--text-label) / 1 var(--font-label); letter-spacing: var(--tracking-label); text-transform: uppercase; border-bottom: var(--rule-label) solid var(--color-rule); }
 .adm-table tbody th { font-weight: var(--weight-medium); }
-.adm-table tr.off { opacity: 0.55; }
+.adm-table tr.off > * { color: var(--color-text-muted); } /* oculto: atenuado sin perder contraste AA */
+.adm-table tr.off img { opacity: 0.55; }
 .input-num { max-width: 6rem; }
 /* Stock en el celular: cada producto es una ficha */
 @media (max-width: 639px) {
@@ -115,7 +117,8 @@
 
 .adm-plist { list-style: none; margin: 0; padding: 0; display: grid; gap: var(--space-2); }
 .adm-pitem { display: grid; grid-template-columns: 4rem 1fr auto; gap: var(--space-3); align-items: center; padding: var(--space-2); border: 1.5px solid var(--color-line); background: var(--color-surface); text-decoration: none; }
-.adm-pitem.off { opacity: 0.6; }
+.adm-pitem.off { color: var(--color-text-muted); }
+.adm-pitem.off img, .adm-pitem.off .ph { opacity: 0.55; }
 .adm-pitem b, .adm-pitem small { display: block; }
 .adm-pitem small { color: var(--color-text-muted); }
 .adm-thumb { width: 4rem; aspect-ratio: 1; display: grid; place-items: center; background: var(--color-placeholder); overflow: hidden; }

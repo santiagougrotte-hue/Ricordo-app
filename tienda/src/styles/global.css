@@ -65,11 +65,12 @@ main:focus { outline: none; }
   transition: transform var(--dur-ui) var(--ease-papel), box-shadow var(--dur-ui) var(--ease-papel), background-color var(--dur-ui);
 }
 .btn:disabled { cursor: not-allowed; opacity: 0.45; box-shadow: none; }
-.btn-ink { background: var(--color-primary); color: var(--color-on-primary); box-shadow: var(--shadow-print); }
-.btn-ink:hover:not(:disabled) { background: var(--color-primary-hover); }
+.btn-ink { background: var(--color-text); color: var(--color-bg); box-shadow: 3px 3px 0 var(--color-accent); }
+.btn-ink:hover:not(:disabled) { background: var(--color-text-muted); }
 .btn-yema { background: var(--color-accent); color: var(--color-on-accent); box-shadow: var(--shadow-print); }
 .btn-yema:hover:not(:disabled) { background: var(--color-accent-hover); }
 .btn-ink:active:not(:disabled), .btn-yema:active:not(:disabled) { transform: translate(2px, 2px); box-shadow: var(--shadow-print-pressed); }
+.btn-ink:active:not(:disabled) { box-shadow: 1px 1px 0 var(--color-accent); }
 .btn-line, .btn-line:disabled { background: transparent; color: var(--color-text); box-shadow: inset 0 0 0 1.5px currentColor; }
 .btn-big { min-height: calc(var(--tap-min) + var(--space-2)); font-size: var(--text-body-l); padding: 0 var(--space-6); }
 .btn-wide { width: 100%; }
@@ -113,6 +114,9 @@ textarea.input { resize: vertical; }
 .ph::after { content: ""; position: absolute; inset: var(--space-3); border: 1px solid var(--color-line); pointer-events: none; }
 .ph.has-photo::after { display: none; }
 .ph img { width: 100%; height: 100%; object-fit: cover; }
+.ph-cycle { overflow: hidden; }
+.ph-cycle img { position: absolute; inset: 0; opacity: 0; transition: opacity var(--dur-papel) var(--ease-papel); }
+.ph-cycle img.on { opacity: 1; }
 .ph-video { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
 
 /* Entrada del hero en CSS: no espera JS y no parpadea. Reducir movimiento la apaga (regla global). */
@@ -219,7 +223,7 @@ textarea.input { resize: vertical; }
 .sec-n { font: var(--weight-regular) var(--text-display-xl) / 0.85 var(--font-display); color: var(--color-primary); }
 .band-kraft { background: var(--color-kraft); color: var(--color-on-kraft); }
 .band-kraft .sec-n { color: var(--color-kraft-ink); }
-.band-kraft .lede { color: inherit; opacity: 0.85; }
+.band-kraft .lede { color: inherit; }
 
 /* ── Home ─────────────────────────────────────────────── */
 .hero { display: grid; gap: var(--space-12); padding-block: var(--space-10) var(--space-24); }

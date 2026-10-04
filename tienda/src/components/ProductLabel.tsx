@@ -30,7 +30,7 @@ export function ProductLabel({ product, size = 'm', eager = false, level = 3, pa
   return (
     <article className={`prod prod-${size}` + (soldOut ? ' sold-out' : '')} data-reveal="paper">
       <Link to={href} className="prod-photo" tabIndex={-1} aria-hidden="true" data-parallax={parallax || undefined}>
-        <ProductCover product={product} ratio={size === 'l' ? '4 / 4.4' : '4 / 5'} eager={eager} />
+        <ProductCover product={product} ratio={size === 'l' ? '4 / 4.4' : '4 / 5'} eager={eager} cycle />
         {soldOut && <Stamp className="stamp-out" lines={['SIN', 'STOCK']} />}
       </Link>
       <div className="tag-box">

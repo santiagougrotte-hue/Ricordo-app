@@ -1,21 +1,21 @@
-/* Ricordo — design tokens (v2 "la caja", propuesta pendiente de aprobación).
+/* Ricordo — design tokens (v3: paleta del logo, rojo y blanco; sin amarillo).
    Fuente de verdad: docs/brand-board.html. El sitio usa SOLO estas variables.
    Fuentes (Google Fonts): Gloock (display), DM Sans (texto),
    Oswald (rótulos de etiqueta), Reenie Beanie (anotaciones en lápiz). */
 
 :root {
   /* ── Paleta base (no usar directo en componentes; usar los roles) ── */
-  --ricordo-sfoglia: #F5EDE0;
-  --ricordo-farina: #FBF8F2;
-  --ricordo-crosta: #E9DCC6;
+  --ricordo-rosso: #DA3833;        /* el rojo del logo */
+  --ricordo-rosso-testo: #C62E28;  /* el mismo rojo, apenas más hondo: AA como texto sobre blanco */
+  --ricordo-rosso-hondo: #A8231E;
+  --ricordo-bianco: #FFFFFF;
+  --ricordo-sfoglia: #FBF7F2;
+  --ricordo-farina: #FFFFFF;
+  --ricordo-crosta: #EFE5DC;
   --ricordo-cartone: #D2B48C;
   --ricordo-inchiostro: #231A15;
   --ricordo-nocciola: #5C4E44;
   --ricordo-matita: #4A4038;
-  --ricordo-bordo: #7A1E2A;
-  --ricordo-bordo-hondo: #5E1520;
-  --ricordo-tuorlo: #E9A23B;
-  --ricordo-tuorlo-hondo: #C9832A;
   --ricordo-basilico: #3E6A3B;
   --ricordo-errore: #B3261E;
   --ricordo-avviso: #9A5B0E;
@@ -30,30 +30,30 @@
   --color-bg: var(--ricordo-sfoglia);
   --color-surface: var(--ricordo-farina);
   --color-surface-sunken: var(--ricordo-crosta);
-  --color-kraft: var(--ricordo-cartone);
-  --color-on-kraft: var(--ricordo-inchiostro);
-  --color-kraft-ink: var(--ricordo-bordo-hondo);
+  --color-kraft: var(--ricordo-rosso);        /* bandas: el círculo rojo del logo */
+  --color-on-kraft: var(--ricordo-bianco);
+  --color-kraft-ink: var(--ricordo-bianco);
   --color-placeholder: var(--ricordo-crosta);
   --color-line: var(--ricordo-crosta);
   --color-rule: var(--ricordo-inchiostro);   /* filetes de etiqueta */
   --color-text: var(--ricordo-inchiostro);
   --color-text-muted: var(--ricordo-nocciola);
   --color-pencil: var(--ricordo-matita);
-  --color-stamp: var(--ricordo-bordo);
+  --color-stamp: var(--ricordo-rosso-testo);
   --color-tape: rgb(210 180 140 / 0.82);
-  --color-primary: var(--ricordo-bordo);
-  --color-primary-hover: var(--ricordo-bordo-hondo);
-  --color-on-primary: var(--ricordo-farina);
-  --color-accent: var(--ricordo-tuorlo);
-  --color-accent-hover: var(--ricordo-tuorlo-hondo);
-  --color-on-accent: var(--ricordo-inchiostro);
+  --color-primary: var(--ricordo-rosso-testo);
+  --color-primary-hover: var(--ricordo-rosso-hondo);
+  --color-on-primary: var(--ricordo-bianco);
+  --color-accent: var(--ricordo-rosso);
+  --color-accent-hover: var(--ricordo-rosso-testo);
+  --color-on-accent: var(--ricordo-bianco);
   --color-success: var(--ricordo-basilico);
-  --color-on-success: var(--ricordo-farina);
+  --color-on-success: var(--ricordo-bianco);
   --color-error: var(--ricordo-errore);
   --color-warning: var(--ricordo-avviso);
   --color-info: var(--ricordo-info);
-  --color-focus: var(--ricordo-tuorlo);
-  --color-logo: var(--ricordo-bordo);
+  --color-focus: var(--ricordo-inchiostro);
+  --color-logo: var(--ricordo-rosso);
   --color-scrim: rgb(35 26 21 / 0.48);
 
   /* ── Tipografía ── */
@@ -145,30 +145,30 @@
     --color-surface: var(--ricordo-tostato-2);
     --color-surface-sunken: var(--ricordo-tostato-3);
     --color-line: var(--ricordo-tostato-line);
-    --color-kraft: var(--ricordo-tostato-cartone);
-    --color-on-kraft: var(--ricordo-sfoglia);
-    --color-kraft-ink: #E07A80;
+    --color-kraft: var(--ricordo-rosso-hondo);
+    --color-on-kraft: var(--ricordo-bianco);
+    --color-kraft-ink: var(--ricordo-bianco);
     --color-placeholder: var(--ricordo-tostato-2);
     --color-rule: var(--ricordo-sfoglia);
     --color-pencil: #D9CBB6;
-    --color-stamp: #E07A80;
+    --color-stamp: #F0675F;
     --color-tape: rgb(90 70 52 / 0.85);
     --grain-opacity: 0.18;
     --color-text: var(--ricordo-sfoglia);
     --color-text-muted: #C9BBA8;
-    --color-primary: #E07A80;
-    --color-primary-hover: #EA959A;
+    --color-primary: #F0675F;
+    --color-primary-hover: #F4857E;
     --color-on-primary: var(--ricordo-tostato);
-    --color-accent: #F2B85C;
-    --color-accent-hover: #F6C97F;
-    --color-on-accent: var(--ricordo-tostato);
+    --color-accent: var(--ricordo-rosso);
+    --color-accent-hover: var(--ricordo-rosso-testo);
+    --color-on-accent: var(--ricordo-bianco);
     --color-success: #8DBF84;
     --color-on-success: var(--ricordo-tostato);
     --color-error: #F2867D;
-    --color-warning: #E8B25E;
+    --color-warning: #F29A6B;
     --color-info: #8DB8D6;
-    --color-focus: #F2B85C;
-    --color-logo: var(--ricordo-sfoglia);
+    --color-focus: var(--ricordo-sfoglia);
+    --color-logo: #F0675F;
     --color-scrim: rgb(0 0 0 / 0.6);
     --shadow-paper: 0 18px 40px -24px rgb(0 0 0 / 0.7);
     color-scheme: dark;
@@ -181,30 +181,30 @@
   --color-surface: var(--ricordo-tostato-2);
   --color-surface-sunken: var(--ricordo-tostato-3);
   --color-line: var(--ricordo-tostato-line);
-  --color-kraft: var(--ricordo-tostato-cartone);
-  --color-on-kraft: var(--ricordo-sfoglia);
-  --color-kraft-ink: #E07A80;
+  --color-kraft: var(--ricordo-rosso-hondo);
+  --color-on-kraft: var(--ricordo-bianco);
+  --color-kraft-ink: var(--ricordo-bianco);
   --color-placeholder: var(--ricordo-tostato-2);
   --color-rule: var(--ricordo-sfoglia);
   --color-pencil: #D9CBB6;
-  --color-stamp: #E07A80;
+  --color-stamp: #F0675F;
   --color-tape: rgb(90 70 52 / 0.85);
   --grain-opacity: 0.18;
   --color-text: var(--ricordo-sfoglia);
   --color-text-muted: #C9BBA8;
-  --color-primary: #E07A80;
-  --color-primary-hover: #EA959A;
+  --color-primary: #F0675F;
+  --color-primary-hover: #F4857E;
   --color-on-primary: var(--ricordo-tostato);
-  --color-accent: #F2B85C;
-  --color-accent-hover: #F6C97F;
-  --color-on-accent: var(--ricordo-tostato);
+  --color-accent: var(--ricordo-rosso);
+  --color-accent-hover: var(--ricordo-rosso-testo);
+  --color-on-accent: var(--ricordo-bianco);
   --color-success: #8DBF84;
   --color-on-success: var(--ricordo-tostato);
   --color-error: #F2867D;
-  --color-warning: #E8B25E;
+  --color-warning: #F29A6B;
   --color-info: #8DB8D6;
-  --color-focus: #F2B85C;
-  --color-logo: var(--ricordo-sfoglia);
+  --color-focus: var(--ricordo-sfoglia);
+  --color-logo: #F0675F;
   --color-scrim: rgb(0 0 0 / 0.6);
   --shadow-paper: 0 18px 40px -24px rgb(0 0 0 / 0.7);
   color-scheme: dark;
