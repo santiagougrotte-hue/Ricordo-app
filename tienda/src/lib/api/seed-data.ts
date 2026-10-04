@@ -4,6 +4,9 @@ import fotoMano from '../../assets/fotos/cabutia-mano.webp';
 import fotoCorte from '../../assets/fotos/cabutia-corte.webp';
 import fotoNero from '../../assets/fotos/cabutia-masa-nero.webp';
 import videoAmasado from '../../assets/fotos/amasado-masa-nero.mp4';
+import fotoCabutiaIng from '../../assets/fotos/cabutia-ingredientes.webp';
+import fotoOsobuco from '../../assets/fotos/osobuco-mano.webp';
+import fotoOsobucoIng from '../../assets/fotos/osobuco-ingredientes.webp';
 
 // Datos de ejemplo — los mismos que netlify/database/migrations/*_example-data. Precios, rellenos y CPs son ilustrativos.
 // Gusto real (igual que netlify/database/migrations/*_gusto-cabutia).
@@ -25,6 +28,27 @@ export const CABUTIA: Product = {
     { id: 'm-cab-2', url: fotoCorte, kind: 'photo', alt: 'Sorrentino de cabutia cortado al medio, con el relleno naranja a la vista', isCover: false, sortOrder: 1 },
     { id: 'm-cab-3', url: fotoNero, kind: 'photo', alt: 'Sorrentinos de masa nero enharinados sobre la mesada', isCover: false, sortOrder: 2 },
     { id: 'm-cab-4', url: videoAmasado, kind: 'video', alt: 'Amasando la masa nero y sorrentinos recién hechos', isCover: false, sortOrder: 3 },
+    { id: 'm-cab-5', url: fotoCabutiaIng, kind: 'photo', alt: 'Lo que lleva: cabutia asada, sardo, almendras, muzzarella y ajo asado, alrededor de un sorrentino de masa nero', isCover: false, sortOrder: 4 },
+  ],
+};
+
+// Igual que netlify/database/migrations/*_gusto-osobuco.
+export const OSOBUCO: Product = {
+  id: '00000000-0000-4000-8000-000000000011',
+  slug: 'sorrentinos-osobuco',
+  name: 'Osobuco',
+  pastaType: 'sorrentinos',
+  filling: 'Osobuco braseado 4 horas al vino tinto y vermut, con zanahoria, apio y cebolla',
+  description: 'Osobuco braseado durante 4 horas al vino tinto y vermut, con zanahoria, apio y cebolla. Cada caja trae 12 sorrentinos.',
+  unitsPerBox: 12,
+  price: 14000,
+  stock: 20,
+  lowStockThreshold: 4,
+  featured: true,
+  sortOrder: 2,
+  media: [
+    { id: 'm-oso-1', url: fotoOsobuco, kind: 'photo', alt: 'Sorrentino de osobuco en la mano, sobre la bandeja con el resto de la tanda', isCover: true, sortOrder: 0 },
+    { id: 'm-oso-2', url: fotoOsobucoIng, kind: 'photo', alt: 'Lo que lleva: osobuco, zanahoria, apio, vino tinto, vermut y cebolla, alrededor de un sorrentino', isCover: false, sortOrder: 1 },
   ],
 };
 
@@ -33,6 +57,7 @@ export const EXAMPLE_IDS = [1, 2, 3, 4, 5].map((n) => `00000000-0000-4000-8000-0
 
 export const SEED_PRODUCTS: Product[] = [
   CABUTIA,
+  OSOBUCO,
   {
     id: '00000000-0000-4000-8000-000000000001',
     slug: 'sorrentinos-jamon-muzza-nuez',
