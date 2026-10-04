@@ -26,9 +26,12 @@ function preloadFonts(): Plugin {
 function inlineFavicon(): Plugin {
   return {
     name: 'ricordo-inline-favicon',
-    transformIndexHtml(html) {
-      const svg = readFileSync(new URL('./public/favicon.svg', import.meta.url), 'utf8');
-      return html.replace('href="/favicon.svg"', `href="data:image/svg+xml,${encodeURIComponent(svg)}"`);
+    transformIndexHtml: {
+      order: 'post',
+      handler(html) {
+        const svg = readFileSync(new URL('./public/favicon.svg', import.meta.url), 'utf8');
+        return html.replace(/href="\.?\/favicon\.svg"/, `href="data:image/svg+xml,${encodeURIComponent(svg)}"`);
+      },
     },
   };
 }
