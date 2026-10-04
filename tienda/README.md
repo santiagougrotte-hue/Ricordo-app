@@ -48,7 +48,7 @@ No hay que crear ninguna base a mano: **Netlify Database** (Postgres) se crea so
 1. En app.netlify.com → proyecto **ricordo-pastas** → *Site configuration → Build & deploy → Link repository* → GitHub `santiagougrotte-hue/Ricordo-app`.
    - **Base directory:** `tienda` · **Branch:** la que quieras publicar (por ejemplo `main` después de mergear).
    - El resto lo toma de `netlify.toml`. Cada push publica solo.
-2. Variables (*Site configuration → Environment variables*), ya cargadas en ricordo-pastas:
+2. Variables (*Site configuration → Environment variables*), ya cargadas en el proyecto ricordopasta (como variables comunes: en el plan gratuito, las marcadas "secret" no se guardan):
    - `ADMIN_EMAIL`, `ADMIN_PASSWORD` (secreta): acceso al panel `/admin`.
    - `SESSION_SECRET` (secreta): firma la sesión del panel.
    - `VITE_TURNSTILE_SITE_KEY` / `TURNSTILE_SECRET_KEY`: captcha. Hoy están las **claves de prueba** de Cloudflare (siempre pasan). Reemplazalas por las tuyas (gratis en Cloudflare → Turnstile) para tener protección real contra bots.
