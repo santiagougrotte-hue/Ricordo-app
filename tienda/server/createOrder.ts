@@ -1,12 +1,14 @@
 // Creación de pedidos del lado del servidor (la usa netlify/functions/create-order.mts).
-// 1) valida Turnstile  2) valida la forma del pedido  3) llama a create_order() con la service key
-// 4) arma el comprobante  5) avisa al dueño (email / Telegram). Si el aviso falla, el pedido igual queda.
+// 1) límite por visitante  2) valida Turnstile  3) valida la forma del pedido
+// 4) llama a create_order() en Netlify Database (una transacción: stock, precios, envío, total)
+// 5) arma el comprobante  6) avisa al dueño (email / Telegram). Si el aviso falla, el pedido igual queda.
 import type { OrderInput, OrderReceipt, OrderResult, ShortItem } from '../src/lib/types';
+import type { Query } from './db';
+import { allow, ipHash } from './http';
 
 export interface ServerEnv {
-  SUPABASE_URL?: string;
-  SUPABASE_SERVICE_ROLE_KEY?: string;
   TURNSTILE_SECRET_KEY?: string;
+  SESSION_SECRET?: string;
   RESEND_API_KEY?: string;
   NOTIFY_FROM?: string;
   TELEGRAM_BOT_TOKEN?: string;
@@ -15,6 +17,7 @@ export interface ServerEnv {
 }
 
 export interface Deps {
+  query: Query;
   fetch: typeof fetch;
   ip?: string;
   log?: (msg: string, extra?: unknown) => void;
@@ -86,7 +89,7 @@ export async function verifyTurnstile(token: string | undefined, env: ServerEnv,
 interface PgError {
   code?: string;
   message?: string;
-  details?: string | null;
+  detail?: string | null;
 }
 
 /** Traduce el error de create_order (SQLSTATE propio RC00x) al formato del front. */
@@ -96,14 +99,14 @@ export function mapDbError(e: PgError): OrderResult & { ok: false } {
     case 'RC001': {
       let short: ShortItem[] = [];
       try {
-        short = JSON.parse(e.details ?? '[]');
+        short = JSON.parse(e.detail ?? '[]');
       } catch { /* sin detalle */ }
       return { ok: false, error: { code: 'RC001', message: msg, short } };
     }
     case 'RC003': {
       let d = { min_order: 0, missing: 0 };
       try {
-        d = JSON.parse(e.details ?? '{}');
+        d = JSON.parse(e.detail ?? '{}');
       } catch { /* sin detalle */ }
       return { ok: false, error: { code: 'RC003', message: msg, minOrder: d.min_order, missing: d.missing } };
     }
@@ -119,88 +122,66 @@ export function mapDbError(e: PgError): OrderResult & { ok: false } {
 
 export async function handleCreateOrder(raw: unknown, env: ServerEnv, deps: Deps): Promise<HttpResult> {
   const log = deps.log ?? (() => {});
-  if (!env.SUPABASE_URL || !env.SUPABASE_SERVICE_ROLE_KEY) {
-    log('Faltan SUPABASE_URL / SUPABASE_SERVICE_ROLE_KEY');
-    return fail(500, { ok: false, error: { code: 'NETWORK', message: 'La tienda no está configurada todavía.' } });
-  }
   const parsed = parseInput(raw);
   if (typeof parsed === 'string') return bad(parsed);
+
+  // Hasta 6 pedidos por hora por visitante: frena a quien quiera "vaciar" el stock con pedidos falsos.
+  const who = ipHash(deps.ip, env.SESSION_SECRET ?? 'ricordo');
+  if (!(await allow(deps.query, 'order', who, 6, 60))) {
+    return fail(429, { ok: false, error: { code: 'RC004', message: 'Hiciste varios pedidos seguidos. Esperá un rato o escribinos por WhatsApp.' } });
+  }
 
   if (!(await verifyTurnstile(parsed.turnstileToken, env, deps))) {
     return fail(403, { ok: false, error: { code: 'CAPTCHA', message: 'No pudimos verificar que no sos un robot.' } });
   }
 
-  const rest = `${env.SUPABASE_URL.replace(/\/$/, '')}/rest/v1`;
-  const headers = {
-    apikey: env.SUPABASE_SERVICE_ROLE_KEY,
-    Authorization: `Bearer ${env.SUPABASE_SERVICE_ROLE_KEY}`,
-    'Content-Type': 'application/json',
-  };
-
   let created: { order_id: string; order_number: number; total: number };
   try {
-    const res = await deps.fetch(`${rest}/rpc/create_order`, {
-      method: 'POST',
-      headers,
-      body: JSON.stringify({
-        p_customer_name: parsed.customerName,
-        p_customer_phone: parsed.customerPhone,
-        p_customer_email: parsed.customerEmail || null,
-        p_delivery_method: parsed.deliveryMethod,
-        p_address: parsed.deliveryMethod === 'delivery' ? parsed.address : null,
-        p_postal_code: parsed.deliveryMethod === 'delivery' ? parsed.postalCode : null,
-        p_notes: parsed.notes || null,
-        p_payment_method: parsed.paymentMethod,
-        p_items: parsed.items.map((i) => ({ product_id: i.productId, quantity: i.quantity })),
-        p_delivery_date: parsed.deliveryDate,
-        p_delivery_window_id: parsed.deliveryWindowId,
-      }),
-      signal: AbortSignal.timeout(10000),
-    });
-    const data = await res.json();
-    if (!res.ok) {
-      const mapped = mapDbError(data as PgError);
-      if (mapped.error.code === 'NETWORK') log('create_order falló', data);
-      return fail(mapped.error.code === 'NETWORK' ? 502 : 409, mapped);
-    }
-    created = (Array.isArray(data) ? data[0] : data) as typeof created;
+    const rows = await deps.query<{ order_id: string; order_number: string; total: number }>(
+      `select * from create_order($1, $2, $3, $4::delivery_method, $5, $6, $7, $8::payment_method, $9::jsonb, $10::date, $11::uuid)`,
+      [
+        parsed.customerName, parsed.customerPhone, parsed.customerEmail || null, parsed.deliveryMethod,
+        parsed.deliveryMethod === 'delivery' ? parsed.address : null,
+        parsed.deliveryMethod === 'delivery' ? parsed.postalCode : null,
+        parsed.notes || null, parsed.paymentMethod,
+        JSON.stringify(parsed.items.map((i) => ({ product_id: i.productId, quantity: i.quantity }))),
+        parsed.deliveryDate, parsed.deliveryWindowId,
+      ],
+    );
+    created = { order_id: rows[0].order_id, order_number: Number(rows[0].order_number), total: rows[0].total };
   } catch (e) {
-    log('create_order sin respuesta', String(e));
-    return fail(502, { ok: false, error: { code: 'NETWORK', message: 'No pudimos registrar el pedido. Probá de nuevo en un momento.' } });
+    const mapped = mapDbError(e as PgError);
+    if (mapped.error.code === 'NETWORK') log('create_order falló', String((e as Error).message));
+    return fail(mapped.error.code === 'NETWORK' ? 502 : 409, mapped);
   }
 
   // Comprobante con los valores que quedaron guardados (no los del navegador).
-  const receipt = await loadReceipt(rest, headers, created, parsed, deps);
-  await notifyOwner(receipt, parsed, rest, headers, env, deps).catch((e) => log('aviso falló', String(e)));
+  const receipt = await loadReceipt(created, parsed, deps);
+  await notifyOwner(receipt, parsed, env, deps).catch((e) => log('aviso falló', String(e)));
   return { status: 200, body: { ok: true, receipt } };
 }
 
-async function loadReceipt(
-  rest: string,
-  headers: Record<string, string>,
-  created: { order_id: string; order_number: number; total: number },
-  input: OrderInput,
-  deps: Deps,
-): Promise<OrderReceipt> {
+async function loadReceipt(created: { order_id: string; order_number: number; total: number }, input: OrderInput, deps: Deps): Promise<OrderReceipt> {
   const fallback: OrderReceipt = {
-    orderId: created.order_id, number: Number(created.order_number), subtotal: created.total, shippingCost: 0, total: created.total,
+    orderId: created.order_id, number: created.order_number, subtotal: created.total, shippingCost: 0, total: created.total,
     deliveryMethod: input.deliveryMethod, windowLabel: '', paymentMethod: input.paymentMethod, lines: [], customerName: input.customerName.trim(),
   };
   try {
-    const res = await deps.fetch(
-      `${rest}/orders?id=eq.${created.order_id}&select=number,subtotal,shipping_cost,total,delivery_method,delivery_window_label,payment_method,customer_name,order_items(product_name,quantity,unit_price)`,
-      { headers: { ...headers, Accept: 'application/vnd.pgrst.object+json' }, signal: AbortSignal.timeout(6000) },
-    );
-    if (!res.ok) return fallback;
-    const o = (await res.json()) as {
-      number: number; subtotal: number; shipping_cost: number; total: number; delivery_method: OrderReceipt['deliveryMethod'];
+    const [o] = await deps.query<{
+      number: string; subtotal: number; shipping_cost: number; total: number; delivery_method: OrderReceipt['deliveryMethod'];
       delivery_window_label: string; payment_method: OrderReceipt['paymentMethod']; customer_name: string;
-      order_items: { product_name: string; quantity: number; unit_price: number }[];
-    };
+      items: { product_name: string; quantity: number; unit_price: number }[];
+    }>(
+      `select o.number, o.subtotal, o.shipping_cost, o.total, o.delivery_method, o.delivery_window_label, o.payment_method, o.customer_name,
+              (select json_agg(json_build_object('product_name', product_name, 'quantity', quantity, 'unit_price', unit_price)) from order_items where order_id = o.id) as items
+       from orders o where o.id = $1`,
+      [created.order_id],
+    );
+    if (!o) return fallback;
     return {
       orderId: created.order_id, number: Number(o.number), subtotal: o.subtotal, shippingCost: o.shipping_cost, total: o.total,
       deliveryMethod: o.delivery_method, windowLabel: o.delivery_window_label, paymentMethod: o.payment_method, customerName: o.customer_name,
-      lines: o.order_items.map((i) => ({ name: i.product_name, quantity: i.quantity, unitPrice: i.unit_price })),
+      lines: (o.items ?? []).map((i) => ({ name: i.product_name, quantity: i.quantity, unitPrice: i.unit_price })),
     };
   } catch {
     return fallback;
@@ -225,23 +206,12 @@ export function orderSummaryText(r: OrderReceipt, input: OrderInput): string {
   ].join('\n');
 }
 
-async function notifyOwner(
-  r: OrderReceipt,
-  input: OrderInput,
-  rest: string,
-  headers: Record<string, string>,
-  env: ServerEnv,
-  deps: Deps,
-): Promise<void> {
+async function notifyOwner(r: OrderReceipt, input: OrderInput, env: ServerEnv, deps: Deps): Promise<void> {
   const text = orderSummaryText(r, input);
   const jobs: Promise<unknown>[] = [];
-
   if (env.RESEND_API_KEY) {
-    const s = await deps.fetch(`${rest}/store_settings?select=notify_email`, {
-      headers: { ...headers, Accept: 'application/vnd.pgrst.object+json' },
-      signal: AbortSignal.timeout(4000),
-    });
-    const to = s.ok ? ((await s.json()) as { notify_email: string | null }).notify_email : null;
+    const [s] = await deps.query<{ notify_email: string | null }>(`select notify_email from store_settings limit 1`);
+    const to = s?.notify_email;
     if (to) {
       const link = env.SITE_URL ? `\n\nVer en el panel: ${env.SITE_URL.replace(/\/$/, '')}/admin/pedidos` : '';
       jobs.push(

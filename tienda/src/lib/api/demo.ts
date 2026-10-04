@@ -5,7 +5,7 @@ import { findZone } from '../shipping';
 import { readDb, writeDb } from './demoDb';
 import type { AdminOrder } from './adminTypes';
 
-// Modo demo: corre sin Supabase. Replica las reglas de create_order() para poder probar el flujo.
+// Modo demo: corre sin servidor. Replica las reglas de create_order() para poder probar el flujo.
 const wait = (ms: number) => new Promise((r) => setTimeout(r, ms));
 const activeZones = () => readDb().zones.filter((z) => z.active !== false);
 

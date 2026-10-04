@@ -4,22 +4,25 @@
   "version": "0.1.0",
   "type": "module",
   "scripts": {
-    "dev": "vite",
+    "dev": "VITE_DEMO=1 vite",
     "build": "tsc -b && vite build",
     "preview": "vite preview",
     "typecheck": "tsc -b",
     "test": "vitest run",
-    "build:html": "VITE_SINGLEFILE=1 vite build"
+    "build:html": "VITE_SINGLEFILE=1 VITE_DEMO=1 vite build",
+    "dev:netlify": "netlify dev",
+    "test:db": "TEST_DATABASE_URL=${TEST_DATABASE_URL:-postgresql://postgres@localhost:5432/ricordo_test} vitest run"
   },
   "dependencies": {
     "@fontsource-variable/dm-sans": "^5.3.0",
     "@fontsource/gloock": "^5.3.0",
     "@fontsource/oswald": "^5.3.0",
     "@fontsource/reenie-beanie": "^5.3.0",
-    "@supabase/postgrest-js": "^2.117.2",
-    "@supabase/supabase-js": "^2.117.2",
+    "@netlify/blobs": "^11.1.3",
+    "@netlify/database": "^2.0.1",
     "gsap": "^3.15.0",
     "lenis": "^1.3.26",
+    "pg": "^8.23.1",
     "react": "^19.3.0",
     "react-dom": "^19.3.0",
     "react-router-dom": "^7.18.4",
@@ -28,6 +31,7 @@
   "devDependencies": {
     "@netlify/functions": "^6.0.2",
     "@types/node": "^22.20.5",
+    "@types/pg": "^8.23.1",
     "@types/react": "^19.3.0",
     "@types/react-dom": "^19.3.0",
     "@types/three": "^0.186.0",

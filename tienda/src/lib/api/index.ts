@@ -1,9 +1,7 @@
 import type { StoreApi } from './types';
 import { createDemoApi } from './demo';
-import { createSupabaseApi } from './supabase';
+import { createNetlifyApi } from './netlify';
 
-const url = import.meta.env.VITE_SUPABASE_URL as string | undefined;
-const key = import.meta.env.VITE_SUPABASE_ANON_KEY as string | undefined;
-
-/** Sin variables de Supabase la tienda corre en modo demo con datos de ejemplo. */
-export const api: StoreApi = url && key ? createSupabaseApi(url, key) : createDemoApi();
+/** VITE_DEMO=1 (npm run dev / build:html): datos de ejemplo en el navegador. Si no, la tienda real en Netlify. */
+export const DEMO = import.meta.env.VITE_DEMO === '1';
+export const api: StoreApi = DEMO ? createDemoApi() : createNetlifyApi();

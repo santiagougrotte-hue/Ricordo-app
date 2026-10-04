@@ -1,8 +1,9 @@
 -- ════════════════════════════════════════════════════════════════════
--- RICORDO · Tienda + Panel admin — ESQUEMA PROPUESTO (v3)
--- Esquema aprobado. La versión ejecutable vive en tienda/supabase/migrations/.
---     Ver docs/esquema-db.md para el resumen.
--- Montos en pesos enteros (ARS, sin centavos). Horarios en America/Argentina/Buenos_Aires.
+-- RICORDO · Tienda + Panel — esquema (Netlify Database / Postgres)
+-- Netlify aplica esta migración sola en cada deploy de producción.
+-- La base NO es accesible desde el navegador: todo pasa por las funciones
+-- de netlify/functions (catálogo público, crear pedido, panel con login).
+-- Montos en pesos enteros (ARS). Horarios en America/Argentina/Buenos_Aires.
 -- ════════════════════════════════════════════════════════════════════
 
 -- ── Tipos ────────────────────────────────────────────────────────────
@@ -12,19 +13,6 @@ create type delivery_method as enum ('delivery', 'pickup');
 create type payment_method  as enum ('transfer', 'cash', 'mercadopago');
 create type order_status    as enum ('new', 'confirmed', 'preparing', 'shipped', 'delivered', 'cancelled');
 create type payment_status  as enum ('pending', 'paid', 'refunded');
-
--- ── Admins ───────────────────────────────────────────────────────────
--- "Logueado" no alcanza: si alguien se registra en Auth sería "authenticated".
--- Solo los user_id de esta tabla son admin. (Además: desactivar signups en Auth.)
-create table admins (
-  user_id    uuid primary key references auth.users (id) on delete cascade,
-  created_at timestamptz not null default now()
-);
-
-create function is_admin() returns boolean
-language sql stable security definer set search_path = public as $$
-  select exists (select 1 from admins where user_id = auth.uid());
-$$;
 
 -- ── Configuración de la tienda (una sola fila) ──────────────────────
 create table store_settings (
@@ -63,7 +51,7 @@ create index products_listing_idx on products (active, pasta_type, sort_order);
 create table product_media (
   id          uuid primary key default gen_random_uuid(),
   product_id  uuid not null references products (id) on delete cascade,
-  url         text not null,          -- path en Storage (bucket product-media)
+  url         text not null,          -- clave en Netlify Blobs (store product-media), servida en /media/<clave>
   kind        media_kind not null default 'photo',
   alt         text not null default '',
   sort_order  int  not null default 0,
@@ -184,7 +172,7 @@ $$;
 create function store_public_settings()
 returns table (pickup_enabled boolean, pickup_min_order int, pickup_address text,
                whatsapp_phone text, transfer_info text, mercadopago_enabled boolean)
-language sql stable security definer set search_path = public as $$
+language sql stable set search_path = public as $$
   select pickup_enabled, pickup_min_order, pickup_address, whatsapp_phone, transfer_info, mercadopago_enabled
   from store_settings limit 1;
 $$;
@@ -194,7 +182,7 @@ create function quote_shipping(p_postal_code text, p_subtotal int)
 returns table (found boolean, postal_code text, zone_id uuid, zone_name text,
                shipping_cost int, min_order int, free_shipping_from int,
                missing_for_min int, missing_for_free int)
-language sql stable security definer set search_path = public as $$
+language sql stable set search_path = public as $$
   with cp as (select normalize_postal_code(p_postal_code) as v),
   z as (
     select sz.* from shipping_zones sz, cp
@@ -214,7 +202,7 @@ $$;
 -- Próximos turnos disponibles (para el checkout). Excluye los que ya cerraron.
 create function available_delivery_slots(p_method delivery_method default 'delivery', p_days int default 14)
 returns table (window_id uuid, delivery_date date, label text, starts_at time, ends_at time, closes_at timestamptz)
-language sql stable security definer set search_path = public as $$
+language sql stable set search_path = public as $$
   select w.id, d::date, w.label, w.starts_at, w.ends_at,
          ((d::date + w.starts_at) at time zone 'America/Argentina/Buenos_Aires') - make_interval(hours => w.cutoff_hours)
   from delivery_windows w
@@ -242,7 +230,7 @@ create function create_order(
   p_notes text, p_payment_method payment_method, p_items jsonb,
   p_delivery_date date, p_delivery_window_id uuid
 ) returns table (order_id uuid, order_number bigint, total int)
-language plpgsql security definer set search_path = public as $$
+language plpgsql set search_path = public as $$
 declare
   v_cp text; v_zone shipping_zones; v_subtotal int := 0; v_shipping int := 0;
   v_order orders; v_short jsonb; v_cfg store_settings; v_slot record;
@@ -339,12 +327,11 @@ begin
   return query select v_order.id, v_order.number, v_order.total;
 end $$;
 
--- Cambiar estado (solo admin). Al cancelar devuelve el stock una sola vez.
+-- Cambiar estado (la llama solo el panel, ya autenticado en el servidor). Al cancelar devuelve el stock una sola vez.
 create function set_order_status(p_order_id uuid, p_status order_status) returns orders
-language plpgsql security definer set search_path = public as $$
+language plpgsql set search_path = public as $$
 declare v_order orders;
 begin
-  if not is_admin() then raise exception 'No autorizado' using errcode = '42501'; end if;
   select * into v_order from orders where id = p_order_id for update;
   if v_order.id is null then raise exception 'Pedido inexistente'; end if;
   if v_order.status = 'cancelled' and p_status <> 'cancelled' then
@@ -359,56 +346,14 @@ begin
   return v_order;
 end $$;
 
--- ════════════════════════════════════════════════════════════════════
--- ROW LEVEL SECURITY
--- ════════════════════════════════════════════════════════════════════
-alter table admins         enable row level security;
-alter table store_settings enable row level security;
-alter table delivery_windows enable row level security;
-alter table products       enable row level security;
-alter table product_media  enable row level security;
-alter table shipping_zones enable row level security;
-alter table orders         enable row level security;
-alter table order_items    enable row level security;
+-- ── Registro de intentos (límite de logins y de pedidos por visitante) ──
+create table request_log (
+  kind      text not null,            -- 'login' | 'order'
+  key_hash  text not null,            -- hash de la IP (no se guarda la IP)
+  at        timestamptz not null default now()
+);
+create index request_log_idx on request_log (kind, key_hash, at desc);
 
--- Público (anon): solo lectura de lo activo
-create policy products_public_read on products for select using (active);
-create policy media_public_read    on product_media for select
-  using (exists (select 1 from products p where p.id = product_id and p.active));
-create policy zones_public_read    on shipping_zones for select using (active);
+-- El panel consulta cambios recientes de pedidos (en lugar de realtime).
+create index orders_updated_idx on orders (updated_at desc);
 
--- Admin: todo
-create policy admins_self_read     on admins         for select using (user_id = auth.uid());
-create policy products_admin_all   on products       for all using (is_admin()) with check (is_admin());
-create policy media_admin_all      on product_media  for all using (is_admin()) with check (is_admin());
-create policy zones_admin_all      on shipping_zones for all using (is_admin()) with check (is_admin());
-create policy settings_admin_all   on store_settings for all using (is_admin()) with check (is_admin());
-create policy windows_public_read  on delivery_windows for select using (active);
-create policy windows_admin_all    on delivery_windows for all using (is_admin()) with check (is_admin());
-create policy orders_admin_all     on orders         for all using (is_admin()) with check (is_admin());
-create policy items_admin_all      on order_items    for all using (is_admin()) with check (is_admin());
-
--- Nadie inserta directo en orders/order_items. create_order() solo la ejecuta el servidor
--- (service_role, desde la función de Netlify que valida Turnstile): un bot con la anon key
--- no puede crear pedidos ni vaciar el stock.
-revoke all on function create_order(text, text, text, delivery_method, text, text, text, payment_method, jsonb, date, uuid) from public, anon, authenticated;
-grant execute on function create_order(text, text, text, delivery_method, text, text, text, payment_method, jsonb, date, uuid) to service_role;
-grant execute on function store_public_settings()          to anon, authenticated;
-grant execute on function available_delivery_slots(delivery_method, int) to anon, authenticated;
-grant execute on function quote_shipping(text, int)       to anon, authenticated;
-grant execute on function normalize_postal_code(text)     to anon, authenticated;
-revoke all on function set_order_status(uuid, order_status) from public, anon;
-grant execute on function set_order_status(uuid, order_status) to authenticated;
-
--- ── Realtime: pedidos nuevos en el panel (RLS filtra: solo admin los recibe)
-alter publication supabase_realtime add table orders;
-
--- ── Storage: fotos/videos públicos de lectura, escritura solo admin
-insert into storage.buckets (id, name, public) values ('product-media', 'product-media', true)
-  on conflict (id) do nothing;
-create policy media_bucket_admin_write on storage.objects for insert
-  with check (bucket_id = 'product-media' and is_admin());
-create policy media_bucket_admin_update on storage.objects for update
-  using (bucket_id = 'product-media' and is_admin());
-create policy media_bucket_admin_delete on storage.objects for delete
-  using (bucket_id = 'product-media' and is_admin());

@@ -1,7 +1,7 @@
 import type { Product, ShippingZone, StoreSettings } from '../types';
 import type { DeliveryWindow } from '../slots';
 
-// Datos de ejemplo — los mismos que supabase/seed.sql. Precios, rellenos y CPs son ilustrativos.
+// Datos de ejemplo — los mismos que netlify/database/migrations/*_example-data. Precios, rellenos y CPs son ilustrativos.
 export const SEED_PRODUCTS: Product[] = [
   {
     id: '00000000-0000-4000-8000-000000000001',

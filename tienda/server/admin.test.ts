@@ -1,0 +1,140 @@
+import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import type pg from 'pg';
+import { handleAdmin, type AdminEnv } from './admin';
+import type { Query } from './db';
+import { memoryMedia } from './media';
+import { freshDb, TEST_DB } from './testdb';
+import { getCatalog } from './catalog';
+
+const ENV: AdminEnv = { ADMIN_EMAIL: 'duenio@ricordo.com', ADMIN_PASSWORD: 'una-clave-larga-123', SESSION_SECRET: 'secreto-de-prueba' };
+const P1 = '00000000-0000-4000-8000-000000000001';
+
+describe.skipIf(!TEST_DB)('API del panel contra Netlify Database (Postgres real)', () => {
+  let q: Query;
+  let pool: pg.Pool;
+  const media = memoryMedia();
+  let cookie = '';
+  let ipN = 0;
+
+  async function call(method: string, path: string, opts: { body?: unknown; raw?: BodyInit; type?: string; auth?: boolean; csrf?: boolean; ip?: string } = {}) {
+    const headers: Record<string, string> = {};
+    if (opts.csrf !== false) headers['x-ricordo'] = 'panel';
+    if (opts.auth !== false && cookie) headers.cookie = cookie;
+    if (opts.body !== undefined) headers['content-type'] = 'application/json';
+    if (opts.type) headers['content-type'] = opts.type;
+    const req = new Request(`https://ricordo-pastas.netlify.app/api/admin/${path}`, {
+      method, headers, body: opts.raw ?? (opts.body !== undefined ? JSON.stringify(opts.body) : undefined),
+    });
+    const res = await handleAdmin(req, path.split('?')[0], ENV, { query: q, media: async () => media, ip: opts.ip ?? `10.1.0.${++ipN}`, secure: true });
+    return { status: res.status, data: (await res.json()) as Record<string, any>, setCookie: res.headers.get('set-cookie') };
+  }
+
+  beforeAll(async () => ({ q, pool } = await freshDb()));
+  afterAll(() => pool.end());
+
+  it('sin sesión: 401 en todo menos login/session', async () => {
+    expect((await call('GET', 'orders')).status).toBe(401);
+    expect((await call('GET', 'session')).data).toEqual({ email: null });
+  });
+
+  it('login incorrecto → 401; correcto → cookie HttpOnly + Secure + SameSite=Strict', async () => {
+    expect((await call('POST', 'login', { body: { email: ENV.ADMIN_EMAIL, password: 'mal' } })).status).toBe(401);
+    const ok = await call('POST', 'login', { body: { email: 'DUENIO@ricordo.com ', password: ENV.ADMIN_PASSWORD } });
+    expect(ok.status).toBe(200);
+    expect(ok.setCookie).toMatch(/HttpOnly; SameSite=Strict; Max-Age=604800; Secure/);
+    cookie = ok.setCookie!.split(';')[0];
+    expect((await call('GET', 'session')).data).toEqual({ email: ENV.ADMIN_EMAIL });
+  });
+
+  it('escrituras sin el encabezado del panel → 403 (CSRF)', async () => {
+    expect((await call('POST', `products/${P1}/stock`, { body: { stock: 1 }, csrf: false })).status).toBe(403);
+  });
+
+  it('login: 9.º intento desde la misma IP en 15 min → 429', async () => {
+    const s: number[] = [];
+    for (let i = 0; i < 9; i++) s.push((await call('POST', 'login', { body: { email: 'x', password: 'y' }, ip: '6.6.6.6' })).status);
+    expect(s.slice(0, 8).every((x) => x === 401)).toBe(true);
+    expect(s[8]).toBe(429);
+  });
+
+  it('pedidos: lista, cambio de estado, pago, cancelar devuelve stock, no se reabre', async () => {
+    const [slot] = await q<{ window_id: string; d: string }>(`select window_id, delivery_date::text d from available_delivery_slots('pickup') limit 1`);
+    const [o] = await q<{ order_id: string }>(
+      `select * from create_order('Laura','1144443333',null,'pickup',null,null,null,'cash',$1::jsonb,$2::date,$3::uuid)`,
+      [JSON.stringify([{ product_id: P1, quantity: 3 }]), slot.d, slot.window_id],
+    );
+    const list = await call('GET', 'orders');
+    expect(list.data.orders[0]).toMatchObject({ number: 1001, customerName: 'Laura', status: 'new', items: [{ productId: P1, quantity: 3 }] });
+    const t0 = list.data.serverTime;
+
+    expect((await call('POST', `orders/${o.order_id}/status`, { body: { status: 'confirmed' } })).status).toBe(200);
+    expect((await call('POST', `orders/${o.order_id}/payment`, { body: { status: 'paid' } })).status).toBe(200);
+    const changed = await call('GET', `orders?changedAfter=${encodeURIComponent(t0)}`);
+    expect(changed.data.orders).toHaveLength(1);
+    expect(changed.data.orders[0]).toMatchObject({ status: 'confirmed', paymentStatus: 'paid' });
+
+    const [{ stock: before }] = await q<{ stock: number }>('select stock from products where id = $1', [P1]);
+    await call('POST', `orders/${o.order_id}/status`, { body: { status: 'cancelled' } });
+    await call('POST', `orders/${o.order_id}/status`, { body: { status: 'cancelled' } });
+    const [{ stock: after }] = await q<{ stock: number }>('select stock from products where id = $1', [P1]);
+    expect(after).toBe(before + 3);
+    expect((await call('POST', `orders/${o.order_id}/status`, { body: { status: 'new' } })).status).toBe(409);
+    expect((await call('POST', `orders/${o.order_id}/status`, { body: { status: 'hackeado' } })).status).toBe(400);
+  });
+
+  it('productos: crear, editar, slug duplicado, stock, ocultar (sale del catálogo público)', async () => {
+    const draft = { slug: 'cuatro-quesos', name: 'Cuatro quesos', pastaType: 'sorrentinos', filling: 'Muzza, azul', description: '', price: 10900, stock: 6, lowStockThreshold: 2, featured: false, active: true, sortOrder: 9 };
+    const c = await call('POST', 'products', { body: draft });
+    expect(c.status).toBe(200);
+    expect((await call('POST', 'products', { body: draft })).status).toBe(409);
+    expect((await call('POST', 'products', { body: { ...draft, id: c.data.id, price: 11500 } })).status).toBe(200);
+    expect((await call('POST', 'products', { body: { ...draft, slug: 'otro', price: 0 } })).status).toBe(400);
+    await call('POST', `products/${c.data.id}/stock`, { body: { stock: 1, active: false } });
+    const all = await call('GET', 'products');
+    expect(all.data.products.find((p: { id: string }) => p.id === c.data.id)).toMatchObject({ price: 11500, stock: 1, active: false });
+    expect((await getCatalog(q)).products.some((p) => p.id === c.data.id)).toBe(false);
+  });
+
+  it('archivos: subir foto (primera = portada), video, formato inválido, portada, mover, borrar', async () => {
+    const up = (type: string, size = 2048) => call('POST', `products/${P1}/media?alt=Sorrentinos`, { raw: new Uint8Array(size), type });
+    expect((await up('image/webp')).status).toBe(200);
+    expect((await up('video/mp4')).status).toBe(200);
+    expect((await up('application/pdf')).status).toBe(415);
+    expect((await up('image/webp', 6 * 1024 * 1024)).status).toBe(413);
+    let p = (await call('GET', 'products')).data.products.find((x: { id: string }) => x.id === P1);
+    expect(p.media).toHaveLength(2);
+    expect(p.media[0]).toMatchObject({ kind: 'photo', isCover: true });
+    expect(p.media[0].url).toMatch(/^\/media\/[0-9a-f-]{36}\/[0-9a-f-]{36}\.webp$/);
+    expect(media.keys()).toHaveLength(2);
+    const video = p.media.find((m: { kind: string }) => m.kind === 'video');
+    await call('POST', `media/${video.id}/move`, { body: { dir: -1 } });
+    await call('DELETE', `media/${p.media.find((m: { kind: string }) => m.kind === 'photo').id}`);
+    p = (await call('GET', 'products')).data.products.find((x: { id: string }) => x.id === P1);
+    expect(p.media).toHaveLength(1);
+    expect(media.keys()).toHaveLength(1);
+  });
+
+  it('zonas: validación, alta, edición y baja (se refleja en el catálogo)', async () => {
+    expect((await call('POST', 'zones', { body: { name: 'Hudson', postalCodes: ['18a5'], shippingCost: 1, minOrder: 0, freeShippingFrom: null, active: true } })).status).toBe(400);
+    expect((await call('POST', 'zones', { body: { name: 'Hudson', postalCodes: ['1893'], shippingCost: 2000, minOrder: 10000, freeShippingFrom: null, active: true } })).status).toBe(200);
+    const z = (await call('GET', 'zones')).data.zones.find((x: { name: string }) => x.name === 'Hudson');
+    expect((await getCatalog(q)).zones.some((x) => x.name === 'Hudson')).toBe(true);
+    await call('POST', 'zones', { body: { ...z, active: false } });
+    expect((await getCatalog(q)).zones.some((x) => x.name === 'Hudson')).toBe(false);
+    expect((await call('DELETE', `zones/${z.id}`)).status).toBe(200);
+  });
+
+  it('ajustes (email de aviso privado) y turnos', async () => {
+    await call('POST', 'settings', { body: { pickupEnabled: true, pickupMinOrder: 0, pickupAddress: 'Calle 1', whatsappPhone: '+54 9 11 5555-1234', transferInfo: 'Alias X', notifyEmail: 'yo@ricordo.com' } });
+    expect((await call('GET', 'settings')).data.settings).toMatchObject({ whatsappPhone: '5491155551234', notifyEmail: 'yo@ricordo.com' });
+    expect(JSON.stringify(await getCatalog(q))).not.toContain('yo@ricordo.com');
+    expect((await call('POST', 'windows', { body: { label: 'Domingo', weekday: 0, startsAt: '12:00', endsAt: '10:00', cutoffHours: 24, forDelivery: true, forPickup: true, active: true } })).status).toBe(400);
+    expect((await call('POST', 'windows', { body: { label: 'Domingo', weekday: 0, startsAt: '10:00', endsAt: '12:00', cutoffHours: 24, forDelivery: false, forPickup: true, active: true } })).status).toBe(200);
+    expect((await call('GET', 'windows')).data.windows).toHaveLength(3);
+  });
+
+  it('logout borra la cookie', async () => {
+    const r = await call('POST', 'logout');
+    expect(r.setCookie).toMatch(/Max-Age=0/);
+  });
+});

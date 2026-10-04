@@ -18,4 +18,5 @@ export async function compressImage(file: File, maxSide = 1600, quality = 0.82):
   return jpg;
 }
 
-export const MAX_VIDEO_MB = 25;
+/** Límite de las funciones de Netlify (~6 MB por pedido). Para videos más largos, recortarlos o bajar la calidad. */
+export const MAX_VIDEO_MB = 5;

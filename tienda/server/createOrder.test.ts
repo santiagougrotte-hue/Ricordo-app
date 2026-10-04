@@ -1,147 +1,121 @@
-import { describe, expect, it, vi } from 'vitest';
+import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import type pg from 'pg';
 import { handleCreateOrder, mapDbError, parseInput, type ServerEnv } from './createOrder';
+import type { Query } from './db';
+import { freshDb, TEST_DB } from './testdb';
 
-const ENV: ServerEnv = {
-  SUPABASE_URL: 'https://x.supabase.co',
-  SUPABASE_SERVICE_ROLE_KEY: 'service',
-  TURNSTILE_SECRET_KEY: '1x0000000000000000000000000000000AA',
-  RESEND_API_KEY: 're_test',
-  TELEGRAM_BOT_TOKEN: 'tg',
-  TELEGRAM_CHAT_ID: '42',
-};
-const P1 = '00000000-0000-4000-8000-000000000001';
-const W1 = '11111111-1111-4111-8111-111111111111';
-const BODY = {
+const P1 = '00000000-0000-4000-8000-000000000001'; // sorrentinos J&M&N $9800, stock 14
+const P2 = '00000000-0000-4000-8000-000000000002'; // ravioles ricota $8500, stock 2
+const P5 = '00000000-0000-4000-8000-000000000005'; // verdura y pollo $8900, stock 20
+const W = '11111111-1111-4111-8111-111111111111';
+const BASE = {
   customerName: 'Ana Pérez', customerPhone: '11 5555 1234', customerEmail: 'ana@x.com', deliveryMethod: 'delivery',
   address: 'Calle 14 1234', postalCode: 'B1884ABC', notes: '', paymentMethod: 'transfer',
-  deliveryDate: '2026-10-09', deliveryWindowId: W1, items: [{ productId: P1, quantity: 2 }], turnstileToken: 'tok',
-};
-const ORDER_ROW = {
-  number: 1001, subtotal: 19600, shipping_cost: 1500, total: 21100, delivery_method: 'delivery',
-  delivery_window_label: 'Viernes 9/10 a la noche · 20 a 23 h', payment_method: 'transfer', customer_name: 'Ana Pérez',
-  order_items: [{ product_name: 'Jamón, muzza y nuez', quantity: 2, unit_price: 9800 }],
+  deliveryDate: '2026-10-09', deliveryWindowId: W, items: [{ productId: P1, quantity: 2 }], turnstileToken: 'ok',
 };
 
-const json = (data: unknown, status = 200) => new Response(JSON.stringify(data), { status, headers: { 'Content-Type': 'application/json' } });
-
-/** fetch falso que enruta por URL y registra las llamadas. */
-function fakeFetch(over: Partial<Record<string, () => Response | Promise<Response>>> = {}) {
-  const calls: { url: string; init?: RequestInit }[] = [];
-  const routes: Record<string, () => Response | Promise<Response>> = {
-    siteverify: () => json({ success: true }),
-    'rpc/create_order': () => json([{ order_id: 'o-1', order_number: 1001, total: 21100 }]),
-    '/orders?': () => json(ORDER_ROW),
-    store_settings: () => json({ notify_email: 'duenio@ricordo.com' }),
-    'api.resend.com': () => json({ id: 'e1' }),
-    'api.telegram.org': () => json({ ok: true }),
-    ...over,
-  };
-  const f = vi.fn(async (url: string | URL | Request, init?: RequestInit) => {
-    const u = String(url);
-    calls.push({ url: u, init });
-    const key = Object.keys(routes).find((k) => u.includes(k));
-    if (!key) throw new Error('ruta no esperada ' + u);
-    return routes[key]();
-  });
-  return { fetch: f as unknown as typeof fetch, calls };
-}
-
-describe('parseInput', () => {
-  it('acepta un pedido válido', () => expect(typeof parseInput(BODY)).toBe('object'));
+describe('parseInput (forma del pedido)', () => {
+  it('acepta un pedido válido', () => expect(typeof parseInput(BASE)).toBe('object'));
   it.each([
-    [{ ...BODY, items: [] }, 'Carrito vacío o inválido'],
-    [{ ...BODY, items: [{ productId: P1, quantity: 0 }] }, 'Cantidad inválida'],
-    [{ ...BODY, items: [{ productId: 'x', quantity: 1 }] }, 'Producto inválido'],
-    [{ ...BODY, paymentMethod: 'mercadopago' }, 'Método de pago no disponible'],
-    [{ ...BODY, customerPhone: '123' }, 'Teléfono inválido'],
-    [{ ...BODY, deliveryWindowId: 'nope' }, 'Turno inválido'],
+    [{ ...BASE, items: [] }, 'Carrito vacío o inválido'],
+    [{ ...BASE, items: [{ productId: P1, quantity: 0 }] }, 'Cantidad inválida'],
+    [{ ...BASE, items: [{ productId: 'x', quantity: 1 }] }, 'Producto inválido'],
+    [{ ...BASE, paymentMethod: 'mercadopago' }, 'Método de pago no disponible'],
+    [{ ...BASE, customerPhone: '123' }, 'Teléfono inválido'],
+    [{ ...BASE, deliveryWindowId: 'nope' }, 'Turno inválido'],
     [null, 'Pedido vacío'],
   ])('rechaza %#', (body, msg) => expect(parseInput(body)).toBe(msg));
 });
 
-describe('handleCreateOrder', () => {
-  it('pedido OK: valida captcha, llama a create_order con la service key, arma comprobante y avisa', async () => {
-    const { fetch, calls } = fakeFetch();
-    const r = await handleCreateOrder(BODY, ENV, { fetch, ip: '1.2.3.4' });
+describe('mapDbError', () => {
+  it('RC001 trae el detalle', () => expect(mapDbError({ code: 'RC001', message: 'm', detail: '[{"name":"x","available":1}]' }).error).toMatchObject({ code: 'RC001', short: [{ available: 1 }] }));
+  it('error inesperado no filtra detalles', () => expect(JSON.stringify(mapDbError({ code: '42501', message: 'permission denied' }))).not.toContain('permission'));
+});
+
+describe.skipIf(!TEST_DB)('handleCreateOrder contra Netlify Database (Postgres real)', () => {
+  let q: Query;
+  let pool: pg.Pool;
+  let slot: { window_id: string; d: string };
+  const sent: { url: string; body: Record<string, unknown> }[] = [];
+  const env: ServerEnv = { TURNSTILE_SECRET_KEY: 'secreto', SESSION_SECRET: 's', RESEND_API_KEY: 're', TELEGRAM_BOT_TOKEN: 't', TELEGRAM_CHAT_ID: '1', SITE_URL: 'https://ricordo-pastas.netlify.app' };
+  const fakeFetch = vi.fn(async (url: string | URL | Request, init?: RequestInit) => {
+    const u = String(url);
+    if (u.includes('siteverify')) {
+      const f = new URLSearchParams(String(init!.body));
+      return Response.json({ success: f.get('secret') === 'secreto' && f.get('response') === 'ok' });
+    }
+    sent.push({ url: u, body: JSON.parse(String(init!.body)) });
+    return Response.json({ ok: true });
+  }) as unknown as typeof fetch;
+  let ipN = 0;
+  const run = (body: unknown, ip = `10.0.0.${++ipN}`) => handleCreateOrder(body, env, { query: q, fetch: fakeFetch, ip });
+  const stock = async () => Object.fromEntries((await q<{ id: string; stock: number }>('select id, stock from products')).map((r) => [r.id, r.stock]));
+
+  beforeAll(async () => {
+    ({ q, pool } = await freshDb());
+    await q(`update store_settings set notify_email = 'duenio@ricordo.com'`);
+  });
+  beforeEach(async () => {
+    [slot] = await q<{ window_id: string; d: string }>(`select window_id, delivery_date::text d from available_delivery_slots('delivery') limit 1`);
+    sent.length = 0;
+  });
+  afterAll(() => pool.end());
+
+  it('pedido OK: recalcula en la base, descuenta stock, devuelve comprobante y avisa', async () => {
+    const before = await stock();
+    const r = await run({ ...BASE, deliveryDate: slot.d, deliveryWindowId: slot.window_id, total: 1, price: 1 });
     expect(r.status).toBe(200);
-    expect(r.body).toMatchObject({ ok: true, receipt: { number: 1001, total: 21100, shippingCost: 1500, windowLabel: 'Viernes 9/10 a la noche · 20 a 23 h' } });
-
-    const verify = calls.find((c) => c.url.includes('siteverify'))!;
-    expect(String(verify.init!.body)).toContain('remoteip=1.2.3.4');
-    const rpc = calls.find((c) => c.url.includes('rpc/create_order'))!;
-    expect((rpc.init!.headers as Record<string, string>).Authorization).toBe('Bearer service');
-    expect(JSON.parse(String(rpc.init!.body))).toMatchObject({
-      p_postal_code: 'B1884ABC', p_payment_method: 'transfer', p_items: [{ product_id: P1, quantity: 2 }], p_delivery_window_id: W1,
-    });
-    const mail = calls.find((c) => c.url.includes('resend'))!;
-    expect(JSON.parse(String(mail.init!.body))).toMatchObject({ to: ['duenio@ricordo.com'], subject: 'Nuevo pedido #1001 — $21.100' });
-    expect(calls.some((c) => c.url.includes('telegram'))).toBe(true);
+    expect(r.body).toMatchObject({ ok: true, receipt: { number: 1001, subtotal: 19600, shippingCost: 1500, total: 21100 } });
+    expect((await stock())[P1]).toBe(before[P1] - 2);
+    const mail = sent.find((s) => s.url.includes('resend'))!;
+    expect(mail.body).toMatchObject({ to: ['duenio@ricordo.com'], subject: 'Nuevo pedido #1001 — $21.100' });
+    expect(String(mail.body.text)).toContain('Ver en el panel: https://ricordo-pastas.netlify.app/admin/pedidos');
+    expect(sent.some((s) => s.url.includes('telegram'))).toBe(true);
   });
 
-  it('no manda precios del navegador: el RPC no recibe montos', async () => {
-    const { fetch, calls } = fakeFetch();
-    await handleCreateOrder({ ...BODY, total: 1, price: 1 }, ENV, { fetch });
-    const sent = JSON.parse(String(calls.find((c) => c.url.includes('rpc/create_order'))!.init!.body));
-    expect(Object.keys(sent).some((k) => /total|price|subtotal|shipping/.test(k))).toBe(false);
-  });
-
-  it('captcha inválido → 403 y no toca la base', async () => {
-    const { fetch, calls } = fakeFetch({ siteverify: () => json({ success: false }) });
-    const r = await handleCreateOrder(BODY, ENV, { fetch });
-    expect(r).toMatchObject({ status: 403, body: { ok: false, error: { code: 'CAPTCHA' } } });
-    expect(calls.some((c) => c.url.includes('create_order'))).toBe(false);
+  it('captcha inválido → 403 y no toca stock ni pedidos', async () => {
+    const before = await stock();
+    const r = await run({ ...BASE, turnstileToken: 'otro', deliveryDate: slot.d, deliveryWindowId: slot.window_id });
+    expect(r.status).toBe(403);
+    expect(await stock()).toEqual(before);
   });
 
   it('sin TURNSTILE_SECRET_KEY no se aceptan pedidos (falla cerrado)', async () => {
-    const { fetch } = fakeFetch();
-    const r = await handleCreateOrder(BODY, { ...ENV, TURNSTILE_SECRET_KEY: undefined }, { fetch });
+    const r = await handleCreateOrder({ ...BASE, deliveryDate: slot.d, deliveryWindowId: slot.window_id }, { ...env, TURNSTILE_SECRET_KEY: undefined }, { query: q, fetch: fakeFetch, ip: '9.9.9.9' });
     expect(r.status).toBe(403);
   });
 
-  it('sin token → 403', async () => {
-    const { fetch } = fakeFetch();
-    expect((await handleCreateOrder({ ...BODY, turnstileToken: '' }, ENV, { fetch })).status).toBe(403);
+  it.each([
+    ['sin stock', { items: [{ productId: P2, quantity: 3 }] }, 'RC001'],
+    ['CP fuera de zona', { postalCode: '1900' }, 'RC002'],
+    ['bajo el mínimo', { items: [{ productId: P2, quantity: 1 }] }, 'RC003'],
+    ['turno inexistente', { deliveryWindowId: W }, 'RC006'],
+  ])('%s → 409 %s y no se crea nada', async (_n, patch, code) => {
+    const [{ n: before }] = await q<{ n: number }>('select count(*)::int n from orders');
+    const r = await run({ ...BASE, deliveryDate: slot.d, deliveryWindowId: slot.window_id, ...patch });
+    expect(r).toMatchObject({ status: 409, body: { ok: false, error: { code } } });
+    const [{ n: after }] = await q<{ n: number }>('select count(*)::int n from orders');
+    expect(after).toBe(before);
   });
 
-  it('sin stock → 409 con detalle de productos', async () => {
-    const { fetch } = fakeFetch({
-      'rpc/create_order': () => json({ code: 'RC001', message: 'Sin stock suficiente', details: JSON.stringify([{ product_id: P1, name: 'Jamón', requested: 2, available: 1 }]) }, 400),
-    });
-    const r = await handleCreateOrder(BODY, ENV, { fetch });
-    expect(r).toMatchObject({ status: 409, body: { ok: false, error: { code: 'RC001', short: [{ available: 1 }] } } });
+  it('retiro sin mínimo y en efectivo', async () => {
+    const [ps] = await q<{ window_id: string; d: string }>(`select window_id, delivery_date::text d from available_delivery_slots('pickup') limit 1`);
+    const r = await run({ ...BASE, deliveryMethod: 'pickup', paymentMethod: 'cash', items: [{ productId: P2, quantity: 1 }], deliveryDate: ps.d, deliveryWindowId: ps.window_id });
+    expect(r.body).toMatchObject({ ok: true, receipt: { shippingCost: 0, total: 8500 } });
   });
 
-  it('bajo el mínimo → RC003 con cuánto falta', async () => {
-    const { fetch } = fakeFetch({ 'rpc/create_order': () => json({ code: 'RC003', message: 'min', details: '{"min_order":15000,"missing":6500}' }, 400) });
-    expect((await handleCreateOrder(BODY, ENV, { fetch })).body).toMatchObject({ error: { code: 'RC003', minOrder: 15000, missing: 6500 } });
+  it('concurrencia: 3 pedidos simultáneos de 8 cajas sobre 20 → pasan 2, nunca se vende de más', async () => {
+    const [ps] = await q<{ window_id: string; d: string }>(`select window_id, delivery_date::text d from available_delivery_slots('pickup') limit 1`);
+    const body = { ...BASE, deliveryMethod: 'pickup', items: [{ productId: P5, quantity: 8 }], deliveryDate: ps.d, deliveryWindowId: ps.window_id };
+    const res = await Promise.all([run(body), run(body), run(body)]);
+    expect(res.map((r) => r.status).sort()).toEqual([200, 200, 409]);
+    expect((await stock())[P5]).toBe(4);
   });
 
-  it('error inesperado de la base → 502 genérico, sin filtrar detalles', async () => {
-    const log = vi.fn();
-    const { fetch } = fakeFetch({ 'rpc/create_order': () => json({ code: '42501', message: 'permission denied for function create_order' }, 401) });
-    const r = await handleCreateOrder(BODY, ENV, { fetch, log });
-    expect(r.status).toBe(502);
-    expect(JSON.stringify(r.body)).not.toContain('permission');
-    expect(log).toHaveBeenCalled();
+  it('límite: el 7.º pedido en una hora desde la misma IP → 429', async () => {
+    const statuses: number[] = [];
+    for (let i = 0; i < 7; i++) statuses.push((await run({ ...BASE, postalCode: '1900', deliveryDate: slot.d, deliveryWindowId: slot.window_id }, '7.7.7.7')).status);
+    expect(statuses.slice(0, 6).every((s) => s === 409)).toBe(true);
+    expect(statuses[6]).toBe(429);
   });
-
-  it('si el email falla, el pedido igual se confirma', async () => {
-    const { fetch } = fakeFetch({ 'api.resend.com': () => Promise.reject(new Error('caído')), 'api.telegram.org': () => json({}, 500) });
-    expect((await handleCreateOrder(BODY, ENV, { fetch })).status).toBe(200);
-  });
-
-  it('sin aviso configurado no llama a Resend ni Telegram', async () => {
-    const { fetch, calls } = fakeFetch();
-    await handleCreateOrder(BODY, { ...ENV, RESEND_API_KEY: undefined, TELEGRAM_BOT_TOKEN: undefined }, { fetch });
-    expect(calls.some((c) => /resend|telegram|store_settings/.test(c.url))).toBe(false);
-  });
-
-  it('sin configuración de Supabase → 500 claro', async () => {
-    const { fetch } = fakeFetch();
-    expect((await handleCreateOrder(BODY, {}, { fetch })).status).toBe(500);
-  });
-});
-
-describe('mapDbError', () => {
-  it.each(['RC002', 'RC004', 'RC005', 'RC006'])('%s pasa tal cual', (code) => expect(mapDbError({ code, message: 'm' }).error.code).toBe(code));
 });

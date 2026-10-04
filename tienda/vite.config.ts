@@ -44,5 +44,5 @@ export default defineConfig({
   build: SINGLE
     ? { target: 'es2020', outDir: 'dist-html', chunkSizeWarningLimit: 4000 }
     : { target: 'es2020', cssCodeSplit: true, chunkSizeWarningLimit: 650 },
-  test: { environment: 'node', include: ['src/**/*.test.ts', 'server/**/*.test.ts'] },
+  test: { environment: 'node', include: ['src/**/*.test.ts', 'server/**/*.test.ts'], fileParallelism: false },
 });

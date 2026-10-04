@@ -14,7 +14,7 @@ import { Turnstile, type TurnstileHandle } from '../components/Turnstile';
 
 const TURNSTILE_KEY = import.meta.env.VITE_TURNSTILE_SITE_KEY as string | undefined;
 // En modo demo no hay servidor que valide, así que no se carga el captcha.
-const NEEDS_CAPTCHA = api.mode === 'supabase';
+const NEEDS_CAPTCHA = api.mode === 'live';
 import { useDocumentTitle } from './useDocumentTitle';
 
 interface Form {

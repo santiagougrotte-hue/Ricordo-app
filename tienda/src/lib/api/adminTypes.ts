@@ -65,7 +65,7 @@ export interface ProductDraft {
 export type OrderEvent = { type: 'insert' | 'update'; order: AdminOrder };
 
 export interface AdminApi {
-  mode: 'demo' | 'supabase';
+  mode: 'demo' | 'live';
   getSession(): Promise<{ email: string } | null>;
   signIn(email: string, password: string): Promise<string | null>; // devuelve mensaje de error o null
   signOut(): Promise<void>;

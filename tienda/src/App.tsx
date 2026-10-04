@@ -32,7 +32,7 @@ export function App() {
   const { pathname } = useLocation();
   const isAdmin = pathname === '/admin' || pathname.startsWith('/admin/');
   useSmoothScroll(!isAdmin);
-  // El panel vive aparte: sin header/footer/carrito de la tienda y en su propio chunk (supabase-js completo va solo ahí).
+  // El panel vive aparte: sin header/footer/carrito de la tienda y en su propio chunk.
   if (isAdmin) {
     return (
       <Suspense fallback={<p className="wrap sec muted">Cargando el panel…</p>}>

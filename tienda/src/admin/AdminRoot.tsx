@@ -17,7 +17,11 @@ import './admin.css';
 export function AdminRoot() {
   const [session, setSession] = useState<{ email: string } | null | undefined>(undefined);
   useEffect(() => {
-    void adminApi.getSession().then(setSession);
+    adminApi.getSession().then(setSession, () => setSession(null));
+    // Si la sesión vence mientras el panel está abierto, vuelve al login.
+    const out = () => setSession(null);
+    window.addEventListener('ricordo-admin-logout', out);
+    return () => window.removeEventListener('ricordo-admin-logout', out);
   }, []);
 
   if (session === undefined) return <main className="adm-wrap muted">Cargando…</main>;
@@ -96,7 +100,7 @@ function Login({ onDone }: { onDone: (email: string) => void }) {
           <h1 className="d-m">Panel de pedidos</h1>
           <div className="field">
             <label className="field-label" htmlFor="adm-email">Email</label>
-            <input id="adm-email" className="input" type="email" autoComplete="username" value={email} onChange={(e) => setEmail(e.target.value)} required={adminApi.mode === 'supabase'} />
+            <input id="adm-email" className="input" type="email" autoComplete="username" value={email} onChange={(e) => setEmail(e.target.value)} required={adminApi.mode === 'live'} />
           </div>
           <div className="field">
             <label className="field-label" htmlFor="adm-pass">Contraseña</label>

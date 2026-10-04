@@ -28,11 +28,10 @@ export function ProductCover({ product, ratio = '4 / 5', sizes = '(min-width: 90
   );
 }
 
-/** Supabase Storage sirve versiones redimensionadas con /render/image/. Solo aplica a URLs de Storage. */
+/** Netlify Image CDN: versiones redimensionadas (y en AVIF/WebP según el navegador) de las fotos de /media/. */
 export function srcSet(url: string): string | undefined {
-  if (!url.includes('/storage/v1/object/public/')) return undefined;
-  const base = url.replace('/storage/v1/object/public/', '/storage/v1/render/image/public/');
-  return [480, 800, 1200].map((w) => `${base}?width=${w}&quality=72 ${w}w`).join(', ');
+  if (!url.startsWith('/media/') || !/\.(webp|jpg|png)$/.test(url)) return undefined;
+  return [480, 800, 1200].map((w) => `/.netlify/images?url=${encodeURIComponent(url)}&w=${w}&q=72 ${w}w`).join(', ');
 }
 
 /** Video del producto: sin sonido, en loop, y solo mientras se ve (ahorra datos y batería). */
