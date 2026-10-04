@@ -140,10 +140,12 @@ describe.skipIf(!TEST_DB)('API del panel contra Netlify Database (Postgres real)
 });
 
 describe.skipIf(!TEST_DB)('migraciones: gusto real cargado', () => {
-  it('la tienda muestra cabutia ($11.500) y osobuco ($14.000), con fotos y video; los ejemplos quedan ocultos', async () => {
+  it('la tienda muestra cabutia ($11.500), osobuco ($14.000) y espinaca ($13.000), con fotos y video; los ejemplos quedan ocultos', async () => {
     const { q, pool } = await freshDb(false);
     const c = await getCatalog(q);
-    expect(c.products.map((p) => p.name)).toEqual(['Cabutia', 'Osobuco']);
+    expect(c.products.map((p) => p.name)).toEqual(['Cabutia', 'Osobuco', 'Espinaca']);
+    expect(c.products[2]).toMatchObject({ price: 13000, pastaType: 'ravioles', featured: true, filling: 'Espinaca, ricotta, sardo, muzzarella, cebolla caramelizada y nueces picadas' });
+    expect(c.products[2].media.map((m) => m.url)).toEqual(['/fotos/espinaca-mano.webp', '/fotos/espinaca-ingredientes.webp']);
     expect(c.products[1]).toMatchObject({ price: 14000, unitsPerBox: 12, featured: true, filling: 'Osobuco braseado 4 horas al vino tinto y vermut, con zanahoria, apio y cebolla' });
     expect(c.products[1].media.map((m) => m.url)).toEqual(['/fotos/osobuco-mano.webp', '/fotos/osobuco-ingredientes.webp']);
     expect(c.products[0]).toMatchObject({ price: 11500, unitsPerBox: 12, pastaType: 'sorrentinos', featured: true });

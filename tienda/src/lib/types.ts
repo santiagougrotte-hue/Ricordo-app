@@ -109,7 +109,7 @@ export type OrderError =
 export type OrderResult = { ok: true; receipt: OrderReceipt } | { ok: false; error: OrderError };
 
 export const PASTA_LABEL: Record<PastaType, string> = {
-  ravioles: 'Ravioles',
+  ravioles: 'Raviolones',  // los ravioles de Ricordo son raviolones
   sorrentinos: 'Sorrentinos',
   cappellacci: 'Cappellacci',
 };

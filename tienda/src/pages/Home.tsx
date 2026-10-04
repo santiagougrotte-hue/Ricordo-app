@@ -26,6 +26,8 @@ export function Home() {
   const single = featured.length === 1 ? featured[0] : null;
   // Dos gustos: van parejos, en dos columnas escalonadas y los dos con descripción.
   const pair = featured.length === 2;
+  // Si todos los gustos están destacados, la sección es la carta completa y no hace falta "ver todos".
+  const all = featured.length > 0 && featured.length === products.length;
   const second = single?.media.filter((m) => m.kind === 'photo')[1];
   useReveal(status);
 
@@ -57,8 +59,8 @@ export function Home() {
         <header className="sec-head" data-reveal="rise">
           <span className="sec-n" aria-hidden="true">01</span>
           <div>
-            <h2 id="h-dest" className="d-xl">{single ? `${PASTA_LABEL[single.pastaType]} de ${single.name.toLowerCase()}` : pair ? 'Los gustos' : 'Las que más salen'}</h2>
-            <p className="lede">{single ? `${single.filling}. Caja de 12.` : pair ? 'Hechos a mano, sin TACC. Cada caja trae 12.' : 'Cada caja trae 12. Se cocinan del freezer a la olla, sin descongelar.'}</p>
+            <h2 id="h-dest" className="d-xl">{single ? `${PASTA_LABEL[single.pastaType]} de ${single.name.toLowerCase()}` : pair || all ? 'Los gustos' : 'Las que más salen'}</h2>
+            <p className="lede">{single ? `${single.filling}. Caja de 12.` : pair || all ? 'Hechos a mano, sin TACC. Cada caja trae 12.' : 'Cada caja trae 12. Se cocinan del freezer a la olla, sin descongelar.'}</p>
           </div>
         </header>
         <div className={'featured' + (single ? ' featured-single' : pair ? ' featured-pair' : '')} aria-busy={status === 'loading'}>
@@ -91,7 +93,7 @@ export function Home() {
             </div>
           )}
         </div>
-        {!single && !pair && <p className="more-link" data-reveal="rise"><Link to="/cajas" className="link-big">Ver todos los gustos <Icon name="flecha" /></Link></p>}
+        {!single && !pair && !all && <p className="more-link" data-reveal="rise"><Link to="/cajas" className="link-big">Ver todos los gustos <Icon name="flecha" /></Link></p>}
       </section>
 
       <section id="como-pedir" className="sec band-kraft" aria-labelledby="h-como">

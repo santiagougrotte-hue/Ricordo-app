@@ -5,7 +5,7 @@ import type { DeliveryWindow } from '../slots';
 import { EXAMPLE_IDS, SEED_PRODUCTS, SEED_SETTINGS, SEED_WINDOWS, SEED_ZONES } from './seed-data';
 import type { AdminOrder, AdminSettings } from './adminTypes';
 
-const KEY = 'ricordo-demo-db-v3';
+const KEY = 'ricordo-demo-db-v4';
 const CHANNEL = 'ricordo-demo';
 
 export interface DemoDb {

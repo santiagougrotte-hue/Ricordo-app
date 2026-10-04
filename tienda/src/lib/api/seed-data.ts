@@ -7,6 +7,8 @@ import videoAmasado from '../../assets/fotos/amasado-masa-nero.mp4';
 import fotoCabutiaIng from '../../assets/fotos/cabutia-ingredientes.webp';
 import fotoOsobuco from '../../assets/fotos/osobuco-mano.webp';
 import fotoOsobucoIng from '../../assets/fotos/osobuco-ingredientes.webp';
+import fotoEspinaca from '../../assets/fotos/espinaca-mano.webp';
+import fotoEspinacaIng from '../../assets/fotos/espinaca-ingredientes.webp';
 
 // Datos de ejemplo — los mismos que netlify/database/migrations/*_example-data. Precios, rellenos y CPs son ilustrativos.
 // Gusto real (igual que netlify/database/migrations/*_gusto-cabutia).
@@ -52,12 +54,33 @@ export const OSOBUCO: Product = {
   ],
 };
 
+// Igual que netlify/database/migrations/*_gusto-espinaca.
+export const ESPINACA: Product = {
+  id: '00000000-0000-4000-8000-000000000012',
+  slug: 'raviolones-espinaca',
+  name: 'Espinaca',
+  pastaType: 'ravioles',
+  filling: 'Espinaca, ricotta, sardo, muzzarella, cebolla caramelizada y nueces picadas',
+  description: 'Raviolones de espinaca, ricotta, queso sardo, muzzarella, cebolla caramelizada y nueces picadas. Cada caja trae 12 raviolones.',
+  unitsPerBox: 12,
+  price: 13000,
+  stock: 20,
+  lowStockThreshold: 4,
+  featured: true,
+  sortOrder: 3,
+  media: [
+    { id: 'm-esp-1', url: fotoEspinaca, kind: 'photo', alt: 'Raviolón de espinaca en la mano, sobre la bandeja con el resto de la tanda', isCover: true, sortOrder: 0 },
+    { id: 'm-esp-2', url: fotoEspinacaIng, kind: 'photo', alt: 'Lo que lleva: espinaca, ricotta, sardo, muzzarella y nueces, alrededor de un raviolón', isCover: false, sortOrder: 1 },
+  ],
+};
+
 /** Productos de ejemplo: ocultos en la tienda (sirven de modelo en el panel). */
 export const EXAMPLE_IDS = [1, 2, 3, 4, 5].map((n) => `00000000-0000-4000-8000-00000000000${n}`);
 
 export const SEED_PRODUCTS: Product[] = [
   CABUTIA,
   OSOBUCO,
+  ESPINACA,
   {
     id: '00000000-0000-4000-8000-000000000001',
     slug: 'sorrentinos-jamon-muzza-nuez',
