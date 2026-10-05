@@ -4,7 +4,7 @@ import type { Query } from './db';
 import type { MediaStore } from './media';
 import { allow, clearCookie, ipHash, json, readCookie, sameText, sessionCookie, signSession, verifySession } from './http';
 import { mapLocality, mapProduct, mapSettings, mapZone, PRODUCTS_SQL } from './catalog';
-import { mapShippingConfig } from './distance';
+import { loadBands, mapShippingConfig } from './distance';
 import { sendWhatsapp } from './createOrder';
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
@@ -268,16 +268,32 @@ export async function handleAdmin(req: Request, path: string, env: AdminEnv, dep
   // ── Cálculo del envío por distancia (privado) ──
   if (path === 'shipping-config' && method === 'GET') {
     const [c] = await q(`select * from shipping_config limit 1`);
-    return json({ config: mapShippingConfig(c), enabled: !!env.ORS_API_KEY });
+    return json({ config: mapShippingConfig(c), bands: await loadBands(q), enabled: !!env.ORS_API_KEY });
   }
   if (path === 'shipping-config' && method === 'POST') {
     const c = await body();
     const lat = Number(c.originLat), lng = Number(c.originLng), cons = Number(c.consumption100km);
     if (!(lat >= -56 && lat <= -21 && lng >= -74 && lng <= -53)) return bad('Revisá las coordenadas de origen (tienen que ser de Argentina).');
     if (int(c.fuelPrice, 1) === null || !(cons > 0 && cons < 100) || int(c.rounding, 1) === null) return bad('Revisá nafta, consumo y redondeo.');
-    await q(`update shipping_config set origin_lat=$1, origin_lng=$2, fuel_price=$3, consumption_100km=$4, rounding=$5`,
-      [lat, lng, c.fuelPrice, Math.round(cons * 10) / 10, c.rounding]);
-    await q(`delete from geo_cache`); // con otro origen hay que volver a medir
+    const mode = c.pricingMode === 'fuel' ? 'fuel' : 'bands';
+    // Escalones: km crecientes, precios enteros; el último puede ser "más lejos" (sin km).
+    let bands: { upToKm: number | null; price: number }[] | null = null;
+    if (Array.isArray(c.bands)) {
+      bands = (c.bands as Row[]).map((b) => ({ upToKm: b.upToKm === null || b.upToKm === '' ? null : Math.round(Number(b.upToKm) * 10) / 10, price: Number(b.price) }));
+      const kms = bands.filter((b) => b.upToKm !== null).map((b) => b.upToKm as number);
+      if (!bands.length || bands.some((b) => !Number.isInteger(b.price) || b.price < 0 || (b.upToKm !== null && !(b.upToKm > 0 && b.upToKm < 1000)))
+          || new Set(kms).size !== kms.length || bands.filter((b) => b.upToKm === null).length > 1) {
+        return bad('Revisá los escalones: km distintos y mayores a 0, precios en pesos enteros, y a lo sumo un "más lejos".');
+      }
+    }
+    const [old] = await q(`select origin_lat, origin_lng from shipping_config limit 1`);
+    await q(`update shipping_config set origin_lat=$1, origin_lng=$2, fuel_price=$3, consumption_100km=$4, rounding=$5, pricing_mode=$6`,
+      [lat, lng, c.fuelPrice, Math.round(cons * 10) / 10, c.rounding, mode]);
+    if (bands) {
+      await q(`delete from shipping_bands`);
+      for (const b of bands) await q(`insert into shipping_bands (up_to_km, price) values ($1, $2)`, [b.upToKm, b.price]);
+    }
+    if (Number(old.origin_lat) !== lat || Number(old.origin_lng) !== lng) await q(`delete from geo_cache`); // otro origen: volver a medir
     return json({ ok: true });
   }
 

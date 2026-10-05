@@ -117,7 +117,7 @@ function ZoneCard({ initial, locs, onSaved, onCancel }: { initial: Draft; locs: 
             </>
           )}
         </div>
-        {d.distancePricing && <p className="small muted">El respaldo se usa si no se puede ubicar la dirección. Con varios pedidos por ruta, el viaje se reparte entre ellos.</p>}
+        {d.distancePricing && <p className="small muted">El respaldo se usa si no se puede ubicar la dirección. Peaje y pedidos por ruta solo cuentan con el cálculo "Nafta + peaje".</p>}
         <label className="switch"><input type="checkbox" checked={d.active} onChange={(e) => setD({ ...d, active: e.target.checked })} /><span>Zona activa</span></label>
         {msg && <p className={msg.ok ? 'field-hint' : 'field-error'} role="status">{msg.text}</p>}
         <div className="stack-row">
@@ -182,53 +182,108 @@ function Localities({ zones, list, onSaved }: { zones: Zone[]; list: Loc[]; onSa
   );
 }
 
+type Band = { upToKm: number | null; price: number };
+
 /** Datos del cálculo por distancia. Privado: la ubicación de origen nunca se muestra en la tienda. */
 function DistanceConfig() {
   const cfg = useLoad(() => adminApi.getShippingConfig());
   const [c, setC] = useState<ShippingConfig | null>(null);
-  // enabled viene aparte (no se guarda)
+  const [bands, setBands] = useState<{ km: string; price: string }[]>([]);
   const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
   useEffect(() => {
     if (!cfg.data) return;
-    const { enabled: _e, ...rest } = cfg.data;
+    const { enabled: _e, bands: b, ...rest } = cfg.data;
     void _e;
     setC(rest);
+    setBands((b ?? []).map((x) => ({ km: x.upToKm === null ? '' : String(x.upToKm), price: String(x.price) })));
   }, [cfg.data]);
   if (cfg.error) return <p className="field-error">{cfg.error}</p>;
   if (!c) return null;
   const n = (k: keyof ShippingConfig) => (e: React.ChangeEvent<HTMLInputElement>) => setC({ ...c, [k]: Number(e.target.value) });
   const ex = (km: number) => Math.ceil((km * (c.consumption100km / 100) * c.fuelPrice) / c.rounding) * c.rounding;
+
+  function parsedBands(): Band[] | string {
+    const out: Band[] = [];
+    for (const b of bands) {
+      if (b.km.trim() === '' && b.price.trim() === '') continue;
+      const price = Number(b.price);
+      const km = b.km.trim() === '' ? null : Number(b.km.replace(',', '.'));
+      if (!Number.isInteger(price) || price < 0) return 'Los precios van en pesos enteros.';
+      if (km !== null && !(km > 0)) return 'Los km tienen que ser mayores a 0.';
+      out.push({ upToKm: km, price });
+    }
+    if (!out.length) return 'Cargá al menos un escalón.';
+    if (out.filter((b) => b.upToKm === null).length > 1) return 'Solo puede haber un escalón "más lejos" (sin km).';
+    const kms = out.filter((b) => b.upToKm !== null).map((b) => b.upToKm);
+    if (new Set(kms).size !== kms.length) return 'Hay dos escalones con los mismos km.';
+    return out.sort((a, b) => (a.upToKm ?? Infinity) - (b.upToKm ?? Infinity));
+  }
+
+  async function save() {
+    const b = parsedBands();
+    if (typeof b === 'string') return setMsg({ ok: false, text: b });
+    try {
+      await adminApi.saveShippingConfig({ ...c!, bands: b });
+      setBands(b.map((x) => ({ km: x.upToKm === null ? '' : String(x.upToKm), price: String(x.price) })));
+      setMsg({ ok: true, text: 'Guardado.' });
+    } catch (e) {
+      setMsg({ ok: false, text: e instanceof Error ? e.message : 'No se pudo guardar' });
+    }
+  }
+
   return (
     <section className="adm-section adm-form" aria-labelledby="h-dist">
-      <h2 id="h-dist" className="d-m">Cálculo por distancia</h2>
+      <h2 id="h-dist" className="d-m">Costo por distancia</h2>
       {cfg.data?.enabled !== undefined && (
         <p className={cfg.data.enabled ? 'adm-flex' : 'adm-callout'} role="status">
           {cfg.data.enabled
-            ? 'Activo: el envío se calcula con la dirección de cada cliente.'
+            ? 'Activo: la tienda mide los km reales (por calles) desde tu casa hasta la dirección de cada cliente.'
             : 'Inactivo: falta la clave de OpenRouteService (ORS_API_KEY) en Netlify. Mientras tanto se cobra el costo fijo de cada zona.'}
         </p>
       )}
-      <p className="small muted">
-        Envío = (km ida y vuelta × consumo × nafta + peaje de la zona) ÷ pedidos promedio por ruta, redondeado hacia arriba.
-        Las direcciones se ubican con OpenRouteService (variable <code>ORS_API_KEY</code> en Netlify); sin esa clave se usa el costo fijo de cada zona.
-        Este dato es privado: no se muestra en la tienda.
-      </p>
+      <p className="small muted">Se aplica a las zonas que tienen "Calcular por distancia". Si la dirección no se puede ubicar, se usa el costo fijo de la zona. Esto es privado: la ubicación de tu casa no se muestra en la tienda.</p>
       <div className="adm-grid2">
-        <div className="field"><label className="field-label" htmlFor="c-lat">Latitud de origen</label><input id="c-lat" className="input" type="number" step="0.000001" value={c.originLat} onChange={n('originLat')} /></div>
-        <div className="field"><label className="field-label" htmlFor="c-lng">Longitud de origen</label><input id="c-lng" className="input" type="number" step="0.000001" value={c.originLng} onChange={n('originLng')} /></div>
+        <div className="field"><label className="field-label" htmlFor="c-lat">Latitud de tu casa</label><input id="c-lat" className="input" type="number" step="0.000001" value={c.originLat} onChange={n('originLat')} /></div>
+        <div className="field"><label className="field-label" htmlFor="c-lng">Longitud de tu casa</label><input id="c-lng" className="input" type="number" step="0.000001" value={c.originLng} onChange={n('originLng')} /></div>
       </div>
       <p className="small muted">Las sacás de Google Maps: tocá y mantené sobre tu casa y copiá los dos números (el primero es la latitud).</p>
-      <div className="adm-grid3">
-        <div className="field"><label className="field-label" htmlFor="c-f">Nafta ($ por litro)</label><input id="c-f" className="input" type="number" min={1} inputMode="numeric" value={c.fuelPrice} onChange={n('fuelPrice')} /></div>
-        <div className="field"><label className="field-label" htmlFor="c-c">Consumo (litros cada 100 km)</label><input id="c-c" className="input" type="number" min={1} step={0.1} inputMode="decimal" value={c.consumption100km} onChange={n('consumption100km')} /></div>
-        <div className="field"><label className="field-label" htmlFor="c-r">Redondear de a ($)</label><input id="c-r" className="input" type="number" min={1} inputMode="numeric" value={c.rounding} onChange={n('rounding')} /></div>
-      </div>
-      <p className="small muted">Ejemplo sin peaje, 1 pedido por ruta: 10 km → {money(ex(10))} · 30 km → {money(ex(30))} · 60 km → {money(ex(60))}.</p>
+
+      <fieldset className="method adm-mode">
+        <legend className="field-label">Cómo se calcula</legend>
+        <label className={c.pricingMode === 'bands' ? 'on' : ''}><input type="radio" name="mode" checked={c.pricingMode === 'bands'} onChange={() => setC({ ...c, pricingMode: 'bands' })} /> Escalones por km</label>
+        <label className={c.pricingMode === 'fuel' ? 'on' : ''}><input type="radio" name="mode" checked={c.pricingMode === 'fuel'} onChange={() => setC({ ...c, pricingMode: 'fuel' })} /> Nafta + peaje</label>
+      </fieldset>
+
+      {c.pricingMode === 'bands' ? (
+        <>
+          <p className="small muted">Km de ida desde tu casa, medidos por calles. El último escalón sin km es "más lejos".</p>
+          <table className="adm-table adm-bands">
+            <thead><tr><th scope="col">Hasta (km)</th><th scope="col">Envío ($)</th><th scope="col"><span className="sr">Quitar</span></th></tr></thead>
+            <tbody>
+              {bands.map((b, i) => (
+                <tr key={i}>
+                  <td><input className="input" inputMode="decimal" aria-label={`Escalón ${i + 1}: hasta cuántos km`} placeholder="más lejos" value={b.km} onChange={(e) => setBands(bands.map((x, j) => (j === i ? { ...x, km: e.target.value } : x)))} /></td>
+                  <td><input className="input" inputMode="numeric" aria-label={`Escalón ${i + 1}: precio`} value={b.price} onChange={(e) => setBands(bands.map((x, j) => (j === i ? { ...x, price: e.target.value } : x)))} /></td>
+                  <td><button type="button" className="link" onClick={() => setBands(bands.filter((_, j) => j !== i))}>Quitar</button></td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+          <button type="button" className="btn btn-line" onClick={() => setBands([...bands, { km: '', price: '' }])}>Agregar escalón</button>
+        </>
+      ) : (
+        <>
+          <p className="small muted">Envío = (km ida y vuelta × consumo × nafta + peaje de la zona) ÷ pedidos promedio por ruta, redondeado hacia arriba.</p>
+          <div className="adm-grid3">
+            <div className="field"><label className="field-label" htmlFor="c-f">Nafta ($ por litro)</label><input id="c-f" className="input" type="number" min={1} inputMode="numeric" value={c.fuelPrice} onChange={n('fuelPrice')} /></div>
+            <div className="field"><label className="field-label" htmlFor="c-c">Consumo (litros cada 100 km)</label><input id="c-c" className="input" type="number" min={1} step={0.1} inputMode="decimal" value={c.consumption100km} onChange={n('consumption100km')} /></div>
+            <div className="field"><label className="field-label" htmlFor="c-r">Redondear de a ($)</label><input id="c-r" className="input" type="number" min={1} inputMode="numeric" value={c.rounding} onChange={n('rounding')} /></div>
+          </div>
+          <p className="small muted">Ejemplo sin peaje, 1 pedido por ruta: 10 km → {money(ex(10))} · 30 km → {money(ex(30))} · 60 km → {money(ex(60))}.</p>
+        </>
+      )}
       {msg && <p className={msg.ok ? 'field-hint' : 'field-error'} role="status">{msg.text}</p>}
-      <button type="button" className="btn btn-ink" onClick={async () => {
-        try { await adminApi.saveShippingConfig(c); setMsg({ ok: true, text: 'Guardado. Las distancias se vuelven a medir con este origen.' }); }
-        catch (e) { setMsg({ ok: false, text: e instanceof Error ? e.message : 'No se pudo guardar' }); }
-      }}>Guardar cálculo</button>
+      <button type="button" className="btn btn-ink" onClick={() => void save()}>Guardar</button>
     </section>
   );
 }

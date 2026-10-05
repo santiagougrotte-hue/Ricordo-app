@@ -164,7 +164,16 @@ describe.skipIf(!TEST_DB)('API del panel contra Netlify Database (Postgres real)
     const got = (await call('GET', 'shipping-config')).data;
     expect(got.enabled).toBe(false); // sin ORS_API_KEY
     const cfg = got.config;
-    expect(cfg).toEqual({ originLat: -34.765, originLng: -58.212, fuelPrice: 1700, consumption100km: 7, rounding: 500 });
+    expect(cfg).toEqual({ originLat: -34.765, originLng: -58.212, pricingMode: 'bands', fuelPrice: 1700, consumption100km: 7, rounding: 500 });
+    expect(got.bands).toHaveLength(7);
+    // Escalones: validación y guardado (sin tocar el origen no se borra la caché)
+    expect((await call('POST', 'shipping-config', { body: { ...cfg, bands: [{ upToKm: 5, price: 1000 }, { upToKm: 5, price: 2000 }] } })).status).toBe(400);
+    expect((await call('POST', 'shipping-config', { body: { ...cfg, bands: [{ upToKm: null, price: 1000 }, { upToKm: null, price: 2000 }] } })).status).toBe(400);
+    expect((await call('POST', 'shipping-config', { body: { ...cfg, bands: [{ upToKm: 4, price: 1200 }, { upToKm: 12.5, price: 2500 }, { upToKm: null, price: 5000 }] } })).status).toBe(200);
+    expect((await call('GET', 'shipping-config')).data.bands).toEqual([{ upToKm: 4, price: 1200 }, { upToKm: 12.5, price: 2500 }, { upToKm: null, price: 5000 }]);
+    // La tabla es pública solo si el cálculo por distancia está activo
+    expect((await getCatalog(q)).settings.shippingBands).toEqual([]);
+    expect((await getCatalog(q, { distanceEnabled: true })).settings.shippingBands).toHaveLength(3);
     expect((await call('POST', 'shipping-config', { body: { ...cfg, originLat: 40.4 } })).status).toBe(400); // fuera de Argentina
     await q(`insert into geo_cache (key, lat, lng, km_round_trip, origin) values ('x|1', -34.7, -58.2, 10, '-34.765,-58.212')`);
     expect((await call('POST', 'shipping-config', { body: { ...cfg, originLat: -34.77, fuelPrice: 1800 } })).status).toBe(200);

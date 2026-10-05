@@ -1,6 +1,7 @@
 // Datos públicos de la tienda: solo lo activo. Nunca el email de aviso ni pedidos.
 import type { Query } from './db';
 import type { Locality, Product, ShippingZone, StoreSettings } from '../src/lib/types';
+import { mapBand } from './distance';
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 type Row = Record<string, any>;
@@ -21,11 +22,13 @@ export const PRODUCTS_SQL = `
   from products p`;
 
 export async function getCatalog(q: Query, opts: { distanceEnabled?: boolean } = {}): Promise<{ products: Product[]; zones: ShippingZone[]; localities: Locality[]; settings: StoreSettings }> {
-  const [products, zones, localities, [s]] = await Promise.all([
+  const [products, zones, localities, [s], [cfg], bands] = await Promise.all([
     q(`${PRODUCTS_SQL} where p.active order by p.sort_order`),
     q(`select * from shipping_zones where active order by sort_order`),
     q(`select l.* from localities l join shipping_zones z on z.id = l.zone_id where l.active and z.active order by l.sort_order, l.name`),
     q(`select * from store_public_settings()`),
+    q(`select pricing_mode from shipping_config limit 1`),
+    q(`select * from shipping_bands order by up_to_km nulls last`),
   ]);
   return {
     products: products.map((r) => {
@@ -35,7 +38,12 @@ export async function getCatalog(q: Query, opts: { distanceEnabled?: boolean } =
     }),
     zones: zones.map(mapZone),
     localities: localities.map(mapLocality),
-    settings: { ...mapSettings(s as Row), distanceEnabled: !!opts.distanceEnabled },
+    settings: {
+      ...mapSettings(s as Row),
+      distanceEnabled: !!opts.distanceEnabled,
+      // La tabla de escalones es pública (se muestra en "¿Llegamos a tu casa?"); el origen no.
+      shippingBands: opts.distanceEnabled && (cfg as Row | undefined)?.pricing_mode !== 'fuel' ? bands.map(mapBand) : [],
+    },
   };
 }
 

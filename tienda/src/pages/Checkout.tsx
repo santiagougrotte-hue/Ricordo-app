@@ -258,7 +258,7 @@ export function Checkout() {
                 {distanceOn && (
                   <p className="small muted" aria-live="polite">
                     {measuring ? 'Calculando el envío según la distancia…'
-                      : distanceCost !== null ? `Envío según la distancia a tu dirección${distance.km ? ` (${distance.km} km ida y vuelta)` : ''}.`
+                      : distanceCost !== null ? `Envío según la distancia a tu dirección${distance.km ? ` (${String(Math.round(distance.km * 5) / 10).replace('.', ',')} km)` : ''}.`
                       : f.address.trim().length >= 5 ? 'No pudimos ubicar la dirección con precisión: usamos el costo de la zona.'
                       : 'Con tu dirección calculamos el envío según la distancia.'}
                   </p>

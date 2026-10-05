@@ -7,18 +7,34 @@ import type { Query } from './db';
 /* eslint-disable @typescript-eslint/no-explicit-any */
 type Row = Record<string, any>;
 
+export interface ShippingBand { upToKm: number | null; price: number }
+
 export interface ShippingConfig {
   originLat: number;
   originLng: number;
+  /** 'bands' = escalones por km (tabla) · 'fuel' = nafta + peaje. */
+  pricingMode: 'bands' | 'fuel';
   fuelPrice: number;
   consumption100km: number;
   rounding: number;
 }
 
 export const mapShippingConfig = (r: Row): ShippingConfig => ({
-  originLat: Number(r.origin_lat), originLng: Number(r.origin_lng), fuelPrice: r.fuel_price,
-  consumption100km: Number(r.consumption_100km), rounding: r.rounding,
+  originLat: Number(r.origin_lat), originLng: Number(r.origin_lng), pricingMode: r.pricing_mode === 'fuel' ? 'fuel' : 'bands',
+  fuelPrice: r.fuel_price, consumption100km: Number(r.consumption_100km), rounding: r.rounding,
 });
+
+export const mapBand = (r: Row): ShippingBand => ({ upToKm: r.up_to_km === null ? null : Number(r.up_to_km), price: r.price });
+
+export async function loadBands(q: Query): Promise<ShippingBand[]> {
+  return (await q<Row>(`select * from shipping_bands order by up_to_km nulls last`)).map(mapBand);
+}
+
+/** Precio del escalón para una distancia (km de ida). null si no hay escalón que la cubra. */
+export function priceForKm(oneWayKm: number, bands: ShippingBand[]): number | null {
+  const sorted = [...bands].sort((a, b) => (a.upToKm ?? Infinity) - (b.upToKm ?? Infinity));
+  return sorted.find((b) => b.upToKm === null || oneWayKm <= b.upToKm)?.price ?? null;
+}
 
 export interface DistanceResult { cost: number; km: number; lat: number; lng: number }
 
@@ -107,7 +123,14 @@ export async function distanceFor(
     }
   }
   const km = Number(hit.km_round_trip);
-  return { cost: costFromKm(km, row.toll_round_trip, Number(row.avg_orders_per_route), cfg), km, lat: Number(hit.lat), lng: Number(hit.lng) };
+  let cost: number | null;
+  if (cfg.pricingMode === 'bands') {
+    cost = priceForKm(km / 2, await loadBands(deps.query)); // la tabla va en km de ida
+    if (cost === null) return null; // más lejos que el último escalón: costo fijo de la zona
+  } else {
+    cost = costFromKm(km, row.toll_round_trip, Number(row.avg_orders_per_route), cfg);
+  }
+  return { cost, km, lat: Number(hit.lat), lng: Number(hit.lng) };
 }
 
 /** Clave de la caché: dirección normalizada + localidad. */

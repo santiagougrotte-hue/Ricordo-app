@@ -121,8 +121,8 @@ export function createAdminNetlify(): AdminApi {
       await api(`localities/${id}`, { method: 'DELETE' });
     },
     async getShippingConfig() {
-      const r = await api<{ config: ShippingConfig; enabled: boolean }>('shipping-config');
-      return { ...r.config, enabled: r.enabled };
+      const r = await api<{ config: ShippingConfig; bands: ShippingConfig['bands']; enabled: boolean }>('shipping-config');
+      return { ...r.config, bands: r.bands, enabled: r.enabled };
     },
     async saveShippingConfig(c) {
       await post('shipping-config', c);

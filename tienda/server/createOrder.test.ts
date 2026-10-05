@@ -185,6 +185,7 @@ describe.skipIf(!TEST_DB)('handleCreateOrder contra Netlify Database (Postgres r
       return fakeFetch(url, init);
     }) as unknown as typeof fetch;
     await q(`update products set stock = 20 where id = $1`, [P5]);
+    await q(`update shipping_config set pricing_mode = 'fuel'`);
     const body = { ...BASE, localityId: locs['Berazategui'], address: 'Calle 148 2345', items: [{ productId: P5, quantity: 3 }] };
     // 7,5 km → 15 km ida y vuelta × 7 l/100 km × $1700 = $1785 → redondeado de a $500 = $2000
     const r = await handleCreateOrder(body, { ...env, ORS_API_KEY: 'ors' }, { query: q, fetch: ors, ip: '5.5.5.1' });
@@ -203,6 +204,24 @@ describe.skipIf(!TEST_DB)('handleCreateOrder contra Netlify Database (Postgres r
     const r3 = await handleCreateOrder({ ...body, address: 'por ahí 1' }, { ...env, ORS_API_KEY: 'ors' }, { query: q, fetch: vague, ip: '5.5.5.3' });
     expect(r3.body).toMatchObject({ ok: true, receipt: { shippingCost: 2500 } });
     await q(`update shipping_zones set toll_round_trip = 0, avg_orders_per_route = 1 where name = 'Berazategui'`);
+    await q(`update products set stock = 20 where id = $1`, [P5]);
+    await q(`update shipping_config set pricing_mode = 'bands'`);
+  });
+
+  it('escalones por km (modo por defecto): 7,5 km de ida → escalón "hasta 10 km" = $2.500; más lejos que todo → último escalón', async () => {
+    const mk = (meters: number) => vi.fn(async (url: string | URL | Request, init?: RequestInit) => {
+      const u = String(url);
+      if (u.includes('/geocode/search')) return Response.json({ features: [{ geometry: { coordinates: [-58.2, -34.75] }, properties: { confidence: 0.9 } }] });
+      if (u.includes('/v2/directions')) return Response.json({ routes: [{ summary: { distance: meters } }] });
+      return fakeFetch(url, init);
+    }) as unknown as typeof fetch;
+    const body = { ...BASE, localityId: locs['Berazategui'], items: [{ productId: P5, quantity: 3 }] };
+    const r = await handleCreateOrder({ ...body, address: 'Calle 10 100' }, { ...env, ORS_API_KEY: 'ors' }, { query: q, fetch: mk(7500), ip: '6.6.6.1' });
+    expect(r.body).toMatchObject({ ok: true, receipt: { shippingCost: 2500 } });
+    const r2 = await handleCreateOrder({ ...body, address: 'Calle 20 200' }, { ...env, ORS_API_KEY: 'ors' }, { query: q, fetch: mk(2900), ip: '6.6.6.2' });
+    expect(r2.body).toMatchObject({ ok: true, receipt: { shippingCost: 1500 } });
+    const r3 = await handleCreateOrder({ ...body, address: 'Calle 30 300' }, { ...env, ORS_API_KEY: 'ors' }, { query: q, fetch: mk(55000), ip: '6.6.6.3' });
+    expect(r3.body).toMatchObject({ ok: true, receipt: { shippingCost: 8000 } });
     await q(`update products set stock = 20 where id = $1`, [P5]);
   });
 

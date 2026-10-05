@@ -4,7 +4,7 @@ import type { Locality, Product, ShippingZone, StoreSettings } from '../types';
 import { EXAMPLE_IDS, SEED_LOCALITIES, SEED_PRODUCTS, SEED_SETTINGS, SEED_ZONES } from './seed-data';
 import type { AdminOrder, AdminSettings, ShippingConfig } from './adminTypes';
 
-const KEY = 'ricordo-demo-db-v10';
+const KEY = 'ricordo-demo-db-v11';
 const CHANNEL = 'ricordo-demo';
 
 export interface DemoDb {
@@ -24,7 +24,8 @@ function fresh(): DemoDb {
     products: structuredClone(SEED_PRODUCTS),
     zones: structuredClone(SEED_ZONES),
     localities: structuredClone(SEED_LOCALITIES),
-    shippingConfig: { originLat: -34.765, originLng: -58.212, fuelPrice: 1700, consumption100km: 7, rounding: 500 },
+    shippingConfig: { originLat: -34.765, originLng: -58.212, pricingMode: 'bands', fuelPrice: 1700, consumption100km: 7, rounding: 500,
+      bands: [{ upToKm: 3, price: 1500 }, { upToKm: 6, price: 2000 }, { upToKm: 10, price: 2500 }, { upToKm: 15, price: 3500 }, { upToKm: 25, price: 4500 }, { upToKm: 40, price: 6000 }, { upToKm: null, price: 8000 }] },
     settings: { ...(SEED_SETTINGS as StoreSettings), notifyEmail: '' },
     orders: [],
     nextNumber: 1001,

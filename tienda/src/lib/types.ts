@@ -87,6 +87,8 @@ export interface StoreSettings {
   cutoffTime: string; // HH:MM
   /** El servidor puede calcular el envío por distancia (hay clave de OpenRouteService). */
   distanceEnabled?: boolean;
+  /** Escalones de envío por km de ida (vacío si se cobra con la fórmula de nafta o sin cálculo por distancia). */
+  shippingBands?: { upToKm: number | null; price: number }[];
 }
 
 export interface CartLine {

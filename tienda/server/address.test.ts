@@ -58,7 +58,10 @@ describe.skipIf(!TEST_DB)('searchAddress contra la base (ORS simulado)', () => {
     return new Response('?', { status: 404 });
   }) as unknown as typeof fetch;
 
-  beforeAll(async () => ({ q, pool } = await freshDb()));
+  beforeAll(async () => {
+    ({ q, pool } = await freshDb());
+    await q(`update shipping_config set pricing_mode = 'fuel'`);
+  });
   afterAll(() => pool.end());
 
   it('sin clave o con menos de 4 letras no consulta', async () => {

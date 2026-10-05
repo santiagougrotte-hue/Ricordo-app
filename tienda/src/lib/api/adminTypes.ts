@@ -123,6 +123,10 @@ export interface AdminApi {
 export interface ShippingConfig {
   originLat: number;
   originLng: number;
+  /** 'bands' = escalones por km · 'fuel' = nafta + peaje. */
+  pricingMode: 'bands' | 'fuel';
+  /** Escalones: hasta X km de ida, $precio. upToKm null = "más lejos". */
+  bands?: { upToKm: number | null; price: number }[];
   fuelPrice: number;
   consumption100km: number;
   rounding: number;

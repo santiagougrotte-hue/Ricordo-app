@@ -184,6 +184,20 @@ export function Home() {
               )}
             </tbody>
           </table>
+          {settings?.shippingBands && settings.shippingBands.length > 0 && (
+            <div className="bands" data-reveal="rise">
+              <p className="label">Envío según la distancia</p>
+              <p className="small muted">Medimos los km por calles desde Berazategui hasta tu casa. En CABA el envío es fijo.</p>
+              <ul>
+                {settings.shippingBands.map((b, i, all) => (
+                  <li key={i}>
+                    <span>{b.upToKm === null ? `más de ${String(all[i - 1]?.upToKm ?? 0).replace('.', ',')} km` : `hasta ${String(b.upToKm).replace('.', ',')} km`}</span>
+                    <b>{money(b.price)}</b>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
         </div>
       </section>
     </>
