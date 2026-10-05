@@ -439,3 +439,15 @@ textarea.input { resize: vertical; }
 @keyframes wa-in { from { opacity: 0; transform: translateY(12px) scale(0.9); } }
 /* Que el botón no tape lo último de la página */
 .site-foot { padding-bottom: calc(var(--space-24) + env(safe-area-inset-bottom)); }
+
+/* ── Dirección con sugerencias ── */
+.addr-box { position: relative; }
+.addr-list { position: absolute; z-index: 5; left: 0; right: 0; top: calc(100% + 4px); margin: 0; padding: var(--space-1) 0; list-style: none; background: var(--color-surface); border: 1.5px solid var(--color-rule); border-radius: var(--radius-label); box-shadow: var(--shadow-paper); max-height: 16rem; overflow-y: auto; }
+.addr-list li { padding: var(--space-3) var(--space-4); cursor: pointer; min-height: var(--tap-min); display: flex; align-items: center; }
+.addr-list li.on, .addr-list li:hover { background: var(--color-surface-sunken); }
+.ship-facts { display: grid; gap: var(--space-2); }
+.ship-facts .ok { display: flex; align-items: center; gap: var(--space-2); font-weight: var(--weight-medium); color: var(--color-success); margin: 0; }
+.ship-facts dl { display: grid; grid-template-columns: repeat(3, auto); gap: var(--space-2) var(--space-4); margin: 0; justify-content: start; }
+.ship-facts dl > div { display: grid; gap: 2px; }
+.ship-facts dt { font: var(--weight-medium) var(--text-label) / 1 var(--font-label); letter-spacing: var(--tracking-label); text-transform: uppercase; color: var(--color-text-muted); }
+.ship-facts dd { margin: 0; font-weight: var(--weight-bold); font-size: var(--text-body-l); }

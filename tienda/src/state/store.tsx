@@ -6,6 +6,7 @@ import { cartTotals, findZone, quote, type CartTotals, type LocalityChoice, type
 const CART_KEY = 'ricordo-cart';
 const METHOD_KEY = 'ricordo-method';
 const LOCALITY_KEY = 'ricordo-localidad';
+const ADDRESS_KEY = 'ricordo-direccion';
 
 function load<T>(storage: () => Storage, key: string, fallback: T): T {
   try {
@@ -42,6 +43,13 @@ interface StoreState {
   localityChoice: LocalityChoice;
   setLocalityChoice: (c: LocalityChoice) => void;
   lookup: ZoneLookup;
+  /** Dirección del cliente (calle y número) y CP si vino de la sugerencia. */
+  address: { street: string; postalCode: string | null };
+  setAddress: (a: { street: string; postalCode: string | null }) => void;
+  /** Envío por distancia para esa dirección (null mientras no se pudo calcular). */
+  distance: { cost: number | null; km: number | null; loading: boolean };
+  /** El envío se calcula por distancia en esta zona y el servidor puede hacerlo. */
+  distanceOn: boolean;
   method: DeliveryMethod;
   setMethod: (m: DeliveryMethod) => void;
 
@@ -77,6 +85,8 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   const [lines, setLines] = useState<CartLine[]>(() => load(local, CART_KEY, []));
   const [method, setMethodState] = useState<DeliveryMethod>(() => load(session, METHOD_KEY, 'delivery'));
   const [localityChoice, setLocalityChoiceState] = useState<LocalityChoice>(() => load<LocalityChoice>(local, LOCALITY_KEY, null));
+  const [address, setAddressState] = useState<{ street: string; postalCode: string | null }>(() => load(local, ADDRESS_KEY, { street: '', postalCode: null }));
+  const [distance, setDistance] = useState<{ cost: number | null; km: number | null; for: string; loading: boolean }>({ cost: null, km: null, for: '', loading: false });
   const [cartOpen, setCartOpen] = useState(false);
   const [postalOpen, setPostalOpen] = useState(false);
   const [announce, setAnnounce] = useState('');
@@ -115,6 +125,10 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   const linesRef = useRef(lines);
   linesRef.current = lines;
 
+  const setAddress = useCallback((a: { street: string; postalCode: string | null }) => {
+    setAddressState(a);
+    save(local, ADDRESS_KEY, a);
+  }, []);
   const setLocalityChoice = useCallback((c: LocalityChoice) => {
     setLocalityChoiceState(c);
     save(local, LOCALITY_KEY, c);
@@ -174,11 +188,26 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     if (status === 'ready' && typeof localityChoice === 'number' && !localities.some((l) => l.id === localityChoice)) setLocalityChoice(null);
   }, [status, localities, localityChoice, setLocalityChoice]);
-  const q = useMemo(() => (settings ? quote(method, lookup, totals, settings) : null), [method, lookup, totals, settings]);
+  // Envío por distancia: con localidad + dirección, lo calcula el servidor (con una pausa mientras se escribe).
+  const distanceOn = lookup.status === 'found' && lookup.zone.distancePricing && settings?.distanceEnabled === true;
+  const distKey = distanceOn && lookup.status === 'found' && address.street.trim().length >= 5 ? `${lookup.locality.id}|${address.street.trim()}` : '';
+  useEffect(() => {
+    if (!distKey) return;
+    const [lid, ...rest] = distKey.split('|');
+    let alive = true;
+    setDistance((d) => ({ ...d, loading: true }));
+    const t = window.setTimeout(async () => {
+      const r = await api.quoteShipping(Number(lid), rest.join('|'));
+      if (alive) setDistance({ cost: r.distanceCost, km: r.km, for: distKey, loading: false });
+    }, 600);
+    return () => { alive = false; clearTimeout(t); };
+  }, [distKey]);
+  const dist = distance.for === distKey && distKey ? { cost: distance.cost, km: distance.km, loading: distance.loading } : { cost: null, km: null, loading: !!distKey && distance.loading };
+  const q = useMemo(() => (settings ? quote(method, lookup, totals, settings, dist.cost) : null), [method, lookup, totals, settings, dist.cost]);
 
   const value: StoreState = {
     status, products, zones, localities, settings, reload,
-    localityChoice, setLocalityChoice, lookup, method, setMethod,
+    localityChoice, setLocalityChoice, lookup, address, setAddress, distance: dist, distanceOn, method, setMethod,
     items, count, subtotal, totals, quote: q, quantityOf, add, setQuantity, remove, clear,
     cartOpen, openCart: () => setCartOpen(true), closeCart: () => setCartOpen(false),
     postalOpen, openPostal: () => setPostalOpen(true), closePostal: () => setPostalOpen(false),

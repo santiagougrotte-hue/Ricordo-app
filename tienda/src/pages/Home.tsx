@@ -53,7 +53,7 @@ export function Home() {
               </div>
               <div className="tag-row">
                 <span className="label">Zona</span>
-                {myZone ? <span className="fill">{myZone.name}</span> : <button type="button" className="fill fill-btn" onClick={openPostal}>elegí tu localidad</button>}
+                {myZone ? <span className="fill">{myZone.name}</span> : <button type="button" className="fill fill-btn" onClick={openPostal}>{settings?.distanceEnabled ? 'poné tu dirección' : 'elegí tu localidad'}</button>}
               </div>
             </div>
             <Stamp className="hero-stamp" ring="SIN TACC · HECHO A MANO · BERAZATEGUI ·" lines={['R']} />
@@ -144,7 +144,7 @@ export function Home() {
           <div>
             <h2 id="h-zonas" className="d-xl">¿Llegamos a tu casa?</h2>
             <p className="lede">
-              Repartimos en Berazategui, alrededores, CABA y La Plata. Elegí tu localidad y te decimos cuándo llega y cuánto sale.
+              Repartimos en Berazategui, alrededores, CABA y La Plata. Poné tu dirección y te decimos la compra mínima, el envío y qué día llega.
               {settings && <> Tomamos pedidos hasta el {cutoffShort(settings)}.</>}
             </p>
             <p className="small muted">Cuantas más cajas, mejor: pasando el envío gratis, cada caja de más suma descuento.</p>

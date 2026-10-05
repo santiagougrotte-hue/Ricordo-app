@@ -29,26 +29,31 @@ export function costFromKm(km: number, toll: number, avgOrders: number, cfg: Shi
   return Math.ceil(gross / cfg.rounding) * cfg.rounding;
 }
 
-const ORS = 'https://api.openrouteservice.org';
+/** Se puede apuntar a otro servidor en pruebas locales (ORS_BASE_URL). */
+export const orsBase = () => (typeof process !== 'undefined' && process.env?.ORS_BASE_URL) || 'https://api.openrouteservice.org';
 const MIN_CONFIDENCE = 0.6; // solo resultados precisos (0 a 1)
 
-async function geocodeAndRoute(text: string, cfg: ShippingConfig, key: string, fetchFn: typeof fetch) {
-  const url = `${ORS}/geocode/search?` + new URLSearchParams({
-    api_key: key, text, 'boundary.country': 'AR', 'focus.point.lat': String(cfg.originLat), 'focus.point.lon': String(cfg.originLng), size: '1',
-  });
-  const geo = (await (await fetchFn(url, { signal: AbortSignal.timeout(6000) })).json()) as Row;
-  const point = geo?.features?.[0];
-  if (!point || (point.properties?.confidence ?? 0) < MIN_CONFIDENCE) return null;
-  const [lng, lat] = point.geometry.coordinates as [number, number];
-  const route = (await (await fetchFn(`${ORS}/v2/directions/driving-car`, {
+async function routeKm(lat: number, lng: number, cfg: ShippingConfig, key: string, fetchFn: typeof fetch): Promise<number | null> {
+  const route = (await (await fetchFn(`${orsBase()}/v2/directions/driving-car`, {
     method: 'POST',
     headers: { Authorization: key, 'Content-Type': 'application/json' },
     body: JSON.stringify({ coordinates: [[cfg.originLng, cfg.originLat], [lng, lat]] }),
     signal: AbortSignal.timeout(6000),
   })).json()) as Row;
   const meters = route?.routes?.[0]?.summary?.distance;
-  if (typeof meters !== 'number') return null;
-  return { lat, lng, km: Math.round((meters / 1000) * 2 * 10) / 10 }; // ida y vuelta
+  return typeof meters === 'number' ? Math.round((meters / 1000) * 2 * 10) / 10 : null; // ida y vuelta
+}
+
+async function geocodeAndRoute(text: string, cfg: ShippingConfig, key: string, fetchFn: typeof fetch) {
+  const url = `${orsBase()}/geocode/search?` + new URLSearchParams({
+    api_key: key, text, 'boundary.country': 'AR', 'focus.point.lat': String(cfg.originLat), 'focus.point.lon': String(cfg.originLng), size: '1',
+  });
+  const geo = (await (await fetchFn(url, { signal: AbortSignal.timeout(6000) })).json()) as Row;
+  const point = geo?.features?.[0];
+  if (!point || (point.properties?.confidence ?? 0) < MIN_CONFIDENCE) return null;
+  const [lng, lat] = point.geometry.coordinates as [number, number];
+  const km = await routeKm(lat, lng, cfg, key, fetchFn);
+  return km === null ? null : { lat, lng, km };
 }
 
 /**
@@ -71,9 +76,21 @@ export async function distanceFor(
   if (!c) return null;
   const cfg = mapShippingConfig(c);
   const origin = `${cfg.originLat},${cfg.originLng}`;
-  const key = `${address.toLowerCase()}|${input.localityId}`;
+  const key = geoKey(address, input.localityId);
 
   let hit = (await deps.query<Row>(`select lat, lng, km_round_trip from geo_cache where key = $1 and origin = $2`, [key, origin]))[0];
+  if (hit && hit.km_round_trip === null) {
+    // Punto conocido (vino de una sugerencia de dirección): falta medir la ruta.
+    if (!deps.orsKey) return null;
+    try {
+      const km = await routeKm(Number(hit.lat), Number(hit.lng), cfg, deps.orsKey, deps.fetch);
+      if (km === null) return null;
+      await deps.query(`update geo_cache set km_round_trip = $2 where key = $1`, [key, km]);
+      hit = { ...hit, km_round_trip: km };
+    } catch {
+      return null;
+    }
+  }
   if (!hit) {
     if (!deps.orsKey) return null;
     try {
@@ -92,3 +109,6 @@ export async function distanceFor(
   const km = Number(hit.km_round_trip);
   return { cost: costFromKm(km, row.toll_round_trip, Number(row.avg_orders_per_route), cfg), km, lat: Number(hit.lat), lng: Number(hit.lng) };
 }
+
+/** Clave de la caché: dirección normalizada + localidad. */
+export const geoKey = (address: string, localityId: number) => `${address.trim().replace(/\s+/g, ' ').toLowerCase()}|${localityId}`;

@@ -28,6 +28,10 @@ export function createDemoApi(): StoreApi {
     async listLocalities() {
       return activeLocalities();
     },
+    async searchAddress() {
+      // En la demo no hay buscador de direcciones: se elige la localidad de la lista.
+      return [];
+    },
     async quoteShipping() {
       // En la demo no se consulta OpenRouteService: se usa el costo fijo de la zona.
       return { distanceCost: null, km: null };

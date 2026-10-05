@@ -7,7 +7,7 @@ import { Sheet } from './Sheet';
 import { Qty } from './Qty';
 import { Ruler } from './Ruler';
 import { Icon } from './Icon';
-import { LocalityForm } from './LocalityForm';
+import { LocalityForm, ShippingFacts } from './LocalityForm';
 import { MethodToggle } from './MethodToggle';
 import { ProductCover } from './ProductMediaView';
 
@@ -62,10 +62,11 @@ export function CartDrawer() {
           {method === 'delivery' && lookup.status !== 'found' && <LocalityForm compact />}
           {zone && lookup.status === 'found' && (
             <p className="cart-zone small">
-              <Icon name="moto" size={20} /> Envío a {lookup.locality.name} ({zone.name}) ·{' '}
+              <Icon name="moto" size={20} /> Envío a {s.address.street ? `${s.address.street}, ` : ''}{lookup.locality.name} ·{' '}
               <button type="button" className="link" onClick={() => setLocalityChoice(null)}>cambiar</button>
             </p>
           )}
+          {zone && <ShippingFacts />}
 
           <ul className="cart-lines">
             {items.map(({ product, quantity }) => (

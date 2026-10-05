@@ -37,12 +37,12 @@ export function Header() {
           <span className="wrap cp-strip-in">
             <Icon name={method === 'pickup' ? 'local' : 'cp'} size={20} />
             <span>{where}</span>
-            <span className="cp-change">{lookup.status === 'empty' && method !== 'pickup' ? 'Elegí tu localidad' : 'Cambiar'}</span>
+            <span className="cp-change">{lookup.status === 'empty' && method !== 'pickup' ? (settings?.distanceEnabled ? 'Poné tu dirección' : 'Elegí tu localidad') : 'Cambiar'}</span>
           </span>
         </button>
       </header>
       <Sheet open={postalOpen} onClose={closePostal} title="¿A dónde te lo llevamos?" side="bottom">
-        <p className="muted">Con tu localidad te decimos el mínimo de tu zona, cuánto sale el envío y qué día llega.</p>
+        <p className="muted">Con tu dirección te decimos la compra mínima, desde cuántas cajas el envío es gratis, cuánto sale y qué día llega.</p>
         <LocalityForm onDone={closePostal} />
         {settings?.pickupEnabled && <PickupNote />}
       </Sheet>

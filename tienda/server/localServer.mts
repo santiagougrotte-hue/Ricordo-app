@@ -8,6 +8,7 @@ import { getCatalog } from './catalog';
 import { handleCreateOrder } from './createOrder';
 import { handleAdmin } from './admin';
 import { handleQuoteShipping } from './quote';
+import { searchAddress } from './address';
 import { memoryMedia } from './media';
 
 const DIST = new URL('../dist/', import.meta.url).pathname;
@@ -30,6 +31,9 @@ createServer(async (nreq, nres) => {
     else if (url.pathname === '/api/create-order') {
       const r = await handleCreateOrder(await req.json().catch(() => null), { TURNSTILE_SECRET_KEY: 'test', SESSION_SECRET: process.env.SESSION_SECRET }, { query, fetch: fakeFetch, ip: String(Math.random()) });
       res = Response.json(r.body, { status: r.status });
+    } else if (url.pathname === '/api/address-search') {
+      const b = (await req.json().catch(() => ({}))) as { text?: string };
+      res = Response.json({ suggestions: await searchAddress(String(b.text ?? ''), { query, fetch, orsKey: process.env.ORS_API_KEY }) });
     } else if (url.pathname === '/api/quote-shipping') {
       const r = await handleQuoteShipping(await req.json().catch(() => null), { ORS_API_KEY: process.env.ORS_API_KEY }, { query, fetch, ip: '127.0.0.1' });
       res = Response.json(r.body, { status: r.status });

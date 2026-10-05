@@ -137,7 +137,7 @@ export function cartMessage(q: Quote, lookup: ZoneLookup): string {
     return 'Retirás en Berazategui, sin costo de envío. El horario lo coordinamos por WhatsApp.';
   }
   if (lookup.status === 'not_found') return 'Todavía no llegamos a tu zona, escribinos por WhatsApp.';
-  if (lookup.status !== 'found') return 'Elegí tu localidad para ver el envío, el mínimo y el día de entrega.';
+  if (lookup.status !== 'found') return 'Decinos dónde te lo llevamos para ver la compra mínima, el envío y el día de entrega.';
   const zone = lookup.zone.name;
   if (q.missingForMin > 0) {
     const pick = q.suggestPickup ? ` O retiralo en Berazategui: con ${cajas(q.boxes)} ya podés.` : '';

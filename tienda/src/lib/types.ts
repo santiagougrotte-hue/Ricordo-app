@@ -57,6 +57,18 @@ export interface Locality {
   zoneId: string;
 }
 
+/** Sugerencia del buscador de direcciones. */
+export interface AddressSuggestion {
+  /** Lo que se muestra: "Calle 14 1234, Ranelagh, Berazategui". */
+  label: string;
+  /** Calle y número, lo que se guarda en el pedido. */
+  address: string;
+  postalCode: string | null;
+  /** Tiene altura (número): sin número el envío se calcula a la calle. */
+  hasNumber: boolean;
+  match: { status: 'found'; localityId: number } | { status: 'confirm'; options: number[] } | { status: 'not_found' };
+}
+
 /** Envío calculado por distancia para una dirección (null = no se pudo, se usa el costo fijo). */
 export interface DistanceQuote {
   distanceCost: number | null;

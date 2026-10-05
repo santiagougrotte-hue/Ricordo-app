@@ -1,5 +1,5 @@
 import type { StoreApi } from './types';
-import type { DistanceQuote, Locality, OrderResult, Product, ShippingZone, StoreSettings } from '../types';
+import type { AddressSuggestion, DistanceQuote, Locality, OrderResult, Product, ShippingZone, StoreSettings } from '../types';
 
 interface Catalog { products: Product[]; zones: ShippingZone[]; localities: Locality[]; settings: StoreSettings }
 
@@ -30,6 +30,14 @@ export function createNetlifyApi(): StoreApi {
     },
     async listLocalities() {
       return (await load()).localities;
+    },
+    async searchAddress(text) {
+      try {
+        const r = await fetch('/api/address-search', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ text }) });
+        return r.ok ? ((await r.json()) as { suggestions: AddressSuggestion[] }).suggestions : [];
+      } catch {
+        return [];
+      }
     },
     async quoteShipping(localityId, address) {
       try {
