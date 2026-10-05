@@ -252,11 +252,12 @@ export async function sendWhatsapp(
   try {
     const res = await deps.fetch(`https://api.callmebot.com/whatsapp.php?${q}`, { signal: AbortSignal.timeout(8000) });
     const body = await res.text().catch(() => '');
-    // CallMeBot responde 200 con un texto; si la clave o el número no coinciden lo dice en ese texto.
-    if (!res.ok || /error|invalid|not (yet )?(registered|activated)/i.test(body)) {
-      return { ok: false, message: `CallMeBot no aceptó el envío al +${phone}. Revisá que la clave sea la de ese número.` };
+    // CallMeBot responde con una página de texto: solo "queued"/"sent" es éxito. Cualquier otra cosa se muestra tal cual.
+    const reply = body.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 220);
+    if (res.ok && /queued|message sent|enviado/i.test(reply) && !/invalid|error|not (yet )?(registered|activated)/i.test(reply)) {
+      return { ok: true, message: `CallMeBot aceptó el mensaje para el +${phone}. Tiene que llegarte en unos segundos.` };
     }
-    return { ok: true, message: `Mensaje enviado al +${phone}.` };
+    return { ok: false, message: `CallMeBot no lo mandó al +${phone}. Respuesta: "${reply || res.status}". Revisá que el número de Ajustes sea el mismo con el que sacaste la clave.` };
   } catch {
     return { ok: false, message: 'No pudimos conectar con CallMeBot. Probá de nuevo en un rato.' };
   }
