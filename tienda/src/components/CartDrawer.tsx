@@ -1,6 +1,8 @@
 import { Link, useNavigate } from 'react-router-dom';
 import { useStore } from '../state/store';
 import { money } from '../lib/money';
+import { cartMessage, maxDiscountAt } from '../lib/shipping';
+import { PASTA_LABEL } from '../lib/types';
 import { Sheet } from './Sheet';
 import { Qty } from './Qty';
 import { Ruler } from './Ruler';
@@ -11,41 +13,32 @@ import { ProductCover } from './ProductMediaView';
 
 export function CartDrawer() {
   const s = useStore();
-  const { items, subtotal, quote: q, method, lookup, settings, cartOpen, closeCart, setQuantity } = s;
+  const { items, subtotal, totals, quote: q, method, setMethod, lookup, locality, cartOpen, closeCart, setQuantity } = s;
   const navigate = useNavigate();
   const empty = items.length === 0;
-
-  const reason = blockReason();
-  function blockReason(): string | null {
-    if (empty || !q) return null;
-    if (method === 'delivery') {
-      if (lookup.status !== 'found') return 'Poné tu código postal para calcular el envío.';
-      if (q.missingForMin > 0) return `Te faltan ${money(q.missingForMin)} para la compra mínima de envío a ${lookup.zone.name} (${money(q.minOrder)}).`;
-    } else {
-      if (!settings?.pickupEnabled) return 'El retiro en el local no está disponible por ahora.';
-      if (q.missingForMin > 0) return `Te faltan ${money(q.missingForMin)} para la compra mínima de retiro (${money(q.minOrder)}).`;
-    }
-    return null;
-  }
-
-  const total = q?.shippingCost !== null && q ? subtotal + q.shippingCost : null;
+  const msg = q ? cartMessage(q, lookup) : '';
+  // CP sin zona: el formulario de CP ya muestra el aviso con el botón de WhatsApp.
+  const notFound = method === 'delivery' && lookup.status === 'not_found';
+  const zone = method === 'delivery' && lookup.status === 'found' ? lookup.zone : null;
+  // El CP se queda a la vista hasta que el cliente confirma su localidad.
+  const needsLocality = !!zone && zone.localities.length > 1 && !zone.localities.includes(locality);
 
   const footer = empty ? null : (
     <>
       <dl className="totals">
         <div><dt>Subtotal</dt><dd>{money(subtotal)}</dd></div>
+        {q && q.discount > 0 && <div className="discount"><dt>Descuento {q.discountPct}%</dt><dd>−{money(q.discount)}</dd></div>}
         <div>
-          <dt>{method === 'pickup' ? 'Retiro en el local' : lookup.status === 'found' ? `Envío a ${lookup.zone.name}` : 'Envío'}</dt>
-          <dd>{q?.shippingCost === null || !q ? '—' : q.shippingCost === 0 ? 'Gratis' : money(q.shippingCost)}</dd>
+          <dt>{method === 'pickup' ? 'Retiro en Berazategui' : zone ? `Envío a ${zone.name}` : 'Envío'}</dt>
+          <dd>{!q || q.shippingCost === null ? '—' : q.shippingCost === 0 ? 'Gratis' : money(q.shippingCost)}</dd>
         </div>
-        <div className="grand"><dt>Total</dt><dd>{total === null ? '—' : money(total)}</dd></div>
+        <div className="grand"><dt>Total</dt><dd>{!q || q.total === null ? '—' : money(q.total)}</dd></div>
       </dl>
-      {reason && <p className="block-reason" id="cart-block">{reason}</p>}
       <button
         type="button"
         className="btn btn-ink btn-wide"
         disabled={!q?.canCheckout}
-        aria-describedby={reason ? 'cart-block' : undefined}
+        aria-describedby={!q?.canCheckout ? 'cart-msg' : undefined}
         onClick={() => {
           closeCart();
           navigate('/checkout');
@@ -67,7 +60,13 @@ export function CartDrawer() {
       ) : (
         <>
           <MethodToggle />
-          {method === 'delivery' && lookup.status !== 'found' && <PostalForm compact />}
+          {method === 'delivery' && (lookup.status !== 'found' || needsLocality) && <PostalForm compact />}
+          {zone && !needsLocality && (
+            <p className="cart-zone small">
+              <Icon name="moto" size={20} /> Envío a {locality || zone.name} ({lookup.status === 'found' && lookup.postalCode}) ·{' '}
+              <button type="button" className="link" onClick={() => s.setPostalCode('')}>cambiar</button>
+            </p>
+          )}
 
           <ul className="cart-lines">
             {items.map(({ product, quantity }) => (
@@ -75,7 +74,7 @@ export function CartDrawer() {
                 <div className="cart-thumb"><ProductCover product={product} ratio="1 / 1" sizes="72px" tape={false} /></div>
                 <div className="cart-info">
                   <p className="cart-name">{product.name}</p>
-                  <p className="muted small">{money(product.price)} la caja · {product.pastaType}</p>
+                  <p className="muted small">{money(product.price)} la caja · {PASTA_LABEL[product.pastaType].toLowerCase()}</p>
                   {quantity >= product.stock && <p className="small warn">No hay más cajas de este gusto.</p>}
                 </div>
                 <div className="cart-qty">
@@ -86,23 +85,20 @@ export function CartDrawer() {
             ))}
           </ul>
 
-          {q && (method === 'pickup' ? q.minOrder > 0 : lookup.status === 'found') && (
-            <div className="progress">
-              <Ruler subtotal={subtotal} minOrder={q.minOrder} freeFrom={method === 'pickup' ? null : q.freeShippingFrom} />
-              <p className="hand progress-note" aria-live="polite">{progressNote()}</p>
-            </div>
-          )}
+          <div className="progress">
+            {q && (method === 'pickup' ? q.minBoxes > 0 : !!zone) && (
+              <Ruler boxes={totals.boxes} min={q.minBoxes} free={zone ? zone.freeFromBoxes : null} maxDiscountAt={zone ? maxDiscountAt(zone) : null} />
+            )}
+            <p id="cart-msg" className={'cart-msg' + (notFound ? ' sr' : '')} aria-live="polite">{msg}</p>
+            {q?.suggestPickup && (
+              <button type="button" className="btn btn-line" onClick={() => setMethod('pickup')}>
+                <Icon name="local" /> Retirar en Berazategui
+              </button>
+            )}
+            {totals.hasExtras && <p className="small muted">Las salsas y complementos no suman cajas para el mínimo, el envío gratis ni el descuento.</p>}
+          </div>
         </>
       )}
     </Sheet>
   );
-
-  function progressNote(): string {
-    if (!q) return '';
-    if (q.missingForMin > 0) return `te faltan ${money(q.missingForMin)} para el mínimo`;
-    if (method === 'delivery' && q.missingForFree !== null) {
-      return q.missingForFree > 0 ? `¡te faltan ${money(q.missingForFree)} para el envío gratis!` : '¡envío gratis!';
-    }
-    return '¡listo para pedir!';
-  }
 }

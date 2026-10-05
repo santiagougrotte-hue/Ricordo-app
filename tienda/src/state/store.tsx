@@ -1,11 +1,12 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { api } from '../lib/api';
 import type { CartLine, DeliveryMethod, Product, ShippingZone, StoreSettings } from '../lib/types';
-import { findZone, quote, type Quote, type ZoneLookup } from '../lib/shipping';
+import { cartTotals, findZone, quote, type CartTotals, type Quote, type ZoneLookup } from '../lib/shipping';
 
 const CART_KEY = 'ricordo-cart';
 const CP_KEY = 'ricordo-cp';
 const METHOD_KEY = 'ricordo-method';
+const LOCALITY_KEY = 'ricordo-locality';
 
 function load<T>(storage: () => Storage, key: string, fallback: T): T {
   try {
@@ -40,12 +41,16 @@ interface StoreState {
   postalCode: string;
   setPostalCode: (cp: string) => void;
   lookup: ZoneLookup;
+  /** Localidad confirmada por el cliente (de la lista de su zona). */
+  locality: string;
+  setLocality: (l: string) => void;
   method: DeliveryMethod;
   setMethod: (m: DeliveryMethod) => void;
 
   items: CartItem[];
   count: number;
   subtotal: number;
+  totals: CartTotals;
   quote: Quote | null;
   quantityOf: (productId: string) => number;
   /** Devuelve la cantidad realmente agregada (limitada por stock). */
@@ -73,6 +78,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   const [lines, setLines] = useState<CartLine[]>(() => load(local, CART_KEY, []));
   const [postalCode, setPostalCodeState] = useState<string>(() => load(session, CP_KEY, ''));
   const [method, setMethodState] = useState<DeliveryMethod>(() => load(session, METHOD_KEY, 'delivery'));
+  const [locality, setLocalityState] = useState<string>(() => load(session, LOCALITY_KEY, ''));
   const [cartOpen, setCartOpen] = useState(false);
   const [postalOpen, setPostalOpen] = useState(false);
   const [announce, setAnnounce] = useState('');
@@ -113,6 +119,10 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   const setPostalCode = useCallback((cp: string) => {
     setPostalCodeState(cp);
     save(session, CP_KEY, cp);
+  }, []);
+  const setLocality = useCallback((l: string) => {
+    setLocalityState(l);
+    save(session, LOCALITY_KEY, l);
   }, []);
   const setMethod = useCallback((m: DeliveryMethod) => {
     setMethodState(m);
@@ -162,14 +172,22 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     [lines, byId],
   );
   const count = items.reduce((s, i) => s + i.quantity, 0);
-  const subtotal = items.reduce((s, i) => s + i.quantity * i.product.price, 0);
+  const totals = useMemo(() => cartTotals(items), [items]);
+  const subtotal = totals.subtotal;
   const lookup = useMemo(() => findZone(zones, postalCode), [zones, postalCode]);
-  const q = useMemo(() => (settings ? quote(method, lookup, subtotal, settings) : null), [method, lookup, subtotal, settings]);
+  // Si cambió la zona, la localidad elegida tiene que seguir en su lista; si la zona tiene una sola, va sola.
+  const zoneLocalities = lookup.status === 'found' ? lookup.zone.localities : null;
+  useEffect(() => {
+    if (!zoneLocalities) return;
+    if (zoneLocalities.length === 1 && locality !== zoneLocalities[0]) setLocality(zoneLocalities[0]);
+    else if (locality && zoneLocalities.length > 1 && !zoneLocalities.includes(locality)) setLocality('');
+  }, [zoneLocalities, locality, setLocality]);
+  const q = useMemo(() => (settings ? quote(method, lookup, totals, settings) : null), [method, lookup, totals, settings]);
 
   const value: StoreState = {
     status, products, zones, settings, reload,
-    postalCode, setPostalCode, lookup, method, setMethod,
-    items, count, subtotal, quote: q, quantityOf, add, setQuantity, remove, clear,
+    postalCode, setPostalCode, lookup, locality, setLocality, method, setMethod,
+    items, count, subtotal, totals, quote: q, quantityOf, add, setQuantity, remove, clear,
     cartOpen, openCart: () => setCartOpen(true), closeCart: () => setCartOpen(false),
     postalOpen, openPostal: () => setPostalOpen(true), closePostal: () => setPostalOpen(false),
     announce,

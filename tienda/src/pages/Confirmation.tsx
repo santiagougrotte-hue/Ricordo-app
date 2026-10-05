@@ -59,6 +59,7 @@ export function Confirmation() {
               </ul>
               <dl className="totals">
                 <div><dt>Subtotal</dt><dd>{money(r.subtotal)}</dd></div>
+                {r.discount > 0 && <div className="discount"><dt>Descuento {r.discountPct}%</dt><dd>−{money(r.discount)}</dd></div>}
                 <div><dt>{r.deliveryMethod === 'pickup' ? 'Retiro' : 'Envío'}</dt><dd>{r.shippingCost === 0 ? 'Gratis' : money(r.shippingCost)}</dd></div>
                 <div className="grand"><dt>Total</dt><dd>{money(r.total)}</dd></div>
               </dl>

@@ -1,5 +1,4 @@
 import type { Product, ShippingZone, StoreSettings } from '../types';
-import type { DeliveryWindow } from '../slots';
 import fotoMano from '../../assets/fotos/cabutia-mano.webp';
 import fotoCorte from '../../assets/fotos/cabutia-corte.webp';
 import fotoNero from '../../assets/fotos/cabutia-masa-nero.webp';
@@ -26,6 +25,7 @@ export const CABUTIA: Product = {
   stock: 20,
   lowStockThreshold: 4,
   featured: true,
+  countsAsBox: true,
   sortOrder: 1,
   media: [
     { id: 'm-cab-1', url: fotoMano, kind: 'photo', alt: 'Sorrentino de masa nero en la mano, sobre la bandeja enharinada', isCover: true, sortOrder: 0 },
@@ -49,6 +49,7 @@ export const OSOBUCO: Product = {
   stock: 20,
   lowStockThreshold: 4,
   featured: true,
+  countsAsBox: true,
   sortOrder: 2,
   media: [
     { id: 'm-oso-1', url: fotoOsobuco, kind: 'photo', alt: 'Sorrentino de osobuco en la mano, sobre la bandeja con el resto de la tanda', isCover: true, sortOrder: 0 },
@@ -69,6 +70,7 @@ export const ESPINACA: Product = {
   stock: 20,
   lowStockThreshold: 4,
   featured: true,
+  countsAsBox: true,
   sortOrder: 3,
   media: [
     { id: 'm-esp-1', url: fotoEspinaca, kind: 'photo', alt: 'Raviolón de espinaca en la mano, sobre la bandeja con el resto de la tanda', isCover: true, sortOrder: 0 },
@@ -89,6 +91,7 @@ export const JAMON_QUESO: Product = {
   stock: 20,
   lowStockThreshold: 4,
   featured: true,
+  countsAsBox: true,
   sortOrder: 4,
   media: [
     { id: 'm-jyq-1', url: fotoJyq, kind: 'photo', alt: 'Sorrentino de jamón y queso en la mano, sobre la bandeja enharinada', isCover: true, sortOrder: 0 },
@@ -116,6 +119,7 @@ export const SEED_PRODUCTS: Product[] = [
     stock: 14,
     lowStockThreshold: 3,
     featured: true,
+  countsAsBox: true,
     sortOrder: 1,
     media: [],
     shotNote: 'sorrentinos en la tabla, enharinados, ¾ desde arriba',
@@ -132,6 +136,7 @@ export const SEED_PRODUCTS: Product[] = [
     stock: 2,
     lowStockThreshold: 3,
     featured: true,
+  countsAsBox: true,
     sortOrder: 2,
     media: [],
     shotNote: 'ravioles crudos en la caja abierta, cenital',
@@ -148,6 +153,7 @@ export const SEED_PRODUCTS: Product[] = [
     stock: 9,
     lowStockThreshold: 3,
     featured: true,
+  countsAsBox: true,
     sortOrder: 3,
     media: [],
     shotNote: 'cappellacci cerrados en fila, luz de ventana',
@@ -164,6 +170,7 @@ export const SEED_PRODUCTS: Product[] = [
     stock: 0,
     lowStockThreshold: 3,
     featured: false,
+  countsAsBox: true,
     sortOrder: 4,
     media: [],
     shotNote: 'sorrentino cortado al medio mostrando el relleno',
@@ -180,27 +187,29 @@ export const SEED_PRODUCTS: Product[] = [
     stock: 20,
     lowStockThreshold: 3,
     featured: false,
+  countsAsBox: true,
     sortOrder: 5,
     media: [],
     shotNote: 'plato servido con salsa fileto, mesa de madera',
   },
 ];
 
+// Igual que netlify/database/migrations/*_zonas-cajas-entrega. Costos de envío de ejemplo.
+const ZONE_DEFAULTS = { discountPerBox: 5, discountMax: 10 };
 export const SEED_ZONES: ShippingZone[] = [
-  { id: 'zone-bera', name: 'Berazategui', postalCodes: ['1884', '1885', '1886'], shippingCost: 1500, minOrder: 15000, freeShippingFrom: 30000 },
-  { id: 'zone-quilmes', name: 'Quilmes y Bernal', postalCodes: ['1876', '1878', '1879', '1881', '1882'], shippingCost: 2500, minOrder: 20000, freeShippingFrom: 40000 },
-  { id: 'zone-varela', name: 'Florencio Varela', postalCodes: ['1888', '1889', '1891'], shippingCost: 3000, minOrder: 20000, freeShippingFrom: null },
+  { id: 'zone-hudson', name: 'Hudson / Plátanos', postalCodes: ['1885', '1880'], localities: ['Hudson', 'Plátanos'], shippingCost: 2000, minBoxes: 3, freeFromBoxes: 4, deliveryWeekday: 5, deliveryMoment: 'a la noche', ...ZONE_DEFAULTS },
+  { id: 'zone-bera', name: 'Berazategui', postalCodes: ['1884', '1886'], localities: ['Berazategui', 'Ranelagh', 'Sourigues', 'Villa España'], shippingCost: 1500, minBoxes: 3, freeFromBoxes: 4, deliveryWeekday: 6, deliveryMoment: 'a la mañana', ...ZONE_DEFAULTS },
+  { id: 'zone-quilmes', name: 'Quilmes / Bernal / Wilde', postalCodes: ['1878', '1876', '1875'], localities: ['Quilmes', 'Bernal', 'Wilde'], shippingCost: 3000, minBoxes: 4, freeFromBoxes: 6, deliveryWeekday: 6, deliveryMoment: 'a la mañana', ...ZONE_DEFAULTS },
+  { id: 'zone-caba', name: 'CABA', postalCodes: ['1000-1499'], localities: ['Ciudad de Buenos Aires'], shippingCost: 5000, minBoxes: 5, freeFromBoxes: 6, deliveryWeekday: 6, deliveryMoment: 'a la mañana', ...ZONE_DEFAULTS },
+  { id: 'zone-laplata', name: 'La Plata / City Bell / Gonnet', postalCodes: ['1900', '1896', '1897'], localities: ['La Plata', 'City Bell', 'Gonnet'], shippingCost: 5000, minBoxes: 5, freeFromBoxes: 8, deliveryWeekday: 0, deliveryMoment: '', ...ZONE_DEFAULTS },
 ];
 
 export const SEED_SETTINGS: StoreSettings = {
   pickupEnabled: true,
-  pickupMinOrder: 0,
+  pickupMinBoxes: 2,
   pickupAddress: 'Berazategui (te pasamos la dirección por WhatsApp)',
   whatsappPhone: '5491100000000',
   transferInfo: 'Alias: RICORDO.PASTAS (dato de ejemplo)',
+  cutoffWeekday: 4,
+  cutoffTime: '13:00',
 };
-
-export const SEED_WINDOWS: DeliveryWindow[] = [
-  { id: 'win-vie', label: 'Viernes a la noche', weekday: 5, startsAt: '20:00', endsAt: '23:00', cutoffHours: 24, forDelivery: true, forPickup: true, active: true },
-  { id: 'win-sab', label: 'Sábado a la mañana', weekday: 6, startsAt: '09:00', endsAt: '13:00', cutoffHours: 24, forDelivery: true, forPickup: true, active: true },
-];

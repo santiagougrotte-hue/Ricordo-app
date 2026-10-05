@@ -1,6 +1,5 @@
 import type { AdminApi, AdminOrder, AdminProduct, AdminSettings } from './adminTypes';
 import type { ShippingZone } from '../types';
-import type { DeliveryWindow } from '../slots';
 
 // Panel contra /api/admin/* (cookie de sesión HttpOnly). Los pedidos nuevos llegan consultando cambios cada pocos segundos.
 async function api<T>(path: string, init: RequestInit = {}): Promise<T> {
@@ -77,6 +76,9 @@ export function createAdminNetlify(): AdminApi {
     async setPaymentStatus(id, status) {
       await post(`orders/${id}/payment`, { status });
     },
+    async setDeliveredOn(id, date) {
+      await post(`orders/${id}/delivered-on`, { date });
+    },
 
     async listProducts() {
       return (await api<{ products: AdminProduct[] }>('products')).products;
@@ -114,12 +116,6 @@ export function createAdminNetlify(): AdminApi {
     },
     async saveSettings(s) {
       await post('settings', s);
-    },
-    async listWindows() {
-      return (await api<{ windows: DeliveryWindow[] }>('windows')).windows;
-    },
-    async saveWindow(w) {
-      await post('windows', w);
     },
   };
 }

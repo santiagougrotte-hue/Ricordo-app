@@ -1,8 +1,7 @@
 import { Link } from 'react-router-dom';
 import { useStore } from '../state/store';
-import { useSlots } from '../state/useSlots';
 import { money } from '../lib/money';
-import { slotDay, slotDeadline, slotDeadlineShort, slotHours, slotPart } from '../lib/slots';
+import { cutoffShort, cutoffWithDate, deliveryDateFor, deliveryLabel, zoneDay } from '../lib/delivery';
 import { HeroLogo } from '../components/HeroLogo';
 import { Icon } from '../components/Icon';
 import { Stamp } from '../components/Stamp';
@@ -16,11 +15,12 @@ import posterAmasado from '../assets/fotos/amasado-masa-nero-poster.webp';
 import { useDocumentTitle } from './useDocumentTitle';
 import { useReveal } from '../motion/useMotion';
 
+const cajas = (n: number) => `${n} ${n === 1 ? 'caja' : 'cajas'}`;
+
 export function Home() {
   useDocumentTitle('Ricordo · Pasta rellena sin TACC en Berazategui');
-  const { products, zones, settings, status } = useStore();
-  const { slots } = useSlots('delivery');
-  const next = slots?.[0];
+  const { products, zones, settings, status, lookup, openPostal } = useStore();
+  const myZone = lookup.status === 'found' ? lookup.zone : null;
   const featured = products.filter((p) => p.featured).slice(0, 4);
   // Con un solo gusto destacado, la sección se arma como nota editorial alrededor de ese gusto.
   const single = featured.length === 1 ? featured[0] : null;
@@ -46,9 +46,15 @@ export function Home() {
             <span className="tape" aria-hidden="true" />
             <div className="tag-in">
               <p className="label tag-title">Ricordo · próxima entrega</p>
-              <div className="tag-row"><span className="label">Día</span><span className="fill">{next ? `${slotDay(next)} ${slotPart(next)}` : '…'}</span></div>
-              <div className="tag-row"><span className="label">Horario</span><span className="fill">{next ? slotHours(next) : '…'}</span></div>
-              <div className="tag-row"><span className="label">Pedí hasta</span><span className="fill">{next ? slotDeadlineShort(next) : '…'}</span></div>
+              <div className="tag-row"><span className="label">Pedí hasta</span><span className="fill">{settings ? cutoffWithDate(settings) : '…'}</span></div>
+              <div className="tag-row">
+                <span className="label">Llega</span>
+                <span className="fill">{settings && myZone ? deliveryLabel(deliveryDateFor(myZone.deliveryWeekday, settings), myZone.deliveryMoment).toLowerCase() : 'el finde, según tu zona'}</span>
+              </div>
+              <div className="tag-row">
+                <span className="label">Zona</span>
+                {myZone ? <span className="fill">{myZone.name}</span> : <button type="button" className="fill fill-btn" onClick={openPostal}>poné tu CP</button>}
+              </div>
             </div>
             <Stamp className="hero-stamp" ring="SIN TACC · HECHO A MANO · BERAZATEGUI ·" lines={['R']} />
           </div>
@@ -102,19 +108,19 @@ export function Home() {
             <span className="sec-n" aria-hidden="true">02</span>
             <div>
               <h2 id="h-como" className="d-xl">Cómo pedir</h2>
-              <p className="lede">Tres pasos y el viernes o el sábado lo tenés en tu casa.</p>
+              <p className="lede">Tres pasos y el fin de semana lo tenés en tu casa.</p>
             </div>
           </header>
           <ol className="steps">
             <li data-reveal="rise">
               <Icon name="caja" size={32} />
               <h3>Armá tu pedido</h3>
-              <p>Elegí los gustos y cuántas cajas. Si mezclás, mejor.</p>
+              <p>Elegí los gustos y cuántas cajas. Cuantas más, menos pagás de envío y más descuento.</p>
             </li>
             <li data-reveal="rise">
               <Icon name="reloj" size={32} />
-              <h3>Elegí el turno</h3>
-              <p>Viernes a la noche o sábado a la mañana. {next && <>El próximo cierra el {slotDeadline(next)}.</>}</p>
+              <h3>Pedí hasta el jueves</h3>
+              <p>{settings ? <>Hasta el {cutoffShort(settings)}.</> : null} Te llega ese fin de semana, el día de tu zona. O lo retirás en Berazategui.</p>
             </li>
             <li data-reveal="rise">
               <Icon name="transfer" size={32} />
@@ -137,7 +143,11 @@ export function Home() {
           <span className="sec-n" aria-hidden="true">03</span>
           <div>
             <h2 id="h-zonas" className="d-xl">¿Llegamos a tu casa?</h2>
-            <p className="lede">Repartimos en Berazategui y alrededores. Poné tu código postal y te decimos cuánto sale.</p>
+            <p className="lede">
+              Repartimos en Berazategui, alrededores, CABA y La Plata. Poné tu código postal y te decimos cuándo llega y cuánto sale.
+              {settings && <> Tomamos pedidos hasta el {cutoffShort(settings)}.</>}
+            </p>
+            <p className="small muted">Cuantas más cajas, mejor: pasando el envío gratis, cada caja de más suma descuento.</p>
           </div>
         </header>
         <div className="zones">
@@ -145,29 +155,31 @@ export function Home() {
             <PostalForm />
           </div>
           <table className="zone-table" data-reveal="rise">
-            <caption className="sr">Zonas de entrega, costo y compra mínima</caption>
+            <caption className="sr">Zonas de entrega: día, mínimo de cajas y costo de envío</caption>
             <thead>
-              <tr><th scope="col">Zona</th><th scope="col">Envío</th><th scope="col">Mínimo</th></tr>
+              <tr><th scope="col">Zona</th><th scope="col">Llega</th><th scope="col">Mínimo</th><th scope="col">Envío</th></tr>
             </thead>
             <tbody>
               {zones.map((z) => (
                 <tr key={z.id}>
                   <th scope="row">
                     {z.name}
-                    <span className="cps">CP {z.postalCodes.join(', ')}</span>
+                    <span className="cps">CP {z.postalCodes.map((c) => c.replace('-', ' a ')).join(', ')}</span>
                   </th>
+                  <td>{zoneDay(z)}</td>
+                  <td>{cajas(z.minBoxes)}</td>
                   <td>
                     {money(z.shippingCost)}
-                    {z.freeShippingFrom !== null && <span className="cps">gratis desde {money(z.freeShippingFrom)}</span>}
+                    {z.freeFromBoxes !== null && <span className="cps">gratis desde {cajas(z.freeFromBoxes)}</span>}
                   </td>
-                  <td>{money(z.minOrder)}</td>
                 </tr>
               ))}
               {settings?.pickupEnabled && (
                 <tr>
-                  <th scope="row">Retiro en el local<span className="cps">{settings.pickupAddress}</span></th>
+                  <th scope="row">Retiro en Berazategui<span className="cps">sin restricción de zona</span></th>
+                  <td>A coordinar por WhatsApp</td>
+                  <td>{cajas(settings.pickupMinBoxes)}</td>
                   <td>Sin cargo</td>
-                  <td>{settings.pickupMinOrder > 0 ? money(settings.pickupMinOrder) : 'Sin mínimo'}</td>
                 </tr>
               )}
             </tbody>

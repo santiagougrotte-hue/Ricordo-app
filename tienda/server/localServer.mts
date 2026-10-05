@@ -4,7 +4,7 @@ import { createServer } from 'node:http';
 import { readFile } from 'node:fs/promises';
 import { extname, join } from 'node:path';
 import { query } from './db';
-import { getCatalog, getSlots } from './catalog';
+import { getCatalog } from './catalog';
 import { handleCreateOrder } from './createOrder';
 import { handleAdmin } from './admin';
 import { memoryMedia } from './media';
@@ -26,7 +26,6 @@ createServer(async (nreq, nres) => {
   let res: Response;
   try {
     if (url.pathname === '/api/catalog') res = Response.json(await getCatalog(query));
-    else if (url.pathname === '/api/slots') res = Response.json(await getSlots(query, url.searchParams.get('method') === 'pickup' ? 'pickup' : 'delivery'));
     else if (url.pathname === '/api/create-order') {
       const r = await handleCreateOrder(await req.json().catch(() => null), { TURNSTILE_SECRET_KEY: 'test', SESSION_SECRET: process.env.SESSION_SECRET }, { query, fetch: fakeFetch, ip: String(Math.random()) });
       res = Response.json(r.body, { status: r.status });

@@ -8,6 +8,10 @@ import { Icon } from '../components/Icon';
 import { ago, arDateTime, arWhatsapp, download, ordersCsv, shortDate, arDay } from './util';
 
 type Filter = 'activos' | OrderStatus | 'todos';
+const PICKUP = 'retiro';
+/** Día del pedido para filtrar y "qué preparar": la entrega real si ya la cargaste, si no la prevista. Los retiros van aparte. */
+const whenKey = (o: AdminOrder) => o.deliveredOn ?? o.deliveryDate ?? PICKUP;
+const whenText = (o: AdminOrder) => (o.deliveredOn ? `entregado ${shortDate(o.deliveredOn)}` : o.deliveryDate ? shortDate(o.deliveryDate) : 'a coordinar');
 const ACTIVE: OrderStatus[] = ['new', 'confirmed', 'preparing', 'shipped'];
 
 export function Orders() {
@@ -18,12 +22,13 @@ export function Orders() {
 
   const today = arDay(new Date());
   const deliveryDays = useMemo(
-    () => [...new Set(orders.filter((o) => o.status !== 'cancelled' && o.deliveryDate >= today).map((o) => o.deliveryDate))].sort(),
+    () => [...new Set(orders.map(whenKey).filter((d) => d !== PICKUP && d >= today))].sort(),
     [orders, today],
   );
+  const hasPickups = orders.some((o) => whenKey(o) === PICKUP && ACTIVE.includes(o.status));
   const byStatus = (s: Filter, list = orders) =>
     list.filter((o) => (s === 'todos' ? true : s === 'activos' ? ACTIVE.includes(o.status) : o.status === s));
-  const inDay = day ? orders.filter((o) => o.deliveryDate === day) : orders;
+  const inDay = day ? orders.filter((o) => whenKey(o) === day) : orders;
   const list = byStatus(filter, inDay);
   const open = orders.find((o) => o.id === openId) ?? null;
 
@@ -31,7 +36,7 @@ export function Orders() {
   const prep = useMemo(() => {
     if (!day) return null;
     const m = new Map<string, number>();
-    for (const o of orders) if (o.deliveryDate === day && o.status !== 'cancelled') for (const i of o.items) m.set(i.productName, (m.get(i.productName) ?? 0) + i.quantity);
+    for (const o of orders) if (whenKey(o) === day && o.status !== 'cancelled') for (const i of o.items) m.set(i.productName, (m.get(i.productName) ?? 0) + i.quantity);
     return [...m].sort((a, b) => b[1] - a[1]);
   }, [orders, day]);
 
@@ -65,13 +70,14 @@ export function Orders() {
         <select id="adm-day" className="input" value={day} onChange={(e) => setDay(e.target.value)}>
           <option value="">Todas las fechas</option>
           {deliveryDays.map((d) => <option key={d} value={d}>{shortDate(d)}</option>)}
+          {hasPickups && <option value={PICKUP}>Retiros a coordinar</option>}
         </select>
       </div>
 
       {prep && prep.length > 0 && (
-        <section className="adm-prep tag-box" aria-label={`Qué preparar para el ${shortDate(day)}`}>
+        <section className="adm-prep tag-box" aria-label={day === PICKUP ? 'Qué preparar para los retiros' : `Qué preparar para el ${shortDate(day)}`}>
           <div className="tag-in">
-            <p className="label">Qué preparar · {shortDate(day)}</p>
+            <p className="label">Qué preparar · {day === PICKUP ? 'retiros' : shortDate(day)}</p>
             <ul>{prep.map(([name, q]) => <li key={name}><span>{name}</span><b>{q} {q === 1 ? 'caja' : 'cajas'}</b></li>)}</ul>
           </div>
         </section>
@@ -87,7 +93,10 @@ export function Orders() {
                 <span className="adm-order-n">#{o.number}</span>
                 <span className="adm-order-who">
                   <b>{o.customerName}</b>
-                  <small>{o.deliveryMethod === 'pickup' ? 'Retira' : o.zoneName} · {shortDate(o.deliveryDate)} · {ago(o.createdAt)}</small>
+                  <small>
+                    {o.deliveryMethod === 'pickup' ? 'Retira · a coordinar' : `${o.locality ?? o.zoneName} · ${whenText(o)}`} · {o.boxCount} {o.boxCount === 1 ? 'caja' : 'cajas'} · {ago(o.createdAt)}
+                    {o.flexibleDelivery && o.status !== 'delivered' && ' · acepta otro día'}
+                  </small>
                 </span>
                 <span className="adm-order-right">
                   <b>{money(o.total)}</b>
@@ -167,24 +176,31 @@ function OrderDetail({ order: o }: { order: AdminOrder }) {
       </section>
 
       <section className="adm-block">
-        <h3 className="label">{o.deliveryMethod === 'pickup' ? 'Retira en el local' : 'Envío'}</h3>
-        <p className="adm-big">{o.windowLabel}</p>
+        <h3 className="label">{o.deliveryMethod === 'pickup' ? 'Retira en Berazategui' : 'Envío'}</h3>
+        <p className="adm-big">{o.deliveryMethod === 'pickup' ? 'Día y horario a coordinar por WhatsApp' : `Previsto: ${o.windowLabel}`}</p>
         {o.deliveryMethod === 'delivery' && (
           <p>
-            {o.address} · CP {o.postalCode} · {o.zoneName}{' '}
-            <a href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(`${o.address}, ${o.postalCode}, Buenos Aires`)}`} target="_blank" rel="noopener noreferrer">Ver mapa</a>
+            {o.address}{o.locality && `, ${o.locality}`} · CP {o.postalCode} · {o.zoneName}{' '}
+            <a href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(`${o.address}, ${o.locality ?? ''} ${o.postalCode}, Buenos Aires`)}`} target="_blank" rel="noopener noreferrer">Ver mapa</a>
           </p>
         )}
+        {o.deliveryMethod === 'delivery' && (
+          <p className={o.flexibleDelivery ? 'adm-flex' : 'small muted'}>
+            {o.flexibleDelivery ? 'Acepta que se lo lleven otro día si pasan antes por la zona (avisarle por WhatsApp).' : 'No marcó la entrega flexible: respetar el día previsto.'}
+          </p>
+        )}
+        <DeliveredOn order={o} />
         {o.notes && <p className="adm-notes">“{o.notes}”</p>}
       </section>
 
       <section className="adm-block">
-        <h3 className="label">Cajas</h3>
+        <h3 className="label">{o.boxCount} {o.boxCount === 1 ? 'caja' : 'cajas'}</h3>
         <ul className="sum-lines">
           {o.items.map((i) => <li key={i.productId}><span>{i.quantity} × {i.productName}</span><span>{money(i.quantity * i.unitPrice)}</span></li>)}
         </ul>
         <dl className="totals">
           <div><dt>Subtotal</dt><dd>{money(o.subtotal)}</dd></div>
+          {o.discount > 0 && <div className="discount"><dt>Descuento {o.discountPct}%</dt><dd>−{money(o.discount)}</dd></div>}
           <div><dt>Envío</dt><dd>{o.shippingCost ? money(o.shippingCost) : 'Gratis'}</dd></div>
           <div className="grand"><dt>Total</dt><dd>{money(o.total)}</dd></div>
         </dl>
@@ -203,6 +219,37 @@ function OrderDetail({ order: o }: { order: AdminOrder }) {
           Cancelar pedido (devuelve el stock)
         </button>
       )}
+    </div>
+  );
+}
+
+/** Fecha real de entrega: la cargás vos (por ejemplo, si lo llevaste antes por la entrega flexible). */
+function DeliveredOn({ order: o }: { order: AdminOrder }) {
+  const { patchOrder } = useAdmin();
+  const [v, setV] = useState(o.deliveredOn ?? '');
+  const [state, setState] = useState<'idle' | 'busy' | 'ok' | string>('idle');
+  const id = `don-${o.id}`;
+  async function save(date: string | null) {
+    setState('busy');
+    try {
+      await adminApi.setDeliveredOn(o.id, date);
+      patchOrder({ ...o, deliveredOn: date });
+      setV(date ?? '');
+      setState('ok');
+    } catch (e) {
+      setState(e instanceof Error ? e.message : 'No se pudo guardar');
+    }
+  }
+  return (
+    <div className="field adm-delivered">
+      <label className="field-label" htmlFor={id}>Fecha real de entrega</label>
+      <div className="stack-row">
+        <input id={id} className="input" type="date" value={v} onChange={(e) => { setV(e.target.value); setState('idle'); }} />
+        <button type="button" className="btn btn-line" disabled={state === 'busy' || !v || v === o.deliveredOn} onClick={() => void save(v)}>Guardar</button>
+        {o.deliveredOn && <button type="button" className="link" disabled={state === 'busy'} onClick={() => void save(null)}>Borrar</button>}
+      </div>
+      {state === 'ok' && <p className="field-hint" role="status">Guardada.</p>}
+      {state !== 'idle' && state !== 'busy' && state !== 'ok' && <p className="field-error" role="alert">{state}</p>}
     </div>
   );
 }

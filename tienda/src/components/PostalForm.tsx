@@ -2,13 +2,26 @@ import { useId, useState, type FormEvent } from 'react';
 import { useStore } from '../state/store';
 import { normalizePostalCode } from '../lib/postal';
 import { findZone } from '../lib/shipping';
+import { deliverySentence } from '../lib/delivery';
 import { money } from '../lib/money';
 import { whatsappLink } from '../lib/whatsapp';
+import type { ShippingZone } from '../lib/types';
 import { Icon } from './Icon';
 
-/** Formulario de CP con respuesta inmediata. Nunca un error genérico. */
+const cajas = (n: number) => `${n} ${n === 1 ? 'caja' : 'cajas'}`;
+
+/** "Mínimo 3 cajas · envío $1.500 · gratis desde 4 cajas" */
+export function zoneTerms(z: ShippingZone): string {
+  return [
+    z.minBoxes > 0 && `mínimo ${cajas(z.minBoxes)}`,
+    `envío ${money(z.shippingCost)}`,
+    z.freeFromBoxes !== null && `gratis desde ${cajas(z.freeFromBoxes)}`,
+  ].filter(Boolean).join(' · ');
+}
+
+/** Formulario de CP con respuesta inmediata. Nunca un error genérico. Después del CP, el cliente confirma su localidad. */
 export function PostalForm({ onDone, compact = false }: { onDone?: () => void; compact?: boolean }) {
-  const { zones, postalCode, setPostalCode, setMethod, settings } = useStore();
+  const { zones, postalCode, setPostalCode, setMethod, settings, locality, setLocality } = useStore();
   const [value, setValue] = useState(postalCode);
   const [submitted, setSubmitted] = useState(postalCode !== '');
   const id = useId();
@@ -21,7 +34,7 @@ export function PostalForm({ onDone, compact = false }: { onDone?: () => void; c
     if (r.status === 'found') {
       setPostalCode(value.trim());
       setMethod('delivery');
-      onDone?.();
+      if (r.zone.localities.length <= 1) onDone?.();
     } else if (r.status === 'not_found') {
       setPostalCode(value.trim());
     }
@@ -55,33 +68,69 @@ export function PostalForm({ onDone, compact = false }: { onDone?: () => void; c
         {result?.status === 'invalid' && <p>Escribilo con 4 números (por ejemplo 1884) o como figura en tus boletas (B1884ABC).</p>}
         {result?.status === 'empty' && <p>Escribí tu código postal para ver el costo de envío.</p>}
         {result?.status === 'found' && (
-          <p className="ok">
-            <Icon name="ok" size={20} /> Llegamos a {result.zone.name}. Envío {money(result.zone.shippingCost)}
-            {result.zone.minOrder > 0 && <>, compra mínima {money(result.zone.minOrder)}</>}
-            {result.zone.freeShippingFrom !== null && <>, gratis desde {money(result.zone.freeShippingFrom)}</>}.
-          </p>
+          <>
+            <p className="ok">
+              <Icon name="ok" size={20} /> Llegamos a {result.zone.name}: {zoneTerms(result.zone)}.
+            </p>
+            {settings && <p className="small">{deliverySentence(result.zone, settings)}.</p>}
+            {result.zone.localities.length > 1 && (
+              <LocalityPicker
+                localities={result.zone.localities}
+                value={locality}
+                onChange={(l) => {
+                  setLocality(l);
+                  if (l) onDone?.();
+                }}
+              />
+            )}
+          </>
         )}
         {result?.status === 'not_found' && (
           <div className="not-found">
             <p>
-              Todavía no llegamos al <strong>{result.postalCode}</strong>. Pero no te quedes sin tus pastas:
+              Todavía no llegamos a tu zona (<strong>{result.postalCode}</strong>), escribinos por WhatsApp.
             </p>
             <div className="stack-row">
+              {wa && (
+                <a className="btn btn-ink" href={wa} target="_blank" rel="noopener noreferrer">
+                  <Icon name="charla" /> Escribir por WhatsApp
+                </a>
+              )}
               {settings?.pickupEnabled && (
                 <button type="button" className="btn btn-line" onClick={() => { setMethod('pickup'); onDone?.(); }}>
-                  <Icon name="local" /> Lo retiro en el local
+                  <Icon name="local" /> Lo retiro en Berazategui
                 </button>
-              )}
-              {wa && (
-                <a className="btn btn-line" href={wa} target="_blank" rel="noopener noreferrer">
-                  <Icon name="charla" /> Preguntar por WhatsApp
-                </a>
               )}
             </div>
           </div>
         )}
       </div>
     </form>
+  );
+}
+
+/** El CP puede abarcar varias localidades: el cliente confirma la suya. */
+export function LocalityPicker({ localities, value, onChange, error, id: idProp }: {
+  localities: string[]; value: string; onChange: (l: string) => void; error?: string; id?: string;
+}) {
+  const auto = useId();
+  const id = idProp ?? auto;
+  return (
+    <div className="field">
+      <label className="field-label" htmlFor={id}>Tu localidad</label>
+      <select
+        id={id}
+        className="input"
+        value={localities.includes(value) ? value : ''}
+        onChange={(e) => onChange(e.target.value)}
+        aria-invalid={error ? true : undefined}
+        aria-describedby={error ? `${id}-err` : undefined}
+      >
+        <option value="">Elegí de la lista</option>
+        {localities.map((l) => <option key={l} value={l}>{l}</option>)}
+      </select>
+      {error && <p id={`${id}-err`} className="field-error">{error}</p>}
+    </div>
   );
 }
 

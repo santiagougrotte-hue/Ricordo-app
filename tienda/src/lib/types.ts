@@ -23,6 +23,8 @@ export interface Product {
   stock: number;
   lowStockThreshold: number;
   featured: boolean;
+  /** Cuenta para mínimos, envío gratis y descuentos. Las salsas y complementos no. */
+  countsAsBox: boolean;
   sortOrder: number;
   media: ProductMedia[];
   /** Pedido para la sesión de fotos mientras no haya fotos reales. */
@@ -32,27 +34,29 @@ export interface Product {
 export interface ShippingZone {
   id: string;
   name: string;
+  /** CP sueltos ('1884') o rangos ('1000-1499'). */
   postalCodes: string[];
+  /** Localidades para que el cliente confirme la suya. */
+  localities: string[];
   shippingCost: number;
-  minOrder: number;
-  freeShippingFrom: number | null;
+  minBoxes: number;
+  freeFromBoxes: number | null;
+  deliveryWeekday: number; // 0 = domingo … 6 = sábado
+  deliveryMoment: string; // 'a la mañana', 'a la noche' o ''
+  /** % de descuento por cada caja que pasa el umbral de envío gratis. */
+  discountPerBox: number;
+  discountMax: number;
 }
 
 export interface StoreSettings {
   pickupEnabled: boolean;
-  pickupMinOrder: number;
+  pickupMinBoxes: number;
   pickupAddress: string;
   whatsappPhone: string;
   transferInfo: string;
-}
-
-export interface DeliverySlot {
-  windowId: string;
-  date: string; // YYYY-MM-DD (hora de Buenos Aires)
-  label: string; // "Viernes a la noche"
-  startsAt: string; // HH:MM
-  endsAt: string;
-  closesAt: string; // ISO
+  /** Cierre semanal de pedidos (hora de Buenos Aires). */
+  cutoffWeekday: number;
+  cutoffTime: string; // HH:MM
 }
 
 export interface CartLine {
@@ -67,10 +71,11 @@ export interface OrderInput {
   deliveryMethod: DeliveryMethod;
   address: string;
   postalCode: string;
+  locality: string;
   notes: string;
   paymentMethod: PaymentMethod;
-  deliveryDate: string;
-  deliveryWindowId: string;
+  /** "Si pasamos por tu zona antes, ¿te lo podemos llevar otro día?" */
+  flexibleDelivery: boolean;
   items: CartLine[];
   turnstileToken?: string;
 }
@@ -79,9 +84,13 @@ export interface OrderReceipt {
   orderId: string;
   number: number;
   subtotal: number;
+  discount: number;
+  discountPct: number;
   shippingCost: number;
   total: number;
+  boxCount: number;
   deliveryMethod: DeliveryMethod;
+  deliveryDate: string | null;
   windowLabel: string;
   paymentMethod: PaymentMethod;
   lines: { name: string; quantity: number; unitPrice: number }[];
@@ -99,7 +108,7 @@ export interface ShortItem {
 export type OrderError =
   | { code: 'RC001'; message: string; short: ShortItem[] }
   | { code: 'RC002'; message: string }
-  | { code: 'RC003'; message: string; minOrder: number; missing: number }
+  | { code: 'RC003'; message: string; minBoxes: number; missing: number; pickupMinBoxes: number | null }
   | { code: 'RC004'; message: string }
   | { code: 'RC005'; message: string }
   | { code: 'RC006'; message: string }

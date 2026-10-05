@@ -1,6 +1,6 @@
 // Datos públicos de la tienda: solo lo activo. Nunca el email de aviso ni pedidos.
 import type { Query } from './db';
-import type { DeliveryMethod, DeliverySlot, Product, ShippingZone, StoreSettings } from '../src/lib/types';
+import type { Product, ShippingZone, StoreSettings } from '../src/lib/types';
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 type Row = Record<string, any>;
@@ -9,7 +9,7 @@ export function mapProduct(r: Row): Product & { active: boolean } {
   return {
     id: r.id, slug: r.slug, name: r.name, pastaType: r.pasta_type, filling: r.filling, description: r.description,
     unitsPerBox: r.units_per_box, price: r.price, stock: r.stock, lowStockThreshold: r.low_stock_threshold,
-    featured: r.featured, sortOrder: r.sort_order, active: r.active,
+    featured: r.featured, countsAsBox: r.counts_as_box, sortOrder: r.sort_order, active: r.active,
     media: ((r.media ?? []) as Row[])
       .map((m) => ({ id: m.id, url: String(m.url).startsWith('/') ? m.url : `/media/${m.url}`, kind: m.kind, alt: m.alt, isCover: m.is_cover, sortOrder: m.sort_order }))
       .sort((a, b) => Number(b.isCover) - Number(a.isCover) || a.sortOrder - b.sortOrder),
@@ -32,24 +32,23 @@ export async function getCatalog(q: Query): Promise<{ products: Product[]; zones
       void _a;
       return p;
     }),
-    zones: zones.map((z: Row) => ({
-      id: z.id, name: z.name, postalCodes: z.postal_codes, shippingCost: z.shipping_cost, minOrder: z.min_order, freeShippingFrom: z.free_shipping_from,
-    })),
-    settings: {
-      pickupEnabled: (s as Row).pickup_enabled, pickupMinOrder: (s as Row).pickup_min_order, pickupAddress: (s as Row).pickup_address,
-      whatsappPhone: (s as Row).whatsapp_phone, transferInfo: (s as Row).transfer_info,
-    },
+    zones: zones.map(mapZone),
+    settings: mapSettings(s as Row),
   };
 }
 
-export async function getSlots(q: Query, method: DeliveryMethod): Promise<DeliverySlot[]> {
-  const rows = await q(`select * from available_delivery_slots($1::delivery_method, 14)`, [method]);
-  return rows.map((s: Row) => ({
-    windowId: s.window_id,
-    date: s.delivery_date instanceof Date ? s.delivery_date.toISOString().slice(0, 10) : String(s.delivery_date).slice(0, 10),
-    label: s.label,
-    startsAt: String(s.starts_at).slice(0, 5),
-    endsAt: String(s.ends_at).slice(0, 5),
-    closesAt: new Date(s.closes_at).toISOString(),
-  }));
+export function mapZone(z: Row): ShippingZone {
+  return {
+    id: z.id, name: z.name, postalCodes: z.postal_codes, localities: z.localities, shippingCost: z.shipping_cost,
+    minBoxes: z.min_boxes, freeFromBoxes: z.free_from_boxes, deliveryWeekday: z.delivery_weekday, deliveryMoment: z.delivery_moment,
+    discountPerBox: z.discount_per_box, discountMax: z.discount_max,
+  };
+}
+
+export function mapSettings(s: Row): StoreSettings {
+  return {
+    pickupEnabled: s.pickup_enabled, pickupMinBoxes: s.pickup_min_boxes, pickupAddress: s.pickup_address,
+    whatsappPhone: s.whatsapp_phone, transferInfo: s.transfer_info,
+    cutoffWeekday: s.cutoff_weekday, cutoffTime: String(s.cutoff_time).slice(0, 5),
+  };
 }

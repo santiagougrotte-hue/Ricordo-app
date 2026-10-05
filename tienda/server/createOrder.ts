@@ -29,7 +29,6 @@ export interface HttpResult {
 }
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-const DATE = /^\d{4}-\d{2}-\d{2}$/;
 const fail = (status: number, error: OrderResult & { ok: false }): HttpResult => ({ status, body: error });
 const bad = (message: string) => fail(400, { ok: false, error: { code: 'RC004', message } });
 
@@ -45,19 +44,19 @@ export function parseInput(raw: unknown): OrderInput | string {
     deliveryMethod: b.deliveryMethod === 'pickup' ? 'pickup' : 'delivery',
     address: str('address', 200),
     postalCode: str('postalCode', 16),
+    locality: str('locality', 80),
     notes: str('notes', 1000),
     paymentMethod: b.paymentMethod === 'cash' ? 'cash' : 'transfer',
-    deliveryDate: str('deliveryDate', 10),
-    deliveryWindowId: str('deliveryWindowId', 36),
+    flexibleDelivery: b.flexibleDelivery === true,
     items: [],
     turnstileToken: str('turnstileToken', 4096),
   };
   if (b.deliveryMethod !== 'pickup' && b.deliveryMethod !== 'delivery') return 'Modalidad de entrega inválida';
   if (b.paymentMethod !== 'cash' && b.paymentMethod !== 'transfer') return 'Método de pago no disponible';
   if (input.customerName.trim().length < 2) return 'Falta el nombre';
-  const digits = input.customerPhone.replace(/\D/g, '');
-  if (digits.length < 8 || digits.length > 15) return 'Teléfono inválido';
-  if (!DATE.test(input.deliveryDate) || !UUID.test(input.deliveryWindowId)) return 'Turno inválido';
+  // El teléfono se guarda solo con números.
+  input.customerPhone = input.customerPhone.replace(/\D/g, '');
+  if (input.customerPhone.length < 8 || input.customerPhone.length > 15) return 'Teléfono inválido';
   if (!Array.isArray(b.items) || b.items.length === 0 || b.items.length > 30) return 'Carrito vacío o inválido';
   for (const it of b.items as unknown[]) {
     const o = it as Record<string, unknown>;
@@ -104,11 +103,11 @@ export function mapDbError(e: PgError): OrderResult & { ok: false } {
       return { ok: false, error: { code: 'RC001', message: msg, short } };
     }
     case 'RC003': {
-      let d = { min_order: 0, missing: 0 };
+      let d: { min_boxes?: number; missing?: number; pickup_min_boxes?: number | null } = {};
       try {
         d = JSON.parse(e.detail ?? '{}');
       } catch { /* sin detalle */ }
-      return { ok: false, error: { code: 'RC003', message: msg, minOrder: d.min_order, missing: d.missing } };
+      return { ok: false, error: { code: 'RC003', message: msg, minBoxes: d.min_boxes ?? 0, missing: d.missing ?? 0, pickupMinBoxes: d.pickup_min_boxes ?? null } };
     }
     case 'RC002':
     case 'RC004':
@@ -138,14 +137,15 @@ export async function handleCreateOrder(raw: unknown, env: ServerEnv, deps: Deps
   let created: { order_id: string; order_number: number; total: number };
   try {
     const rows = await deps.query<{ order_id: string; order_number: string; total: number }>(
-      `select * from create_order($1, $2, $3, $4::delivery_method, $5, $6, $7, $8::payment_method, $9::jsonb, $10::date, $11::uuid)`,
+      `select * from create_order($1, $2, $3, $4::delivery_method, $5, $6, $7, $8, $9::payment_method, $10::jsonb, $11)`,
       [
         parsed.customerName, parsed.customerPhone, parsed.customerEmail || null, parsed.deliveryMethod,
         parsed.deliveryMethod === 'delivery' ? parsed.address : null,
         parsed.deliveryMethod === 'delivery' ? parsed.postalCode : null,
+        parsed.deliveryMethod === 'delivery' ? parsed.locality : null,
         parsed.notes || null, parsed.paymentMethod,
         JSON.stringify(parsed.items.map((i) => ({ product_id: i.productId, quantity: i.quantity }))),
-        parsed.deliveryDate, parsed.deliveryWindowId,
+        parsed.flexibleDelivery,
       ],
     );
     created = { order_id: rows[0].order_id, order_number: Number(rows[0].order_number), total: rows[0].total };
@@ -163,24 +163,28 @@ export async function handleCreateOrder(raw: unknown, env: ServerEnv, deps: Deps
 
 async function loadReceipt(created: { order_id: string; order_number: number; total: number }, input: OrderInput, deps: Deps): Promise<OrderReceipt> {
   const fallback: OrderReceipt = {
-    orderId: created.order_id, number: created.order_number, subtotal: created.total, shippingCost: 0, total: created.total,
-    deliveryMethod: input.deliveryMethod, windowLabel: '', paymentMethod: input.paymentMethod, lines: [], customerName: input.customerName.trim(),
+    orderId: created.order_id, number: created.order_number, subtotal: created.total, discount: 0, discountPct: 0, shippingCost: 0, total: created.total,
+    boxCount: 0, deliveryMethod: input.deliveryMethod, deliveryDate: null, windowLabel: '', paymentMethod: input.paymentMethod, lines: [],
+    customerName: input.customerName.trim(),
   };
   try {
     const [o] = await deps.query<{
-      number: string; subtotal: number; shipping_cost: number; total: number; delivery_method: OrderReceipt['deliveryMethod'];
+      number: string; subtotal: number; discount: number; discount_pct: number; shipping_cost: number; total: number; box_count: number;
+      delivery_method: OrderReceipt['deliveryMethod']; delivery_date: string | null;
       delivery_window_label: string; payment_method: OrderReceipt['paymentMethod']; customer_name: string;
       items: { product_name: string; quantity: number; unit_price: number }[];
     }>(
-      `select o.number, o.subtotal, o.shipping_cost, o.total, o.delivery_method, o.delivery_window_label, o.payment_method, o.customer_name,
+      `select o.number, o.subtotal, o.discount, o.discount_pct, o.shipping_cost, o.total, o.box_count, o.delivery_method,
+              to_char(o.delivery_date, 'YYYY-MM-DD') as delivery_date, o.delivery_window_label, o.payment_method, o.customer_name,
               (select json_agg(json_build_object('product_name', product_name, 'quantity', quantity, 'unit_price', unit_price)) from order_items where order_id = o.id) as items
        from orders o where o.id = $1`,
       [created.order_id],
     );
     if (!o) return fallback;
     return {
-      orderId: created.order_id, number: Number(o.number), subtotal: o.subtotal, shippingCost: o.shipping_cost, total: o.total,
-      deliveryMethod: o.delivery_method, windowLabel: o.delivery_window_label, paymentMethod: o.payment_method, customerName: o.customer_name,
+      orderId: created.order_id, number: Number(o.number), subtotal: o.subtotal, discount: o.discount, discountPct: o.discount_pct,
+      shippingCost: o.shipping_cost, total: o.total, boxCount: o.box_count, deliveryMethod: o.delivery_method, deliveryDate: o.delivery_date,
+      windowLabel: o.delivery_window_label, paymentMethod: o.payment_method, customerName: o.customer_name,
       lines: (o.items ?? []).map((i) => ({ name: i.product_name, quantity: i.quantity, unitPrice: i.unit_price })),
     };
   } catch {
@@ -192,16 +196,18 @@ const peso = (n: number) => '$' + new Intl.NumberFormat('es-AR').format(n);
 
 export function orderSummaryText(r: OrderReceipt, input: OrderInput): string {
   const lines = r.lines.map((l) => `• ${l.quantity} × ${l.name} — ${peso(l.quantity * l.unitPrice)}`).join('\n');
-  const where = r.deliveryMethod === 'pickup' ? 'Retira en el local' : `Envío a ${input.address} (CP ${input.postalCode})`;
+  const where = r.deliveryMethod === 'pickup'
+    ? 'Retira en Berazategui'
+    : `Envío a ${input.address}, ${input.locality ? input.locality + ' ' : ''}(CP ${input.postalCode})`;
   return [
-    `Pedido #${r.number} — ${peso(r.total)}`,
+    `Pedido #${r.number} — ${peso(r.total)} — ${r.boxCount} ${r.boxCount === 1 ? 'caja' : 'cajas'}`,
     `${r.customerName} · ${input.customerPhone}${input.customerEmail ? ' · ' + input.customerEmail : ''}`,
     where,
-    r.windowLabel,
+    r.windowLabel + (r.deliveryMethod === 'delivery' && input.flexibleDelivery ? ' (acepta que se lo lleven otro día)' : ''),
     `Pago: ${r.paymentMethod === 'cash' ? 'efectivo' : 'transferencia'}`,
     '',
     lines,
-    `Subtotal ${peso(r.subtotal)} · Envío ${r.shippingCost ? peso(r.shippingCost) : 'gratis'}`,
+    `Subtotal ${peso(r.subtotal)}${r.discount ? ` · Descuento ${r.discountPct}% −${peso(r.discount)}` : ''} · Envío ${r.shippingCost ? peso(r.shippingCost) : 'gratis'}`,
     input.notes ? `\nNotas: ${input.notes}` : '',
   ].join('\n');
 }

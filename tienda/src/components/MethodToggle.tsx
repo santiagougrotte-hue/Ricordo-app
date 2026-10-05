@@ -13,7 +13,7 @@ export function MethodToggle() {
       </label>
       <label className={method === 'pickup' ? 'on' : ''}>
         <input type="radio" name="method" checked={method === 'pickup'} onChange={() => setMethod('pickup')} />
-        <Icon name="local" size={20} /> Lo retiro
+        <Icon name="local" size={20} /> Retiro en Berazategui
       </label>
     </fieldset>
   );

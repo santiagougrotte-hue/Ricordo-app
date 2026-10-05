@@ -1,5 +1,4 @@
 import type { DeliveryMethod, PastaType, PaymentMethod, Product, ShippingZone, StoreSettings } from '../types';
-import type { DeliveryWindow } from '../slots';
 
 export type OrderStatus = 'new' | 'confirmed' | 'preparing' | 'shipped' | 'delivered' | 'cancelled';
 export type PaymentStatus = 'pending' | 'paid' | 'refunded';
@@ -27,10 +26,20 @@ export interface AdminOrder {
   address: string | null;
   postalCode: string | null;
   zoneName: string | null;
-  deliveryDate: string;
+  locality: string | null;
+  /** Cajas que cuentan (sin salsas ni complementos). */
+  boxCount: number;
+  /** Fecha prevista (null en retiros: se coordina por WhatsApp). */
+  deliveryDate: string | null;
+  /** Fecha real de entrega, la carga el admin. */
+  deliveredOn: string | null;
+  /** Acepta que se lo lleven otro día si pasan antes por la zona. */
+  flexibleDelivery: boolean;
   windowLabel: string;
   notes: string | null;
   subtotal: number;
+  discount: number;
+  discountPct: number;
   shippingCost: number;
   total: number;
   paymentMethod: PaymentMethod | 'mercadopago';
@@ -58,6 +67,7 @@ export interface ProductDraft {
   stock: number;
   lowStockThreshold: number;
   featured: boolean;
+  countsAsBox: boolean;
   active: boolean;
   sortOrder: number;
 }
@@ -74,6 +84,8 @@ export interface AdminApi {
   subscribeOrders(fn: (e: OrderEvent) => void): () => void;
   setOrderStatus(id: string, status: OrderStatus): Promise<void>;
   setPaymentStatus(id: string, status: PaymentStatus): Promise<void>;
+  /** Fecha real de entrega (YYYY-MM-DD) o null para borrarla. */
+  setDeliveredOn(id: string, date: string | null): Promise<void>;
 
   listProducts(): Promise<AdminProduct[]>;
   saveProduct(d: ProductDraft): Promise<string>; // id
@@ -89,6 +101,4 @@ export interface AdminApi {
 
   getSettings(): Promise<AdminSettings>;
   saveSettings(s: AdminSettings): Promise<void>;
-  listWindows(): Promise<DeliveryWindow[]>;
-  saveWindow(w: Omit<DeliveryWindow, 'id'> & { id: string | null }): Promise<void>;
 }

@@ -1,38 +1,40 @@
 import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useStore } from '../state/store';
-import { useSlots } from '../state/useSlots';
 import { api } from '../lib/api';
 import { money } from '../lib/money';
 import { normalizePostalCode } from '../lib/postal';
-import { findZone, quote } from '../lib/shipping';
-import { slotDay, slotDeadline, slotHours, slotPart } from '../lib/slots';
+import { cartMessage, findZone, quote } from '../lib/shipping';
+import { deliverySentence } from '../lib/delivery';
+import { whatsappLink } from '../lib/whatsapp';
 import type { OrderError, PaymentMethod } from '../lib/types';
 import { Icon } from '../components/Icon';
 import { MethodToggle } from '../components/MethodToggle';
+import { LocalityPicker } from '../components/PostalForm';
 import { Turnstile, type TurnstileHandle } from '../components/Turnstile';
+import { useDocumentTitle } from './useDocumentTitle';
 
 const TURNSTILE_KEY = import.meta.env.VITE_TURNSTILE_SITE_KEY as string | undefined;
 // En modo demo no hay servidor que valide, así que no se carga el captcha.
 const NEEDS_CAPTCHA = api.mode === 'live';
-import { useDocumentTitle } from './useDocumentTitle';
 
 interface Form {
-  name: string; phone: string; email: string; address: string; postalCode: string; notes: string;
-  payment: PaymentMethod | ''; slot: string; // "windowId|date"
+  name: string; phone: string; email: string; address: string; postalCode: string; locality: string; notes: string;
+  payment: PaymentMethod | ''; flexible: boolean;
 }
 type Errors = Partial<Record<keyof Form, string>>;
 
 export const RECEIPT_KEY = 'ricordo-last-receipt';
+const cajas = (n: number) => `${n} ${n === 1 ? 'caja' : 'cajas'}`;
 
 export function Checkout() {
   useDocumentTitle('Tu pedido · Ricordo');
   const s = useStore();
-  const { items, subtotal, method, settings, zones, postalCode, setPostalCode, status, setQuantity, reload } = s;
+  const { items, subtotal, totals, method, setMethod, settings, zones, postalCode, setPostalCode, locality, setLocality, status, setQuantity, reload } = s;
   const navigate = useNavigate();
-  const { slots, refresh: refreshSlots } = useSlots(method);
   const [f, setF] = useState<Form>(() => ({
-    name: '', phone: '', email: '', address: '', postalCode: normalizePostalCode(postalCode) ?? postalCode, notes: '', payment: '', slot: '',
+    name: '', phone: '', email: '', address: '', postalCode: normalizePostalCode(postalCode) ?? postalCode, locality,
+    notes: '', payment: '', flexible: false,
   }));
   const [errors, setErrors] = useState<Errors>({});
   const [serverError, setServerError] = useState<string | null>(null);
@@ -40,19 +42,17 @@ export function Checkout() {
   const [token, setToken] = useState<string | null>(null);
   const captcha = useRef<TurnstileHandle>(null);
 
-  // El CP del checkout manda: recalcula zona y envío en vivo.
+  // El CP del checkout manda: recalcula zona, envío, descuento y fecha en vivo.
   const lookup = useMemo(() => findZone(zones, f.postalCode), [zones, f.postalCode]);
-  const q = settings ? quote(method, lookup, subtotal, settings) : null;
+  const zone = method === 'delivery' && lookup.status === 'found' ? lookup.zone : null;
+  const q = settings ? quote(method, lookup, totals, settings) : null;
+  const localities = zone?.localities ?? [];
+  const loc = localities.length === 1 ? localities[0] : localities.includes(f.locality) ? f.locality : '';
 
   // Precarga la confirmación: si no, el router muestra el checkout vacío mientras baja ese código.
   useEffect(() => {
     void import('./Confirmation');
   }, []);
-
-  // Si el turno elegido desaparece (cerró o cambió la modalidad), se limpia.
-  useEffect(() => {
-    if (slots && f.slot && !slots.some((x) => `${x.windowId}|${x.date}` === f.slot)) setF((v) => ({ ...v, slot: '' }));
-  }, [slots, f.slot]);
 
   if (status === 'ready' && items.length === 0) {
     return (
@@ -73,15 +73,14 @@ export function Checkout() {
     const e: Errors = {};
     if (f.name.trim().length < 2) e.name = 'Contanos tu nombre.';
     const digits = f.phone.replace(/\D/g, '');
-    if (digits.length < 8 || digits.length > 15) e.phone = 'Necesitamos un teléfono con WhatsApp, con característica (ej. 11 5555 1234).';
+    if (digits.length < 8 || digits.length > 15) e.phone = 'Necesitamos un celular con WhatsApp, con característica (ej. 11 5555 1234).';
     if (f.email.trim() && !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(f.email.trim())) e.email = 'Revisá el email (o dejalo vacío).';
     if (method === 'delivery') {
       if (f.address.trim().length < 5) e.address = 'Calle, número y piso/depto si tiene.';
       if (!normalizePostalCode(f.postalCode)) e.postalCode = 'Escribí 4 números (1884) o el CP completo (B1884ABC).';
-      else if (lookup.status === 'not_found') e.postalCode = `Todavía no llegamos al ${lookup.postalCode}. Podés elegir "Lo retiro" arriba.`;
+      else if (lookup.status === 'not_found') e.postalCode = 'Todavía no llegamos a tu zona, escribinos por WhatsApp. También podés elegir retiro en Berazategui.';
+      else if (localities.length > 1 && !loc) e.locality = 'Elegí tu localidad.';
     }
-    if (q && q.missingForMin > 0 && !e.postalCode) setServerError(`Te faltan ${money(q.missingForMin)} para la compra mínima (${money(q.minOrder)}). Sumá alguna caja y volvé.`);
-    if (!f.slot) e.slot = 'Elegí cuándo lo querés.';
     if (!f.payment) e.payment = 'Elegí cómo pagás.';
     return e;
   }
@@ -94,14 +93,13 @@ export function Checkout() {
         const parts = err.short.map((it) => (it.available > 0 ? `${it.name}: quedan ${it.available}` : `${it.name ?? 'Un gusto'}: se agotó`));
         return `Mientras armabas el pedido se vendieron algunas cajas. ${parts.join(' · ')}. Ya ajustamos tu pedido, revisalo y confirmá de nuevo.`;
       }
-      case 'RC002': return 'Todavía no llegamos a ese código postal. Podés elegir retiro en el local.';
-      case 'RC003': return `Te faltan ${money(err.missing)} para la compra mínima (${money(err.minOrder)}).`;
-      case 'RC006':
-        void refreshSlots();
-        return 'El turno que elegiste ya cerró. Elegí otro y confirmá de nuevo.';
+      case 'RC002': return 'Todavía no llegamos a tu zona, escribinos por WhatsApp. También podés elegir retiro en Berazategui.';
+      case 'RC003': return `Sumá ${cajas(err.missing)} más: el mínimo es de ${cajas(err.minBoxes)}.`;
       case 'CAPTCHA': return 'No pudimos verificar que no sos un robot. Recargá la página y probá de nuevo.';
       case 'NETWORK': return err.message;
-      default: return 'Algo no cerró con los datos del pedido. Revisalos y probá de nuevo; si sigue, escribinos por WhatsApp.';
+      default: return err.message && err.code === 'RC004' && /localidad|Teléfono|dirección/i.test(err.message)
+        ? `${err.message}.`
+        : 'Algo no cerró con los datos del pedido. Revisalos y probá de nuevo; si sigue, escribinos por WhatsApp.';
     }
   }
 
@@ -111,9 +109,12 @@ export function Checkout() {
     const errs = validate();
     setErrors(errs);
     const first = Object.keys(errs)[0];
-    if (!first && q && q.missingForMin > 0) return;
     if (first) {
       document.getElementById(`f-${first}`)?.focus();
+      return;
+    }
+    if (q && !q.canCheckout) {
+      setServerError(q ? cartMessage(q, lookup) : null);
       return;
     }
     if (NEEDS_CAPTCHA && !token) {
@@ -122,12 +123,12 @@ export function Checkout() {
         : 'La tienda todavía no tiene configurado el captcha (VITE_TURNSTILE_SITE_KEY).');
       return;
     }
-    const [windowId, date] = f.slot.split('|');
     setSending(true);
+    const delivery = method === 'delivery';
     const res = await api.createOrder({
-      customerName: f.name, customerPhone: f.phone, customerEmail: f.email,
-      deliveryMethod: method, address: method === 'delivery' ? f.address : '', postalCode: method === 'delivery' ? f.postalCode : '',
-      notes: f.notes, paymentMethod: f.payment as PaymentMethod, deliveryDate: date, deliveryWindowId: windowId,
+      customerName: f.name, customerPhone: f.phone.replace(/\D/g, ''), customerEmail: f.email,
+      deliveryMethod: method, address: delivery ? f.address : '', postalCode: delivery ? f.postalCode : '', locality: delivery ? loc : '',
+      notes: f.notes, paymentMethod: f.payment as PaymentMethod, flexibleDelivery: delivery && f.flexible,
       items: items.map((i) => ({ productId: i.product.id, quantity: i.quantity })),
       turnstileToken: token ?? undefined,
     });
@@ -138,7 +139,10 @@ export function Checkout() {
       requestAnimationFrame(() => document.getElementById('server-error')?.focus());
       return;
     }
-    if (method === 'delivery') setPostalCode(f.postalCode);
+    if (delivery) {
+      setPostalCode(f.postalCode);
+      setLocality(loc);
+    }
     try {
       sessionStorage.setItem(RECEIPT_KEY, JSON.stringify(res.receipt));
     } catch { /* sin storage */ }
@@ -146,8 +150,11 @@ export function Checkout() {
     navigate(`/pedido/${res.receipt.number}`, { state: { receipt: res.receipt, fresh: true }, replace: true });
   }
 
-  const total = q && q.shippingCost !== null ? subtotal + q.shippingCost : null;
   const err = (k: keyof Form) => (errors[k] ? { 'aria-invalid': true, 'aria-describedby': `e-${k}` } : {});
+  const wa = settings && method === 'delivery' && lookup.status === 'not_found'
+    ? whatsappLink(settings.whatsappPhone, `Hola Ricordo! Quería hacer un pedido y mi código postal es ${lookup.postalCode}.`)
+    : null;
+  const blocked = q && !q.canCheckout && (method === 'pickup' || zone) ? cartMessage(q, lookup) : null;
 
   return (
     <section className="wrap sec checkout">
@@ -166,7 +173,7 @@ export function Checkout() {
             <Field id="name" label="Nombre y apellido" error={errors.name}>
               <input id="f-name" className="input" autoComplete="name" value={f.name} onChange={set('name')} {...err('name')} />
             </Field>
-            <Field id="phone" label="Celular (WhatsApp)" error={errors.phone}>
+            <Field id="phone" label="Celular con WhatsApp" error={errors.phone} hint="Por acá te confirmamos el pedido.">
               <input id="f-phone" className="input" type="tel" inputMode="tel" autoComplete="tel" placeholder="11 5555 1234" value={f.phone} onChange={set('phone')} {...err('phone')} />
             </Field>
             <Field id="email" label="Email (opcional)" error={errors.email}>
@@ -182,33 +189,38 @@ export function Checkout() {
                 <Field id="address" label="Dirección" error={errors.address}>
                   <input id="f-address" className="input" autoComplete="street-address" placeholder="Calle 14 1234, 2°B" value={f.address} onChange={set('address')} {...err('address')} />
                 </Field>
-                <Field id="postalCode" label="Código postal" error={errors.postalCode} hint={lookup.status === 'found' ? `Zona ${lookup.zone.name}` : undefined}>
+                <Field id="postalCode" label="Código postal" error={errors.postalCode} hint={zone ? `Zona ${zone.name}` : undefined}>
                   <input id="f-postalCode" className="input input-cp" autoComplete="postal-code" value={f.postalCode} onChange={set('postalCode')} {...err('postalCode')} />
                 </Field>
+                {wa && (
+                  <p className="stack-row">
+                    <a className="btn btn-ink" href={wa} target="_blank" rel="noopener noreferrer"><Icon name="charla" /> Escribir por WhatsApp</a>
+                    {settings?.pickupEnabled && <button type="button" className="btn btn-line" onClick={() => setMethod('pickup')}><Icon name="local" /> Retiro en Berazategui</button>}
+                  </p>
+                )}
+                {localities.length > 1 && (
+                  <LocalityPicker
+                    id="f-locality"
+                    localities={localities}
+                    value={loc}
+                    error={errors.locality}
+                    onChange={(l) => {
+                      setF((v) => ({ ...v, locality: l }));
+                      if (errors.locality) setErrors((x) => ({ ...x, locality: undefined }));
+                    }}
+                  />
+                )}
+                {zone && settings && (
+                  <p className="co-when"><Icon name="moto" size={20} /> <span>{deliverySentence(zone, settings)}.</span></p>
+                )}
+                <label className="check">
+                  <input type="checkbox" checked={f.flexible} onChange={(e) => setF((v) => ({ ...v, flexible: e.target.checked }))} />
+                  <span>Si pasamos por tu zona antes, ¿te lo podemos llevar otro día? Te avisamos por WhatsApp.</span>
+                </label>
               </>
             ) : (
-              <p className="pickup-note">Retirás en {settings?.pickupAddress || 'el local'}. Te pasamos los detalles por WhatsApp.</p>
+              <p className="co-when"><Icon name="local" size={20} /> <span>Retirás en Berazategui, sin costo de envío. El día y el horario los coordinamos por WhatsApp.</span></p>
             )}
-
-            <div className="field" role="radiogroup" aria-labelledby="slot-label" aria-describedby={errors.slot ? 'e-slot' : undefined}>
-              <p id="slot-label" className="field-label">¿Cuándo?</p>
-              {slots === null && <p className="muted">Buscando turnos…</p>}
-              {slots?.length === 0 && <p className="block-reason">No hay turnos abiertos ahora. Escribinos por WhatsApp y lo coordinamos.</p>}
-              <div className="slots">
-                {slots?.slice(0, 4).map((x, i) => {
-                  const v = `${x.windowId}|${x.date}`;
-                  return (
-                    <label key={v} className={'slot' + (f.slot === v ? ' on' : '')}>
-                      <input type="radio" name="slot" id={i === 0 ? 'f-slot' : undefined} value={v} checked={f.slot === v} onChange={set('slot')} />
-                      <span className="slot-day">{slotDay(x)}</span>
-                      <span className="slot-label">{slotPart(x)} · {slotHours(x)}</span>
-                      <span className="slot-close">pedí hasta el {slotDeadline(x)}</span>
-                    </label>
-                  );
-                })}
-              </div>
-              {errors.slot && <p id="e-slot" className="field-error">{errors.slot}</p>}
-            </div>
           </fieldset>
 
           <fieldset className="co-block">
@@ -233,7 +245,7 @@ export function Checkout() {
         <aside className="co-summary" aria-label="Resumen del pedido">
           <div className="tag-box">
             <div className="tag-in">
-              <p className="label tag-title">Resumen</p>
+              <p className="label tag-title">Resumen · {cajas(totals.boxes)}</p>
               <ul className="sum-lines">
                 {items.map(({ product, quantity }) => (
                   <li key={product.id}><span>{quantity} × {product.name}</span><span>{money(product.price * quantity)}</span></li>
@@ -241,24 +253,29 @@ export function Checkout() {
               </ul>
               <dl className="totals">
                 <div><dt>Subtotal</dt><dd>{money(subtotal)}</dd></div>
+                {q && q.discount > 0 && <div className="discount"><dt>Descuento {q.discountPct}%</dt><dd>−{money(q.discount)}</dd></div>}
                 <div>
-                  <dt>{method === 'pickup' ? 'Retiro' : lookup.status === 'found' ? `Envío a ${lookup.zone.name}` : 'Envío'}</dt>
+                  <dt>{method === 'pickup' ? 'Retiro' : zone ? `Envío a ${zone.name}` : 'Envío'}</dt>
                   <dd>{!q || q.shippingCost === null ? '—' : q.shippingCost === 0 ? 'Gratis' : money(q.shippingCost)}</dd>
                 </div>
-                <div className="grand"><dt>Total</dt><dd>{total === null ? '—' : money(total)}</dd></div>
+                <div className="grand"><dt>Total</dt><dd>{!q || q.total === null ? '—' : money(q.total)}</dd></div>
               </dl>
-              {method === 'delivery' && lookup.status !== 'found' && (
+              {method === 'delivery' && lookup.status !== 'found' && lookup.status !== 'not_found' && (
                 <p className="block-reason">Completá tu código postal para calcular el envío.</p>
               )}
-              {q && q.missingForMin > 0 && (
-                <p className="block-reason">Te faltan {money(q.missingForMin)} para la compra mínima ({money(q.minOrder)}). <Link to="/cajas">Sumar cajas</Link></p>
+              {q && method === 'delivery' && zone && q.canCheckout && <p className="small">{cartMessage(q, lookup)}</p>}
+              {blocked && (
+                <p className="block-reason">{blocked} <Link to="/cajas">Sumar cajas</Link></p>
+              )}
+              {q?.suggestPickup && (
+                <button type="button" className="btn btn-line btn-wide" onClick={() => setMethod('pickup')}><Icon name="local" /> Retirar en Berazategui</button>
               )}
             </div>
           </div>
           {NEEDS_CAPTCHA && TURNSTILE_KEY && <Turnstile ref={captcha} siteKey={TURNSTILE_KEY} onToken={setToken} />}
           {serverError && <p id="server-error" className="server-error" tabIndex={-1} role="alert">{serverError}</p>}
           <button type="submit" className="btn btn-ink btn-wide btn-big" disabled={sending} aria-busy={sending}>
-            {sending ? 'Enviando…' : <>Confirmar pedido {total !== null && `· ${money(total)}`}</>}
+            {sending ? 'Enviando…' : <>Confirmar pedido {q && q.total !== null && `· ${money(q.total)}`}</>}
           </button>
           <p className="small muted center">El total final lo confirma el sistema al enviar.</p>
         </aside>

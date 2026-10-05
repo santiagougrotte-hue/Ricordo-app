@@ -58,13 +58,16 @@ describe.skipIf(!TEST_DB)('API del panel contra Netlify Database (Postgres real)
   });
 
   it('pedidos: lista, cambio de estado, pago, cancelar devuelve stock, no se reabre', async () => {
-    const [slot] = await q<{ window_id: string; d: string }>(`select window_id, delivery_date::text d from available_delivery_slots('pickup') limit 1`);
     const [o] = await q<{ order_id: string }>(
-      `select * from create_order('Laura','1144443333',null,'pickup',null,null,null,'cash',$1::jsonb,$2::date,$3::uuid)`,
-      [JSON.stringify([{ product_id: P1, quantity: 3 }]), slot.d, slot.window_id],
+      `select * from create_order('Laura','11 4444-3333',null,'delivery','Calle 14 1234','1884','Berazategui',null,'cash',$1::jsonb,true)`,
+      [JSON.stringify([{ product_id: P1, quantity: 3 }])],
     );
     const list = await call('GET', 'orders');
-    expect(list.data.orders[0]).toMatchObject({ number: 1001, customerName: 'Laura', status: 'new', items: [{ productId: P1, quantity: 3 }] });
+    expect(list.data.orders[0]).toMatchObject({
+      number: 1001, customerName: 'Laura', customerPhone: '1144443333', status: 'new', items: [{ productId: P1, quantity: 3 }],
+      zoneName: 'Berazategui', locality: 'Berazategui', boxCount: 3, flexibleDelivery: true, deliveredOn: null, discount: 0,
+    });
+    expect(list.data.orders[0].deliveryDate).toMatch(/^\d{4}-\d{2}-\d{2}$/);
     const t0 = list.data.serverTime;
 
     expect((await call('POST', `orders/${o.order_id}/status`, { body: { status: 'confirmed' } })).status).toBe(200);
@@ -72,6 +75,13 @@ describe.skipIf(!TEST_DB)('API del panel contra Netlify Database (Postgres real)
     const changed = await call('GET', `orders?changedAfter=${encodeURIComponent(t0)}`);
     expect(changed.data.orders).toHaveLength(1);
     expect(changed.data.orders[0]).toMatchObject({ status: 'confirmed', paymentStatus: 'paid' });
+
+    // Fecha real de entrega: la carga el admin, se puede borrar, y valida el formato.
+    expect((await call('POST', `orders/${o.order_id}/delivered-on`, { body: { date: '2026-10-09' } })).status).toBe(200);
+    expect((await call('GET', 'orders')).data.orders[0].deliveredOn).toBe('2026-10-09');
+    expect((await call('POST', `orders/${o.order_id}/delivered-on`, { body: { date: 'mañana' } })).status).toBe(400);
+    expect((await call('POST', `orders/${o.order_id}/delivered-on`, { body: { date: null } })).status).toBe(200);
+    expect((await call('GET', 'orders')).data.orders[0].deliveredOn).toBe(null);
 
     const [{ stock: before }] = await q<{ stock: number }>('select stock from products where id = $1', [P1]);
     await call('POST', `orders/${o.order_id}/status`, { body: { status: 'cancelled' } });
@@ -83,7 +93,7 @@ describe.skipIf(!TEST_DB)('API del panel contra Netlify Database (Postgres real)
   });
 
   it('productos: crear, editar, slug duplicado, stock, ocultar (sale del catálogo público)', async () => {
-    const draft = { slug: 'cuatro-quesos', name: 'Cuatro quesos', pastaType: 'sorrentinos', filling: 'Muzza, azul', description: '', price: 10900, stock: 6, lowStockThreshold: 2, featured: false, active: true, sortOrder: 9 };
+    const draft = { slug: 'cuatro-quesos', name: 'Cuatro quesos', pastaType: 'sorrentinos', filling: 'Muzza, azul', description: '', price: 10900, stock: 6, lowStockThreshold: 2, featured: false, countsAsBox: true, active: true, sortOrder: 9 };
     const c = await call('POST', 'products', { body: draft });
     expect(c.status).toBe(200);
     expect((await call('POST', 'products', { body: draft })).status).toBe(409);
@@ -115,22 +125,38 @@ describe.skipIf(!TEST_DB)('API del panel contra Netlify Database (Postgres real)
   });
 
   it('zonas: validación, alta, edición y baja (se refleja en el catálogo)', async () => {
-    expect((await call('POST', 'zones', { body: { name: 'Hudson', postalCodes: ['18a5'], shippingCost: 1, minOrder: 0, freeShippingFrom: null, active: true } })).status).toBe(400);
-    expect((await call('POST', 'zones', { body: { name: 'Hudson', postalCodes: ['1893'], shippingCost: 2000, minOrder: 10000, freeShippingFrom: null, active: true } })).status).toBe(200);
-    const z = (await call('GET', 'zones')).data.zones.find((x: { name: string }) => x.name === 'Hudson');
-    expect((await getCatalog(q)).zones.some((x) => x.name === 'Hudson')).toBe(true);
+    const zone = {
+      name: 'Varela', postalCodes: ['1888', '1890-1891'], localities: ['Florencio Varela', 'Bosques', ''], shippingCost: 2500, minBoxes: 3, freeFromBoxes: 5,
+      deliveryWeekday: 5, deliveryMoment: 'a la noche', discountPerBox: 4, discountMax: 8, active: true,
+    };
+    expect((await call('POST', 'zones', { body: { ...zone, postalCodes: ['18a5'] } })).status).toBe(400);
+    expect((await call('POST', 'zones', { body: { ...zone, postalCodes: ['1999-1000'] } })).status).toBe(400);
+    expect((await call('POST', 'zones', { body: { ...zone, discountMax: 150 } })).status).toBe(400);
+    expect((await call('POST', 'zones', { body: { ...zone, deliveryWeekday: 7 } })).status).toBe(400);
+    expect((await call('POST', 'zones', { body: zone })).status).toBe(200);
+    const z = (await call('GET', 'zones')).data.zones.find((x: { name: string }) => x.name === 'Varela');
+    expect(z).toMatchObject({ ...zone, localities: ['Florencio Varela', 'Bosques'] });
+    expect((await getCatalog(q)).zones.find((x) => x.name === 'Varela')).toMatchObject({ postalCodes: ['1888', '1890-1891'], minBoxes: 3 });
+    const [{ name }] = await q<{ name: string }>(`select (zone_for_cp('B1890XYZ')).name`);
+    expect(name).toBe('Varela');
     await call('POST', 'zones', { body: { ...z, active: false } });
-    expect((await getCatalog(q)).zones.some((x) => x.name === 'Hudson')).toBe(false);
+    expect((await getCatalog(q)).zones.some((x) => x.name === 'Varela')).toBe(false);
     expect((await call('DELETE', `zones/${z.id}`)).status).toBe(200);
+    // Borrar una zona con pedidos no rompe nada: el pedido conserva el nombre.
+    const bera = (await call('GET', 'zones')).data.zones.find((x: { name: string }) => x.name === 'Berazategui');
+    expect((await call('DELETE', `zones/${bera.id}`)).status).toBe(200);
+    const [o] = await q(`select zone_id, zone_name from orders where number = 1001`);
+    expect(o).toEqual({ zone_id: null, zone_name: 'Berazategui' });
   });
 
-  it('ajustes (email de aviso privado) y turnos', async () => {
-    await call('POST', 'settings', { body: { pickupEnabled: true, pickupMinOrder: 0, pickupAddress: 'Calle 1', whatsappPhone: '+54 9 11 5555-1234', transferInfo: 'Alias X', notifyEmail: 'yo@ricordo.com' } });
-    expect((await call('GET', 'settings')).data.settings).toMatchObject({ whatsappPhone: '5491155551234', notifyEmail: 'yo@ricordo.com' });
-    expect(JSON.stringify(await getCatalog(q))).not.toContain('yo@ricordo.com');
-    expect((await call('POST', 'windows', { body: { label: 'Domingo', weekday: 0, startsAt: '12:00', endsAt: '10:00', cutoffHours: 24, forDelivery: true, forPickup: true, active: true } })).status).toBe(400);
-    expect((await call('POST', 'windows', { body: { label: 'Domingo', weekday: 0, startsAt: '10:00', endsAt: '12:00', cutoffHours: 24, forDelivery: false, forPickup: true, active: true } })).status).toBe(200);
-    expect((await call('GET', 'windows')).data.windows).toHaveLength(3);
+  it('ajustes: email de aviso privado, retiro en cajas y cierre semanal', async () => {
+    const s = { pickupEnabled: true, pickupMinBoxes: 2, pickupAddress: 'Calle 1', whatsappPhone: '+54 9 11 5555-1234', transferInfo: 'Alias X', notifyEmail: 'yo@ricordo.com', cutoffWeekday: 3, cutoffTime: '18:30' };
+    expect((await call('POST', 'settings', { body: { ...s, cutoffTime: '25:00' } })).status).toBe(400);
+    expect((await call('POST', 'settings', { body: s })).status).toBe(200);
+    expect((await call('GET', 'settings')).data.settings).toMatchObject({ whatsappPhone: '5491155551234', notifyEmail: 'yo@ricordo.com', pickupMinBoxes: 2, cutoffWeekday: 3, cutoffTime: '18:30' });
+    const cat = await getCatalog(q);
+    expect(cat.settings).toMatchObject({ pickupMinBoxes: 2, cutoffWeekday: 3, cutoffTime: '18:30' });
+    expect(JSON.stringify(cat)).not.toContain('yo@ricordo.com');
   });
 
   it('logout borra la cookie', async () => {
@@ -155,6 +181,16 @@ describe.skipIf(!TEST_DB)('migraciones: gusto real cargado', () => {
     expect(c.products[0].media.map((m) => m.url)).toEqual(['/fotos/cabutia-mano.webp', '/fotos/cabutia-corte.webp', '/fotos/cabutia-masa-nero.webp', '/fotos/amasado-masa-nero.mp4', '/fotos/cabutia-ingredientes.webp']);
     const [{ n }] = await q<{ n: number }>('select count(*)::int n from products where not active');
     expect(n).toBe(5);
+    expect(c.products.every((p) => p.countsAsBox)).toBe(true);
+    expect(c.zones.map((z) => [z.name, z.postalCodes.join(','), z.minBoxes, z.freeFromBoxes, z.deliveryWeekday, z.deliveryMoment])).toEqual([
+      ['Hudson / Plátanos', '1885,1880', 3, 4, 5, 'a la noche'],
+      ['Berazategui', '1884,1886', 3, 4, 6, 'a la mañana'],
+      ['Quilmes / Bernal / Wilde', '1878,1876,1875', 4, 6, 6, 'a la mañana'],
+      ['CABA', '1000-1499', 5, 6, 6, 'a la mañana'],
+      ['La Plata / City Bell / Gonnet', '1900,1896,1897', 5, 8, 0, ''],
+    ]);
+    expect(c.zones.every((z) => z.discountPerBox === 5 && z.discountMax === 10)).toBe(true);
+    expect(c.settings).toMatchObject({ pickupMinBoxes: 2, cutoffWeekday: 4, cutoffTime: '13:00' });
     await pool.end();
   });
 });

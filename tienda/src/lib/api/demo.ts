@@ -1,13 +1,14 @@
 import type { StoreApi } from './types';
 import type { OrderInput, OrderResult, ShortItem } from '../types';
-import { availableSlots, slotLong } from '../slots';
-import { findZone } from '../shipping';
+import { cartTotals, discountAmount, discountPct, findZone } from '../shipping';
+import { deliveryDateFor, deliveryLabel } from '../delivery';
 import { readDb, writeDb } from './demoDb';
 import type { AdminOrder } from './adminTypes';
 
 // Modo demo: corre sin servidor. Replica las reglas de create_order() para poder probar el flujo.
 const wait = (ms: number) => new Promise((r) => setTimeout(r, ms));
 const activeZones = () => readDb().zones.filter((z) => z.active !== false);
+export const PICKUP_LABEL = 'Retiro en Berazategui · día y horario a coordinar por WhatsApp';
 
 export function createDemoApi(): StoreApi {
   return {
@@ -24,14 +25,13 @@ export function createDemoApi(): StoreApi {
       void _private;
       return pub;
     },
-    async listSlots(method) {
-      return availableSlots(readDb().windows, method);
-    },
     async createOrder(input: OrderInput): Promise<OrderResult> {
       await wait(600);
       const db = readDb();
       const byId = new Map(db.products.filter((p) => !db.inactive.includes(p.id)).map((p) => [p.id, p]));
 
+      const phone = input.customerPhone.replace(/\D/g, '');
+      if (phone.length < 8 || phone.length > 15) return { ok: false, error: { code: 'RC004', message: 'Teléfono inválido' } };
       const merged = new Map<string, number>();
       for (const it of input.items) merged.set(it.productId, (merged.get(it.productId) ?? 0) + it.quantity);
       if (merged.size === 0 || [...merged.values()].some((q) => !Number.isInteger(q) || q < 1 || q > 99)) {
@@ -44,56 +44,62 @@ export function createDemoApi(): StoreApi {
       }
       if (short.length) return { ok: false, error: { code: 'RC001', message: 'Sin stock suficiente', short } };
 
-      const subtotal = [...merged].reduce((s, [id, q]) => s + byId.get(id)!.price * q, 0);
-      let shipping = 0;
-      let zoneName: string | null = null;
-      let cp: string | null = null;
+      const totals = cartTotals([...merged].map(([id, quantity]) => ({ product: byId.get(id)!, quantity })));
+      const { subtotal, boxes } = totals;
+      const s = db.settings;
+      let shipping = 0, pct = 0, discount = 0;
+      let zoneName: string | null = null, cp: string | null = null, locality: string | null = null;
+      let date: string | null = null, label = PICKUP_LABEL;
       if (input.deliveryMethod === 'delivery') {
         const look = findZone(activeZones(), input.postalCode);
         if (look.status !== 'found') return { ok: false, error: { code: 'RC002', message: 'No llegamos a ese código postal' } };
         if (input.address.trim().length < 5) return { ok: false, error: { code: 'RC004', message: 'Falta la dirección' } };
         const z = look.zone;
-        if (subtotal < z.minOrder) {
-          return { ok: false, error: { code: 'RC003', message: 'No alcanza la compra mínima', minOrder: z.minOrder, missing: z.minOrder - subtotal } };
+        if (z.localities.length && !z.localities.includes(input.locality.trim())) return { ok: false, error: { code: 'RC004', message: 'Elegí tu localidad' } };
+        if (boxes < z.minBoxes) {
+          return { ok: false, error: { code: 'RC003', message: 'No alcanza el mínimo de cajas', minBoxes: z.minBoxes, missing: z.minBoxes - boxes, pickupMinBoxes: s.pickupEnabled ? s.pickupMinBoxes : null } };
         }
-        shipping = z.freeShippingFrom !== null && subtotal >= z.freeShippingFrom ? 0 : z.shippingCost;
+        const free = z.freeFromBoxes !== null && boxes >= z.freeFromBoxes;
+        shipping = free ? 0 : z.shippingCost;
+        pct = discountPct(z, boxes);
+        discount = discountAmount(totals.boxSubtotal, pct);
         zoneName = z.name;
         cp = look.postalCode;
+        locality = input.locality.trim() || null;
+        date = deliveryDateFor(z.deliveryWeekday, s);
+        label = deliveryLabel(date, z.deliveryMoment);
       } else {
-        if (!db.settings.pickupEnabled) return { ok: false, error: { code: 'RC005', message: 'El retiro en el local no está disponible' } };
-        if (subtotal < db.settings.pickupMinOrder) {
-          const min = db.settings.pickupMinOrder;
-          return { ok: false, error: { code: 'RC003', message: 'No alcanza la compra mínima para retiro', minOrder: min, missing: min - subtotal } };
+        if (!s.pickupEnabled) return { ok: false, error: { code: 'RC005', message: 'El retiro no está disponible' } };
+        if (boxes < s.pickupMinBoxes) {
+          return { ok: false, error: { code: 'RC003', message: 'No alcanza el mínimo de cajas para retiro', minBoxes: s.pickupMinBoxes, missing: s.pickupMinBoxes - boxes, pickupMinBoxes: null } };
         }
       }
 
-      const slot = availableSlots(db.windows, input.deliveryMethod, new Date(), 60).find(
-        (s) => s.windowId === input.deliveryWindowId && s.date === input.deliveryDate,
-      );
-      if (!slot) return { ok: false, error: { code: 'RC006', message: 'Ese turno de entrega ya cerró o no existe' } };
-
-      for (const [id, q] of merged) {
-        const p = db.products.find((x) => x.id === id)!;
-        p.stock -= q;
-      }
+      for (const [id, q] of merged) db.products.find((x) => x.id === id)!.stock -= q;
       const number = db.nextNumber;
       const order: AdminOrder = {
         id: `demo-${number}`,
         number,
         createdAt: new Date().toISOString(),
         customerName: input.customerName.trim(),
-        customerPhone: input.customerPhone.trim(),
+        customerPhone: phone,
         customerEmail: input.customerEmail.trim() || null,
         deliveryMethod: input.deliveryMethod,
         address: input.deliveryMethod === 'delivery' ? input.address.trim() : null,
         postalCode: cp,
         zoneName,
-        deliveryDate: slot.date,
-        windowLabel: slotLong(slot),
+        locality,
+        boxCount: boxes,
+        deliveryDate: date,
+        deliveredOn: null,
+        flexibleDelivery: input.deliveryMethod === 'delivery' && input.flexibleDelivery,
+        windowLabel: label,
         notes: input.notes.trim() || null,
         subtotal,
+        discount,
+        discountPct: pct,
         shippingCost: shipping,
-        total: subtotal + shipping,
+        total: subtotal - discount + shipping,
         paymentMethod: input.paymentMethod,
         paymentStatus: 'pending',
         status: 'new',
@@ -106,8 +112,8 @@ export function createDemoApi(): StoreApi {
       return {
         ok: true,
         receipt: {
-          orderId: order.id, number, subtotal, shippingCost: shipping, total: order.total, deliveryMethod: order.deliveryMethod,
-          windowLabel: order.windowLabel, paymentMethod: input.paymentMethod, customerName: order.customerName,
+          orderId: order.id, number, subtotal, discount, discountPct: pct, shippingCost: shipping, total: order.total, boxCount: boxes,
+          deliveryMethod: order.deliveryMethod, deliveryDate: date, windowLabel: label, paymentMethod: input.paymentMethod, customerName: order.customerName,
           lines: order.items.map((i) => ({ name: i.productName, quantity: i.quantity, unitPrice: i.unitPrice })),
         },
       };

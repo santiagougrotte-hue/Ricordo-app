@@ -68,6 +68,12 @@ export function createAdminDemo(): AdminApi {
       o.paymentStatus = status;
       writeDb(db, { type: 'order-update', order: o });
     },
+    async setDeliveredOn(id, date) {
+      const db = readDb();
+      const o = db.orders.find((x) => x.id === id) as AdminOrder;
+      o.deliveredOn = date;
+      writeDb(db, { type: 'order-update', order: o });
+    },
 
     async listProducts() {
       const db = readDb();
@@ -149,16 +155,6 @@ export function createAdminDemo(): AdminApi {
     async saveSettings(s) {
       const db = readDb();
       db.settings = s;
-      writeDb(db, { type: 'catalog' });
-    },
-    async listWindows() {
-      return readDb().windows;
-    },
-    async saveWindow(w) {
-      const db = readDb();
-      const id = w.id ?? crypto.randomUUID();
-      const win = { ...w, id };
-      db.windows = db.windows.some((x) => x.id === id) ? db.windows.map((x) => (x.id === id ? win : x)) : [...db.windows, win];
       writeDb(db, { type: 'catalog' });
     },
   };

@@ -1,5 +1,5 @@
 import type { StoreApi } from './types';
-import type { DeliverySlot, OrderResult, Product, ShippingZone, StoreSettings } from '../types';
+import type { OrderResult, Product, ShippingZone, StoreSettings } from '../types';
 
 interface Catalog { products: Product[]; zones: ShippingZone[]; settings: StoreSettings }
 
@@ -27,11 +27,6 @@ export function createNetlifyApi(): StoreApi {
     },
     async getSettings() {
       return (await load()).settings;
-    },
-    async listSlots(method) {
-      const r = await fetch(`/api/slots?method=${method}`);
-      if (!r.ok) throw new Error('slots');
-      return (await r.json()) as DeliverySlot[];
     },
     async createOrder(input): Promise<OrderResult> {
       try {

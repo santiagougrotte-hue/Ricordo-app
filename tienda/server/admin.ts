@@ -3,7 +3,7 @@
 import type { Query } from './db';
 import type { MediaStore } from './media';
 import { allow, clearCookie, ipHash, json, readCookie, sameText, sessionCookie, signSession, verifySession } from './http';
-import { mapProduct, PRODUCTS_SQL } from './catalog';
+import { mapProduct, mapSettings, mapZone, PRODUCTS_SQL } from './catalog';
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 type Row = Record<string, any>;
@@ -32,14 +32,16 @@ const ORDER_SQL = `
                         from order_items where order_id = o.id), '[]') as items
   from orders o`;
 
-const day = (d: unknown) => (d instanceof Date ? d.toISOString().slice(0, 10) : String(d).slice(0, 10));
+const day = (d: unknown) => (d == null ? null : d instanceof Date ? d.toISOString().slice(0, 10) : String(d).slice(0, 10));
+const DATE = /^\d{4}-\d{2}-\d{2}$/;
 
 export function mapOrder(r: Row) {
   return {
     id: r.id, number: Number(r.number), createdAt: new Date(r.created_at).toISOString(), updatedAt: new Date(r.updated_at).toISOString(),
     customerName: r.customer_name, customerPhone: r.customer_phone, customerEmail: r.customer_email, deliveryMethod: r.delivery_method,
-    address: r.address, postalCode: r.postal_code, zoneName: r.zone_name, deliveryDate: day(r.delivery_date), windowLabel: r.delivery_window_label,
-    notes: r.notes, subtotal: r.subtotal, shippingCost: r.shipping_cost, total: r.total, paymentMethod: r.payment_method,
+    address: r.address, postalCode: r.postal_code, zoneName: r.zone_name, locality: r.locality, boxCount: r.box_count,
+    deliveryDate: day(r.delivery_date), deliveredOn: day(r.delivered_on), flexibleDelivery: r.flexible_delivery, windowLabel: r.delivery_window_label,
+    notes: r.notes, subtotal: r.subtotal, discount: r.discount, discountPct: r.discount_pct, shippingCost: r.shipping_cost, total: r.total, paymentMethod: r.payment_method,
     paymentStatus: r.payment_status, status: r.status,
     items: (r.items as Row[]).map((i) => ({ productId: i.product_id, productName: i.product_name, quantity: i.quantity, unitPrice: i.unit_price })),
   };
@@ -101,6 +103,11 @@ export async function handleAdmin(req: Request, path: string, env: AdminEnv, dep
       await q(`update orders set payment_status = $2::payment_status where id = $1`, [seg[1], b.status]);
       return json({ ok: true });
     }
+    if (seg[2] === 'delivered-on') {
+      if (b.date !== null && !(typeof b.date === 'string' && DATE.test(b.date) && !Number.isNaN(Date.parse(b.date)))) return bad('Fecha inválida');
+      await q(`update orders set delivered_on = $2::date where id = $1`, [seg[1], b.date]);
+      return json({ ok: true });
+    }
   }
 
   // ── Productos ──
@@ -115,16 +122,16 @@ export async function handleAdmin(req: Request, path: string, env: AdminEnv, dep
     if (name.length < 2 || !/^[a-z0-9-]+$/.test(slug) || !TYPES.includes(d.pastaType)) return bad('Revisá nombre, tipo y dirección (slug).');
     const price = int(d.price, 1), stock = int(d.stock), low = int(d.lowStockThreshold), order = Number.isInteger(d.sortOrder) ? d.sortOrder : 99;
     if (price === null || stock === null || low === null) return bad('Precio, stock y umbral tienen que ser números enteros.');
-    const vals = [slug, name, d.pastaType, String(d.filling ?? ''), String(d.description ?? ''), price, stock, low, !!d.featured, !!d.active, order];
+    const vals = [slug, name, d.pastaType, String(d.filling ?? ''), String(d.description ?? ''), price, stock, low, !!d.featured, !!d.active, order, d.countsAsBox !== false];
     try {
       if (d.id) {
         if (!UUID.test(d.id)) return bad('Producto inválido');
         await q(`update products set slug=$2, name=$3, pasta_type=$4::pasta_type, filling=$5, description=$6, price=$7, stock=$8,
-                   low_stock_threshold=$9, featured=$10, active=$11, sort_order=$12, updated_at=now() where id=$1`, [d.id, ...vals]);
+                   low_stock_threshold=$9, featured=$10, active=$11, sort_order=$12, counts_as_box=$13, updated_at=now() where id=$1`, [d.id, ...vals]);
         return json({ id: d.id });
       }
-      const [r] = await q<{ id: string }>(`insert into products (slug, name, pasta_type, filling, description, price, stock, low_stock_threshold, featured, active, sort_order)
-                                          values ($1,$2,$3::pasta_type,$4,$5,$6,$7,$8,$9,$10,$11) returning id`, vals);
+      const [r] = await q<{ id: string }>(`insert into products (slug, name, pasta_type, filling, description, price, stock, low_stock_threshold, featured, active, sort_order, counts_as_box)
+                                          values ($1,$2,$3::pasta_type,$4,$5,$6,$7,$8,$9,$10,$11,$12) returning id`, vals);
       return json({ id: r.id });
     } catch (e) {
       return bad(/unique|duplicate/i.test((e as Error).message) ? 'duplicate slug' : (e as Error).message, 409);
@@ -191,21 +198,28 @@ export async function handleAdmin(req: Request, path: string, env: AdminEnv, dep
   // ── Zonas ──
   if (path === 'zones' && method === 'GET') {
     const rows = await q(`select * from shipping_zones order by sort_order, name`);
-    return json({ zones: rows.map((z) => ({ id: z.id, name: z.name, postalCodes: z.postal_codes, shippingCost: z.shipping_cost, minOrder: z.min_order, freeShippingFrom: z.free_shipping_from, active: z.active })) });
+    return json({ zones: rows.map((z) => ({ ...mapZone(z), active: z.active })) });
   }
   if (path === 'zones' && method === 'POST') {
     const z = await body();
     const cps = Array.isArray(z.postalCodes) ? z.postalCodes.map(String) : [];
-    if (!String(z.name ?? '').trim() || !cps.length || cps.some((c: string) => !/^\d{4}$/.test(c))) return bad('Revisá el nombre y los códigos postales (4 números).');
-    const cost = int(z.shippingCost), min = int(z.minOrder), free = z.freeShippingFrom === null ? null : int(z.freeShippingFrom);
-    if (cost === null || min === null || (z.freeShippingFrom !== null && free === null)) return bad('Montos inválidos');
-    const vals = [String(z.name).trim(), cps, cost, min, free, !!z.active];
+    const cpOk = (c: string) => /^\d{4}$/.test(c) || (/^(\d{4})-(\d{4})$/.test(c) && +c.slice(0, 4) <= +c.slice(5));
+    if (!String(z.name ?? '').trim() || !cps.length || !cps.every(cpOk)) return bad('Revisá el nombre y los códigos postales (4 números o un rango 1000-1499).');
+    const locs = Array.isArray(z.localities) ? [...new Set(z.localities.map((l: unknown) => String(l).trim()).filter(Boolean))].slice(0, 40) : [];
+    const cost = int(z.shippingCost), min = int(z.minBoxes), free = z.freeFromBoxes === null ? null : int(z.freeFromBoxes, 1);
+    const per = int(z.discountPerBox), max = int(z.discountMax), wd = int(z.deliveryWeekday);
+    if (cost === null || min === null || (z.freeFromBoxes !== null && free === null)) return bad('Revisá el envío, el mínimo y el envío gratis.');
+    if (per === null || per > 100 || max === null || max > 100) return bad('Los descuentos van de 0 a 100 %.');
+    if (wd === null || wd > 6) return bad('Día de entrega inválido');
+    const vals = [String(z.name).trim(), cps, locs, cost, min, free, wd, String(z.deliveryMoment ?? '').trim().slice(0, 40), per, max, !!z.active];
     if (z.id) {
       if (!UUID.test(z.id)) return bad('Zona inválida');
-      await q(`update shipping_zones set name=$2, postal_codes=$3, shipping_cost=$4, min_order=$5, free_shipping_from=$6, active=$7 where id=$1`, [z.id, ...vals]);
+      await q(`update shipping_zones set name=$2, postal_codes=$3, localities=$4, shipping_cost=$5, min_boxes=$6, free_from_boxes=$7,
+                 delivery_weekday=$8, delivery_moment=$9, discount_per_box=$10, discount_max=$11, active=$12 where id=$1`, [z.id, ...vals]);
     } else {
-      await q(`insert into shipping_zones (name, postal_codes, shipping_cost, min_order, free_shipping_from, active, sort_order)
-               values ($1,$2,$3,$4,$5,$6,(select coalesce(max(sort_order),0)+1 from shipping_zones))`, vals);
+      await q(`insert into shipping_zones (name, postal_codes, localities, shipping_cost, min_boxes, free_from_boxes, delivery_weekday,
+                 delivery_moment, discount_per_box, discount_max, active, sort_order)
+               values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,(select coalesce(max(sort_order),0)+1 from shipping_zones))`, vals);
     }
     return json({ ok: true });
   }
@@ -214,34 +228,20 @@ export async function handleAdmin(req: Request, path: string, env: AdminEnv, dep
     return json({ ok: true });
   }
 
-  // ── Ajustes y turnos ──
+  // ── Ajustes ──
   if (path === 'settings' && method === 'GET') {
     const [s] = await q(`select * from store_settings limit 1`);
-    return json({ settings: { pickupEnabled: s.pickup_enabled, pickupMinOrder: s.pickup_min_order, pickupAddress: s.pickup_address, whatsappPhone: s.whatsapp_phone, transferInfo: s.transfer_info, notifyEmail: s.notify_email ?? '' } });
+    return json({ settings: { ...mapSettings(s), notifyEmail: s.notify_email ?? '' } });
   }
   if (path === 'settings' && method === 'POST') {
     const s = await body();
-    if (int(s.pickupMinOrder) === null) return bad('Mínimo inválido');
-    await q(`update store_settings set pickup_enabled=$1, pickup_min_order=$2, pickup_address=$3, whatsapp_phone=$4, transfer_info=$5, notify_email=$6`,
-      [!!s.pickupEnabled, s.pickupMinOrder, String(s.pickupAddress ?? ''), String(s.whatsappPhone ?? '').replace(/\D/g, ''), String(s.transferInfo ?? ''), String(s.notifyEmail ?? '').trim() || null]);
-    return json({ ok: true });
-  }
-  if (path === 'windows' && method === 'GET') {
-    const rows = await q(`select * from delivery_windows order by sort_order, weekday`);
-    return json({ windows: rows.map((w) => ({ id: w.id, label: w.label, weekday: w.weekday, startsAt: String(w.starts_at).slice(0, 5), endsAt: String(w.ends_at).slice(0, 5), cutoffHours: w.cutoff_hours, forDelivery: w.for_delivery, forPickup: w.for_pickup, active: w.active })) });
-  }
-  if (path === 'windows' && method === 'POST') {
-    const w = await body();
-    const hhmm = /^\d{2}:\d{2}$/;
-    if (!String(w.label ?? '').trim() || !(int(w.weekday) !== null && w.weekday <= 6) || !hhmm.test(w.startsAt) || !hhmm.test(w.endsAt) || w.endsAt <= w.startsAt || int(w.cutoffHours) === null) return bad('Revisá el turno.');
-    const vals = [String(w.label).trim(), w.weekday, w.startsAt, w.endsAt, w.cutoffHours, !!w.forDelivery, !!w.forPickup, !!w.active];
-    if (w.id) {
-      if (!UUID.test(w.id)) return bad('Turno inválido');
-      await q(`update delivery_windows set label=$2, weekday=$3, starts_at=$4, ends_at=$5, cutoff_hours=$6, for_delivery=$7, for_pickup=$8, active=$9 where id=$1`, [w.id, ...vals]);
-    } else {
-      await q(`insert into delivery_windows (label, weekday, starts_at, ends_at, cutoff_hours, for_delivery, for_pickup, active, sort_order)
-               values ($1,$2,$3,$4,$5,$6,$7,$8,(select coalesce(max(sort_order),0)+1 from delivery_windows))`, vals);
-    }
+    const wd = int(s.cutoffWeekday);
+    if (int(s.pickupMinBoxes) === null) return bad('Mínimo de retiro inválido');
+    if (wd === null || wd > 6 || !/^([01]\d|2[0-3]):[0-5]\d$/.test(String(s.cutoffTime))) return bad('Revisá el día y la hora de cierre.');
+    await q(`update store_settings set pickup_enabled=$1, pickup_min_boxes=$2, pickup_address=$3, whatsapp_phone=$4, transfer_info=$5,
+               notify_email=$6, cutoff_weekday=$7, cutoff_time=$8`,
+      [!!s.pickupEnabled, s.pickupMinBoxes, String(s.pickupAddress ?? ''), String(s.whatsappPhone ?? '').replace(/\D/g, ''), String(s.transferInfo ?? ''),
+       String(s.notifyEmail ?? '').trim() || null, wd, s.cutoffTime]);
     return json({ ok: true });
   }
 

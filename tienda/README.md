@@ -8,11 +8,11 @@ Tienda de pastas rellenas sin TACC (Vite + React + TypeScript). Diseño: [`docs/
 cd tienda
 npm install
 npm run dev        # http://localhost:5173
-npm test           # lógica de CP, envío, turnos y montos
+npm test           # lógica de CP, cajas, envío, descuentos, fechas de entrega y montos
 npm run build      # chequeo de tipos + build de producción
 ```
 
-Sin variables de entorno corre en **modo demo**, con 5 productos y 3 zonas de ejemplo. Los pedidos se simulan en el navegador con las mismas reglas que la base: stock, mínimo, envío gratis y turnos.
+Sin variables de entorno corre en **modo demo**, con los gustos y las 5 zonas reales. Los pedidos se simulan en el navegador con las mismas reglas que la base: stock, mínimo en cajas, envío gratis, descuento y fecha de entrega.
 
 En modo demo, el panel está en `/admin`: cualquier email y la contraseña `ricordo`. Abrilo en una pestaña y comprá en otra: el pedido aparece al instante.
 
@@ -29,8 +29,9 @@ En modo demo, el panel está en `/admin`: cualquier email y la contraseña `rico
 - **Ventas:** día, 7 días y mes, con vendido, pedidos, ticket promedio y cajas. Gráficos por día, por gusto y por zona, con tabla accesible.
 - **Stock:** edición rápida, umbral de aviso por producto, mostrar u ocultar.
 - **Productos:** alta y edición. Las fotos se comprimen a WebP en el navegador antes de subir. Videos MP4/WebM de hasta 25 MB.
-- **Zonas:** códigos postales (acepta 1884 o B1884ABC), costo, mínimo y envío gratis, con aviso de CP repetidos.
-- **Ajustes:** WhatsApp, alias de transferencia, email de aviso, retiro en el local y turnos de entrega.
+- **Zonas:** códigos postales (1884, B1884ABC o rangos como 1000-1499), localidades, día de entrega, costo de envío, mínimo y envío gratis en cajas, y descuento por volumen (% por caja y tope), con aviso de CP repetidos.
+- **Ajustes:** WhatsApp, alias de transferencia, email de aviso, cierre semanal de pedidos (jueves 13 h) y retiro en Berazategui (mínimo en cajas).
+- **Pedidos:** localidad, cajas, fecha prevista, si acepta entrega flexible y la fecha real de entrega que cargás vos.
 - **Exportar:** pedidos y ventas a CSV (se abren bien en Excel en español).
 
 ### Versión de un solo archivo
@@ -53,7 +54,7 @@ No hay que crear ninguna base a mano: **Netlify Database** (Postgres) se crea so
    - `SESSION_SECRET` (secreta): firma la sesión del panel.
    - `VITE_TURNSTILE_SITE_KEY` / `TURNSTILE_SECRET_KEY`: captcha. Hoy están las **claves de prueba** de Cloudflare (siempre pasan). Reemplazalas por las tuyas (gratis en Cloudflare → Turnstile) para tener protección real contra bots.
    - Opcionales: `RESEND_API_KEY` + `NOTIFY_FROM` (email de pedido nuevo), `TELEGRAM_BOT_TOKEN` + `TELEGRAM_CHAT_ID`.
-3. Entrá a `/admin` y cargá tus datos reales: productos y fotos, zonas, WhatsApp, alias, email de aviso y turnos.
+3. Entrá a `/admin` y cargá tus datos reales: productos y fotos, costos de envío de cada zona, WhatsApp, alias y email de aviso.
 
 ### Probar el backend en local
 
@@ -70,7 +71,7 @@ DATABASE_URL=postgres://... ADMIN_EMAIL=... ADMIN_PASSWORD=... SESSION_SECRET=..
 | 2. Esquema + seguridad | ✅ `netlify/database/migrations` (Netlify Database) |
 | 3. Tienda: catálogo, CP, carrito, checkout | ✅ funciona en modo demo |
 | 4. Pedido en el servidor (Netlify Function + Turnstile) | ✅ probado contra Postgres real: concurrencia, límites por IP |
-| 5. Panel admin (`/admin`) | ✅ pedidos (aviso a los ~8 s), ventas, stock, productos con fotos, zonas, turnos, CSV |
+| 5. Panel admin (`/admin`) | ✅ pedidos (aviso a los ~8 s), ventas, stock, productos con fotos, zonas por cajas, cierre semanal, CSV |
 | 6. Capa visual: logo 3D, GSAP + ScrollTrigger, Lenis, videos | ✅ diferida y solo en equipos capaces; Lighthouse mobile 96–99 |
 | 7. Auditoría | ✅ ver [`docs/AUDITORIA.md`](../docs/AUDITORIA.md) |
 
@@ -108,6 +109,7 @@ server/         lógica de las funciones (testeada contra Postgres real)
 
 Son de ejemplo y conviene revisarlos antes de publicar:
 - **Productos:** precios, rellenos y descripciones.
-- **Envío:** códigos postales, costos y mínimos por zona.
+- **Envío:** zona por código postal; mínimos y envío gratis en cajas (solo cuentan los productos marcados "cuenta como caja", no las salsas); descuento de X % por caja arriba del envío gratis, con tope; retiro en Berazategui sin zona.
+- **Entrega:** pedidos hasta el jueves 13 h (hora de Argentina); antes del corte sale ese fin de semana, el día de la zona, y después, el siguiente. La misma regla está en `src/lib/delivery.ts` y en `delivery_date_for()` de la base, y una prueba verifica que coincidan.
 - **Configuración:** alias de transferencia y número de WhatsApp.
 - **Textos con datos concretos:** "4 a 6 minutos" de cocción y "hasta 3 meses" en el freezer.

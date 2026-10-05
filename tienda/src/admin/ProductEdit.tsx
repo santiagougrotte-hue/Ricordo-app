@@ -7,7 +7,7 @@ import { compressImage, MAX_VIDEO_MB } from './image';
 import { Icon } from '../components/Icon';
 
 const EMPTY: ProductDraft = {
-  slug: '', name: '', pastaType: 'ravioles', filling: '', description: '', price: 0, stock: 0, lowStockThreshold: 3, featured: false, active: true, sortOrder: 99,
+  slug: '', name: '', pastaType: 'ravioles', filling: '', description: '', price: 0, stock: 0, lowStockThreshold: 3, featured: false, countsAsBox: true, active: true, sortOrder: 99,
 };
 export function slugify(s: string) {
   return s.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
@@ -28,7 +28,7 @@ export function ProductEdit() {
     const list = await adminApi.listProducts();
     const p = list.find((x) => x.id === id) ?? null;
     setProduct(p);
-    if (p) setD({ id: p.id, slug: p.slug, name: p.name, pastaType: p.pastaType, filling: p.filling, description: p.description, price: p.price, stock: p.stock, lowStockThreshold: p.lowStockThreshold, featured: p.featured, active: p.active, sortOrder: p.sortOrder });
+    if (p) setD({ id: p.id, slug: p.slug, name: p.name, pastaType: p.pastaType, filling: p.filling, description: p.description, price: p.price, stock: p.stock, lowStockThreshold: p.lowStockThreshold, featured: p.featured, countsAsBox: p.countsAsBox !== false, active: p.active, sortOrder: p.sortOrder });
   }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => { void load(); }, [id]);
@@ -105,6 +105,7 @@ export function ProductEdit() {
           <div className="adm-checks">
             <label className="switch"><input type="checkbox" checked={d.active} onChange={(e) => set('active', e.target.checked)} /><span>Visible en la tienda</span></label>
             <label className="switch"><input type="checkbox" checked={d.featured} onChange={(e) => set('featured', e.target.checked)} /><span>Destacado en el inicio</span></label>
+            <label className="switch"><input type="checkbox" checked={d.countsAsBox} onChange={(e) => set('countsAsBox', e.target.checked)} /><span>Cuenta como caja (para mínimos, envío gratis y descuentos). Desactivalo en salsas y complementos.</span></label>
           </div>
         </div>
         <p className="small muted">Todas las cajas son de 12 unidades.</p>

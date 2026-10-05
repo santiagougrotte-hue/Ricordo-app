@@ -67,12 +67,14 @@ export function download(name: string, content: string) {
 
 export function ordersCsv(orders: AdminOrder[]): string {
   return toCsv([
-    ['Número', 'Fecha', 'Cliente', 'Teléfono', 'Email', 'Entrega', 'Dirección', 'CP', 'Zona', 'Turno', 'Pago', 'Estado del pago', 'Estado', 'Subtotal', 'Envío', 'Total', 'Detalle', 'Notas'],
+    ['Número', 'Fecha', 'Cliente', 'Teléfono', 'Email', 'Entrega', 'Dirección', 'Localidad', 'CP', 'Zona', 'Entrega prevista', 'Entrega real',
+     'Acepta otro día', 'Cajas', 'Pago', 'Estado del pago', 'Estado', 'Subtotal', 'Descuento', 'Envío', 'Total', 'Detalle', 'Notas'],
     ...orders.map((o) => [
       o.number, arDateTime(o.createdAt), o.customerName, o.customerPhone, o.customerEmail, o.deliveryMethod === 'pickup' ? 'Retiro' : 'Envío',
-      o.address, o.postalCode, o.zoneName, o.windowLabel, o.paymentMethod === 'cash' ? 'Efectivo' : 'Transferencia',
+      o.address, o.locality, o.postalCode, o.zoneName, o.deliveryDate ? shortDate(o.deliveryDate) : 'A coordinar', o.deliveredOn ? shortDate(o.deliveredOn) : '',
+      o.flexibleDelivery ? 'Sí' : 'No', o.boxCount, o.paymentMethod === 'cash' ? 'Efectivo' : 'Transferencia',
       o.paymentStatus === 'paid' ? 'Pagado' : o.paymentStatus === 'refunded' ? 'Devuelto' : 'Pendiente', STATUS_LABEL[o.status],
-      o.subtotal, o.shippingCost, o.total, o.items.map((i) => `${i.quantity} ${i.productName}`).join(', '), o.notes,
+      o.subtotal, o.discount, o.shippingCost, o.total, o.items.map((i) => `${i.quantity} ${i.productName}`).join(', '), o.notes,
     ]),
   ]);
 }
