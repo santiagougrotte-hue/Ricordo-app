@@ -19,7 +19,7 @@ export function ProductSkeleton({ size = 'm' }: { size?: 'l' | 'm' }) {
 }
 
 /** La "card" de Ricordo: foto pegada + etiqueta de caja montada encima. */
-export function ProductLabel({ product, size = 'm', eager = false, level = 3, parallax = false }: { product: Product; size?: 'l' | 'm'; eager?: boolean; level?: 2 | 3; parallax?: boolean }) {
+export function ProductLabel({ product, size = 'm', eager = false, level = 3, parallax = false, position = 0 }: { product: Product; size?: 'l' | 'm'; eager?: boolean; level?: 2 | 3; parallax?: boolean; position?: number }) {
   const H = level === 2 ? 'h2' : 'h3';
   const { quantityOf, add, setQuantity } = useStore();
   const qty = quantityOf(product.id);
@@ -30,7 +30,7 @@ export function ProductLabel({ product, size = 'm', eager = false, level = 3, pa
   return (
     <article className={`prod prod-${size}` + (soldOut ? ' sold-out' : '')} data-reveal="paper">
       <Link to={href} className="prod-photo" tabIndex={-1} aria-hidden="true" data-parallax={parallax || undefined}>
-        <ProductCover product={product} ratio={size === 'l' ? '4 / 4.4' : '4 / 5'} eager={eager} cycle />
+        <ProductCover product={product} ratio={size === 'l' ? '4 / 4.4' : '4 / 5'} eager={eager} cycle position={position} />
         {soldOut && <Stamp className="stamp-out" lines={['SIN', 'STOCK']} />}
       </Link>
       <div className="tag-box">

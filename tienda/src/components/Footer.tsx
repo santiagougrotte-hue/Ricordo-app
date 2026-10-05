@@ -14,7 +14,7 @@ export function Footer() {
         <Logo tagline className="foot-logo" />
         <div>
           <p className="label">Entregas</p>
-          <p>Viernes a la noche y sábado a la mañana, en Berazategui y alrededores.</p>
+          <p>El fin de semana, según tu zona: Berazategui, alrededores, CABA y La Plata. Pedidos hasta el jueves 13 h.</p>
         </div>
         <div>
           <p className="label">Hablemos</p>

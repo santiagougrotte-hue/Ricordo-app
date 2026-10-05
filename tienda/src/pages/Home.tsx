@@ -72,7 +72,7 @@ export function Home() {
         <div className={'featured' + (single ? ' featured-single' : pair ? ' featured-pair' : '')} aria-busy={status === 'loading'}>
           {status === 'loading' && [0, 1, 2].map((i) => <ProductSkeleton key={i} size={i === 0 ? 'l' : 'm'} />)}
           {featured.map((p, i) => (
-            <ProductLabel key={p.id} product={p} size={i === 0 || pair ? 'l' : 'm'} eager={i === 0} parallax={i === 0} />
+            <ProductLabel key={p.id} product={p} size={i === 0 || pair ? 'l' : 'm'} eager={i === 0} parallax={i === 0} position={i} />
           ))}
           {single && (
             <div className="feature-side">

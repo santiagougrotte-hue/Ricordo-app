@@ -4,6 +4,8 @@ import { useStore } from '../state/store';
 import { PASTA_LABEL } from '../lib/types';
 import { money } from '../lib/money';
 import { Gallery } from '../components/Gallery';
+import { InViewVideo, srcSet, videoPoster } from '../components/ProductMediaView';
+import { cutoffWithDate, deliverySentence } from '../lib/delivery';
 import { Icon } from '../components/Icon';
 import { Qty } from '../components/Qty';
 import { Stamp } from '../components/Stamp';
@@ -14,7 +16,7 @@ import { useReveal } from '../motion/useMotion';
 
 export function ProductPage() {
   const { slug } = useParams();
-  const { products, status, quantityOf, add, openCart } = useStore();
+  const { products, status, quantityOf, add, openCart, settings, lookup, openPostal } = useStore();
   const product = products.find((p) => p.slug === slug);
   const [qty, setQty] = useState(1);
   useReveal(`${status}-${slug}`);
@@ -35,6 +37,8 @@ export function ProductPage() {
   const soldOut = product.stock <= 0;
   const low = !soldOut && product.stock <= product.lowStockThreshold;
   const others = products.filter((p) => p.id !== product.id && p.stock > 0).slice(0, 2);
+  const zone = lookup.status === 'found' ? lookup.zone : null;
+  const perUnit = Math.round(product.price / product.unitsPerBox);
 
   return (
     <>
@@ -49,14 +53,17 @@ export function ProductPage() {
         <div className="pdp-info">
           <p className="label">{PASTA_LABEL[product.pastaType]} · caja x {product.unitsPerBox}</p>
           <h1 className="d-xl pdp-name">{product.name}</h1>
+          <p className="label pdp-lleva">Lo que lleva</p>
           <p className="pdp-filling">{product.filling}</p>
           <p className="pdp-desc">{product.description}</p>
 
           <div className="tag-box pdp-tag" data-reveal="paper">
             <div className="tag-in">
               <div className="tag-row"><span className="label">Unidades</span><span className="fill">12 por caja</span></div>
+              <div className="tag-row"><span className="label">Cada una</span><span className="fill">{money(perUnit)}</span></div>
+              <div className="tag-row"><span className="label">Sin TACC</span><span className="fill">masa sin gluten</span></div>
               <div className="tag-row"><span className="label">Conservación</span><span className="fill">freezer, hasta 3 meses</span></div>
-              <div className="tag-row"><span className="label">Cocción</span><span className="fill">del freezer a la olla</span></div>
+              <div className="tag-row"><span className="label">Cocción</span><span className="fill">del freezer a la olla, 4 a 6 min</span></div>
               <div className="tag-row">
                 <span className="label">Stock</span>
                 <span className="fill">{soldOut ? 'agotado' : low ? `quedan ${product.stock}` : 'hay'}</span>
@@ -91,14 +98,40 @@ export function ProductPage() {
               </div>
             )}
             {inCart > 0 && left > 0 && <p className="small muted">Ya tenés {inCart} en tu pedido.</p>}
+            {settings && (
+              <p className="pdp-when small">
+                <Icon name="moto" size={20} />
+                <span>
+                  {zone ? <>{deliverySentence(zone, settings)}.</> : <>Pedí hasta el {cutoffWithDate(settings)} y te llega ese fin de semana, el día de tu zona. </>}
+                  {!zone && <button type="button" className="link" onClick={openPostal}>Poné tu código postal</button>}
+                </span>
+              </p>
+            )}
           </div>
         </div>
       </article>
+      {product.media.length > 1 && (
+        <section className="wrap sec pdp-photos" aria-labelledby="h-fotos">
+          <h2 id="h-fotos" className="d-l">Todas las fotos</h2>
+          <ul className="photo-wall">
+            {product.media.map((m, i) => (
+              <li key={m.id} className={'taped' + (i % 2 ? ' tilt-r' : '')} data-reveal="paper">
+                <span className="tape" aria-hidden="true" />
+                {m.kind === 'video' ? (
+                  <InViewVideo src={m.url} poster={videoPoster(m.url)} preload="metadata" label={m.alt || product.name} />
+                ) : (
+                  <img src={m.url} srcSet={srcSet(m.url)} sizes="(min-width: 900px) 33vw, 50vw" alt={m.alt || product.name} loading="lazy" decoding="async" />
+                )}
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
       {others.length > 0 && (
         <section className="wrap sec" aria-labelledby="h-otros">
           <h2 id="h-otros" className="d-l">Para sumar a la caja</h2>
           <div className="others">
-            {others.map((p) => <ProductLabel key={p.id} product={p} />)}
+            {others.map((p, i) => <ProductLabel key={p.id} product={p} position={i + 1} />)}
           </div>
         </section>
       )}

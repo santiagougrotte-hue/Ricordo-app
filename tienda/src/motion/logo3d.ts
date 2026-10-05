@@ -31,7 +31,8 @@ async function buildModel(front: MeshStandardMaterial, side: MeshStandardMateria
     const gltf = await new GLTFLoader().loadAsync(GLB_URL);
     return gltf.scene;
   }
-  const data = new SVGLoader().parse(`<svg xmlns="http://www.w3.org/2000/svg"><path d="${WORDMARK_D}"/></svg>`);
+  // evenodd, igual que el logo 2D: sin esto los huecos de la R, las "o" y la "d" salen rellenos.
+  const data = new SVGLoader().parse(`<svg xmlns="http://www.w3.org/2000/svg"><path fill-rule="evenodd" d="${WORDMARK_D}"/></svg>`);
   const shapes = data.paths.flatMap((p) => SVGLoader.createShapes(p));
   const geo = new ExtrudeGeometry(shapes, {
     depth: 90, bevelEnabled: true, bevelThickness: 14, bevelSize: 7, bevelSegments: 2, curveSegments: 5,

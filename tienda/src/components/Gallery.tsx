@@ -1,7 +1,7 @@
 import { useRef, useState } from 'react';
 import type { Product } from '../lib/types';
 import { Placeholder } from './Placeholder';
-import { srcSet } from './ProductMediaView';
+import { srcSet, videoPoster } from './ProductMediaView';
 
 /** Galería con scroll-snap: swipe nativo en el celular, puntos y flechas accesibles. */
 export function Gallery({ product }: { product: Product }) {
@@ -39,7 +39,7 @@ export function Gallery({ product }: { product: Product }) {
         {media.map((m, i) => (
           <figure key={m.id} className="gallery-slide" aria-label={`${i + 1} de ${media.length}`}>
             {m.kind === 'video' ? (
-              <video src={m.url} muted playsInline loop autoPlay={i === 0} preload={i === 0 ? 'metadata' : 'none'} aria-label={m.alt || product.name} />
+              <video src={m.url} poster={videoPoster(m.url)} muted playsInline loop autoPlay={i === 0} preload={i === 0 ? 'metadata' : 'none'} aria-label={m.alt || product.name} />
             ) : (
               <img src={m.url} srcSet={srcSet(m.url)} sizes="(min-width: 900px) 50vw, 100vw" alt={m.alt || product.name} loading={i === 0 ? 'eager' : 'lazy'} decoding="async" />
             )}

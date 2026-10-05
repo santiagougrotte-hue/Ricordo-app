@@ -43,7 +43,7 @@ export function Catalog() {
       <div className="cat-grid" aria-live="polite" aria-busy={status === 'loading'}>
         {status === 'loading' && [0, 1, 2, 3, 4].map((i) => <ProductSkeleton key={i} size={i === 0 ? 'l' : 'm'} />)}
         {sorted.map((p, i) => (
-          <ProductLabel key={p.id} product={p} size={i % 5 === 0 ? 'l' : 'm'} eager={i < 2} level={2} />
+          <ProductLabel key={p.id} product={p} size={i % 5 === 0 ? 'l' : 'm'} eager={i < 2} level={2} position={i} />
         ))}
       </div>
     </section>

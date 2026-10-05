@@ -116,7 +116,7 @@ textarea.input { resize: vertical; }
 .ph.has-photo::after { display: none; }
 .ph img { width: 100%; height: 100%; object-fit: cover; }
 .ph-cycle { overflow: hidden; }
-.ph-cycle img { position: absolute; inset: 0; opacity: 0; transition: opacity var(--dur-papel) var(--ease-papel); }
+.ph-cycle img { position: absolute; inset: 0; opacity: 0; transition: opacity var(--dur-papel) var(--ease-papel); transition-delay: calc(var(--chain, 0) * 160ms); }
 .ph-cycle img.on { opacity: 1; }
 .ph-video { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
 
@@ -342,6 +342,14 @@ textarea.input { resize: vertical; }
 .pdp-name { margin: var(--space-2) 0; }
 .pdp-filling { font: var(--weight-regular) var(--text-display-s) / 1.2 var(--font-display); color: var(--color-text-muted); }
 .pdp-desc { margin-top: var(--space-4); max-width: 52ch; }
+.pdp-lleva { margin-bottom: var(--space-1); color: var(--color-primary); }
+.pdp-when { display: flex; gap: var(--space-2); align-items: flex-start; margin-top: var(--space-4); }
+.pdp-when svg { flex: none; color: var(--color-primary); }
+.pdp-when .link { min-height: auto; }
+/* Todas las fotos: muro de fotos pegadas. Cada foto conserva su forma (vertical u horizontal). */
+.photo-wall { list-style: none; margin: var(--space-8) 0 0; padding: 0; display: grid; grid-template-columns: 1fr 1fr; gap: var(--space-8) var(--space-4); align-items: start; }
+.photo-wall .ph-video { position: static; height: auto; aspect-ratio: 9 / 16; object-fit: cover; }
+@media (min-width: 900px) { .photo-wall { grid-template-columns: repeat(3, 1fr); gap: var(--space-12) var(--space-8); } }
 .pdp-tag { margin-top: var(--space-8); transform: rotate(var(--rotate-label)); }
 .pdp-buy { margin-top: var(--space-8); display: grid; gap: var(--space-4); }
 .pdp-add { display: flex; flex-wrap: wrap; gap: var(--space-3); align-items: center; }
