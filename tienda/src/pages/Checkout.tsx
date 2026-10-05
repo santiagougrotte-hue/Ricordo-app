@@ -4,13 +4,13 @@ import { useStore } from '../state/store';
 import { api } from '../lib/api';
 import { money } from '../lib/money';
 import { normalizePostalCode } from '../lib/postal';
-import { cartMessage, findZone, quote } from '../lib/shipping';
+import { cartMessage, findZone, OTHER_LOCALITY, quote } from '../lib/shipping';
 import { deliverySentence } from '../lib/delivery';
 import { whatsappLink } from '../lib/whatsapp';
 import type { OrderError, PaymentMethod } from '../lib/types';
 import { Icon } from '../components/Icon';
 import { MethodToggle } from '../components/MethodToggle';
-import { AddressSearch, LocalitySelect } from '../components/LocalityForm';
+import { AddressSearch, LocalitySelect, TownInput } from '../components/LocalityForm';
 import { Turnstile, type TurnstileHandle } from '../components/Turnstile';
 import { useDocumentTitle } from './useDocumentTitle';
 
@@ -82,7 +82,7 @@ export function Checkout() {
     if (method === 'delivery') {
       if (f.address.trim().length < 5) e.address = 'Calle, número y piso/depto si tiene.';
       if (!normalizePostalCode(f.postalCode)) e.postalCode = 'Escribí 4 números (1884) o el CP completo (B1884ABC).';
-      if (lookup.status === 'empty') e.locality = 'Elegí tu localidad.';
+      if (lookup.status === 'empty') e.locality = settings?.distanceEnabled ? 'Escribí tu dirección y elegila de la lista (o escribí tu localidad).' : 'Elegí tu localidad.';
       else if (lookup.status === 'not_found') e.locality = 'Todavía no llegamos a tu zona, escribinos por WhatsApp. También podés elegir retiro en Berazategui.';
     }
     if (!f.payment) e.payment = 'Elegí cómo pagás.';
@@ -188,21 +188,6 @@ export function Checkout() {
             <MethodToggle />
             {method === 'delivery' ? (
               <>
-                <div className="field">
-                  <label className="field-label" htmlFor="f-locality">Localidad</label>
-                  <LocalitySelect
-                    id="f-locality"
-                    localities={localities}
-                    value={localityChoice}
-                    error={errors.locality}
-                    onChange={(c) => {
-                      setLocalityChoice(c);
-                      if (errors.locality) setErrors((x) => ({ ...x, locality: undefined }));
-                    }}
-                  />
-                  {zone && !errors.locality && <p className="field-hint">Zona {zone.name}</p>}
-                  {errors.locality && <p id="f-locality-err" className="field-error">{errors.locality}</p>}
-                </div>
                 {wa && (
                   <p className="stack-row">
                     <a className="btn btn-ink" href={wa} target="_blank" rel="noopener noreferrer"><Icon name="charla" /> Escribir por WhatsApp</a>
@@ -224,6 +209,8 @@ export function Checkout() {
                       setF((v) => ({ ...v, address: sg.address, postalCode: sg.postalCode ?? v.postalCode }));
                       setAddress({ street: sg.address, postalCode: sg.postalCode });
                       if (sg.match.status === 'found') setLocalityChoice(sg.match.localityId);
+                      else if (sg.match.status === 'not_found') setLocalityChoice(OTHER_LOCALITY);
+                      else setLocalityChoice(null); // la escribe abajo
                       if (errors.address) setErrors((x) => ({ ...x, address: undefined }));
                     }}
                   />
@@ -231,6 +218,36 @@ export function Checkout() {
                   <Field id="address" label="Dirección" error={errors.address}>
                     <input id="f-address" className="input" autoComplete="street-address" placeholder="Calle 14 1234, 2°B" value={f.address} onChange={set('address')} {...err('address')} />
                   </Field>
+                )}
+                {settings?.distanceEnabled ? (
+                  // Con buscador: la localidad sale de la dirección; si no, la escribe el cliente.
+                  lookup.status === 'found' ? (
+                    <p className="co-loc">
+                      Localidad: <b>{lookup.locality.name}</b> <span className="muted">(zona {lookup.zone.name})</span>{' '}
+                      <button type="button" className="link" onClick={() => setLocalityChoice(null)}>no es esa</button>
+                    </p>
+                  ) : lookup.status === 'empty' && f.address.trim().length >= 5 ? (
+                    <>
+                      <TownInput id="f-locality" localities={localities} onDone={(c) => { setLocalityChoice(c); setErrors((x) => ({ ...x, locality: undefined })); }} />
+                      {errors.locality && <p id="f-locality-err" className="field-error">{errors.locality}</p>}
+                    </>
+                  ) : errors.locality ? <p id="f-locality-err" className="field-error">{errors.locality}</p> : null
+                ) : (
+                  <div className="field">
+                  <label className="field-label" htmlFor="f-locality">Localidad</label>
+                  <LocalitySelect
+                    id="f-locality"
+                    localities={localities}
+                    value={localityChoice}
+                    error={errors.locality}
+                    onChange={(c) => {
+                      setLocalityChoice(c);
+                      if (errors.locality) setErrors((x) => ({ ...x, locality: undefined }));
+                    }}
+                  />
+                  {zone && !errors.locality && <p className="field-hint">Zona {zone.name}</p>}
+                  {errors.locality && <p id="f-locality-err" className="field-error">{errors.locality}</p>}
+                </div>
                 )}
                 <Field id="unit" label="Piso / depto / entre calles (opcional)">
                   <input id="f-unit" className="input" placeholder="2°B, entre 15 y 16" value={unit} onChange={(e) => setUnit(e.target.value)} />

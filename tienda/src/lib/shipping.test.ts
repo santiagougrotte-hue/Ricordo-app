@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { byPartido, cartMessage, cartTotals, discountPct, findZone as find, OTHER_LOCALITY, quote, type LocalityChoice } from './shipping';
+import { byPartido, cartMessage, matchTypedLocality, cartTotals, discountPct, findZone as find, OTHER_LOCALITY, quote, type LocalityChoice } from './shipping';
 import { SEED_LOCALITIES, SEED_SETTINGS, SEED_ZONES } from './api/seed-data';
 
 const loc = (name: string) => SEED_LOCALITIES.find((l) => l.name === name)!.id;
@@ -91,4 +91,14 @@ describe('quote', () => {
     expect(quote('pickup', findZone(0, null), cart(9), SEED_SETTINGS)).toMatchObject({ shippingCost: 0, discount: 0, canCheckout: true, total: 90000 });
   });
   it('carrito vacío nunca habilita', () => expect(quote('pickup', findZone(0, null), cart(0), { ...SEED_SETTINGS, pickupMinBoxes: 0 }).canCheckout).toBe(false));
+});
+
+describe('localidad escrita por el cliente', () => {
+  it('sin tildes ni mayúsculas', () => {
+    expect(matchTypedLocality('villa espana', SEED_LOCALITIES)?.name).toBe('Villa España');
+    expect(matchTypedLocality('  RANELAGH ', SEED_LOCALITIES)?.name).toBe('Ranelagh');
+    expect(matchTypedLocality('Hudson', SEED_LOCALITIES)?.name).toBe('Guillermo E. Hudson');
+    expect(matchTypedLocality('Capital Federal', SEED_LOCALITIES)?.name).toBe('CABA');
+  });
+  it('si no está en la lista → null (no llegamos)', () => expect(matchTypedLocality('Florencio Varela', SEED_LOCALITIES)).toBeNull());
 });

@@ -160,3 +160,16 @@ export function maxDiscountAt(z: Pick<ShippingZone, 'freeFromBoxes' | 'discountP
   if (z.freeFromBoxes === null || z.discountPerBox <= 0 || z.discountMax <= 0) return null;
   return z.freeFromBoxes + Math.ceil(z.discountMax / z.discountPerBox);
 }
+
+const plain = (s: string) => s.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/\s+/g, ' ').trim();
+const CABA_NAMES = ['caba', 'capital federal', 'capital', 'ciudad de buenos aires', 'ciudad autonoma de buenos aires'];
+
+/** Localidad que escribió el cliente → la de la lista (sin importar tildes ni mayúsculas). null = no llegamos. */
+export function matchTypedLocality(text: string, localities: Locality[]): Locality | null {
+  const t = plain(text).replace(/^(localidad de|barrio) /, '');
+  if (!t) return null;
+  if (CABA_NAMES.includes(t)) return localities.find((l) => plain(l.partido) === 'caba') ?? null;
+  return localities.find((l) => plain(l.name) === t)
+    ?? localities.find((l) => plain(l.name).replace(/^guillermo e\.? /, '') === t) // "Hudson"
+    ?? null;
+}

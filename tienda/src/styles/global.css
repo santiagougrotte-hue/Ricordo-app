@@ -451,3 +451,5 @@ textarea.input { resize: vertical; }
 .ship-facts dl > div { display: grid; gap: 2px; }
 .ship-facts dt { font: var(--weight-medium) var(--text-label) / 1 var(--font-label); letter-spacing: var(--tracking-label); text-transform: uppercase; color: var(--color-text-muted); }
 .ship-facts dd { margin: 0; font-weight: var(--weight-bold); font-size: var(--text-body-l); }
+.co-loc { margin: 0; }
+.co-loc .link { min-height: auto; }

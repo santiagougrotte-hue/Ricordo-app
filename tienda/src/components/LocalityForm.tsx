@@ -1,7 +1,7 @@
 import { useEffect, useId, useRef, useState } from 'react';
 import { api } from '../lib/api';
 import { useStore } from '../state/store';
-import { byPartido, findZone, OTHER_LOCALITY, type LocalityChoice } from '../lib/shipping';
+import { byPartido, findZone, matchTypedLocality, OTHER_LOCALITY, type LocalityChoice } from '../lib/shipping';
 import { deliverySentence } from '../lib/delivery';
 import { money } from '../lib/money';
 import { whatsappLink } from '../lib/whatsapp';
@@ -79,15 +79,15 @@ export function LocalityForm({ onDone, compact = false }: { onDone?: () => void;
   const id = useId();
   const result = findZone(zones, localities, localityChoice);
   const searchable = settings?.distanceEnabled === true;
-  const [manual, setManual] = useState(!searchable);
-  const [confirmOptions, setConfirmOptions] = useState<number[] | null>(null);
+  // Si la dirección no dice la localidad (o no aparece), el cliente la escribe.
+  const [askTown, setAskTown] = useState(false);
   const wa = settings && result.status === 'not_found'
     ? whatsappLink(settings.whatsappPhone, `Hola Ricordo! Quería saber si llegan a mi dirección: ${address.street}`)
     : null;
 
   function pickLocality(c: LocalityChoice) {
     setLocalityChoice(c);
-    setConfirmOptions(null);
+    setAskTown(false);
     if (typeof c === 'number') {
       setMethod('delivery');
       onDone?.();
@@ -104,24 +104,22 @@ export function LocalityForm({ onDone, compact = false }: { onDone?: () => void;
           onPick={(s) => {
             setAddress({ street: s.address, postalCode: s.postalCode });
             if (s.match.status === 'found') pickLocality(s.match.localityId);
-            else if (s.match.status === 'confirm') { setLocalityChoice(null); setConfirmOptions(s.match.options); }
-            else pickLocality(OTHER_LOCALITY);
+            else if (s.match.status === 'not_found') pickLocality(OTHER_LOCALITY);
+            else { setLocalityChoice(null); setAskTown(true); }
           }}
         />
       )}
-      {confirmOptions && (
+      {searchable ? (
+        askTown ? (
+          <TownInput id={`${id}-town`} localities={localities} onDone={pickLocality} />
+        ) : (
+          <button type="button" className="link small" onClick={() => setAskTown(true)}>¿No aparece tu dirección? Escribí tu localidad</button>
+        )
+      ) : (
         <div className="field">
-          <label className="field-label" htmlFor={`${id}-conf`}>¿En qué localidad queda?</label>
-          <LocalitySelect id={`${id}-conf`} localities={localities.filter((l) => confirmOptions.includes(l.id))} value={localityChoice} onChange={pickLocality} />
-        </div>
-      )}
-      {manual || !searchable ? (
-        <div className="field">
-          <label htmlFor={id} className={searchable ? 'field-label' : 'label'}>Tu localidad</label>
+          <label htmlFor={id} className="label">Tu localidad</label>
           <LocalitySelect id={id} localities={localities} value={localityChoice} onChange={pickLocality} />
         </div>
-      ) : (
-        <button type="button" className="link small" onClick={() => setManual(true)}>¿No aparece tu dirección? Elegí tu localidad</button>
       )}
       <div className="postal-msg" aria-live="polite">
         {result.status === 'found' && <ShippingFacts />}
@@ -143,6 +141,36 @@ export function LocalityForm({ onDone, compact = false }: { onDone?: () => void;
           </div>
         )}
       </div>
+    </div>
+  );
+}
+
+/** "¿En qué localidad queda?": la escribe el cliente (con tus localidades como sugerencia mientras tipea). */
+export function TownInput({ id, localities, onDone }: { id: string; localities: Locality[]; onDone: (c: LocalityChoice) => void }) {
+  const [text, setText] = useState('');
+  const listId = `${id}-opts`;
+  function submit() {
+    if (!text.trim()) return;
+    const hit = matchTypedLocality(text, localities);
+    onDone(hit ? hit.id : OTHER_LOCALITY);
+  }
+  return (
+    <div className="field">
+      <label className="field-label" htmlFor={id}>¿En qué localidad queda?</label>
+      <div className="postal-row">
+        <input
+          id={id}
+          className="input"
+          list={listId}
+          autoComplete="address-level2"
+          placeholder="Ej.: Ranelagh"
+          value={text}
+          onChange={(e) => setText(e.target.value)}
+          onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); submit(); } }}
+        />
+        <button type="button" className="btn btn-ink" onClick={submit}>Listo</button>
+      </div>
+      <datalist id={listId}>{localities.map((l) => <option key={l.id} value={l.name} />)}</datalist>
     </div>
   );
 }

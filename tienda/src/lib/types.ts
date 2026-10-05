@@ -66,7 +66,8 @@ export interface AddressSuggestion {
   postalCode: string | null;
   /** Tiene altura (número): sin número el envío se calcula a la calle. */
   hasNumber: boolean;
-  match: { status: 'found'; localityId: number } | { status: 'confirm'; options: number[] } | { status: 'not_found' };
+  /** unknown = la dirección no trae localidad ni partido: el cliente la escribe. */
+  match: { status: 'found'; localityId: number } | { status: 'confirm'; options: number[] } | { status: 'not_found' } | { status: 'unknown' };
 }
 
 /** Envío calculado por distancia para una dirección (null = no se pudo, se usa el costo fijo). */

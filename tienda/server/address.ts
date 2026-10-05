@@ -20,11 +20,16 @@ const CABA_HINTS = ['ciudad autonoma de buenos aires', 'autonomous city of bueno
 
 /** Relaciona un resultado de OpenRouteService (propiedades de Pelias) con nuestras localidades. */
 export function matchLocality(p: Row, localities: Locality[]): AddressSuggestion['match'] {
+  const partidoOf = (name: string) => localities.filter((l) => norm(l.partido) === name);
   // De lo más específico a lo más general.
   const fields = [p.neighbourhood, p.borough, p.locality, p.localadmin].map(norm).filter(Boolean);
   for (const f of fields) {
     const hit = localities.find((l) => norm(l.name) === f);
-    if (hit) return { status: 'found', localityId: hit.id };
+    if (!hit) continue;
+    // "Berazategui" puede ser la ciudad o todo el partido: si el partido tiene varias localidades, se decide por cercanía.
+    const same = partidoOf(f);
+    if (norm(hit.name) === norm(hit.partido) && same.length > 1 && !norm(p.neighbourhood)) return { status: 'confirm', options: same.map((l) => l.id) };
+    return { status: 'found', localityId: hit.id };
   }
   const region = norm(p.region), county = norm(p.county), loc = norm(p.locality);
   if (CABA_HINTS.some((h) => region.includes(h) || county.includes(h)) || (loc === 'buenos aires' && /comuna/.test(county))) {
@@ -36,7 +41,45 @@ export function matchLocality(p: Row, localities: Locality[]): AddressSuggestion
   const options = localities.filter((l) => partidos.includes(norm(l.partido))).map((l) => l.id);
   if (options.length === 1) return { status: 'found', localityId: options[0] };
   if (options.length > 1) return { status: 'confirm', options };
-  return { status: 'not_found' };
+  // Sin ningún dato de localidad ni partido: que el cliente la escriba. Con un partido que no atendemos: no llegamos.
+  return partidos.length || region ? { status: 'not_found' } : { status: 'unknown' };
+}
+
+const R = 6371;
+/** Distancia en km entre dos puntos (para elegir la localidad más cercana). */
+export function kmBetween(a: { lat: number; lng: number }, b: { lat: number; lng: number }): number {
+  const rad = (x: number) => (x * Math.PI) / 180;
+  const dLat = rad(b.lat - a.lat), dLng = rad(b.lng - a.lng);
+  const h = Math.sin(dLat / 2) ** 2 + Math.cos(rad(a.lat)) * Math.cos(rad(b.lat)) * Math.sin(dLng / 2) ** 2;
+  return 2 * R * Math.asin(Math.sqrt(h));
+}
+
+/** Centro de una localidad con OpenRouteService; se guarda en la base para no volver a pedirlo. */
+async function ensureCentroids(ids: number[], deps: { query: Query; fetch: typeof fetch; orsKey: string }) {
+  const missing = await deps.query<Row>(`select id, name, partido from localities where id = any($1) and lat is null`, [ids]);
+  for (const l of missing.slice(0, 8)) {
+    try {
+      const url = `${orsBase()}/geocode/search?` + new URLSearchParams({
+        api_key: deps.orsKey, text: `${l.name}, ${l.partido}, Buenos Aires, Argentina`, 'boundary.country': 'AR',
+        layers: 'neighbourhood,locality,localadmin,borough', size: '1',
+      });
+      const g = (await (await deps.fetch(url, { signal: AbortSignal.timeout(5000) })).json()) as Row;
+      const [lng, lat] = (g?.features?.[0]?.geometry?.coordinates ?? []) as number[];
+      if (typeof lat === 'number' && typeof lng === 'number') await deps.query(`update localities set lat = $2, lng = $3 where id = $1`, [l.id, lat, lng]);
+    } catch { /* se reintenta en la próxima búsqueda */ }
+  }
+}
+
+/** Entre varias localidades posibles (mismo partido), la más cercana a la dirección. */
+async function nearest(options: number[], point: { lat: number; lng: number }, deps: { query: Query; fetch: typeof fetch; orsKey: string }): Promise<number | null> {
+  await ensureCentroids(options, deps);
+  const rows = await deps.query<Row>(`select id, lat, lng from localities where id = any($1) and lat is not null`, [options]);
+  let best: { id: number; d: number } | null = null;
+  for (const r of rows) {
+    const d = kmBetween(point, { lat: Number(r.lat), lng: Number(r.lng) });
+    if (!best || d < best.d) best = { id: r.id, d };
+  }
+  return best && best.d < 15 ? best.id : null; // a más de 15 km del centro más cercano, mejor que la confirme
 }
 
 export async function searchAddress(
@@ -65,8 +108,15 @@ export async function searchAddress(
     if (typeof lat !== 'number' || typeof lng !== 'number') continue;
     const address = (p.housenumber && p.street ? `${p.street} ${p.housenumber}` : p.name ?? '').trim();
     if (!address) continue;
-    const match = matchLocality(p, localities);
-    const place = [p.neighbourhood ?? p.locality, p.county && norm(p.county) !== norm(p.neighbourhood ?? p.locality) ? p.county : null].filter(Boolean).join(', ');
+    let match = matchLocality(p, localities);
+    // Solo sabemos el partido: la localidad más cercana a la dirección.
+    if (match.status === 'confirm') {
+      const id = await nearest(match.options, { lat, lng }, { ...deps, orsKey: deps.orsKey }).catch(() => null);
+      if (id !== null) match = { status: 'found', localityId: id };
+    }
+    const placeName = match.status === 'found' ? localities.find((l) => l.id === (match as { localityId: number }).localityId)?.name : null;
+    const town = placeName ?? p.neighbourhood ?? p.locality;
+    const place = [town, p.county && norm(p.county) !== norm(town) ? p.county : null].filter(Boolean).join(', ');
     const label = place ? `${address}, ${place}` : address;
     if (seen.has(label)) continue;
     seen.add(label);

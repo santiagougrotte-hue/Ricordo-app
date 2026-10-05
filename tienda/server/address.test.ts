@@ -25,6 +25,10 @@ describe('matchLocality (resultado de OpenRouteService → nuestra localidad)', 
   });
   it('partido con una sola localidad → directo (Avellaneda → Wilde)', () =>
     expect(matchLocality({ county: 'Avellaneda', locality: 'Sarandí' }, SEED_LOCALITIES)).toEqual({ status: 'found', localityId: id('Wilde') }));
+  it('"Berazategui" sin barrio puede ser cualquier localidad del partido → se decide por cercanía', () =>
+    expect(matchLocality({ locality: 'Berazategui', county: 'Partido de Berazategui' }, SEED_LOCALITIES).status).toBe('confirm'));
+  it('sin localidad ni partido → que la escriba el cliente', () =>
+    expect(matchLocality({ street: 'Calle 14' }, SEED_LOCALITIES)).toEqual({ status: 'unknown' }));
   it('fuera de la lista → not_found', () =>
     expect(matchLocality({ locality: 'Florencio Varela', county: 'Florencio Varela' }, SEED_LOCALITIES)).toEqual({ status: 'not_found' }));
 });
@@ -44,6 +48,13 @@ describe.skipIf(!TEST_DB)('searchAddress contra la base (ORS simulado)', () => {
       ] });
     }
     if (u.includes('/v2/directions')) return Response.json({ routes: [{ summary: { distance: 4000 } }] });
+    if (u.includes('/geocode/search')) {
+      // Centros de localidades (aprox.) para elegir la más cercana
+      const t = new URL(u).searchParams.get('text') ?? '';
+      const c: Record<string, [number, number]> = { Ranelagh: [-58.20, -34.79], 'Guillermo E. Hudson': [-58.15, -34.79], 'Plátanos': [-58.16, -34.78], 'Berazategui': [-58.21, -34.76], 'Villa España': [-58.20, -34.77] };
+      const name = Object.keys(c).find((k) => t.startsWith(k + ','));
+      return Response.json({ features: name ? [{ geometry: { coordinates: c[name] } }] : [] });
+    }
     return new Response('?', { status: 404 });
   }) as unknown as typeof fetch;
 
@@ -56,17 +67,35 @@ describe.skipIf(!TEST_DB)('searchAddress contra la base (ORS simulado)', () => {
     expect(calls).toHaveLength(0);
   });
 
+  it('dirección con solo "Berazategui": elige la localidad más cercana del partido (Ranelagh)', async () => {
+    const near = (async (url: string | URL | Request) => {
+      const u = String(url);
+      if (u.includes('/geocode/autocomplete')) {
+        return Response.json({ features: [{ geometry: { coordinates: [-58.201, -34.791] }, properties: { street: 'Calle 151', housenumber: '400', locality: 'Berazategui', county: 'Partido de Berazategui' } }] });
+      }
+      return ors(url);
+    }) as unknown as typeof fetch;
+    const [{ id: ranelagh }] = await q<{ id: number }>(`select id from localities where name = 'Ranelagh'`);
+    const r = await searchAddress('Calle 151 400', { query: q, fetch: near, orsKey: 'k' });
+    expect(r[0].match).toEqual({ status: 'found', localityId: ranelagh });
+    expect(r[0].label).toBe('Calle 151 400, Ranelagh, Partido de Berazategui');
+    // Los centros quedaron guardados: la próxima vez no se piden
+    const [{ n }] = await q<{ n: number }>(`select count(*)::int n from localities where lat is not null`);
+    expect(n).toBeGreaterThanOrEqual(5);
+  });
+
   it('sugiere direcciones, las relaciona con la localidad y guarda el punto; el envío sale sin volver a ubicarla', async () => {
     const r = await searchAddress('Calle 361 1234', { query: q, fetch: ors, orsKey: 'k' });
     const [{ id: ranelagh }] = await q<{ id: number }>(`select id from localities where name = 'Ranelagh'`);
     expect(r[0]).toMatchObject({ address: 'Calle 361 1234', postalCode: 'B1886', hasNumber: true, match: { status: 'found', localityId: ranelagh } });
     expect(r[0].label).toBe('Calle 361 1234, Ranelagh, Partido de Berazategui');
-    expect(r[1].match.status).toBe('confirm');
+    expect(r[1].match.status).toBe('confirm'); // Quilmes: sin centros cargados en la prueba → que la escriba
     expect(r[2].match).toEqual({ status: 'not_found' });
     // Elegida la primera: solo se mide la ruta (no se vuelve a geocodificar). 4 km → 8 km i/v × 7 l × $1700 = $952 → $1000
     calls.length = 0;
     const d = await distanceFor({ address: 'Calle 361 1234', localityId: ranelagh }, { query: q, fetch: ors, orsKey: 'k' });
     expect(d).toMatchObject({ cost: 1000, km: 8 });
     expect(calls.every((u) => u.includes('/v2/directions'))).toBe(true);
+    void id;
   });
 });
