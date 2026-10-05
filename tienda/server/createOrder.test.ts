@@ -89,7 +89,7 @@ describe.skipIf(!TEST_DB)('handleCreateOrder contra Netlify Database (Postgres r
     expect(sent.some((s) => s.url.includes('telegram'))).toBe(true);
     // WhatsApp al dueño (CallMeBot): al número de la tienda, con productos, CP, total y día de entrega.
     const wa = new URL(sent.find((s) => s.url.includes('callmebot'))!.url);
-    expect(wa.searchParams.get('phone')).toBe('+5491100000000');
+    expect(wa.searchParams.get('phone')).toBe('5491100000000');
     expect(wa.searchParams.get('apikey')).toBe('k123');
     const text = wa.searchParams.get('text')!;
     expect(text).toContain('Nuevo pedido #1001');
@@ -101,7 +101,7 @@ describe.skipIf(!TEST_DB)('handleCreateOrder contra Netlify Database (Postgres r
 
   it('WhatsApp a un número propio para avisos (WHATSAPP_NOTIFY_PHONE) y sin clave no se manda', async () => {
     await handleCreateOrder({ ...BASE, flexibleDelivery: false }, { ...env, WHATSAPP_NOTIFY_PHONE: '54 9 11 2222-3333' }, { query: q, fetch: fakeFetch, ip: '8.8.8.1' });
-    expect(new URL(sent.find((s) => s.url.includes('callmebot'))!.url).searchParams.get('phone')).toBe('+5491122223333');
+    expect(new URL(sent.find((s) => s.url.includes('callmebot'))!.url).searchParams.get('phone')).toBe('5491122223333');
     sent.length = 0;
     await handleCreateOrder(BASE, { ...env, CALLMEBOT_APIKEY: undefined }, { query: q, fetch: fakeFetch, ip: '8.8.8.2' });
     expect(sent.some((s) => s.url.includes('callmebot'))).toBe(false);

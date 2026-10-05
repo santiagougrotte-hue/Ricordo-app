@@ -257,7 +257,8 @@ export async function sendWhatsapp(
     phone = (s?.whatsapp_phone ?? '').replace(/\D/g, '');
   }
   if (phone.length < 10) return { ok: false, message: 'Falta el WhatsApp de la tienda en Ajustes.' };
-  const q = new URLSearchParams({ phone: `+${phone}`, text, apikey: env.CALLMEBOT_APIKEY });
+  // Mismo formato que el ejemplo de CallMeBot: el número con código de país, sin "+".
+  const q = new URLSearchParams({ phone, text, apikey: env.CALLMEBOT_APIKEY });
   try {
     const res = await deps.fetch(`https://api.callmebot.com/whatsapp.php?${q}`, { signal: AbortSignal.timeout(8000) });
     const body = await res.text().catch(() => '');
@@ -266,7 +267,7 @@ export async function sendWhatsapp(
     if (res.ok && /queued|message sent|enviado/i.test(reply) && !/invalid|error|not (yet )?(registered|activated)/i.test(reply)) {
       return { ok: true, message: `CallMeBot aceptó el mensaje para el +${phone}. Tiene que llegarte en unos segundos.` };
     }
-    return { ok: false, message: `CallMeBot no lo mandó al +${phone}. Respuesta: "${reply || res.status}". Revisá que el número de Ajustes sea el mismo con el que sacaste la clave.` };
+    return { ok: false, message: `CallMeBot no lo mandó al +${phone}. Respuesta: "${reply || res.status}". Revisá que sea el mismo número con el que sacaste la clave.` };
   } catch {
     return { ok: false, message: 'No pudimos conectar con CallMeBot. Probá de nuevo en un rato.' };
   }
