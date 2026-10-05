@@ -117,5 +117,8 @@ export function createAdminNetlify(): AdminApi {
     async saveSettings(s) {
       await post('settings', s);
     },
+    async testWhatsapp() {
+      return (await post<{ message: string }>('notify-test')).message;
+    },
   };
 }

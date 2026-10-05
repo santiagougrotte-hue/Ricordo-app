@@ -101,4 +101,6 @@ export interface AdminApi {
 
   getSettings(): Promise<AdminSettings>;
   saveSettings(s: AdminSettings): Promise<void>;
+  /** Manda un WhatsApp de prueba al número de avisos. Devuelve el resultado legible. */
+  testWhatsapp(): Promise<string>;
 }

@@ -235,6 +235,33 @@ export function whatsappOrderText(r: OrderReceipt, input: OrderInput): string {
   ].join('\n');
 }
 
+/** Manda un WhatsApp al dueño vía CallMeBot. Número: WHATSAPP_NOTIFY_PHONE o el WhatsApp de la tienda (Ajustes). */
+export async function sendWhatsapp(
+  text: string,
+  env: Pick<ServerEnv, 'CALLMEBOT_APIKEY' | 'WHATSAPP_NOTIFY_PHONE'>,
+  deps: Pick<Deps, 'query' | 'fetch'>,
+): Promise<{ ok: boolean; message: string }> {
+  if (!env.CALLMEBOT_APIKEY) return { ok: false, message: 'Falta la clave de CallMeBot (CALLMEBOT_APIKEY) en Netlify.' };
+  let phone = (env.WHATSAPP_NOTIFY_PHONE ?? '').replace(/\D/g, '');
+  if (!phone) {
+    const [s] = await deps.query<{ whatsapp_phone: string }>(`select whatsapp_phone from store_settings limit 1`);
+    phone = (s?.whatsapp_phone ?? '').replace(/\D/g, '');
+  }
+  if (phone.length < 10) return { ok: false, message: 'Falta el WhatsApp de la tienda en Ajustes.' };
+  const q = new URLSearchParams({ phone: `+${phone}`, text, apikey: env.CALLMEBOT_APIKEY });
+  try {
+    const res = await deps.fetch(`https://api.callmebot.com/whatsapp.php?${q}`, { signal: AbortSignal.timeout(8000) });
+    const body = await res.text().catch(() => '');
+    // CallMeBot responde 200 con un texto; si la clave o el número no coinciden lo dice en ese texto.
+    if (!res.ok || /error|invalid|not (yet )?(registered|activated)/i.test(body)) {
+      return { ok: false, message: `CallMeBot no aceptó el envío al +${phone}. Revisá que la clave sea la de ese número.` };
+    }
+    return { ok: true, message: `Mensaje enviado al +${phone}.` };
+  } catch {
+    return { ok: false, message: 'No pudimos conectar con CallMeBot. Probá de nuevo en un rato.' };
+  }
+}
+
 async function notifyOwner(r: OrderReceipt, input: OrderInput, env: ServerEnv, deps: Deps): Promise<void> {
   const text = orderSummaryText(r, input);
   const jobs: Promise<unknown>[] = [];
@@ -258,17 +285,7 @@ async function notifyOwner(r: OrderReceipt, input: OrderInput, env: ServerEnv, d
       );
     }
   }
-  if (env.CALLMEBOT_APIKEY) {
-    let phone = (env.WHATSAPP_NOTIFY_PHONE ?? '').replace(/\D/g, '');
-    if (!phone) {
-      const [s] = await deps.query<{ whatsapp_phone: string }>(`select whatsapp_phone from store_settings limit 1`);
-      phone = (s?.whatsapp_phone ?? '').replace(/\D/g, '');
-    }
-    if (phone.length >= 10) {
-      const q = new URLSearchParams({ phone: `+${phone}`, text: whatsappOrderText(r, input), apikey: env.CALLMEBOT_APIKEY });
-      jobs.push(deps.fetch(`https://api.callmebot.com/whatsapp.php?${q}`, { signal: AbortSignal.timeout(8000) }));
-    }
-  }
+  if (env.CALLMEBOT_APIKEY) jobs.push(sendWhatsapp(whatsappOrderText(r, input), env, deps));
   if (env.TELEGRAM_BOT_TOKEN && env.TELEGRAM_CHAT_ID) {
     jobs.push(
       deps.fetch(`https://api.telegram.org/bot${env.TELEGRAM_BOT_TOKEN}/sendMessage`, {

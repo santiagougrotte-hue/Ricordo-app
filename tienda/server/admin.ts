@@ -4,6 +4,7 @@ import type { Query } from './db';
 import type { MediaStore } from './media';
 import { allow, clearCookie, ipHash, json, readCookie, sameText, sessionCookie, signSession, verifySession } from './http';
 import { mapProduct, mapSettings, mapZone, PRODUCTS_SQL } from './catalog';
+import { sendWhatsapp } from './createOrder';
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 type Row = Record<string, any>;
@@ -12,9 +13,12 @@ export interface AdminEnv {
   ADMIN_EMAIL?: string;
   ADMIN_PASSWORD?: string;
   SESSION_SECRET?: string;
+  CALLMEBOT_APIKEY?: string;
+  WHATSAPP_NOTIFY_PHONE?: string;
 }
 export interface AdminDeps {
   query: Query;
+  fetch?: typeof fetch;
   media: () => Promise<MediaStore>;
   ip?: string;
   secure: boolean;
@@ -226,6 +230,12 @@ export async function handleAdmin(req: Request, path: string, env: AdminEnv, dep
   if (seg[0] === 'zones' && UUID.test(seg[1] ?? '') && method === 'DELETE') {
     await q(`delete from shipping_zones where id = $1`, [seg[1]]);
     return json({ ok: true });
+  }
+
+  // ── Prueba del aviso de WhatsApp ──
+  if (path === 'notify-test' && method === 'POST') {
+    const r = await sendWhatsapp('Ricordo: prueba de aviso. Así te van a llegar los pedidos nuevos.', env, { query: q, fetch: deps.fetch ?? fetch });
+    return r.ok ? json(r) : bad(r.message, 400);
   }
 
   // ── Ajustes ──

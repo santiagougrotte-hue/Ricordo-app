@@ -8,6 +8,8 @@ export function SettingsPage() {
   const settings = useLoad(() => adminApi.getSettings());
   const [s, setS] = useState<AdminSettings | null>(null);
   const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
+  const [waMsg, setWaMsg] = useState<{ ok: boolean; text: string } | null>(null);
+  const [waBusy, setWaBusy] = useState(false);
   useEffect(() => { if (settings.data) setS(settings.data); }, [settings.data]);
 
   if (settings.error) return <p className="field-error">{settings.error}</p>;
@@ -35,7 +37,15 @@ export function SettingsPage() {
           <div className="field">
             <label className="field-label" htmlFor="s-wa">WhatsApp de Ricordo</label>
             <input id="s-wa" className="input" inputMode="tel" placeholder="5491155551234" value={s.whatsappPhone} onChange={(e) => set('whatsappPhone', e.target.value)} />
-            <p className="small muted">Con 54 9 y sin 0 ni 15. Lo usan los botones de WhatsApp de la tienda.</p>
+            <p className="small muted">Con 54 9 y sin 0 ni 15. Lo usan los botones de WhatsApp de la tienda y ahí te llega cada pedido nuevo.</p>
+            <button type="button" className="btn btn-line" disabled={waBusy} onClick={async () => {
+              setWaBusy(true);
+              setWaMsg(null);
+              try { setWaMsg({ ok: true, text: await adminApi.testWhatsapp() }); } catch (e) { setWaMsg({ ok: false, text: e instanceof Error ? e.message : 'No se pudo enviar' }); }
+              setWaBusy(false);
+            }}>{waBusy ? 'Enviando…' : 'Probar aviso de WhatsApp'}</button>
+            <p className="small muted">Guardá el número antes de probar.</p>
+            {waMsg && <p className={waMsg.ok ? 'field-hint' : 'field-error'} role="status">{waMsg.text}</p>}
           </div>
           <div className="field">
             <label className="field-label" htmlFor="s-mail">Email de aviso de pedidos</label>

@@ -9,7 +9,8 @@ export default async (req: Request, context: Context) => {
     return await handleAdmin(
       req,
       path,
-      { ADMIN_EMAIL: Netlify.env.get('ADMIN_EMAIL'), ADMIN_PASSWORD: Netlify.env.get('ADMIN_PASSWORD'), SESSION_SECRET: Netlify.env.get('SESSION_SECRET') },
+      { ADMIN_EMAIL: Netlify.env.get('ADMIN_EMAIL'), ADMIN_PASSWORD: Netlify.env.get('ADMIN_PASSWORD'), SESSION_SECRET: Netlify.env.get('SESSION_SECRET'),
+        CALLMEBOT_APIKEY: Netlify.env.get('CALLMEBOT_APIKEY'), WHATSAPP_NOTIFY_PHONE: Netlify.env.get('WHATSAPP_NOTIFY_PHONE') },
       { query, media: netlifyMedia, ip: context.ip, secure: new URL(req.url).protocol === 'https:' },
     );
   } catch (e) {

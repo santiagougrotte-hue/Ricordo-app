@@ -152,6 +152,9 @@ export function createAdminDemo(): AdminApi {
     async getSettings() {
       return readDb().settings;
     },
+    async testWhatsapp() {
+      return 'En modo demo no se mandan mensajes. En la tienda publicada te llega un WhatsApp de prueba.';
+    },
     async saveSettings(s) {
       const db = readDb();
       db.settings = s;

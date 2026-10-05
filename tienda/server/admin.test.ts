@@ -159,6 +159,19 @@ describe.skipIf(!TEST_DB)('API del panel contra Netlify Database (Postgres real)
     expect(JSON.stringify(cat)).not.toContain('yo@ricordo.com');
   });
 
+  it('probar aviso de WhatsApp: sin clave avisa qué falta; con clave manda al número de la tienda', async () => {
+    expect((await call('POST', 'notify-test')).data.error).toContain('CALLMEBOT_APIKEY');
+    const urls: string[] = [];
+    const fakeFetch = (async (u: string | URL | Request) => { urls.push(String(u)); return new Response('Message queued. You will receive it in a few seconds.'); }) as typeof fetch;
+    const req = new Request('https://x/api/admin/notify-test', { method: 'POST', headers: { 'x-ricordo': 'panel', cookie } });
+    const res = await handleAdmin(req, 'notify-test', { ...ENV, CALLMEBOT_APIKEY: 'k1' }, { query: q, media: async () => media, ip: '10.9.9.9', secure: true, fetch: fakeFetch });
+    expect(res.status).toBe(200);
+    expect(new URL(urls[0]).searchParams.get('phone')).toBe('+5491155551234'); // el WhatsApp que se guardó en Ajustes
+    const bad = (async () => new Response('APIKey is invalid')) as unknown as typeof fetch;
+    const res2 = await handleAdmin(new Request('https://x/api/admin/notify-test', { method: 'POST', headers: { 'x-ricordo': 'panel', cookie } }), 'notify-test', { ...ENV, CALLMEBOT_APIKEY: 'k1' }, { query: q, media: async () => media, ip: '10.9.9.8', secure: true, fetch: bad });
+    expect(res2.status).toBe(400);
+  });
+
   it('logout borra la cookie', async () => {
     const r = await call('POST', 'logout');
     expect(r.setCookie).toMatch(/Max-Age=0/);
