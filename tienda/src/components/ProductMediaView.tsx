@@ -71,8 +71,14 @@ function CyclingPhotos({ photos, ratio, sizes, eager, name, position }: { photos
   const ref = useRef<HTMLDivElement>(null);
   const t = useTick();
   const [seen, setSeen] = useState(false);
+  // Fotos ya descargadas: solo se pasa a una foto cuando está lista (nunca un recuadro vacío en conexiones lentas).
+  const [loaded, setLoaded] = useState<Set<number>>(() => new Set());
+  const [shown, setShown] = useState(position % photos.length);
   const start = position % photos.length;
-  const i = (start + (seen ? t : 0)) % photos.length;
+  const want = (start + (seen ? t : 0)) % photos.length;
+  useEffect(() => {
+    if (loaded.has(want)) setShown(want);
+  }, [want, loaded]);
   useEffect(() => {
     const el = ref.current;
     if (!el || !canAnimate()) return;
@@ -82,19 +88,23 @@ function CyclingPhotos({ photos, ratio, sizes, eager, name, position }: { photos
     io.observe(el);
     return () => io.disconnect();
   }, []);
+  const markLoaded = (n: number) => setLoaded((prev) => (prev.has(n) ? prev : new Set(prev).add(n)));
   return (
     <div ref={ref} className="ph has-photo ph-cycle" style={{ aspectRatio: ratio, '--chain': position } as React.CSSProperties}>
       {photos.map((m, n) => (n === start || seen) && (
         <img
           key={m.id}
-          className={n === i ? 'on' : undefined}
+          className={n === shown ? 'on' : undefined}
           src={m.url}
           srcSet={srcSet(m.url)}
           sizes={sizes}
-          alt={n === i ? m.alt || name : ''}
-          loading={n === start && eager ? 'eager' : 'lazy'}
+          alt={n === shown ? m.alt || name : ''}
+          // La de arranque respeta lazy; las siguientes se piden ya (la tarjeta está por verse).
+          loading={n === start ? (eager ? 'eager' : 'lazy') : 'eager'}
           decoding="async"
           fetchPriority={n === start && eager ? 'high' : 'auto'}
+          ref={(img) => { if (img?.complete && img.naturalWidth > 0) markLoaded(n); }}
+          onLoad={() => markLoaded(n)}
         />
       ))}
     </div>

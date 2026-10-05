@@ -178,7 +178,7 @@ describe.skipIf(!TEST_DB)('migraciones: gusto real cargado', () => {
     expect(c.products[1].media.map((m) => m.url)).toEqual(['/fotos/osobuco-mano.webp', '/fotos/osobuco-ingredientes.webp']);
     expect(c.products[0]).toMatchObject({ price: 11500, unitsPerBox: 12, pastaType: 'sorrentinos', featured: true });
     expect(c.products[0].filling).toBe('Cabutia asada, ajo asado, muzzarella, sardo y almendras picadas');
-    expect(c.products[0].media.map((m) => m.url)).toEqual(['/fotos/cabutia-mano.webp', '/fotos/cabutia-corte.webp', '/fotos/cabutia-masa-nero.webp', '/fotos/amasado-masa-nero.mp4', '/fotos/cabutia-ingredientes.webp']);
+    expect(c.products[0].media.map((m) => m.url)).toEqual(['/fotos/cabutia-mano.webp', '/fotos/cabutia-corte.webp', '/fotos/amasado-masa-nero.mp4', '/fotos/cabutia-ingredientes.webp']);
     const [{ n }] = await q<{ n: number }>('select count(*)::int n from products where not active');
     expect(n).toBe(5);
     expect(c.products.every((p) => p.countsAsBox)).toBe(true);

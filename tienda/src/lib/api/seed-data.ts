@@ -1,7 +1,6 @@
 import type { Product, ShippingZone, StoreSettings } from '../types';
 import fotoMano from '../../assets/fotos/cabutia-mano.webp';
 import fotoCorte from '../../assets/fotos/cabutia-corte.webp';
-import fotoNero from '../../assets/fotos/cabutia-masa-nero.webp';
 import videoAmasado from '../../assets/fotos/amasado-masa-nero.mp4';
 import fotoCabutiaIng from '../../assets/fotos/cabutia-ingredientes.webp';
 import fotoOsobuco from '../../assets/fotos/osobuco-mano.webp';
@@ -30,7 +29,6 @@ export const CABUTIA: Product = {
   media: [
     { id: 'm-cab-1', url: fotoMano, kind: 'photo', alt: 'Sorrentino de masa nero en la mano, sobre la bandeja enharinada', isCover: true, sortOrder: 0 },
     { id: 'm-cab-2', url: fotoCorte, kind: 'photo', alt: 'Sorrentino de cabutia cortado al medio, con el relleno naranja a la vista', isCover: false, sortOrder: 1 },
-    { id: 'm-cab-3', url: fotoNero, kind: 'photo', alt: 'Sorrentinos de masa nero enharinados sobre la mesada', isCover: false, sortOrder: 2 },
     { id: 'm-cab-4', url: videoAmasado, kind: 'video', alt: 'Amasando la masa nero y sorrentinos recién hechos', isCover: false, sortOrder: 3 },
     { id: 'm-cab-5', url: fotoCabutiaIng, kind: 'photo', alt: 'Lo que lleva: cabutia asada, sardo, almendras, muzzarella y ajo asado, alrededor de un sorrentino de masa nero', isCover: false, sortOrder: 4 },
   ],
