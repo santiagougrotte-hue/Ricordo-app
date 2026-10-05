@@ -109,7 +109,8 @@ export interface AdminApi {
   listLocalities(): Promise<(Locality & { active: boolean })[]>;
   saveLocality(l: Omit<Locality, 'id'> & { id: number | null; active: boolean }): Promise<void>;
   deleteLocality(id: number): Promise<void>;
-  getShippingConfig(): Promise<ShippingConfig>;
+  /** enabled = hay clave de OpenRouteService en el servidor. */
+  getShippingConfig(): Promise<ShippingConfig & { enabled?: boolean }>;
   saveShippingConfig(c: ShippingConfig): Promise<void>;
 
   getSettings(): Promise<AdminSettings>;

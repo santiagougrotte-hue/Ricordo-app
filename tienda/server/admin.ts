@@ -16,6 +16,7 @@ export interface AdminEnv {
   SESSION_SECRET?: string;
   CALLMEBOT_APIKEY?: string;
   WHATSAPP_NOTIFY_PHONE?: string;
+  ORS_API_KEY?: string;
 }
 export interface AdminDeps {
   query: Query;
@@ -267,7 +268,7 @@ export async function handleAdmin(req: Request, path: string, env: AdminEnv, dep
   // ── Cálculo del envío por distancia (privado) ──
   if (path === 'shipping-config' && method === 'GET') {
     const [c] = await q(`select * from shipping_config limit 1`);
-    return json({ config: mapShippingConfig(c) });
+    return json({ config: mapShippingConfig(c), enabled: !!env.ORS_API_KEY });
   }
   if (path === 'shipping-config' && method === 'POST') {
     const c = await body();

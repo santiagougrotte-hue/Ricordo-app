@@ -186,8 +186,14 @@ function Localities({ zones, list, onSaved }: { zones: Zone[]; list: Loc[]; onSa
 function DistanceConfig() {
   const cfg = useLoad(() => adminApi.getShippingConfig());
   const [c, setC] = useState<ShippingConfig | null>(null);
+  // enabled viene aparte (no se guarda)
   const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
-  useEffect(() => { if (cfg.data) setC(cfg.data); }, [cfg.data]);
+  useEffect(() => {
+    if (!cfg.data) return;
+    const { enabled: _e, ...rest } = cfg.data;
+    void _e;
+    setC(rest);
+  }, [cfg.data]);
   if (cfg.error) return <p className="field-error">{cfg.error}</p>;
   if (!c) return null;
   const n = (k: keyof ShippingConfig) => (e: React.ChangeEvent<HTMLInputElement>) => setC({ ...c, [k]: Number(e.target.value) });
@@ -195,6 +201,13 @@ function DistanceConfig() {
   return (
     <section className="adm-section adm-form" aria-labelledby="h-dist">
       <h2 id="h-dist" className="d-m">Cálculo por distancia</h2>
+      {cfg.data?.enabled !== undefined && (
+        <p className={cfg.data.enabled ? 'adm-flex' : 'adm-callout'} role="status">
+          {cfg.data.enabled
+            ? 'Activo: el envío se calcula con la dirección de cada cliente.'
+            : 'Inactivo: falta la clave de OpenRouteService (ORS_API_KEY) en Netlify. Mientras tanto se cobra el costo fijo de cada zona.'}
+        </p>
+      )}
       <p className="small muted">
         Envío = (km ida y vuelta × consumo × nafta + peaje de la zona) ÷ pedidos promedio por ruta, redondeado hacia arriba.
         Las direcciones se ubican con OpenRouteService (variable <code>ORS_API_KEY</code> en Netlify); sin esa clave se usa el costo fijo de cada zona.

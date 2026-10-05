@@ -161,7 +161,9 @@ describe.skipIf(!TEST_DB)('API del panel contra Netlify Database (Postgres real)
   });
 
   it('cálculo por distancia: privado, se valida y al cambiar el origen se borra la caché', async () => {
-    const cfg = (await call('GET', 'shipping-config')).data.config;
+    const got = (await call('GET', 'shipping-config')).data;
+    expect(got.enabled).toBe(false); // sin ORS_API_KEY
+    const cfg = got.config;
     expect(cfg).toEqual({ originLat: -34.765, originLng: -58.212, fuelPrice: 1700, consumption100km: 7, rounding: 500 });
     expect((await call('POST', 'shipping-config', { body: { ...cfg, originLat: 40.4 } })).status).toBe(400); // fuera de Argentina
     await q(`insert into geo_cache (key, lat, lng, km_round_trip, origin) values ('x|1', -34.7, -58.2, 10, '-34.765,-58.212')`);
