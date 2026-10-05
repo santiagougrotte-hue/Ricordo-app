@@ -133,7 +133,7 @@ export function Home() {
               <span className="tape" aria-hidden="true" />
               <AutoVideo src={videoAmasado} poster={posterAmasado} label="Amasando la masa nero a mano y sorrentinos recién cerrados" />
             </figure>
-            <p className="hand cook-note" data-reveal="hand">del freezer a la olla: agua hirviendo con sal, 4 a 6 minutos y listo.</p>
+            <p className="hand cook-note" data-reveal="hand">del freezer a la olla: agua hirviendo con sal, 4 minutos y listo.</p>
           </div>
         </div>
       </section>

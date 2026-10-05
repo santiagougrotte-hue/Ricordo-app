@@ -38,7 +38,6 @@ export function ProductPage() {
   const low = !soldOut && product.stock <= product.lowStockThreshold;
   const others = products.filter((p) => p.id !== product.id && p.stock > 0).slice(0, 2);
   const zone = lookup.status === 'found' ? lookup.zone : null;
-  const perUnit = Math.round(product.price / product.unitsPerBox);
 
   return (
     <>
@@ -60,19 +59,14 @@ export function ProductPage() {
           <div className="tag-box pdp-tag" data-reveal="paper">
             <div className="tag-in">
               <div className="tag-row"><span className="label">Unidades</span><span className="fill">12 por caja</span></div>
-              <div className="tag-row"><span className="label">Cada una</span><span className="fill">{money(perUnit)}</span></div>
-              <div className="tag-row"><span className="label">Sin TACC</span><span className="fill">masa sin gluten</span></div>
               <div className="tag-row"><span className="label">Conservación</span><span className="fill">freezer, hasta 3 meses</span></div>
-              <div className="tag-row"><span className="label">Cocción</span><span className="fill">del freezer a la olla, 4 a 6 min</span></div>
-              <div className="tag-row">
-                <span className="label">Stock</span>
-                <span className="fill">{soldOut ? 'agotado' : low ? `quedan ${product.stock}` : 'hay'}</span>
-              </div>
+              <div className="tag-row"><span className="label">Cocción</span><span className="fill">del freezer a la olla, 4 minutos</span></div>
             </div>
           </div>
 
           <div className="pdp-buy">
             <p className="price price-l">{money(product.price)}<small> la caja</small></p>
+            {low && <p className="hand low">¡quedan {product.stock}!</p>}
             {soldOut ? (
               <p className="block-reason">Este gusto se agotó. Volvemos a tenerlo en la próxima tanda.</p>
             ) : left === 0 ? (
