@@ -97,7 +97,7 @@ export function ProductPage() {
                 <Icon name="moto" size={20} />
                 <span>
                   {zone ? <>{deliverySentence(zone, settings)}.</> : <>Pedí hasta el {cutoffWithDate(settings)} y te llega ese fin de semana, el día de tu zona. </>}
-                  {!zone && <button type="button" className="link" onClick={openPostal}>Poné tu código postal</button>}
+                  {!zone && <button type="button" className="link" onClick={openPostal}>Elegí tu localidad</button>}
                 </span>
               </p>
             )}

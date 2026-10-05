@@ -1,6 +1,7 @@
 import type { StoreApi } from './types';
 import type { OrderInput, OrderResult, ShortItem } from '../types';
 import { cartTotals, discountAmount, discountPct, findZone } from '../shipping';
+import { normalizePostalCode } from '../postal';
 import { deliveryDateFor, deliveryLabel } from '../delivery';
 import { readDb, writeDb } from './demoDb';
 import type { AdminOrder } from './adminTypes';
@@ -8,6 +9,10 @@ import type { AdminOrder } from './adminTypes';
 // Modo demo: corre sin servidor. Replica las reglas de create_order() para poder probar el flujo.
 const wait = (ms: number) => new Promise((r) => setTimeout(r, ms));
 const activeZones = () => readDb().zones.filter((z) => z.active !== false);
+const activeLocalities = () => {
+  const zones = new Set(activeZones().map((z) => z.id));
+  return readDb().localities.filter((l) => l.active !== false && zones.has(l.zoneId));
+};
 export const PICKUP_LABEL = 'Retiro en Berazategui · día y horario a coordinar por WhatsApp';
 
 export function createDemoApi(): StoreApi {
@@ -19,6 +24,13 @@ export function createDemoApi(): StoreApi {
     },
     async listZones() {
       return activeZones();
+    },
+    async listLocalities() {
+      return activeLocalities();
+    },
+    async quoteShipping() {
+      // En la demo no se consulta OpenRouteService: se usa el costo fijo de la zona.
+      return { distanceCost: null, km: null };
     },
     async getSettings() {
       const { notifyEmail: _private, ...pub } = readDb().settings;
@@ -48,14 +60,15 @@ export function createDemoApi(): StoreApi {
       const { subtotal, boxes } = totals;
       const s = db.settings;
       let shipping = 0, pct = 0, discount = 0;
-      let zoneName: string | null = null, cp: string | null = null, locality: string | null = null;
+      let zoneName: string | null = null, cp: string | null = null, locality: string | null = null, partido: string | null = null;
       let date: string | null = null, label = PICKUP_LABEL;
       if (input.deliveryMethod === 'delivery') {
-        const look = findZone(activeZones(), input.postalCode);
-        if (look.status !== 'found') return { ok: false, error: { code: 'RC002', message: 'No llegamos a ese código postal' } };
+        const look = findZone(activeZones(), activeLocalities(), input.localityId);
+        if (look.status !== 'found') return { ok: false, error: { code: 'RC002', message: 'Todavía no llegamos a esa localidad' } };
         if (input.address.trim().length < 5) return { ok: false, error: { code: 'RC004', message: 'Falta la dirección' } };
+        const pc = normalizePostalCode(input.postalCode);
+        if (!pc) return { ok: false, error: { code: 'RC004', message: 'Revisá el código postal' } };
         const z = look.zone;
-        if (z.localities.length && !z.localities.includes(input.locality.trim())) return { ok: false, error: { code: 'RC004', message: 'Elegí tu localidad' } };
         if (boxes < z.minBoxes) {
           return { ok: false, error: { code: 'RC003', message: 'No alcanza el mínimo de cajas', minBoxes: z.minBoxes, missing: z.minBoxes - boxes, pickupMinBoxes: s.pickupEnabled ? s.pickupMinBoxes : null } };
         }
@@ -64,8 +77,9 @@ export function createDemoApi(): StoreApi {
         pct = discountPct(z, boxes);
         discount = discountAmount(totals.boxSubtotal, pct);
         zoneName = z.name;
-        cp = look.postalCode;
-        locality = input.locality.trim() || null;
+        cp = pc;
+        locality = look.locality.name;
+        partido = look.locality.partido;
         date = deliveryDateFor(z.deliveryWeekday, s);
         label = deliveryLabel(date, z.deliveryMoment);
       } else {
@@ -89,6 +103,7 @@ export function createDemoApi(): StoreApi {
         postalCode: cp,
         zoneName,
         locality,
+        partido,
         boxCount: boxes,
         deliveryDate: date,
         deliveredOn: null,
@@ -113,7 +128,7 @@ export function createDemoApi(): StoreApi {
         ok: true,
         receipt: {
           orderId: order.id, number, subtotal, discount, discountPct: pct, shippingCost: shipping, total: order.total, boxCount: boxes,
-          deliveryMethod: order.deliveryMethod, deliveryDate: date, windowLabel: label, paymentMethod: input.paymentMethod, customerName: order.customerName,
+          deliveryMethod: order.deliveryMethod, deliveryDate: date, windowLabel: label, locality, paymentMethod: input.paymentMethod, customerName: order.customerName,
           lines: order.items.map((i) => ({ name: i.productName, quantity: i.quantity, unitPrice: i.unitPrice })),
         },
       };

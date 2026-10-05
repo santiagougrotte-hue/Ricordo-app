@@ -1,15 +1,17 @@
 // "Base de datos" del modo demo, en localStorage. La comparten la tienda y el panel,
 // así lo que se compra en la tienda aparece en el panel y lo que se edita en el panel se ve en la tienda.
-import type { Product, ShippingZone, StoreSettings } from '../types';
-import { EXAMPLE_IDS, SEED_PRODUCTS, SEED_SETTINGS, SEED_ZONES } from './seed-data';
-import type { AdminOrder, AdminSettings } from './adminTypes';
+import type { Locality, Product, ShippingZone, StoreSettings } from '../types';
+import { EXAMPLE_IDS, SEED_LOCALITIES, SEED_PRODUCTS, SEED_SETTINGS, SEED_ZONES } from './seed-data';
+import type { AdminOrder, AdminSettings, ShippingConfig } from './adminTypes';
 
-const KEY = 'ricordo-demo-db-v9';
+const KEY = 'ricordo-demo-db-v10';
 const CHANNEL = 'ricordo-demo';
 
 export interface DemoDb {
   products: Product[];
   zones: (ShippingZone & { active?: boolean })[];
+  localities: (Locality & { active?: boolean })[];
+  shippingConfig: ShippingConfig;
   settings: AdminSettings;
   orders: AdminOrder[];
   nextNumber: number;
@@ -21,6 +23,8 @@ function fresh(): DemoDb {
   return {
     products: structuredClone(SEED_PRODUCTS),
     zones: structuredClone(SEED_ZONES),
+    localities: structuredClone(SEED_LOCALITIES),
+    shippingConfig: { originLat: -34.765, originLng: -58.212, fuelPrice: 1700, consumption100km: 7, rounding: 500 },
     settings: { ...(SEED_SETTINGS as StoreSettings), notifyEmail: '' },
     orders: [],
     nextNumber: 1001,

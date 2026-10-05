@@ -1,6 +1,6 @@
 // Datos públicos de la tienda: solo lo activo. Nunca el email de aviso ni pedidos.
 import type { Query } from './db';
-import type { Product, ShippingZone, StoreSettings } from '../src/lib/types';
+import type { Locality, Product, ShippingZone, StoreSettings } from '../src/lib/types';
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 type Row = Record<string, any>;
@@ -20,10 +20,11 @@ export const PRODUCTS_SQL = `
   select p.*, coalesce((select json_agg(m order by m.sort_order) from product_media m where m.product_id = p.id), '[]') as media
   from products p`;
 
-export async function getCatalog(q: Query): Promise<{ products: Product[]; zones: ShippingZone[]; settings: StoreSettings }> {
-  const [products, zones, [s]] = await Promise.all([
+export async function getCatalog(q: Query, opts: { distanceEnabled?: boolean } = {}): Promise<{ products: Product[]; zones: ShippingZone[]; localities: Locality[]; settings: StoreSettings }> {
+  const [products, zones, localities, [s]] = await Promise.all([
     q(`${PRODUCTS_SQL} where p.active order by p.sort_order`),
     q(`select * from shipping_zones where active order by sort_order`),
+    q(`select l.* from localities l join shipping_zones z on z.id = l.zone_id where l.active and z.active order by l.sort_order, l.name`),
     q(`select * from store_public_settings()`),
   ]);
   return {
@@ -33,17 +34,21 @@ export async function getCatalog(q: Query): Promise<{ products: Product[]; zones
       return p;
     }),
     zones: zones.map(mapZone),
-    settings: mapSettings(s as Row),
+    localities: localities.map(mapLocality),
+    settings: { ...mapSettings(s as Row), distanceEnabled: !!opts.distanceEnabled },
   };
 }
 
 export function mapZone(z: Row): ShippingZone {
   return {
-    id: z.id, name: z.name, postalCodes: z.postal_codes, localities: z.localities, shippingCost: z.shipping_cost,
+    id: z.id, name: z.name, shippingCost: z.shipping_cost,
     minBoxes: z.min_boxes, freeFromBoxes: z.free_from_boxes, deliveryWeekday: z.delivery_weekday, deliveryMoment: z.delivery_moment,
     discountPerBox: z.discount_per_box, discountMax: z.discount_max,
+    distancePricing: z.distance_pricing, tollRoundTrip: z.toll_round_trip, avgOrdersPerRoute: Number(z.avg_orders_per_route),
   };
 }
+
+export const mapLocality = (l: Row): Locality => ({ id: l.id, name: l.name, partido: l.partido, zoneId: l.zone_id });
 
 export function mapSettings(s: Row): StoreSettings {
   return {

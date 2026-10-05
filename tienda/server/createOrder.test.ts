@@ -11,13 +11,13 @@ const P3 = '00000000-0000-4000-8000-000000000003'; // cappellacci $10200, stock 
 const P5 = '00000000-0000-4000-8000-000000000005'; // verdura y pollo $8900, stock 20
 const BASE = {
   customerName: 'Ana Pérez', customerPhone: '11 5555-1234', customerEmail: 'ana@x.com', deliveryMethod: 'delivery',
-  address: 'Calle 14 1234', postalCode: 'B1884ABC', locality: 'Ranelagh', notes: '', paymentMethod: 'transfer', flexibleDelivery: true,
+  address: 'Calle 14 1234', postalCode: 'B1884ABC', localityId: 0 /* se completa con la base: Berazategui */, notes: '', paymentMethod: 'transfer', flexibleDelivery: true,
   items: [{ productId: P1, quantity: 3 }], turnstileToken: 'ok',
 };
 
 describe('parseInput (forma del pedido)', () => {
   it('acepta un pedido válido y deja el teléfono solo con números', () => {
-    const r = parseInput(BASE);
+    const r = parseInput({ ...BASE, localityId: 5 });
     expect(typeof r === 'object' && r.customerPhone).toBe('1155551234');
   });
   it.each([
@@ -27,6 +27,7 @@ describe('parseInput (forma del pedido)', () => {
     [{ ...BASE, paymentMethod: 'mercadopago' }, 'Método de pago no disponible'],
     [{ ...BASE, customerPhone: '123' }, 'Teléfono inválido'],
     [{ ...BASE, customerPhone: '' }, 'Teléfono inválido'],
+    [{ ...BASE, localityId: undefined }, 'Elegí tu localidad'],
     [null, 'Pedido vacío'],
   ])('rechaza %#', (body, msg) => expect(parseInput(body)).toBe(msg));
 });
@@ -56,11 +57,14 @@ describe.skipIf(!TEST_DB)('handleCreateOrder contra Netlify Database (Postgres r
   const run = (body: unknown, ip = `10.0.0.${++ipN}`) => handleCreateOrder(body, env, { query: q, fetch: fakeFetch, ip });
   const stock = async () => Object.fromEntries((await q<{ id: string; stock: number }>('select id, stock from products')).map((r) => [r.id, r.stock]));
   const count = async () => (await q<{ n: number }>('select count(*)::int n from orders'))[0].n;
+  const locs: Record<string, number> = {};
 
   beforeAll(async () => {
     ({ q, pool } = await freshDb());
     await q(`update store_settings set notify_email = 'duenio@ricordo.com'`);
     await q(`update products set counts_as_box = false where id = $1`, [P3]);
+    for (const r of await q<{ id: number; name: string }>(`select id, name from localities`)) locs[r.name] = r.id;
+    BASE.localityId = locs['Berazategui'];
   });
   beforeEach(() => {
     sent.length = 0;
@@ -71,15 +75,15 @@ describe.skipIf(!TEST_DB)('handleCreateOrder contra Netlify Database (Postgres r
     const before = await stock();
     const r = await run({ ...BASE, total: 1, price: 1 });
     expect(r.status).toBe(200);
-    expect(r.body).toMatchObject({ ok: true, receipt: { number: 1001, subtotal: 29400, discount: 0, shippingCost: 1500, total: 30900, boxCount: 3 } });
+    expect(r.body).toMatchObject({ ok: true, receipt: { number: 1001, subtotal: 29400, discount: 0, shippingCost: 2500, total: 31900, boxCount: 3, locality: 'Berazategui' } });
     expect((await stock())[P1]).toBe(before[P1] - 3);
-    const [o] = await q(`select customer_phone, zone_name, locality, box_count, flexible_delivery, delivery_date::text d, delivery_window_label from orders where number = 1001`);
+    const [o] = await q(`select customer_phone, zone_name, locality, partido, postal_code, box_count, flexible_delivery, distance_priced, delivery_date::text d, delivery_window_label from orders where number = 1001`);
     const [{ d: expected }] = await q<{ d: string }>(`select delivery_date_for(6::smallint)::text d`);
-    expect(o).toMatchObject({ customer_phone: '1155551234', zone_name: 'Berazategui', locality: 'Ranelagh', box_count: 3, flexible_delivery: true, d: expected });
+    expect(o).toMatchObject({ customer_phone: '1155551234', zone_name: 'Berazategui', locality: 'Berazategui', partido: 'Berazategui', postal_code: '1884', box_count: 3, flexible_delivery: true, distance_priced: false, d: expected });
     expect(o.delivery_window_label).toMatch(/^Sábado \d+\/\d+ a la mañana$/);
     expect(expected).toBe(deliveryDateFor(6, { cutoffWeekday: 4, cutoffTime: '13:00' }));
     const mail = sent.find((s) => s.url.includes('resend'))!;
-    expect(mail.body).toMatchObject({ to: ['duenio@ricordo.com'], subject: 'Nuevo pedido #1001 — $30.900' });
+    expect(mail.body).toMatchObject({ to: ['duenio@ricordo.com'], subject: 'Nuevo pedido #1001 — $31.900' });
     expect(String(mail.body.text)).toContain('3 cajas');
     expect(String(mail.body.text)).toContain('acepta que se lo lleven otro día');
     expect(sent.some((s) => s.url.includes('telegram'))).toBe(true);
@@ -90,8 +94,8 @@ describe.skipIf(!TEST_DB)('handleCreateOrder contra Netlify Database (Postgres r
     const text = wa.searchParams.get('text')!;
     expect(text).toContain('Nuevo pedido #1001');
     expect(text).toContain('3 × Jamón, muzza y nuez');
-    expect(text).toContain('CP B1884ABC');
-    expect(text).toContain('Total: $30.900');
+    expect(text).toContain('Calle 14 1234, Berazategui · CP B1884ABC');
+    expect(text).toContain('Total: $31.900');
     expect(text).toMatch(/Entrega: Sábado \d+\/\d+ a la mañana \(acepta otro día\)/);
   });
 
@@ -105,26 +109,25 @@ describe.skipIf(!TEST_DB)('handleCreateOrder contra Netlify Database (Postgres r
   });
 
   it('CABA con 8 cajas: envío gratis y 10 % de descuento (tope)', async () => {
-    const r = await run({ ...BASE, postalCode: 'C1425ABC', locality: 'Ciudad de Buenos Aires', items: [{ productId: P5, quantity: 8 }] });
+    const r = await run({ ...BASE, postalCode: 'C1425ABC', localityId: locs['CABA'], items: [{ productId: P5, quantity: 8 }] });
     expect(r.body).toMatchObject({ ok: true, receipt: { subtotal: 71200, discountPct: 10, discount: 7120, shippingCost: 0, total: 64080, boxCount: 8 } });
   });
 
   it('CABA con 7 cajas: 5 %; las salsas no suman cajas ni entran en el descuento', async () => {
-    const r = await run({ ...BASE, postalCode: '1000', locality: 'Ciudad de Buenos Aires', items: [{ productId: P1, quantity: 7 }, { productId: P3, quantity: 1 }] });
+    const r = await run({ ...BASE, postalCode: '1000', localityId: locs['CABA'], items: [{ productId: P1, quantity: 7 }, { productId: P3, quantity: 1 }] });
     // cajas 7 × 9800 = 68600 → 5 % = 3430; la "salsa" (10200) se cobra entera
     expect(r.body).toMatchObject({ ok: true, receipt: { subtotal: 78800, discountPct: 5, discount: 3430, shippingCost: 0, total: 75370, boxCount: 7 } });
   });
 
   it.each([
     ['sin stock', { items: [{ productId: P2, quantity: 3 }] }, 'RC001'],
-    ['CP fuera de zona', { postalCode: '1888' }, 'RC002'],
+    ['localidad que no existe', { localityId: 9999 }, 'RC002'],
     ['bajo el mínimo de cajas', { items: [{ productId: P1, quantity: 2 }] }, 'RC003'],
     ['las salsas no completan el mínimo', { items: [{ productId: P1, quantity: 2 }, { productId: P3, quantity: 4 }] }, 'RC003'],
-    ['localidad que no es de la zona', { locality: 'Quilmes' }, 'RC004'],
-    ['sin localidad', { locality: '' }, 'RC004'],
+    ['CP inválido', { postalCode: 'hola' }, 'RC004'],
   ])('%s → 409 %s y no se crea nada', async (_n, patch, code) => {
     const before = await count();
-    const r = await run({ ...BASE, ...patch });
+    const r = await run({ ...BASE, localityId: locs['Berazategui'], ...patch });
     expect(r).toMatchObject({ status: 409, body: { ok: false, error: { code } } });
     expect(await count()).toBe(before);
   });
@@ -165,9 +168,42 @@ describe.skipIf(!TEST_DB)('handleCreateOrder contra Netlify Database (Postgres r
 
   it('límite: el 7.º pedido en una hora desde la misma IP → 429', async () => {
     const statuses: number[] = [];
-    for (let i = 0; i < 7; i++) statuses.push((await run({ ...BASE, postalCode: '1888' }, '7.7.7.7')).status);
+    for (let i = 0; i < 7; i++) statuses.push((await run({ ...BASE, localityId: 9999 }, '7.7.7.7')).status);
     expect(statuses.slice(0, 6).every((s) => s === 409)).toBe(true);
     expect(statuses[6]).toBe(429);
+  });
+
+  it('envío por distancia (OpenRouteService simulado): nafta + peaje, redondeo y caché', async () => {
+    let orsCalls = 0;
+    const ors = vi.fn(async (url: string | URL | Request, init?: RequestInit) => {
+      const u = String(url);
+      if (u.includes('openrouteservice.org/geocode')) {
+        orsCalls++;
+        return Response.json({ features: [{ geometry: { coordinates: [-58.2, -34.75] }, properties: { confidence: 0.9 } }] });
+      }
+      if (u.includes('openrouteservice.org/v2/directions')) { orsCalls++; return Response.json({ routes: [{ summary: { distance: 7500 } }] }); }
+      return fakeFetch(url, init);
+    }) as unknown as typeof fetch;
+    await q(`update products set stock = 20 where id = $1`, [P5]);
+    const body = { ...BASE, localityId: locs['Berazategui'], address: 'Calle 148 2345', items: [{ productId: P5, quantity: 3 }] };
+    // 7,5 km → 15 km ida y vuelta × 7 l/100 km × $1700 = $1785 → redondeado de a $500 = $2000
+    const r = await handleCreateOrder(body, { ...env, ORS_API_KEY: 'ors' }, { query: q, fetch: ors, ip: '5.5.5.1' });
+    expect(r.body).toMatchObject({ ok: true, receipt: { shippingCost: 2000, total: 26700 + 2000 } });
+    const [o] = await q(`select distance_priced, km_round_trip::float km, lat::float lat from orders order by number desc limit 1`);
+    expect(o).toEqual({ distance_priced: true, km: 15, lat: -34.75 });
+    // Peaje y pedidos por ruta de la zona: (1785 + 1000) / 2 = 1392,5 → $1500. Misma dirección: sale de la caché (no consulta ORS).
+    await q(`update shipping_zones set toll_round_trip = 1000, avg_orders_per_route = 2 where name = 'Berazategui'`);
+    const calls = orsCalls;
+    const r2 = await handleCreateOrder(body, { ...env, ORS_API_KEY: 'ors' }, { query: q, fetch: ors, ip: '5.5.5.2' });
+    expect(r2.body).toMatchObject({ ok: true, receipt: { shippingCost: 1500 } });
+    expect(orsCalls).toBe(calls);
+    // Dirección que ORS no ubica con precisión → costo fijo de la zona
+    const vague = vi.fn(async (url: string | URL | Request, init?: RequestInit) =>
+      String(url).includes('geocode') ? Response.json({ features: [{ geometry: { coordinates: [0, 0] }, properties: { confidence: 0.3 } }] }) : fakeFetch(url, init)) as unknown as typeof fetch;
+    const r3 = await handleCreateOrder({ ...body, address: 'por ahí 1' }, { ...env, ORS_API_KEY: 'ors' }, { query: q, fetch: vague, ip: '5.5.5.3' });
+    expect(r3.body).toMatchObject({ ok: true, receipt: { shippingCost: 2500 } });
+    await q(`update shipping_zones set toll_round_trip = 0, avg_orders_per_route = 1 where name = 'Berazategui'`);
+    await q(`update products set stock = 20 where id = $1`, [P5]);
   });
 
   it('la fecha de entrega de la base coincide con la de la tienda (cierre jueves 13 h y otro cierre)', async () => {

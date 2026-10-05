@@ -1,4 +1,4 @@
-import type { Product, ShippingZone, StoreSettings } from '../types';
+import type { Locality, Product, ShippingZone, StoreSettings } from '../types';
 import fotoMano from '../../assets/fotos/cabutia-mano.webp';
 import fotoCorte from '../../assets/fotos/cabutia-corte.webp';
 import videoAmasado from '../../assets/fotos/amasado-masa-nero.mp4';
@@ -192,15 +192,25 @@ export const SEED_PRODUCTS: Product[] = [
   },
 ];
 
-// Igual que netlify/database/migrations/*_zonas-cajas-entrega. Costos de envío de ejemplo.
-const ZONE_DEFAULTS = { discountPerBox: 5, discountMax: 10 };
+// Igual que netlify/database/migrations/*_localidades-distancia. Costos fijos de ejemplo.
+const Z = { discountPerBox: 5, discountMax: 10, tollRoundTrip: 0, avgOrdersPerRoute: 1 };
 export const SEED_ZONES: ShippingZone[] = [
-  { id: 'zone-hudson', name: 'Hudson / Plátanos', postalCodes: ['1885', '1880'], localities: ['Hudson', 'Plátanos'], shippingCost: 2000, minBoxes: 3, freeFromBoxes: 4, deliveryWeekday: 5, deliveryMoment: 'a la noche', ...ZONE_DEFAULTS },
-  { id: 'zone-bera', name: 'Berazategui', postalCodes: ['1884', '1886'], localities: ['Berazategui', 'Ranelagh', 'Sourigues', 'Villa España'], shippingCost: 1500, minBoxes: 3, freeFromBoxes: 4, deliveryWeekday: 6, deliveryMoment: 'a la mañana', ...ZONE_DEFAULTS },
-  { id: 'zone-quilmes', name: 'Quilmes / Bernal / Wilde', postalCodes: ['1878', '1876', '1875'], localities: ['Quilmes', 'Bernal', 'Wilde'], shippingCost: 3000, minBoxes: 4, freeFromBoxes: 6, deliveryWeekday: 6, deliveryMoment: 'a la mañana', ...ZONE_DEFAULTS },
-  { id: 'zone-caba', name: 'CABA', postalCodes: ['1000-1499'], localities: ['Ciudad de Buenos Aires'], shippingCost: 5000, minBoxes: 5, freeFromBoxes: 6, deliveryWeekday: 6, deliveryMoment: 'a la mañana', ...ZONE_DEFAULTS },
-  { id: 'zone-laplata', name: 'La Plata / City Bell / Gonnet', postalCodes: ['1900', '1896', '1897'], localities: ['La Plata', 'City Bell', 'Gonnet'], shippingCost: 5000, minBoxes: 5, freeFromBoxes: 8, deliveryWeekday: 0, deliveryMoment: '', ...ZONE_DEFAULTS },
+  { id: 'zone-0', name: 'Hudson / Plátanos / Ranelagh', shippingCost: 1500, minBoxes: 3, freeFromBoxes: 4, deliveryWeekday: 5, deliveryMoment: 'a la noche', distancePricing: true, ...Z },
+  { id: 'zone-1', name: 'Berazategui', shippingCost: 2500, minBoxes: 3, freeFromBoxes: 4, deliveryWeekday: 6, deliveryMoment: 'a la mañana', distancePricing: true, ...Z },
+  { id: 'zone-2', name: 'Quilmes / Bernal / Wilde', shippingCost: 4500, minBoxes: 4, freeFromBoxes: 6, deliveryWeekday: 6, deliveryMoment: 'a la mañana', distancePricing: true, ...Z },
+  { id: 'zone-3', name: 'CABA', shippingCost: 5000, minBoxes: 5, freeFromBoxes: 6, deliveryWeekday: 6, deliveryMoment: 'a la mañana', distancePricing: false, ...Z },
+  { id: 'zone-4', name: 'City Bell / La Plata', shippingCost: 6000, minBoxes: 5, freeFromBoxes: 8, deliveryWeekday: 0, deliveryMoment: '', distancePricing: true, ...Z },
 ];
+
+const LOC: [string, string, string][] = [
+  ['Guillermo E. Hudson', 'Berazategui', 'zone-0'], ['Plátanos', 'Berazategui', 'zone-0'], ['Ranelagh', 'Berazategui', 'zone-0'], ['Juan María Gutiérrez', 'Berazategui', 'zone-0'],
+  ['Berazategui', 'Berazategui', 'zone-1'], ['Berazategui Oeste', 'Berazategui', 'zone-1'], ['Villa España', 'Berazategui', 'zone-1'], ['Sourigues', 'Berazategui', 'zone-1'],
+  ['Quilmes', 'Quilmes', 'zone-2'], ['Quilmes Oeste', 'Quilmes', 'zone-2'], ['Bernal', 'Quilmes', 'zone-2'], ['Bernal Oeste', 'Quilmes', 'zone-2'],
+  ['Don Bosco', 'Quilmes', 'zone-2'], ['Ezpeleta', 'Quilmes', 'zone-2'], ['Ezpeleta Oeste', 'Quilmes', 'zone-2'], ['Wilde', 'Avellaneda', 'zone-2'],
+  ['CABA', 'CABA', 'zone-3'],
+  ['City Bell', 'La Plata', 'zone-4'], ['Gonnet', 'La Plata', 'zone-4'], ['La Plata', 'La Plata', 'zone-4'],
+];
+export const SEED_LOCALITIES: Locality[] = LOC.map(([name, partido, zoneId], i) => ({ id: i + 1, name, partido, zoneId }));
 
 export const SEED_SETTINGS: StoreSettings = {
   pickupEnabled: true,

@@ -145,10 +145,35 @@ export function createAdminDemo(): AdminApi {
     },
     async deleteZone(id) {
       const db = readDb();
+      if (db.localities.some((l) => l.zoneId === id)) throw new Error('Primero pasá sus localidades a otra zona (o desactivá la zona).');
       db.zones = db.zones.filter((z) => z.id !== id);
       writeDb(db, { type: 'catalog' });
     },
 
+    async listLocalities() {
+      return readDb().localities.map((l) => ({ ...l, active: l.active !== false }));
+    },
+    async saveLocality(l) {
+      const db = readDb();
+      if (db.localities.some((x) => x.id !== l.id && x.name === l.name && x.partido === l.partido)) throw new Error(`Ya existe ${l.name} (${l.partido}).`);
+      const id = l.id ?? Math.max(0, ...db.localities.map((x) => x.id)) + 1;
+      const loc = { ...l, id };
+      db.localities = db.localities.some((x) => x.id === id) ? db.localities.map((x) => (x.id === id ? loc : x)) : [...db.localities, loc];
+      writeDb(db, { type: 'catalog' });
+    },
+    async deleteLocality(id) {
+      const db = readDb();
+      db.localities = db.localities.filter((l) => l.id !== id);
+      writeDb(db, { type: 'catalog' });
+    },
+    async getShippingConfig() {
+      return readDb().shippingConfig;
+    },
+    async saveShippingConfig(c) {
+      const db = readDb();
+      db.shippingConfig = c;
+      writeDb(db, { type: 'catalog' });
+    },
     async getSettings() {
       return readDb().settings;
     },

@@ -30,9 +30,11 @@ export function WhatsAppButton() {
   const href = whatsappLink(settings.whatsappPhone, text);
   if (!href) return null;
   return (
+    <aside aria-label="Consultas por WhatsApp">
     <a className="wa-fab" href={href} target="_blank" rel="noopener noreferrer" aria-label="¿Dudas? Escribinos por WhatsApp (se abre en una pestaña nueva)">
       <span className="wa-fab-logo"><WhatsAppLogo size={26} /></span>
       <span className="wa-fab-text"><b>¿Dudas?</b> Escribinos</span>
     </a>
+    </aside>
   );
 }

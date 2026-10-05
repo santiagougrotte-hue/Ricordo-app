@@ -1,26 +1,25 @@
 import { describe, expect, it } from 'vitest';
-import { cartMessage, cartTotals, discountPct, findZone, quote, zoneHasCp } from './shipping';
-import { SEED_SETTINGS, SEED_ZONES } from './api/seed-data';
+import { byPartido, cartMessage, cartTotals, discountPct, findZone as find, OTHER_LOCALITY, quote, type LocalityChoice } from './shipping';
+import { SEED_LOCALITIES, SEED_SETTINGS, SEED_ZONES } from './api/seed-data';
+
+const loc = (name: string) => SEED_LOCALITIES.find((l) => l.name === name)!.id;
+const findZone = (_z: unknown, c: LocalityChoice) => find(SEED_ZONES, SEED_LOCALITIES, c);
 
 const caja = (price = 10000, countsAsBox = true) => ({ price, countsAsBox });
 const cart = (boxes: number, extras = 0) =>
   cartTotals([{ product: caja(), quantity: boxes }, ...(extras ? [{ product: caja(3000, false), quantity: extras }] : [])]);
 
-describe('findZone', () => {
-  it('encuentra la zona por CPA', () => {
-    const r = findZone(SEED_ZONES, 'B1884ABC');
-    expect(r.status === 'found' && r.zone.name).toBe('Berazategui');
+describe('zona por localidad', () => {
+  it('la localidad define la zona (Ranelagh es viernes a la noche, aunque comparta CP con Berazategui)', () => {
+    const r = findZone(0, loc('Ranelagh'));
+    expect(r.status === 'found' && [r.zone.name, r.locality.partido]).toEqual(['Hudson / Plátanos / Ranelagh', 'Berazategui']);
+    const w = findZone(0, loc('Wilde'));
+    expect(w.status === 'found' && [w.zone.name, w.locality.partido]).toEqual(['Quilmes / Bernal / Wilde', 'Avellaneda']);
   });
-  it('rangos: CABA 1000 a 1499', () => {
-    expect(zoneHasCp(['1000-1499'], '1000')).toBe(true);
-    expect(zoneHasCp(['1000-1499'], '1499')).toBe(true);
-    expect(zoneHasCp(['1000-1499'], '1500')).toBe(false);
-    const r = findZone(SEED_ZONES, 'C1425ABC');
-    expect(r.status === 'found' && r.zone.name).toBe('CABA');
-  });
-  it('CP sin zona → not_found (nunca error)', () => expect(findZone(SEED_ZONES, '1888')).toEqual({ status: 'not_found', postalCode: '1888' }));
-  it('basura → invalid', () => expect(findZone(SEED_ZONES, 'hola').status).toBe('invalid'));
-  it('vacío → empty', () => expect(findZone(SEED_ZONES, '  ').status).toBe('empty'));
+  it('"Otra localidad" → not_found (WhatsApp o retiro), nunca error', () => expect(findZone(0, OTHER_LOCALITY)).toEqual({ status: 'not_found' }));
+  it('sin elegir → empty', () => expect(findZone(0, null).status).toBe('empty'));
+  it('localidad que ya no existe → not_found', () => expect(findZone(0, 999).status).toBe('not_found'));
+  it('agrupa por partido para el selector', () => expect(byPartido(SEED_LOCALITIES).map(([p]) => p)).toEqual(['Berazategui', 'Quilmes', 'Avellaneda', 'CABA', 'La Plata']));
 });
 
 describe('qué cuenta como caja', () => {
@@ -41,11 +40,11 @@ describe('descuento por volumen', () => {
 });
 
 describe('quote', () => {
-  const bera = findZone(SEED_ZONES, '1884'); // mínimo 3, gratis desde 4, envío 1500
-  const caba = findZone(SEED_ZONES, '1425');
+  const bera = findZone(0, loc('Berazategui')); // mínimo 3, gratis desde 4, envío fijo 2500 (por distancia)
+  const caba = findZone(0, loc('CABA')); // costo fijo 5000, gratis desde 6
   it('bajo el mínimo: no deja avanzar, dice cuántas cajas faltan y sugiere retiro', () => {
     const q = quote('delivery', bera, cart(2), SEED_SETTINGS);
-    expect(q).toMatchObject({ missingForMin: 1, shippingCost: 1500, canCheckout: false, suggestPickup: true });
+    expect(q).toMatchObject({ missingForMin: 1, shippingCost: 2500, shippingEstimated: false, canCheckout: false, suggestPickup: true });
     expect(cartMessage(q, bera)).toBe('Sumá 1 caja más para hacer tu pedido con envío a Berazategui. O retiralo en Berazategui: con 2 cajas ya podés.');
   });
   it('con 1 caja no alcanza ni para retiro: no sugiere retiro', () => {
@@ -56,7 +55,7 @@ describe('quote', () => {
   });
   it('en el mínimo: cobra envío y dice cuánto falta para gratis', () => {
     const q = quote('delivery', bera, cart(3), SEED_SETTINGS);
-    expect(q).toMatchObject({ shippingCost: 1500, missingForFree: 1, canCheckout: true, total: 31500 });
+    expect(q).toMatchObject({ shippingCost: 2500, missingForFree: 1, canCheckout: true, total: 32500 });
     expect(cartMessage(q, bera)).toBe('Sumá 1 caja más y el envío a Berazategui es gratis.');
   });
   it('CABA con 7 cajas: envío gratis y 5 % sobre las cajas', () => {
@@ -72,14 +71,24 @@ describe('quote', () => {
     expect(q).toMatchObject({ discountPct: 10, discount: 9000, missingForNextDiscount: null });
     expect(cartMessage(q, caba)).toBe('¡Envío gratis y 10% de descuento!');
   });
-  it('sin CP no se puede cotizar', () => expect(quote('delivery', findZone(SEED_ZONES, ''), cart(5), SEED_SETTINGS)).toMatchObject({ shippingCost: null, canCheckout: false }));
-  it('CP sin zona: mensaje de WhatsApp', () => {
-    const nf = findZone(SEED_ZONES, '1888');
+  it('envío por distancia: usa el costo calculado; si todavía no hay, el fijo como aproximado', () => {
+    const on = { ...SEED_SETTINGS, distanceEnabled: true };
+    expect(quote('delivery', bera, cart(3), on, 1800)).toMatchObject({ shippingCost: 1800, shippingEstimated: false, total: 31800 });
+    expect(quote('delivery', bera, cart(3), on, null)).toMatchObject({ shippingCost: 2500, shippingEstimated: true });
+    expect(quote('delivery', bera, cart(4), on, 1800)).toMatchObject({ shippingCost: 0, shippingEstimated: false });
+    // CABA no calcula por distancia: siempre el fijo
+    expect(quote('delivery', caba, cart(5), on, 1800)).toMatchObject({ shippingCost: 5000, shippingEstimated: false });
+    // Sin clave de OpenRouteService: el fijo es el definitivo
+    expect(quote('delivery', bera, cart(3), SEED_SETTINGS, 1800)).toMatchObject({ shippingCost: 2500, shippingEstimated: false });
+  });
+  it('sin localidad no se puede cotizar', () => expect(quote('delivery', findZone(0, null), cart(5), SEED_SETTINGS)).toMatchObject({ shippingCost: null, canCheckout: false }));
+  it('"Otra localidad": mensaje de WhatsApp', () => {
+    const nf = findZone(0, OTHER_LOCALITY);
     expect(cartMessage(quote('delivery', nf, cart(5), SEED_SETTINGS), nf)).toBe('Todavía no llegamos a tu zona, escribinos por WhatsApp.');
   });
   it('retiro: mínimo 2 cajas, sin envío ni zona, sin descuento', () => {
-    expect(quote('pickup', findZone(SEED_ZONES, '1888'), cart(1), SEED_SETTINGS)).toMatchObject({ missingForMin: 1, canCheckout: false });
-    expect(quote('pickup', findZone(SEED_ZONES, ''), cart(9), SEED_SETTINGS)).toMatchObject({ shippingCost: 0, discount: 0, canCheckout: true, total: 90000 });
+    expect(quote('pickup', findZone(0, OTHER_LOCALITY), cart(1), SEED_SETTINGS)).toMatchObject({ missingForMin: 1, canCheckout: false });
+    expect(quote('pickup', findZone(0, null), cart(9), SEED_SETTINGS)).toMatchObject({ shippingCost: 0, discount: 0, canCheckout: true, total: 90000 });
   });
-  it('carrito vacío nunca habilita', () => expect(quote('pickup', findZone(SEED_ZONES, ''), cart(0), { ...SEED_SETTINGS, pickupMinBoxes: 0 }).canCheckout).toBe(false));
+  it('carrito vacío nunca habilita', () => expect(quote('pickup', findZone(0, null), cart(0), { ...SEED_SETTINGS, pickupMinBoxes: 0 }).canCheckout).toBe(false));
 });

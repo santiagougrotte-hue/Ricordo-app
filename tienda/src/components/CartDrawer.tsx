@@ -7,21 +7,19 @@ import { Sheet } from './Sheet';
 import { Qty } from './Qty';
 import { Ruler } from './Ruler';
 import { Icon } from './Icon';
-import { PostalForm } from './PostalForm';
+import { LocalityForm } from './LocalityForm';
 import { MethodToggle } from './MethodToggle';
 import { ProductCover } from './ProductMediaView';
 
 export function CartDrawer() {
   const s = useStore();
-  const { items, subtotal, totals, quote: q, method, setMethod, lookup, locality, cartOpen, closeCart, setQuantity } = s;
+  const { items, subtotal, totals, quote: q, method, setMethod, lookup, cartOpen, closeCart, setQuantity, setLocalityChoice } = s;
   const navigate = useNavigate();
   const empty = items.length === 0;
   const msg = q ? cartMessage(q, lookup) : '';
   // CP sin zona: el formulario de CP ya muestra el aviso con el botón de WhatsApp.
   const notFound = method === 'delivery' && lookup.status === 'not_found';
   const zone = method === 'delivery' && lookup.status === 'found' ? lookup.zone : null;
-  // El CP se queda a la vista hasta que el cliente confirma su localidad.
-  const needsLocality = !!zone && zone.localities.length > 1 && !zone.localities.includes(locality);
 
   const footer = empty ? null : (
     <>
@@ -30,10 +28,11 @@ export function CartDrawer() {
         {q && q.discount > 0 && <div className="discount"><dt>Descuento {q.discountPct}%</dt><dd>−{money(q.discount)}</dd></div>}
         <div>
           <dt>{method === 'pickup' ? 'Retiro en Berazategui' : zone ? `Envío a ${zone.name}` : 'Envío'}</dt>
-          <dd>{!q || q.shippingCost === null ? '—' : q.shippingCost === 0 ? 'Gratis' : money(q.shippingCost)}</dd>
+          <dd>{!q || q.shippingCost === null ? '—' : q.shippingCost === 0 ? 'Gratis' : `${q.shippingEstimated ? 'aprox. ' : ''}${money(q.shippingCost)}`}</dd>
         </div>
         <div className="grand"><dt>Total</dt><dd>{!q || q.total === null ? '—' : money(q.total)}</dd></div>
       </dl>
+      {q?.shippingEstimated && <p className="small muted">El envío se ajusta según la distancia a tu dirección; lo ves exacto al completar el pedido.</p>}
       <button
         type="button"
         className="btn btn-ink btn-wide"
@@ -60,11 +59,11 @@ export function CartDrawer() {
       ) : (
         <>
           <MethodToggle />
-          {method === 'delivery' && (lookup.status !== 'found' || needsLocality) && <PostalForm compact />}
-          {zone && !needsLocality && (
+          {method === 'delivery' && lookup.status !== 'found' && <LocalityForm compact />}
+          {zone && lookup.status === 'found' && (
             <p className="cart-zone small">
-              <Icon name="moto" size={20} /> Envío a {locality || zone.name} ({lookup.status === 'found' && lookup.postalCode}) ·{' '}
-              <button type="button" className="link" onClick={() => s.setPostalCode('')}>cambiar</button>
+              <Icon name="moto" size={20} /> Envío a {lookup.locality.name} ({zone.name}) ·{' '}
+              <button type="button" className="link" onClick={() => setLocalityChoice(null)}>cambiar</button>
             </p>
           )}
 

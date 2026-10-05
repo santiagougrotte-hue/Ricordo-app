@@ -7,6 +7,7 @@ import { query } from './db';
 import { getCatalog } from './catalog';
 import { handleCreateOrder } from './createOrder';
 import { handleAdmin } from './admin';
+import { handleQuoteShipping } from './quote';
 import { memoryMedia } from './media';
 
 const DIST = new URL('../dist/', import.meta.url).pathname;
@@ -25,9 +26,12 @@ createServer(async (nreq, nres) => {
   const req = new Request(url, { method: nreq.method, headers: nreq.headers as Record<string, string>, body: ['GET', 'HEAD'].includes(nreq.method!) ? undefined : Buffer.concat(chunks) });
   let res: Response;
   try {
-    if (url.pathname === '/api/catalog') res = Response.json(await getCatalog(query));
+    if (url.pathname === '/api/catalog') res = Response.json(await getCatalog(query, { distanceEnabled: !!process.env.ORS_API_KEY }));
     else if (url.pathname === '/api/create-order') {
       const r = await handleCreateOrder(await req.json().catch(() => null), { TURNSTILE_SECRET_KEY: 'test', SESSION_SECRET: process.env.SESSION_SECRET }, { query, fetch: fakeFetch, ip: String(Math.random()) });
+      res = Response.json(r.body, { status: r.status });
+    } else if (url.pathname === '/api/quote-shipping') {
+      const r = await handleQuoteShipping(await req.json().catch(() => null), { ORS_API_KEY: process.env.ORS_API_KEY }, { query, fetch, ip: '127.0.0.1' });
       res = Response.json(r.body, { status: r.status });
     } else if (url.pathname.startsWith('/api/admin/')) {
       res = await handleAdmin(req, url.pathname.replace(/^\/api\/admin\/?/, ''), process.env, { query, media: async () => media, ip: '127.0.0.1', secure: false });

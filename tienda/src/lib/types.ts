@@ -34,10 +34,7 @@ export interface Product {
 export interface ShippingZone {
   id: string;
   name: string;
-  /** CP sueltos ('1884') o rangos ('1000-1499'). */
-  postalCodes: string[];
-  /** Localidades para que el cliente confirme la suya. */
-  localities: string[];
+  /** Costo fijo: se usa en zonas sin cálculo por distancia o si no se pudo ubicar la dirección. */
   shippingCost: number;
   minBoxes: number;
   freeFromBoxes: number | null;
@@ -46,6 +43,24 @@ export interface ShippingZone {
   /** % de descuento por cada caja que pasa el umbral de envío gratis. */
   discountPerBox: number;
   discountMax: number;
+  /** El envío sale del cálculo por distancia (nafta + peaje). */
+  distancePricing: boolean;
+  tollRoundTrip: number;
+  avgOrdersPerRoute: number;
+}
+
+/** La zona la define la localidad (los CP se superponen entre localidades). */
+export interface Locality {
+  id: number;
+  name: string;
+  partido: string;
+  zoneId: string;
+}
+
+/** Envío calculado por distancia para una dirección (null = no se pudo, se usa el costo fijo). */
+export interface DistanceQuote {
+  distanceCost: number | null;
+  km: number | null;
 }
 
 export interface StoreSettings {
@@ -57,6 +72,8 @@ export interface StoreSettings {
   /** Cierre semanal de pedidos (hora de Buenos Aires). */
   cutoffWeekday: number;
   cutoffTime: string; // HH:MM
+  /** El servidor puede calcular el envío por distancia (hay clave de OpenRouteService). */
+  distanceEnabled?: boolean;
 }
 
 export interface CartLine {
@@ -71,7 +88,7 @@ export interface OrderInput {
   deliveryMethod: DeliveryMethod;
   address: string;
   postalCode: string;
-  locality: string;
+  localityId: number | null;
   notes: string;
   paymentMethod: PaymentMethod;
   /** "Si pasamos por tu zona antes, ¿te lo podemos llevar otro día?" */
@@ -92,6 +109,7 @@ export interface OrderReceipt {
   deliveryMethod: DeliveryMethod;
   deliveryDate: string | null;
   windowLabel: string;
+  locality?: string | null;
   paymentMethod: PaymentMethod;
   lines: { name: string; quantity: number; unitPrice: number }[];
   customerName: string;

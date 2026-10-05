@@ -1,5 +1,5 @@
-import type { AdminApi, AdminOrder, AdminProduct, AdminSettings } from './adminTypes';
-import type { ShippingZone } from '../types';
+import type { AdminApi, AdminOrder, AdminProduct, AdminSettings, ShippingConfig } from './adminTypes';
+import type { Locality, ShippingZone } from '../types';
 
 // Panel contra /api/admin/* (cookie de sesión HttpOnly). Los pedidos nuevos llegan consultando cambios cada pocos segundos.
 async function api<T>(path: string, init: RequestInit = {}): Promise<T> {
@@ -110,6 +110,21 @@ export function createAdminNetlify(): AdminApi {
     },
     async deleteZone(id) {
       await api(`zones/${id}`, { method: 'DELETE' });
+    },
+    async listLocalities() {
+      return (await api<{ localities: (Locality & { active: boolean })[] }>('localities')).localities;
+    },
+    async saveLocality(l) {
+      await post('localities', l);
+    },
+    async deleteLocality(id) {
+      await api(`localities/${id}`, { method: 'DELETE' });
+    },
+    async getShippingConfig() {
+      return (await api<{ config: ShippingConfig }>('shipping-config')).config;
+    },
+    async saveShippingConfig(c) {
+      await post('shipping-config', c);
     },
     async getSettings() {
       return (await api<{ settings: AdminSettings }>('settings')).settings;

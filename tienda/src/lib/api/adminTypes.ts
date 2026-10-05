@@ -1,4 +1,4 @@
-import type { DeliveryMethod, PastaType, PaymentMethod, Product, ShippingZone, StoreSettings } from '../types';
+import type { DeliveryMethod, Locality, PastaType, PaymentMethod, Product, ShippingZone, StoreSettings } from '../types';
 
 export type OrderStatus = 'new' | 'confirmed' | 'preparing' | 'shipped' | 'delivered' | 'cancelled';
 export type PaymentStatus = 'pending' | 'paid' | 'refunded';
@@ -27,6 +27,13 @@ export interface AdminOrder {
   postalCode: string | null;
   zoneName: string | null;
   locality: string | null;
+  partido?: string | null;
+  /** Km ida y vuelta (cálculo por distancia) y ubicación de la dirección. */
+  km?: number | null;
+  lat?: number | null;
+  lng?: number | null;
+  /** El envío salió del cálculo por distancia. */
+  distancePriced?: boolean;
   /** Cajas que cuentan (sin salsas ni complementos). */
   boxCount: number;
   /** Fecha prevista (null en retiros: se coordina por WhatsApp). */
@@ -99,8 +106,23 @@ export interface AdminApi {
   saveZone(z: Omit<ShippingZone, 'id'> & { active: boolean; id: string | null }): Promise<void>;
   deleteZone(id: string): Promise<void>;
 
+  listLocalities(): Promise<(Locality & { active: boolean })[]>;
+  saveLocality(l: Omit<Locality, 'id'> & { id: number | null; active: boolean }): Promise<void>;
+  deleteLocality(id: number): Promise<void>;
+  getShippingConfig(): Promise<ShippingConfig>;
+  saveShippingConfig(c: ShippingConfig): Promise<void>;
+
   getSettings(): Promise<AdminSettings>;
   saveSettings(s: AdminSettings): Promise<void>;
   /** Manda un WhatsApp de prueba al número de avisos. Devuelve el resultado legible. */
   testWhatsapp(): Promise<string>;
+}
+
+/** Cálculo del envío por distancia (privado: tiene la ubicación de origen). */
+export interface ShippingConfig {
+  originLat: number;
+  originLng: number;
+  fuelPrice: number;
+  consumption100km: number;
+  rounding: number;
 }

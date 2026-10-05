@@ -23,7 +23,7 @@ describe('cierre de pedidos', () => {
 
 describe('textos', () => {
   const bera = SEED_ZONES.find((z) => z.name === 'Berazategui')!;
-  const lp = SEED_ZONES.find((z) => z.name.startsWith('La Plata'))!;
+  const lp = SEED_ZONES.find((z) => z.name === 'City Bell / La Plata')!;
   it('frase del checkout', () => {
     expect(deliverySentence(bera, S, ar('2026-10-05T10:00'))).toBe('Pedí hasta el jueves 13 h y te llega el sábado 10 a la mañana');
     expect(deliverySentence(lp, S, ar('2026-10-05T10:00'))).toBe('Pedí hasta el jueves 13 h y te llega el domingo 11');

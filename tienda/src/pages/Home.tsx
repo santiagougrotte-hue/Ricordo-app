@@ -6,7 +6,7 @@ import { HeroLogo } from '../components/HeroLogo';
 import { Icon } from '../components/Icon';
 import { Stamp } from '../components/Stamp';
 import { ProductLabel, ProductSkeleton } from '../components/ProductLabel';
-import { PostalForm } from '../components/PostalForm';
+import { LocalityForm } from '../components/LocalityForm';
 import { srcSet, InViewVideo as AutoVideo } from '../components/ProductMediaView';
 import { PASTA_LABEL } from '../lib/types';
 import fotoIngredientes from '../assets/fotos/cabutia-ingredientes.webp';
@@ -19,7 +19,7 @@ const cajas = (n: number) => `${n} ${n === 1 ? 'caja' : 'cajas'}`;
 
 export function Home() {
   useDocumentTitle('Ricordo · Pasta rellena sin TACC en Berazategui');
-  const { products, zones, settings, status, lookup, openPostal } = useStore();
+  const { products, zones, localities, settings, status, lookup, openPostal } = useStore();
   const myZone = lookup.status === 'found' ? lookup.zone : null;
   const featured = products.filter((p) => p.featured).slice(0, 4);
   // Con un solo gusto destacado, la sección se arma como nota editorial alrededor de ese gusto.
@@ -53,7 +53,7 @@ export function Home() {
               </div>
               <div className="tag-row">
                 <span className="label">Zona</span>
-                {myZone ? <span className="fill">{myZone.name}</span> : <button type="button" className="fill fill-btn" onClick={openPostal}>poné tu CP</button>}
+                {myZone ? <span className="fill">{myZone.name}</span> : <button type="button" className="fill fill-btn" onClick={openPostal}>elegí tu localidad</button>}
               </div>
             </div>
             <Stamp className="hero-stamp" ring="SIN TACC · HECHO A MANO · BERAZATEGUI ·" lines={['R']} />
@@ -144,7 +144,7 @@ export function Home() {
           <div>
             <h2 id="h-zonas" className="d-xl">¿Llegamos a tu casa?</h2>
             <p className="lede">
-              Repartimos en Berazategui, alrededores, CABA y La Plata. Poné tu código postal y te decimos cuándo llega y cuánto sale.
+              Repartimos en Berazategui, alrededores, CABA y La Plata. Elegí tu localidad y te decimos cuándo llega y cuánto sale.
               {settings && <> Tomamos pedidos hasta el {cutoffShort(settings)}.</>}
             </p>
             <p className="small muted">Cuantas más cajas, mejor: pasando el envío gratis, cada caja de más suma descuento.</p>
@@ -152,10 +152,10 @@ export function Home() {
         </header>
         <div className="zones">
           <div className="zones-form" data-reveal="rise">
-            <PostalForm />
+            <LocalityForm />
           </div>
           <table className="zone-table" data-reveal="rise">
-            <caption className="sr">Zonas de entrega: día, mínimo de cajas y costo de envío</caption>
+            <caption className="sr">Zonas de entrega: localidades, día, mínimo de cajas y costo de envío</caption>
             <thead>
               <tr><th scope="col">Zona</th><th scope="col">Llega</th><th scope="col">Mínimo</th><th scope="col">Envío</th></tr>
             </thead>
@@ -164,12 +164,12 @@ export function Home() {
                 <tr key={z.id}>
                   <th scope="row">
                     {z.name}
-                    <span className="cps">CP {z.postalCodes.map((c) => c.replace('-', ' a ')).join(', ')}</span>
+                    <span className="cps">{localities.filter((l) => l.zoneId === z.id).map((l) => l.name).join(', ')}</span>
                   </th>
                   <td>{zoneDay(z)}</td>
                   <td>{cajas(z.minBoxes)}</td>
                   <td>
-                    {money(z.shippingCost)}
+                    {z.distancePricing && settings?.distanceEnabled ? 'aprox. ' : ''}{money(z.shippingCost)}
                     {z.freeFromBoxes !== null && <span className="cps">gratis desde {cajas(z.freeFromBoxes)}</span>}
                   </td>
                 </tr>

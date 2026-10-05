@@ -7,10 +7,10 @@ import { normalizePostalCode } from '../lib/postal';
 import { cartMessage, findZone, quote } from '../lib/shipping';
 import { deliverySentence } from '../lib/delivery';
 import { whatsappLink } from '../lib/whatsapp';
-import type { OrderError, PaymentMethod } from '../lib/types';
+import type { DistanceQuote, OrderError, PaymentMethod } from '../lib/types';
 import { Icon } from '../components/Icon';
 import { MethodToggle } from '../components/MethodToggle';
-import { LocalityPicker } from '../components/PostalForm';
+import { LocalitySelect } from '../components/LocalityForm';
 import { Turnstile, type TurnstileHandle } from '../components/Turnstile';
 import { useDocumentTitle } from './useDocumentTitle';
 
@@ -19,10 +19,10 @@ const TURNSTILE_KEY = import.meta.env.VITE_TURNSTILE_SITE_KEY as string | undefi
 const NEEDS_CAPTCHA = api.mode === 'live';
 
 interface Form {
-  name: string; phone: string; email: string; address: string; postalCode: string; locality: string; notes: string;
+  name: string; phone: string; email: string; address: string; postalCode: string; notes: string;
   payment: PaymentMethod | ''; flexible: boolean;
 }
-type Errors = Partial<Record<keyof Form, string>>;
+type Errors = Partial<Record<keyof Form | 'locality', string>>;
 
 export const RECEIPT_KEY = 'ricordo-last-receipt';
 const cajas = (n: number) => `${n} ${n === 1 ? 'caja' : 'cajas'}`;
@@ -30,11 +30,10 @@ const cajas = (n: number) => `${n} ${n === 1 ? 'caja' : 'cajas'}`;
 export function Checkout() {
   useDocumentTitle('Tu pedido · Ricordo');
   const s = useStore();
-  const { items, subtotal, totals, method, setMethod, settings, zones, postalCode, setPostalCode, locality, setLocality, status, setQuantity, reload } = s;
+  const { items, subtotal, totals, method, setMethod, settings, zones, localities, localityChoice, setLocalityChoice, status, setQuantity, reload } = s;
   const navigate = useNavigate();
   const [f, setF] = useState<Form>(() => ({
-    name: '', phone: '', email: '', address: '', postalCode: normalizePostalCode(postalCode) ?? postalCode, locality,
-    notes: '', payment: '', flexible: false,
+    name: '', phone: '', email: '', address: '', postalCode: '', notes: '', payment: '', flexible: false,
   }));
   const [errors, setErrors] = useState<Errors>({});
   const [serverError, setServerError] = useState<string | null>(null);
@@ -42,12 +41,28 @@ export function Checkout() {
   const [token, setToken] = useState<string | null>(null);
   const captcha = useRef<TurnstileHandle>(null);
 
-  // El CP del checkout manda: recalcula zona, envío, descuento y fecha en vivo.
-  const lookup = useMemo(() => findZone(zones, f.postalCode), [zones, f.postalCode]);
+  // La localidad define la zona: mínimo, envío, descuento y fecha se recalculan en vivo.
+  const lookup = useMemo(() => findZone(zones, localities, localityChoice), [zones, localities, localityChoice]);
   const zone = method === 'delivery' && lookup.status === 'found' ? lookup.zone : null;
-  const q = settings ? quote(method, lookup, totals, settings) : null;
-  const localities = zone?.localities ?? [];
-  const loc = localities.length === 1 ? localities[0] : localities.includes(f.locality) ? f.locality : '';
+  const localityId = lookup.status === 'found' ? lookup.locality.id : null;
+
+  // Envío por distancia: se pide al servidor cuando hay localidad y dirección (con una pausa, mientras escribe).
+  const [dist, setDist] = useState<(DistanceQuote & { for: string }) | null>(null);
+  const [measuring, setMeasuring] = useState(false);
+  const distanceOn = !!zone?.distancePricing && settings?.distanceEnabled === true;
+  const distKey = distanceOn && localityId !== null && f.address.trim().length >= 5 ? `${localityId}|${f.address.trim()}` : null;
+  useEffect(() => {
+    if (!distKey || localityId === null) return;
+    let alive = true;
+    setMeasuring(true);
+    const t = window.setTimeout(async () => {
+      const r = await api.quoteShipping(localityId, f.address.trim());
+      if (alive) { setDist({ ...r, for: distKey }); setMeasuring(false); }
+    }, 800);
+    return () => { alive = false; clearTimeout(t); };
+  }, [distKey]); // eslint-disable-line react-hooks/exhaustive-deps
+  const distanceCost = dist && dist.for === distKey ? dist.distanceCost : null;
+  const q = settings ? quote(method, lookup, totals, settings, distanceCost) : null;
 
   // Precarga la confirmación: si no, el router muestra el checkout vacío mientras baja ese código.
   useEffect(() => {
@@ -78,8 +93,8 @@ export function Checkout() {
     if (method === 'delivery') {
       if (f.address.trim().length < 5) e.address = 'Calle, número y piso/depto si tiene.';
       if (!normalizePostalCode(f.postalCode)) e.postalCode = 'Escribí 4 números (1884) o el CP completo (B1884ABC).';
-      else if (lookup.status === 'not_found') e.postalCode = 'Todavía no llegamos a tu zona, escribinos por WhatsApp. También podés elegir retiro en Berazategui.';
-      else if (localities.length > 1 && !loc) e.locality = 'Elegí tu localidad.';
+      if (lookup.status === 'empty') e.locality = 'Elegí tu localidad.';
+      else if (lookup.status === 'not_found') e.locality = 'Todavía no llegamos a tu zona, escribinos por WhatsApp. También podés elegir retiro en Berazategui.';
     }
     if (!f.payment) e.payment = 'Elegí cómo pagás.';
     return e;
@@ -127,7 +142,7 @@ export function Checkout() {
     const delivery = method === 'delivery';
     const res = await api.createOrder({
       customerName: f.name, customerPhone: f.phone.replace(/\D/g, ''), customerEmail: f.email,
-      deliveryMethod: method, address: delivery ? f.address : '', postalCode: delivery ? f.postalCode : '', locality: delivery ? loc : '',
+      deliveryMethod: method, address: delivery ? f.address : '', postalCode: delivery ? f.postalCode : '', localityId: delivery ? localityId : null,
       notes: f.notes, paymentMethod: f.payment as PaymentMethod, flexibleDelivery: delivery && f.flexible,
       items: items.map((i) => ({ productId: i.product.id, quantity: i.quantity })),
       turnstileToken: token ?? undefined,
@@ -139,10 +154,6 @@ export function Checkout() {
       requestAnimationFrame(() => document.getElementById('server-error')?.focus());
       return;
     }
-    if (delivery) {
-      setPostalCode(f.postalCode);
-      setLocality(loc);
-    }
     try {
       sessionStorage.setItem(RECEIPT_KEY, JSON.stringify(res.receipt));
     } catch { /* sin storage */ }
@@ -152,7 +163,7 @@ export function Checkout() {
 
   const err = (k: keyof Form) => (errors[k] ? { 'aria-invalid': true, 'aria-describedby': `e-${k}` } : {});
   const wa = settings && method === 'delivery' && lookup.status === 'not_found'
-    ? whatsappLink(settings.whatsappPhone, `Hola Ricordo! Quería hacer un pedido y mi código postal es ${lookup.postalCode}.`)
+    ? whatsappLink(settings.whatsappPhone, 'Hola Ricordo! Quería hacer un pedido y mi localidad no está en la lista: ')
     : null;
   const blocked = q && !q.canCheckout && (method === 'pickup' || zone) ? cartMessage(q, lookup) : null;
 
@@ -186,29 +197,40 @@ export function Checkout() {
             <MethodToggle />
             {method === 'delivery' ? (
               <>
-                <Field id="address" label="Dirección" error={errors.address}>
-                  <input id="f-address" className="input" autoComplete="street-address" placeholder="Calle 14 1234, 2°B" value={f.address} onChange={set('address')} {...err('address')} />
-                </Field>
-                <Field id="postalCode" label="Código postal" error={errors.postalCode} hint={zone ? `Zona ${zone.name}` : undefined}>
-                  <input id="f-postalCode" className="input input-cp" autoComplete="postal-code" value={f.postalCode} onChange={set('postalCode')} {...err('postalCode')} />
-                </Field>
+                <div className="field">
+                  <label className="field-label" htmlFor="f-locality">Localidad</label>
+                  <LocalitySelect
+                    id="f-locality"
+                    localities={localities}
+                    value={localityChoice}
+                    error={errors.locality}
+                    onChange={(c) => {
+                      setLocalityChoice(c);
+                      if (errors.locality) setErrors((x) => ({ ...x, locality: undefined }));
+                    }}
+                  />
+                  {zone && !errors.locality && <p className="field-hint">Zona {zone.name}</p>}
+                  {errors.locality && <p id="f-locality-err" className="field-error">{errors.locality}</p>}
+                </div>
                 {wa && (
                   <p className="stack-row">
                     <a className="btn btn-ink" href={wa} target="_blank" rel="noopener noreferrer"><Icon name="charla" /> Escribir por WhatsApp</a>
                     {settings?.pickupEnabled && <button type="button" className="btn btn-line" onClick={() => setMethod('pickup')}><Icon name="local" /> Retiro en Berazategui</button>}
                   </p>
                 )}
-                {localities.length > 1 && (
-                  <LocalityPicker
-                    id="f-locality"
-                    localities={localities}
-                    value={loc}
-                    error={errors.locality}
-                    onChange={(l) => {
-                      setF((v) => ({ ...v, locality: l }));
-                      if (errors.locality) setErrors((x) => ({ ...x, locality: undefined }));
-                    }}
-                  />
+                <Field id="address" label="Dirección" error={errors.address}>
+                  <input id="f-address" className="input" autoComplete="street-address" placeholder="Calle 14 1234, 2°B" value={f.address} onChange={set('address')} {...err('address')} />
+                </Field>
+                <Field id="postalCode" label="Código postal" error={errors.postalCode}>
+                  <input id="f-postalCode" className="input input-cp" autoComplete="postal-code" placeholder="1884" value={f.postalCode} onChange={set('postalCode')} {...err('postalCode')} />
+                </Field>
+                {distanceOn && (
+                  <p className="small muted" aria-live="polite">
+                    {measuring ? 'Calculando el envío según la distancia…'
+                      : distanceCost !== null ? `Envío según la distancia a tu dirección${dist?.km ? ` (${dist.km} km ida y vuelta)` : ''}.`
+                      : f.address.trim().length >= 5 ? 'No pudimos ubicar la dirección con precisión: usamos el costo de la zona.'
+                      : 'Con tu dirección calculamos el envío según la distancia.'}
+                  </p>
                 )}
                 {zone && settings && (
                   <p className="co-when"><Icon name="moto" size={20} /> <span>{deliverySentence(zone, settings)}.</span></p>
@@ -256,12 +278,12 @@ export function Checkout() {
                 {q && q.discount > 0 && <div className="discount"><dt>Descuento {q.discountPct}%</dt><dd>−{money(q.discount)}</dd></div>}
                 <div>
                   <dt>{method === 'pickup' ? 'Retiro' : zone ? `Envío a ${zone.name}` : 'Envío'}</dt>
-                  <dd>{!q || q.shippingCost === null ? '—' : q.shippingCost === 0 ? 'Gratis' : money(q.shippingCost)}</dd>
+                  <dd>{!q || q.shippingCost === null ? '—' : q.shippingCost === 0 ? 'Gratis' : `${q.shippingEstimated ? 'aprox. ' : ''}${money(q.shippingCost)}`}</dd>
                 </div>
                 <div className="grand"><dt>Total</dt><dd>{!q || q.total === null ? '—' : money(q.total)}</dd></div>
               </dl>
               {method === 'delivery' && lookup.status !== 'found' && lookup.status !== 'not_found' && (
-                <p className="block-reason">Completá tu código postal para calcular el envío.</p>
+                <p className="block-reason">Elegí tu localidad para calcular el envío.</p>
               )}
               {q && method === 'delivery' && zone && q.canCheckout && <p className="small">{cartMessage(q, lookup)}</p>}
               {blocked && (

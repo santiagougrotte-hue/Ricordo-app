@@ -1,7 +1,7 @@
 import type { StoreApi } from './types';
-import type { OrderResult, Product, ShippingZone, StoreSettings } from '../types';
+import type { DistanceQuote, Locality, OrderResult, Product, ShippingZone, StoreSettings } from '../types';
 
-interface Catalog { products: Product[]; zones: ShippingZone[]; settings: StoreSettings }
+interface Catalog { products: Product[]; zones: ShippingZone[]; localities: Locality[]; settings: StoreSettings }
 
 // La tienda lee todo de las funciones de Netlify (la base nunca se expone al navegador).
 export function createNetlifyApi(): StoreApi {
@@ -27,6 +27,17 @@ export function createNetlifyApi(): StoreApi {
     },
     async getSettings() {
       return (await load()).settings;
+    },
+    async listLocalities() {
+      return (await load()).localities;
+    },
+    async quoteShipping(localityId, address) {
+      try {
+        const r = await fetch('/api/quote-shipping', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ localityId, address }) });
+        return r.ok ? ((await r.json()) as DistanceQuote) : { distanceCost: null, km: null };
+      } catch {
+        return { distanceCost: null, km: null };
+      }
     },
     async createOrder(input): Promise<OrderResult> {
       try {

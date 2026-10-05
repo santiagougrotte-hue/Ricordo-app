@@ -5,6 +5,7 @@
 import type { OrderInput, OrderReceipt, OrderResult, ShortItem } from '../src/lib/types';
 import type { Query } from './db';
 import { allow, ipHash } from './http';
+import { distanceFor } from './distance';
 
 export interface ServerEnv {
   TURNSTILE_SECRET_KEY?: string;
@@ -17,6 +18,8 @@ export interface ServerEnv {
   CALLMEBOT_APIKEY?: string;
   /** Número que recibe el aviso (54911…). Si no está, se usa el WhatsApp de la tienda (Ajustes). */
   WHATSAPP_NOTIFY_PHONE?: string;
+  /** OpenRouteService: envío por distancia. Sin clave se usa el costo fijo de cada zona. */
+  ORS_API_KEY?: string;
   SITE_URL?: string;
 }
 
@@ -48,7 +51,7 @@ export function parseInput(raw: unknown): OrderInput | string {
     deliveryMethod: b.deliveryMethod === 'pickup' ? 'pickup' : 'delivery',
     address: str('address', 200),
     postalCode: str('postalCode', 16),
-    locality: str('locality', 80),
+    localityId: Number.isInteger(b.localityId) && (b.localityId as number) > 0 ? (b.localityId as number) : null,
     notes: str('notes', 1000),
     paymentMethod: b.paymentMethod === 'cash' ? 'cash' : 'transfer',
     flexibleDelivery: b.flexibleDelivery === true,
@@ -68,6 +71,7 @@ export function parseInput(raw: unknown): OrderInput | string {
     if (!Number.isInteger(o.quantity) || (o.quantity as number) < 1 || (o.quantity as number) > 99) return 'Cantidad inválida';
     input.items.push({ productId: o.productId, quantity: o.quantity as number });
   }
+  if (input.deliveryMethod === 'delivery' && input.localityId === null) return 'Elegí tu localidad';
   return input;
 }
 
@@ -138,18 +142,23 @@ export async function handleCreateOrder(raw: unknown, env: ServerEnv, deps: Deps
     return fail(403, { ok: false, error: { code: 'CAPTCHA', message: 'No pudimos verificar que no sos un robot.' } });
   }
 
+  // Envío por distancia: lo calcula el servidor (nunca se acepta un costo que mande el navegador).
+  const dist = parsed.deliveryMethod === 'delivery' && parsed.localityId !== null
+    ? await distanceFor({ address: parsed.address, localityId: parsed.localityId }, { query: deps.query, fetch: deps.fetch, orsKey: env.ORS_API_KEY }).catch(() => null)
+    : null;
+
   let created: { order_id: string; order_number: number; total: number };
   try {
     const rows = await deps.query<{ order_id: string; order_number: string; total: number }>(
-      `select * from create_order($1, $2, $3, $4::delivery_method, $5, $6, $7, $8, $9::payment_method, $10::jsonb, $11)`,
+      `select * from create_order($1, $2, $3, $4::delivery_method, $5, $6, $7::smallint, $8, $9::payment_method, $10::jsonb, $11, $12, $13, $14, $15)`,
       [
         parsed.customerName, parsed.customerPhone, parsed.customerEmail || null, parsed.deliveryMethod,
         parsed.deliveryMethod === 'delivery' ? parsed.address : null,
         parsed.deliveryMethod === 'delivery' ? parsed.postalCode : null,
-        parsed.deliveryMethod === 'delivery' ? parsed.locality : null,
+        parsed.deliveryMethod === 'delivery' ? parsed.localityId : null,
         parsed.notes || null, parsed.paymentMethod,
         JSON.stringify(parsed.items.map((i) => ({ product_id: i.productId, quantity: i.quantity }))),
-        parsed.flexibleDelivery,
+        parsed.flexibleDelivery, dist?.cost ?? null, dist?.lat ?? null, dist?.lng ?? null, dist?.km ?? null,
       ],
     );
     created = { order_id: rows[0].order_id, order_number: Number(rows[0].order_number), total: rows[0].total };
@@ -175,11 +184,11 @@ async function loadReceipt(created: { order_id: string; order_number: number; to
     const [o] = await deps.query<{
       number: string; subtotal: number; discount: number; discount_pct: number; shipping_cost: number; total: number; box_count: number;
       delivery_method: OrderReceipt['deliveryMethod']; delivery_date: string | null;
-      delivery_window_label: string; payment_method: OrderReceipt['paymentMethod']; customer_name: string;
+      delivery_window_label: string; payment_method: OrderReceipt['paymentMethod']; customer_name: string; locality: string | null;
       items: { product_name: string; quantity: number; unit_price: number }[];
     }>(
       `select o.number, o.subtotal, o.discount, o.discount_pct, o.shipping_cost, o.total, o.box_count, o.delivery_method,
-              to_char(o.delivery_date, 'YYYY-MM-DD') as delivery_date, o.delivery_window_label, o.payment_method, o.customer_name,
+              to_char(o.delivery_date, 'YYYY-MM-DD') as delivery_date, o.delivery_window_label, o.payment_method, o.customer_name, o.locality,
               (select json_agg(json_build_object('product_name', product_name, 'quantity', quantity, 'unit_price', unit_price)) from order_items where order_id = o.id) as items
        from orders o where o.id = $1`,
       [created.order_id],
@@ -188,7 +197,7 @@ async function loadReceipt(created: { order_id: string; order_number: number; to
     return {
       orderId: created.order_id, number: Number(o.number), subtotal: o.subtotal, discount: o.discount, discountPct: o.discount_pct,
       shippingCost: o.shipping_cost, total: o.total, boxCount: o.box_count, deliveryMethod: o.delivery_method, deliveryDate: o.delivery_date,
-      windowLabel: o.delivery_window_label, paymentMethod: o.payment_method, customerName: o.customer_name,
+      windowLabel: o.delivery_window_label, paymentMethod: o.payment_method, customerName: o.customer_name, locality: o.locality,
       lines: (o.items ?? []).map((i) => ({ name: i.product_name, quantity: i.quantity, unitPrice: i.unit_price })),
     };
   } catch {
@@ -202,7 +211,7 @@ export function orderSummaryText(r: OrderReceipt, input: OrderInput): string {
   const lines = r.lines.map((l) => `• ${l.quantity} × ${l.name} — ${peso(l.quantity * l.unitPrice)}`).join('\n');
   const where = r.deliveryMethod === 'pickup'
     ? 'Retira en Berazategui'
-    : `Envío a ${input.address}, ${input.locality ? input.locality + ' ' : ''}(CP ${input.postalCode})`;
+    : `Envío a ${input.address}${r.locality ? ', ' + r.locality : ''} (CP ${input.postalCode})`;
   return [
     `Pedido #${r.number} — ${peso(r.total)} — ${r.boxCount} ${r.boxCount === 1 ? 'caja' : 'cajas'}`,
     `${r.customerName} · ${input.customerPhone}${input.customerEmail ? ' · ' + input.customerEmail : ''}`,
@@ -221,7 +230,7 @@ export function whatsappOrderText(r: OrderReceipt, input: OrderInput): string {
   const items = r.lines.map((l) => `• ${l.quantity} × ${l.name}`).join('\n');
   const where = r.deliveryMethod === 'pickup'
     ? 'Retira en Berazategui'
-    : `${input.address}${input.locality ? ', ' + input.locality : ''} · CP ${input.postalCode}`;
+    : `${input.address}${r.locality ? ', ' + r.locality : ''} · CP ${input.postalCode}`;
   return [
     `Nuevo pedido #${r.number}`,
     `${r.customerName} · ${input.customerPhone}`,

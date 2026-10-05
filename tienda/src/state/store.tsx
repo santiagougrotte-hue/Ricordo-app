@@ -1,12 +1,11 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { api } from '../lib/api';
-import type { CartLine, DeliveryMethod, Product, ShippingZone, StoreSettings } from '../lib/types';
-import { cartTotals, findZone, quote, type CartTotals, type Quote, type ZoneLookup } from '../lib/shipping';
+import type { CartLine, DeliveryMethod, Locality, Product, ShippingZone, StoreSettings } from '../lib/types';
+import { cartTotals, findZone, quote, type CartTotals, type LocalityChoice, type Quote, type ZoneLookup } from '../lib/shipping';
 
 const CART_KEY = 'ricordo-cart';
-const CP_KEY = 'ricordo-cp';
 const METHOD_KEY = 'ricordo-method';
-const LOCALITY_KEY = 'ricordo-locality';
+const LOCALITY_KEY = 'ricordo-localidad';
 
 function load<T>(storage: () => Storage, key: string, fallback: T): T {
   try {
@@ -35,15 +34,14 @@ interface StoreState {
   status: 'loading' | 'ready' | 'error';
   products: Product[];
   zones: ShippingZone[];
+  localities: Locality[];
   settings: StoreSettings | null;
   reload: () => Promise<void>;
 
-  postalCode: string;
-  setPostalCode: (cp: string) => void;
+  /** Localidad elegida (define la zona), "otra" o null si todavía no eligió. */
+  localityChoice: LocalityChoice;
+  setLocalityChoice: (c: LocalityChoice) => void;
   lookup: ZoneLookup;
-  /** Localidad confirmada por el cliente (de la lista de su zona). */
-  locality: string;
-  setLocality: (l: string) => void;
   method: DeliveryMethod;
   setMethod: (m: DeliveryMethod) => void;
 
@@ -74,20 +72,21 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   const [status, setStatus] = useState<StoreState['status']>('loading');
   const [products, setProducts] = useState<Product[]>([]);
   const [zones, setZones] = useState<ShippingZone[]>([]);
+  const [localities, setLocalities] = useState<Locality[]>([]);
   const [settings, setSettings] = useState<StoreSettings | null>(null);
   const [lines, setLines] = useState<CartLine[]>(() => load(local, CART_KEY, []));
-  const [postalCode, setPostalCodeState] = useState<string>(() => load(session, CP_KEY, ''));
   const [method, setMethodState] = useState<DeliveryMethod>(() => load(session, METHOD_KEY, 'delivery'));
-  const [locality, setLocalityState] = useState<string>(() => load(session, LOCALITY_KEY, ''));
+  const [localityChoice, setLocalityChoiceState] = useState<LocalityChoice>(() => load<LocalityChoice>(local, LOCALITY_KEY, null));
   const [cartOpen, setCartOpen] = useState(false);
   const [postalOpen, setPostalOpen] = useState(false);
   const [announce, setAnnounce] = useState('');
 
   const reload = useCallback(async () => {
     try {
-      const [p, z, s] = await Promise.all([api.listProducts(), api.listZones(), api.getSettings()]);
+      const [p, z, l, s] = await Promise.all([api.listProducts(), api.listZones(), api.listLocalities(), api.getSettings()]);
       setProducts(p);
       setZones(z);
+      setLocalities(l);
       setSettings(s);
       setStatus('ready');
     } catch {
@@ -116,13 +115,9 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   const linesRef = useRef(lines);
   linesRef.current = lines;
 
-  const setPostalCode = useCallback((cp: string) => {
-    setPostalCodeState(cp);
-    save(session, CP_KEY, cp);
-  }, []);
-  const setLocality = useCallback((l: string) => {
-    setLocalityState(l);
-    save(session, LOCALITY_KEY, l);
+  const setLocalityChoice = useCallback((c: LocalityChoice) => {
+    setLocalityChoiceState(c);
+    save(local, LOCALITY_KEY, c);
   }, []);
   const setMethod = useCallback((m: DeliveryMethod) => {
     setMethodState(m);
@@ -174,19 +169,16 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   const count = items.reduce((s, i) => s + i.quantity, 0);
   const totals = useMemo(() => cartTotals(items), [items]);
   const subtotal = totals.subtotal;
-  const lookup = useMemo(() => findZone(zones, postalCode), [zones, postalCode]);
-  // Si cambió la zona, la localidad elegida tiene que seguir en su lista; si la zona tiene una sola, va sola.
-  const zoneLocalities = lookup.status === 'found' ? lookup.zone.localities : null;
+  const lookup = useMemo(() => findZone(zones, localities, localityChoice), [zones, localities, localityChoice]);
+  // Si la localidad guardada ya no existe (la desactivaron), se vuelve a pedir.
   useEffect(() => {
-    if (!zoneLocalities) return;
-    if (zoneLocalities.length === 1 && locality !== zoneLocalities[0]) setLocality(zoneLocalities[0]);
-    else if (locality && zoneLocalities.length > 1 && !zoneLocalities.includes(locality)) setLocality('');
-  }, [zoneLocalities, locality, setLocality]);
+    if (status === 'ready' && typeof localityChoice === 'number' && !localities.some((l) => l.id === localityChoice)) setLocalityChoice(null);
+  }, [status, localities, localityChoice, setLocalityChoice]);
   const q = useMemo(() => (settings ? quote(method, lookup, totals, settings) : null), [method, lookup, totals, settings]);
 
   const value: StoreState = {
-    status, products, zones, settings, reload,
-    postalCode, setPostalCode, lookup, locality, setLocality, method, setMethod,
+    status, products, zones, localities, settings, reload,
+    localityChoice, setLocalityChoice, lookup, method, setMethod,
     items, count, subtotal, totals, quote: q, quantityOf, add, setQuantity, remove, clear,
     cartOpen, openCart: () => setCartOpen(true), closeCart: () => setCartOpen(false),
     postalOpen, openPostal: () => setPostalOpen(true), closePostal: () => setPostalOpen(false),

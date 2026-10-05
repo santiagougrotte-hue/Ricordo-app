@@ -9,6 +9,9 @@ import { ago, arDateTime, arWhatsapp, download, ordersCsv, shortDate, arDay } fr
 
 type Filter = 'activos' | OrderStatus | 'todos';
 const PICKUP = 'retiro';
+const FLEX = 'flexibles';
+/** Pendientes que aceptan entrega flexible: para adelantarlos si pasás por la zona. */
+const isFlexPending = (o: AdminOrder) => o.flexibleDelivery && !o.deliveredOn && o.status !== 'cancelled' && o.status !== 'delivered';
 /** Día del pedido para filtrar y "qué preparar": la entrega real si ya la cargaste, si no la prevista. Los retiros van aparte. */
 const whenKey = (o: AdminOrder) => o.deliveredOn ?? o.deliveryDate ?? PICKUP;
 const whenText = (o: AdminOrder) => (o.deliveredOn ? `entregado ${shortDate(o.deliveredOn)}` : o.deliveryDate ? shortDate(o.deliveryDate) : 'a coordinar');
@@ -28,13 +31,16 @@ export function Orders() {
   const hasPickups = orders.some((o) => whenKey(o) === PICKUP && ACTIVE.includes(o.status));
   const byStatus = (s: Filter, list = orders) =>
     list.filter((o) => (s === 'todos' ? true : s === 'activos' ? ACTIVE.includes(o.status) : o.status === s));
-  const inDay = day ? orders.filter((o) => whenKey(o) === day) : orders;
+  const inDay = day === FLEX
+    ? orders.filter(isFlexPending).sort((a, b) => (a.zoneName ?? '').localeCompare(b.zoneName ?? '') || (a.deliveryDate ?? '').localeCompare(b.deliveryDate ?? ''))
+    : day ? orders.filter((o) => whenKey(o) === day) : orders;
+  const flexCount = orders.filter(isFlexPending).length;
   const list = byStatus(filter, inDay);
   const open = orders.find((o) => o.id === openId) ?? null;
 
   // "Qué preparar": cajas por gusto para el día elegido (sin cancelados).
   const prep = useMemo(() => {
-    if (!day) return null;
+    if (!day || day === FLEX) return null;
     const m = new Map<string, number>();
     for (const o of orders) if (whenKey(o) === day && o.status !== 'cancelled') for (const i of o.items) m.set(i.productName, (m.get(i.productName) ?? 0) + i.quantity);
     return [...m].sort((a, b) => b[1] - a[1]);
@@ -71,6 +77,7 @@ export function Orders() {
           <option value="">Todas las fechas</option>
           {deliveryDays.map((d) => <option key={d} value={d}>{shortDate(d)}</option>)}
           {hasPickups && <option value={PICKUP}>Retiros a coordinar</option>}
+          {flexCount > 0 && <option value={FLEX}>Aceptan otro día ({flexCount})</option>}
         </select>
       </div>
 
@@ -180,8 +187,13 @@ function OrderDetail({ order: o }: { order: AdminOrder }) {
         <p className="adm-big">{o.deliveryMethod === 'pickup' ? 'Día y horario a coordinar por WhatsApp' : `Previsto: ${o.windowLabel}`}</p>
         {o.deliveryMethod === 'delivery' && (
           <p>
-            {o.address}{o.locality && `, ${o.locality}`} · CP {o.postalCode} · {o.zoneName}{' '}
-            <a href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(`${o.address}, ${o.locality ?? ''} ${o.postalCode}, Buenos Aires`)}`} target="_blank" rel="noopener noreferrer">Ver mapa</a>
+            {o.address}{o.locality && `, ${o.locality}`}{o.partido && o.partido !== o.locality ? ` (${o.partido})` : ''} · CP {o.postalCode} · {o.zoneName}{' '}
+            <a
+              href={o.lat != null && o.lng != null
+                ? `https://www.google.com/maps/search/?api=1&query=${o.lat},${o.lng}`
+                : `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(`${o.address}, ${o.locality ?? ''}, ${o.partido ?? ''}, Buenos Aires`)}`}
+              target="_blank" rel="noopener noreferrer"
+            >Ver mapa</a>
           </p>
         )}
         {o.deliveryMethod === 'delivery' && (
@@ -201,7 +213,7 @@ function OrderDetail({ order: o }: { order: AdminOrder }) {
         <dl className="totals">
           <div><dt>Subtotal</dt><dd>{money(o.subtotal)}</dd></div>
           {o.discount > 0 && <div className="discount"><dt>Descuento {o.discountPct}%</dt><dd>−{money(o.discount)}</dd></div>}
-          <div><dt>Envío</dt><dd>{o.shippingCost ? money(o.shippingCost) : 'Gratis'}</dd></div>
+          <div><dt>Envío{o.distancePriced && o.km ? ` (${o.km} km ida y vuelta)` : ''}</dt><dd>{o.shippingCost ? money(o.shippingCost) : 'Gratis'}</dd></div>
           <div className="grand"><dt>Total</dt><dd>{money(o.total)}</dd></div>
         </dl>
         <p className="small">Pago: {o.paymentMethod === 'cash' ? 'efectivo' : 'transferencia'} · {o.paymentStatus === 'paid' ? 'pagado' : 'pendiente'}</p>

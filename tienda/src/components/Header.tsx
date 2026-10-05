@@ -3,15 +3,15 @@ import { useStore } from '../state/store';
 import { Logo } from './Logo';
 import { Icon } from './Icon';
 import { Sheet } from './Sheet';
-import { PostalForm } from './PostalForm';
+import { LocalityForm } from './LocalityForm';
 
 export function Header() {
   const { count, openCart, lookup, method, postalOpen, openPostal, closePostal, settings } = useStore();
 
   let where: string;
-  if (method === 'pickup') where = 'Retirás en el local';
-  else if (lookup.status === 'found') where = `Envío a ${lookup.postalCode} · ${lookup.zone.name}`;
-  else if (lookup.status === 'not_found') where = `Todavía no llegamos al ${lookup.postalCode}`;
+  if (method === 'pickup') where = 'Retirás en Berazategui';
+  else if (lookup.status === 'found') where = `Envío a ${lookup.locality.name}`;
+  else if (lookup.status === 'not_found') where = 'Todavía no llegamos a tu localidad';
   else where = '¿A dónde te lo llevamos?';
 
   return (
@@ -37,13 +37,13 @@ export function Header() {
           <span className="wrap cp-strip-in">
             <Icon name={method === 'pickup' ? 'local' : 'cp'} size={20} />
             <span>{where}</span>
-            <span className="cp-change">{lookup.status === 'empty' && method !== 'pickup' ? 'Poné tu CP' : 'Cambiar'}</span>
+            <span className="cp-change">{lookup.status === 'empty' && method !== 'pickup' ? 'Elegí tu localidad' : 'Cambiar'}</span>
           </span>
         </button>
       </header>
       <Sheet open={postalOpen} onClose={closePostal} title="¿A dónde te lo llevamos?" side="bottom">
-        <p className="muted">Con tu código postal te decimos cuánto sale el envío y cuál es la compra mínima de tu zona.</p>
-        <PostalForm onDone={closePostal} />
+        <p className="muted">Con tu localidad te decimos el mínimo de tu zona, cuánto sale el envío y qué día llega.</p>
+        <LocalityForm onDone={closePostal} />
         {settings?.pickupEnabled && <PickupNote />}
       </Sheet>
     </>
@@ -51,11 +51,11 @@ export function Header() {
 }
 
 function PickupNote() {
-  const { method, setMethod, closePostal, settings } = useStore();
+  const { method, setMethod, closePostal } = useStore();
   if (method === 'pickup') {
     return (
       <p className="pickup-note">
-        Elegiste retirar en el local{settings?.pickupAddress ? ` (${settings.pickupAddress})` : ''}.{' '}
+        Elegiste retirar en Berazategui (el horario lo coordinamos por WhatsApp).{' '}
         <button type="button" className="link" onClick={() => setMethod('delivery')}>Prefiero envío</button>
       </p>
     );
@@ -63,7 +63,7 @@ function PickupNote() {
   return (
     <p className="pickup-note">
       ¿Preferís pasar a buscarlo?{' '}
-      <button type="button" className="link" onClick={() => { setMethod('pickup'); closePostal(); }}>Retiro en el local, sin envío</button>
+      <button type="button" className="link" onClick={() => { setMethod('pickup'); closePostal(); }}>Retiro en Berazategui, sin envío</button>
     </p>
   );
 }

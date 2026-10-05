@@ -3,7 +3,8 @@
 import type { Query } from './db';
 import type { MediaStore } from './media';
 import { allow, clearCookie, ipHash, json, readCookie, sameText, sessionCookie, signSession, verifySession } from './http';
-import { mapProduct, mapSettings, mapZone, PRODUCTS_SQL } from './catalog';
+import { mapLocality, mapProduct, mapSettings, mapZone, PRODUCTS_SQL } from './catalog';
+import { mapShippingConfig } from './distance';
 import { sendWhatsapp } from './createOrder';
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
@@ -43,7 +44,9 @@ export function mapOrder(r: Row) {
   return {
     id: r.id, number: Number(r.number), createdAt: new Date(r.created_at).toISOString(), updatedAt: new Date(r.updated_at).toISOString(),
     customerName: r.customer_name, customerPhone: r.customer_phone, customerEmail: r.customer_email, deliveryMethod: r.delivery_method,
-    address: r.address, postalCode: r.postal_code, zoneName: r.zone_name, locality: r.locality, boxCount: r.box_count,
+    address: r.address, postalCode: r.postal_code, zoneName: r.zone_name, locality: r.locality, partido: r.partido, boxCount: r.box_count,
+    km: r.km_round_trip === null ? null : Number(r.km_round_trip), distancePriced: r.distance_priced,
+    lat: r.lat === null ? null : Number(r.lat), lng: r.lng === null ? null : Number(r.lng),
     deliveryDate: day(r.delivery_date), deliveredOn: day(r.delivered_on), flexibleDelivery: r.flexible_delivery, windowLabel: r.delivery_window_label,
     notes: r.notes, subtotal: r.subtotal, discount: r.discount, discountPct: r.discount_pct, shippingCost: r.shipping_cost, total: r.total, paymentMethod: r.payment_method,
     paymentStatus: r.payment_status, status: r.status,
@@ -206,29 +209,74 @@ export async function handleAdmin(req: Request, path: string, env: AdminEnv, dep
   }
   if (path === 'zones' && method === 'POST') {
     const z = await body();
-    const cps = Array.isArray(z.postalCodes) ? z.postalCodes.map(String) : [];
-    const cpOk = (c: string) => /^\d{4}$/.test(c) || (/^(\d{4})-(\d{4})$/.test(c) && +c.slice(0, 4) <= +c.slice(5));
-    if (!String(z.name ?? '').trim() || !cps.length || !cps.every(cpOk)) return bad('Revisá el nombre y los códigos postales (4 números o un rango 1000-1499).');
-    const locs = Array.isArray(z.localities) ? [...new Set(z.localities.map((l: unknown) => String(l).trim()).filter(Boolean))].slice(0, 40) : [];
     const cost = int(z.shippingCost), min = int(z.minBoxes), free = z.freeFromBoxes === null ? null : int(z.freeFromBoxes, 1);
-    const per = int(z.discountPerBox), max = int(z.discountMax), wd = int(z.deliveryWeekday);
+    const per = int(z.discountPerBox), max = int(z.discountMax), wd = int(z.deliveryWeekday), toll = int(z.tollRoundTrip);
+    const avg = Number(z.avgOrdersPerRoute);
+    if (!String(z.name ?? '').trim()) return bad('Poné un nombre a la zona.');
     if (cost === null || min === null || (z.freeFromBoxes !== null && free === null)) return bad('Revisá el envío, el mínimo y el envío gratis.');
+    if (free !== null && free <= min) return bad('El envío gratis tiene que empezar con más cajas que el mínimo.');
     if (per === null || per > 100 || max === null || max > 100) return bad('Los descuentos van de 0 a 100 %.');
     if (wd === null || wd > 6) return bad('Día de entrega inválido');
-    const vals = [String(z.name).trim(), cps, locs, cost, min, free, wd, String(z.deliveryMoment ?? '').trim().slice(0, 40), per, max, !!z.active];
+    if (toll === null || !(avg >= 1 && avg < 1000)) return bad('Revisá el peaje y los pedidos promedio por ruta (1 o más).');
+    const vals = [String(z.name).trim(), cost, min, free, wd, String(z.deliveryMoment ?? '').trim().slice(0, 40), per, max, !!z.distancePricing, toll, Math.round(avg * 10) / 10, !!z.active];
     if (z.id) {
       if (!UUID.test(z.id)) return bad('Zona inválida');
-      await q(`update shipping_zones set name=$2, postal_codes=$3, localities=$4, shipping_cost=$5, min_boxes=$6, free_from_boxes=$7,
-                 delivery_weekday=$8, delivery_moment=$9, discount_per_box=$10, discount_max=$11, active=$12 where id=$1`, [z.id, ...vals]);
+      await q(`update shipping_zones set name=$2, shipping_cost=$3, min_boxes=$4, free_from_boxes=$5, delivery_weekday=$6, delivery_moment=$7,
+                 discount_per_box=$8, discount_max=$9, distance_pricing=$10, toll_round_trip=$11, avg_orders_per_route=$12, active=$13 where id=$1`, [z.id, ...vals]);
     } else {
-      await q(`insert into shipping_zones (name, postal_codes, localities, shipping_cost, min_boxes, free_from_boxes, delivery_weekday,
-                 delivery_moment, discount_per_box, discount_max, active, sort_order)
-               values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,(select coalesce(max(sort_order),0)+1 from shipping_zones))`, vals);
+      await q(`insert into shipping_zones (name, shipping_cost, min_boxes, free_from_boxes, delivery_weekday, delivery_moment, discount_per_box,
+                 discount_max, distance_pricing, toll_round_trip, avg_orders_per_route, active, sort_order)
+               values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,(select coalesce(max(sort_order),0)+1 from shipping_zones))`, vals);
     }
     return json({ ok: true });
   }
   if (seg[0] === 'zones' && UUID.test(seg[1] ?? '') && method === 'DELETE') {
+    const [{ n }] = await q<{ n: number }>(`select count(*)::int n from localities where zone_id = $1`, [seg[1]]);
+    if (n > 0) return bad('Primero pasá sus localidades a otra zona (o desactivá la zona).', 409);
     await q(`delete from shipping_zones where id = $1`, [seg[1]]);
+    return json({ ok: true });
+  }
+
+  // ── Localidades (definen la zona) ──
+  if (path === 'localities' && method === 'GET') {
+    const rows = await q(`select * from localities order by sort_order, partido, name`);
+    return json({ localities: rows.map((l) => ({ ...mapLocality(l), active: l.active })) });
+  }
+  if (path === 'localities' && method === 'POST') {
+    const l = await body();
+    const name = String(l.name ?? '').trim().slice(0, 80), partido = String(l.partido ?? '').trim().slice(0, 80);
+    if (name.length < 2 || partido.length < 2 || !UUID.test(String(l.zoneId ?? ''))) return bad('Revisá el nombre, el partido y la zona.');
+    try {
+      if (l.id) {
+        if (int(l.id, 1) === null) return bad('Localidad inválida');
+        await q(`update localities set name=$2, partido=$3, zone_id=$4, active=$5 where id=$1`, [l.id, name, partido, l.zoneId, !!l.active]);
+      } else {
+        await q(`insert into localities (name, partido, zone_id, active, sort_order) values ($1,$2,$3,$4,(select coalesce(max(sort_order),0)+1 from localities))`,
+          [name, partido, l.zoneId, l.active !== false]);
+      }
+    } catch (e) {
+      return bad(/unique|duplicate/i.test((e as Error).message) ? `Ya existe ${name} (${partido}).` : 'No se pudo guardar', 409);
+    }
+    return json({ ok: true });
+  }
+  if (seg[0] === 'localities' && int(Number(seg[1]), 1) !== null && method === 'DELETE') {
+    await q(`delete from localities where id = $1`, [Number(seg[1])]);
+    return json({ ok: true });
+  }
+
+  // ── Cálculo del envío por distancia (privado) ──
+  if (path === 'shipping-config' && method === 'GET') {
+    const [c] = await q(`select * from shipping_config limit 1`);
+    return json({ config: mapShippingConfig(c) });
+  }
+  if (path === 'shipping-config' && method === 'POST') {
+    const c = await body();
+    const lat = Number(c.originLat), lng = Number(c.originLng), cons = Number(c.consumption100km);
+    if (!(lat >= -56 && lat <= -21 && lng >= -74 && lng <= -53)) return bad('Revisá las coordenadas de origen (tienen que ser de Argentina).');
+    if (int(c.fuelPrice, 1) === null || !(cons > 0 && cons < 100) || int(c.rounding, 1) === null) return bad('Revisá nafta, consumo y redondeo.');
+    await q(`update shipping_config set origin_lat=$1, origin_lng=$2, fuel_price=$3, consumption_100km=$4, rounding=$5`,
+      [lat, lng, c.fuelPrice, Math.round(cons * 10) / 10, c.rounding]);
+    await q(`delete from geo_cache`); // con otro origen hay que volver a medir
     return json({ ok: true });
   }
 

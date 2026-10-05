@@ -1,29 +1,30 @@
 // Envío, mínimos y descuentos. Se cuentan CAJAS (solo productos con countsAsBox).
 // Cálculo informativo para el carrito: el definitivo lo hace create_order() en la base, con la misma regla.
-import type { DeliveryMethod, Product, ShippingZone, StoreSettings } from './types';
-import { normalizePostalCode } from './postal';
+import type { DeliveryMethod, Locality, Product, ShippingZone, StoreSettings } from './types';
+
+/** "Otra localidad": no está en la lista → se ofrece WhatsApp o retiro. */
+export const OTHER_LOCALITY = 'otra';
+export type LocalityChoice = number | typeof OTHER_LOCALITY | null;
 
 export type ZoneLookup =
   | { status: 'empty' }
-  | { status: 'invalid'; raw: string }
-  | { status: 'not_found'; postalCode: string }
-  | { status: 'found'; postalCode: string; zone: ShippingZone };
+  | { status: 'not_found' }
+  | { status: 'found'; zone: ShippingZone; locality: Locality };
 
-/** '1884' o rango '1000-1499'. */
-export function zoneHasCp(codes: string[], cp: string): boolean {
-  return codes.some((c) => {
-    if (c === cp) return true;
-    const m = /^(\d{4})-(\d{4})$/.exec(c);
-    return !!m && +cp >= +m[1] && +cp <= +m[2];
-  });
+/** La zona la define la localidad que elige el cliente. */
+export function findZone(zones: ShippingZone[], localities: Locality[], choice: LocalityChoice): ZoneLookup {
+  if (choice === null) return { status: 'empty' };
+  if (choice === OTHER_LOCALITY) return { status: 'not_found' };
+  const locality = localities.find((l) => l.id === choice);
+  const zone = locality && zones.find((z) => z.id === locality.zoneId);
+  return locality && zone ? { status: 'found', zone, locality } : { status: 'not_found' };
 }
 
-export function findZone(zones: ShippingZone[], raw: string): ZoneLookup {
-  if (!raw.trim()) return { status: 'empty' };
-  const cp = normalizePostalCode(raw);
-  if (!cp) return { status: 'invalid', raw };
-  const zone = zones.find((z) => zoneHasCp(z.postalCodes, cp));
-  return zone ? { status: 'found', postalCode: cp, zone } : { status: 'not_found', postalCode: cp };
+/** Localidades agrupadas por partido, para el selector. */
+export function byPartido(localities: Locality[]): [string, Locality[]][] {
+  const m = new Map<string, Locality[]>();
+  for (const l of localities) m.set(l.partido, [...(m.get(l.partido) ?? []), l]);
+  return [...m];
 }
 
 export interface CartTotals {
@@ -59,8 +60,10 @@ export interface Quote {
   boxes: number;
   minBoxes: number;
   missingForMin: number;
-  /** null = todavía no se puede calcular (falta CP o no llegamos). */
+  /** null = todavía no se puede calcular (falta la localidad o no llegamos). */
   shippingCost: number | null;
+  /** El costo es el fijo de la zona pero se ajusta con la dirección (cálculo por distancia). */
+  shippingEstimated: boolean;
   freeFromBoxes: number | null;
   missingForFree: number | null;
   discountPct: number;
@@ -74,12 +77,12 @@ export interface Quote {
   suggestPickup: boolean;
 }
 
-export function quote(method: DeliveryMethod, lookup: ZoneLookup, cart: CartTotals, settings: StoreSettings): Quote {
+export function quote(method: DeliveryMethod, lookup: ZoneLookup, cart: CartTotals, settings: StoreSettings, distanceCost: number | null = null): Quote {
   const { boxes, subtotal } = cart;
   const pickupOk = settings.pickupEnabled && boxes >= settings.pickupMinBoxes && boxes > 0;
   const base = {
     method, boxes, discountPct: 0, discount: 0, missingForNextDiscount: null, nextDiscountPct: null, suggestPickup: false,
-    freeFromBoxes: null, missingForFree: null,
+    freeFromBoxes: null, missingForFree: null, shippingEstimated: false,
   };
   if (method === 'pickup') {
     const missing = Math.max(settings.pickupMinBoxes - boxes, 0);
@@ -96,7 +99,10 @@ export function quote(method: DeliveryMethod, lookup: ZoneLookup, cart: CartTota
   const missing = Math.max(z.minBoxes - boxes, 0);
   const pct = discountPct(z, boxes);
   const discount = discountAmount(cart.boxSubtotal, pct);
-  const shippingCost = free ? 0 : z.shippingCost;
+  // Sin clave de OpenRouteService el costo fijo es el definitivo (no es "aproximado").
+  const distanceOn = z.distancePricing && settings.distanceEnabled === true;
+  const byDistance = distanceOn && distanceCost !== null;
+  const shippingCost = free ? 0 : byDistance ? distanceCost : z.shippingCost;
   let missingForNextDiscount: number | null = null;
   let nextDiscountPct: number | null = null;
   if (z.freeFromBoxes !== null && z.discountPerBox > 0 && pct < z.discountMax) {
@@ -109,6 +115,7 @@ export function quote(method: DeliveryMethod, lookup: ZoneLookup, cart: CartTota
     minBoxes: z.minBoxes,
     missingForMin: missing,
     shippingCost,
+    shippingEstimated: !free && distanceOn && !byDistance,
     freeFromBoxes: z.freeFromBoxes,
     missingForFree: z.freeFromBoxes === null ? null : Math.max(z.freeFromBoxes - boxes, 0),
     discountPct: pct,
@@ -130,7 +137,7 @@ export function cartMessage(q: Quote, lookup: ZoneLookup): string {
     return 'Retirás en Berazategui, sin costo de envío. El horario lo coordinamos por WhatsApp.';
   }
   if (lookup.status === 'not_found') return 'Todavía no llegamos a tu zona, escribinos por WhatsApp.';
-  if (lookup.status !== 'found') return 'Poné tu código postal para ver el envío, el mínimo y el día de entrega.';
+  if (lookup.status !== 'found') return 'Elegí tu localidad para ver el envío, el mínimo y el día de entrega.';
   const zone = lookup.zone.name;
   if (q.missingForMin > 0) {
     const pick = q.suggestPickup ? ` O retiralo en Berazategui: con ${cajas(q.boxes)} ya podés.` : '';

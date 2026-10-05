@@ -54,6 +54,7 @@ No hay que crear ninguna base a mano: **Netlify Database** (Postgres) se crea so
    - `SESSION_SECRET` (secreta): firma la sesión del panel.
    - `VITE_TURNSTILE_SITE_KEY` / `TURNSTILE_SECRET_KEY`: captcha. Hoy están las **claves de prueba** de Cloudflare (siempre pasan). Reemplazalas por las tuyas (gratis en Cloudflare → Turnstile) para tener protección real contra bots.
    - Opcionales: `RESEND_API_KEY` + `NOTIFY_FROM` (email de pedido nuevo), `TELEGRAM_BOT_TOKEN` + `TELEGRAM_CHAT_ID`.
+   - Envío por distancia: `ORS_API_KEY` (gratis en openrouteservice.org). Sin esa clave, cada zona cobra su costo fijo.
    - WhatsApp con cada pedido (productos, CP, total y día de entrega): `CALLMEBOT_APIKEY` (se saca gratis en callmebot.com, desde el WhatsApp que va a recibir los avisos). Llega al WhatsApp de la tienda (Ajustes) o a `WHATSAPP_NOTIFY_PHONE` si querés otro número.
 3. Entrá a `/admin` y cargá tus datos reales: productos y fotos, costos de envío de cada zona, WhatsApp, alias y email de aviso.
 
@@ -110,7 +111,7 @@ server/         lógica de las funciones (testeada contra Postgres real)
 
 Son de ejemplo y conviene revisarlos antes de publicar:
 - **Productos:** precios, rellenos y descripciones.
-- **Envío:** zona por código postal; mínimos y envío gratis en cajas (solo cuentan los productos marcados "cuenta como caja", no las salsas); descuento de X % por caja arriba del envío gratis, con tope; retiro en Berazategui sin zona.
+- **Envío:** zona por **localidad** (los CP se superponen entre localidades; el CP queda solo como parte de la dirección); costo por distancia (nafta + peaje, con OpenRouteService y caché) o fijo por zona; mínimos y envío gratis en cajas (solo cuentan los productos marcados "cuenta como caja", no las salsas); descuento de X % por caja arriba del envío gratis, con tope; retiro en Berazategui sin zona.
 - **Entrega:** pedidos hasta el jueves 13 h (hora de Argentina); antes del corte sale ese fin de semana, el día de la zona, y después, el siguiente. La misma regla está en `src/lib/delivery.ts` y en `delivery_date_for()` de la base, y una prueba verifica que coincidan.
 - **Configuración:** alias de transferencia y número de WhatsApp.
 - **Textos con datos concretos:** "4 a 6 minutos" de cocción y "hasta 3 meses" en el freezer.

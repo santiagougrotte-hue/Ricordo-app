@@ -59,13 +59,14 @@ describe.skipIf(!TEST_DB)('API del panel contra Netlify Database (Postgres real)
 
   it('pedidos: lista, cambio de estado, pago, cancelar devuelve stock, no se reabre', async () => {
     const [o] = await q<{ order_id: string }>(
-      `select * from create_order('Laura','11 4444-3333',null,'delivery','Calle 14 1234','1884','Berazategui',null,'cash',$1::jsonb,true)`,
+      `select * from create_order('Laura','11 4444-3333',null,'delivery','Calle 14 1234','1884',(select id from localities where name = 'Berazategui'),null,'cash',$1::jsonb,true)`,
       [JSON.stringify([{ product_id: P1, quantity: 3 }])],
     );
     const list = await call('GET', 'orders');
     expect(list.data.orders[0]).toMatchObject({
       number: 1001, customerName: 'Laura', customerPhone: '1144443333', status: 'new', items: [{ productId: P1, quantity: 3 }],
-      zoneName: 'Berazategui', locality: 'Berazategui', boxCount: 3, flexibleDelivery: true, deliveredOn: null, discount: 0,
+      zoneName: 'Berazategui', locality: 'Berazategui', partido: 'Berazategui', boxCount: 3, flexibleDelivery: true, deliveredOn: null, discount: 0,
+      distancePriced: false, km: null,
     });
     expect(list.data.orders[0].deliveryDate).toMatch(/^\d{4}-\d{2}-\d{2}$/);
     const t0 = list.data.serverTime;
@@ -126,27 +127,48 @@ describe.skipIf(!TEST_DB)('API del panel contra Netlify Database (Postgres real)
 
   it('zonas: validación, alta, edición y baja (se refleja en el catálogo)', async () => {
     const zone = {
-      name: 'Varela', postalCodes: ['1888', '1890-1891'], localities: ['Florencio Varela', 'Bosques', ''], shippingCost: 2500, minBoxes: 3, freeFromBoxes: 5,
-      deliveryWeekday: 5, deliveryMoment: 'a la noche', discountPerBox: 4, discountMax: 8, active: true,
+      name: 'Varela', shippingCost: 2500, minBoxes: 3, freeFromBoxes: 5, deliveryWeekday: 5, deliveryMoment: 'a la noche',
+      discountPerBox: 4, discountMax: 8, distancePricing: true, tollRoundTrip: 800, avgOrdersPerRoute: 2.5, active: true,
     };
-    expect((await call('POST', 'zones', { body: { ...zone, postalCodes: ['18a5'] } })).status).toBe(400);
-    expect((await call('POST', 'zones', { body: { ...zone, postalCodes: ['1999-1000'] } })).status).toBe(400);
+    expect((await call('POST', 'zones', { body: { ...zone, freeFromBoxes: 3 } })).status).toBe(400); // gratis no puede ser ≤ mínimo
     expect((await call('POST', 'zones', { body: { ...zone, discountMax: 150 } })).status).toBe(400);
     expect((await call('POST', 'zones', { body: { ...zone, deliveryWeekday: 7 } })).status).toBe(400);
+    expect((await call('POST', 'zones', { body: { ...zone, avgOrdersPerRoute: 0 } })).status).toBe(400);
     expect((await call('POST', 'zones', { body: zone })).status).toBe(200);
     const z = (await call('GET', 'zones')).data.zones.find((x: { name: string }) => x.name === 'Varela');
-    expect(z).toMatchObject({ ...zone, localities: ['Florencio Varela', 'Bosques'] });
-    expect((await getCatalog(q)).zones.find((x) => x.name === 'Varela')).toMatchObject({ postalCodes: ['1888', '1890-1891'], minBoxes: 3 });
-    const [{ name }] = await q<{ name: string }>(`select (zone_for_cp('B1890XYZ')).name`);
-    expect(name).toBe('Varela');
+    expect(z).toMatchObject(zone);
+
+    // Localidades: alta en la zona nueva, aparece en el catálogo; duplicada → 409
+    expect((await call('POST', 'localities', { body: { name: 'Florencio Varela', partido: 'Florencio Varela', zoneId: z.id, active: true } })).status).toBe(200);
+    expect((await call('POST', 'localities', { body: { name: 'Florencio Varela', partido: 'Florencio Varela', zoneId: z.id, active: true } })).status).toBe(409);
+    expect((await call('POST', 'localities', { body: { name: 'X', partido: 'Y', zoneId: 'nope' } })).status).toBe(400);
+    const cat = await getCatalog(q);
+    const fv = cat.localities.find((l) => l.name === 'Florencio Varela')!;
+    expect(fv.zoneId).toBe(z.id);
+    // La zona no se puede borrar mientras tenga localidades
+    expect((await call('DELETE', `zones/${z.id}`)).status).toBe(409);
+    // Desactivar la zona saca sus localidades del catálogo
     await call('POST', 'zones', { body: { ...z, active: false } });
-    expect((await getCatalog(q)).zones.some((x) => x.name === 'Varela')).toBe(false);
+    expect((await getCatalog(q)).localities.some((l) => l.name === 'Florencio Varela')).toBe(false);
+    expect((await call('DELETE', `localities/${fv.id}`)).status).toBe(200);
     expect((await call('DELETE', `zones/${z.id}`)).status).toBe(200);
-    // Borrar una zona con pedidos no rompe nada: el pedido conserva el nombre.
+
+    // Pasar una localidad de zona
+    const ranelagh = (await call('GET', 'localities')).data.localities.find((l: { name: string }) => l.name === 'Ranelagh');
     const bera = (await call('GET', 'zones')).data.zones.find((x: { name: string }) => x.name === 'Berazategui');
-    expect((await call('DELETE', `zones/${bera.id}`)).status).toBe(200);
-    const [o] = await q(`select zone_id, zone_name from orders where number = 1001`);
-    expect(o).toEqual({ zone_id: null, zone_name: 'Berazategui' });
+    expect((await call('POST', 'localities', { body: { ...ranelagh, zoneId: bera.id } })).status).toBe(200);
+    expect((await getCatalog(q)).localities.find((l) => l.name === 'Ranelagh')!.zoneId).toBe(bera.id);
+  });
+
+  it('cálculo por distancia: privado, se valida y al cambiar el origen se borra la caché', async () => {
+    const cfg = (await call('GET', 'shipping-config')).data.config;
+    expect(cfg).toEqual({ originLat: -34.765, originLng: -58.212, fuelPrice: 1700, consumption100km: 7, rounding: 500 });
+    expect((await call('POST', 'shipping-config', { body: { ...cfg, originLat: 40.4 } })).status).toBe(400); // fuera de Argentina
+    await q(`insert into geo_cache (key, lat, lng, km_round_trip, origin) values ('x|1', -34.7, -58.2, 10, '-34.765,-58.212')`);
+    expect((await call('POST', 'shipping-config', { body: { ...cfg, originLat: -34.77, fuelPrice: 1800 } })).status).toBe(200);
+    expect((await call('GET', 'shipping-config')).data.config).toMatchObject({ originLat: -34.77, fuelPrice: 1800 });
+    expect((await q(`select count(*)::int n from geo_cache`))[0].n).toBe(0);
+    expect(JSON.stringify(await getCatalog(q))).not.toContain('-34.77'); // el origen nunca sale en la tienda
   });
 
   it('ajustes: email de aviso privado, retiro en cajas y cierre semanal', async () => {
@@ -200,13 +222,16 @@ describe.skipIf(!TEST_DB)('migraciones: gusto real cargado', () => {
     const [{ n }] = await q<{ n: number }>('select count(*)::int n from products where not active');
     expect(n).toBe(5);
     expect(c.products.every((p) => p.countsAsBox)).toBe(true);
-    expect(c.zones.map((z) => [z.name, z.postalCodes.join(','), z.minBoxes, z.freeFromBoxes, z.deliveryWeekday, z.deliveryMoment])).toEqual([
-      ['Hudson / Plátanos', '1885,1880', 3, 4, 5, 'a la noche'],
-      ['Berazategui', '1884,1886', 3, 4, 6, 'a la mañana'],
-      ['Quilmes / Bernal / Wilde', '1878,1876,1875', 4, 6, 6, 'a la mañana'],
-      ['CABA', '1000-1499', 5, 6, 6, 'a la mañana'],
-      ['La Plata / City Bell / Gonnet', '1900,1896,1897', 5, 8, 0, ''],
+    expect(c.zones.map((z) => [z.name, z.shippingCost, z.minBoxes, z.freeFromBoxes, z.deliveryWeekday, z.deliveryMoment, z.distancePricing])).toEqual([
+      ['Hudson / Plátanos / Ranelagh', 1500, 3, 4, 5, 'a la noche', true],
+      ['Berazategui', 2500, 3, 4, 6, 'a la mañana', true],
+      ['Quilmes / Bernal / Wilde', 4500, 4, 6, 6, 'a la mañana', true],
+      ['CABA', 5000, 5, 6, 6, 'a la mañana', false],
+      ['City Bell / La Plata', 6000, 5, 8, 0, '', true],
     ]);
+    const zoneOf = (name: string) => c.zones.find((z) => z.id === c.localities.find((l) => l.name === name)!.zoneId)!.name;
+    expect(c.localities).toHaveLength(20);
+    expect([zoneOf('Ranelagh'), zoneOf('Villa España'), zoneOf('Wilde'), zoneOf('Gonnet')]).toEqual(['Hudson / Plátanos / Ranelagh', 'Berazategui', 'Quilmes / Bernal / Wilde', 'City Bell / La Plata']);
     expect(c.zones.every((z) => z.discountPerBox === 5 && z.discountMax === 10)).toBe(true);
     expect(c.settings).toMatchObject({ pickupMinBoxes: 2, cutoffWeekday: 4, cutoffTime: '13:00' });
     await pool.end();
