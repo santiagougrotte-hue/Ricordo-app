@@ -5,6 +5,7 @@ import { api } from './lib/api';
 import { Header } from './components/Header';
 import { Footer } from './components/Footer';
 import { CartDrawer } from './components/CartDrawer';
+import { WhatsAppButton } from './components/WhatsAppButton';
 import { Home } from './pages/Home';
 import { Catalog } from './pages/Catalog';
 import { ProductPage } from './pages/ProductPage';
@@ -70,6 +71,7 @@ export function App() {
         )}
       </main>
       <Footer />
+      <WhatsAppButton />
       <CartDrawer />
       <p className="sr" aria-live="polite">{announce}</p>
     </>
