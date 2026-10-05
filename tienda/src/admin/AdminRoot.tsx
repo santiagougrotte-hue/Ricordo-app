@@ -5,6 +5,7 @@ import { DEMO_PASSWORD } from '../lib/api/adminDemo';
 import { Logo } from '../components/Logo';
 import { Icon } from '../components/Icon';
 import { AdminProvider, useAdmin } from './AdminContext';
+import { useNewVersion } from './useNewVersion';
 import { Orders } from './Orders';
 import { Sales } from './Sales';
 import { Stock } from './Stock';
@@ -35,6 +36,7 @@ export function AdminRoot() {
 
 function Shell({ email, onSignOut }: { email: string; onSignOut: () => void }) {
   const { unseen, alertsOn, enableAlerts, disableAlerts, toast } = useAdmin();
+  const stale = useNewVersion(adminApi.mode === 'live');
   return (
     <div className="adm">
       <header className="adm-head">
@@ -56,6 +58,12 @@ function Shell({ email, onSignOut }: { email: string; onSignOut: () => void }) {
           <NavLink to="/admin/ajustes">Ajustes</NavLink>
         </nav>
       </header>
+      {stale && (
+        <div className="adm-wrap adm-update" role="status">
+          <p><b>Hay una versión nueva del panel.</b> Actualizá para tener los últimos cambios.</p>
+          <button type="button" className="btn btn-yema" onClick={() => location.reload()}>Actualizar</button>
+        </div>
+      )}
       {adminApi.mode === 'demo' && (
         <aside className="demo-bar" aria-label="Aviso">Panel en modo demo: los pedidos que hagas en la tienda (en otra pestaña) aparecen acá al instante.</aside>
       )}

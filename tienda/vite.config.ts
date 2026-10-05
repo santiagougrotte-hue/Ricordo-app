@@ -33,6 +33,18 @@ function copyFotos(): Plugin {
   };
 }
 
+/** Versión del build: el panel la compara con /version.json para avisar que hay una versión nueva. */
+const BUILD_ID = new Date().toISOString();
+function versionFile(): Plugin {
+  return {
+    name: 'ricordo-version',
+    apply: 'build',
+    generateBundle() {
+      this.emitFile({ type: 'asset', fileName: 'version.json', source: JSON.stringify({ build: BUILD_ID }) });
+    },
+  };
+}
+
 /** En el archivo único, el ícono de la pestaña va embebido (no hay /favicon.svg al lado). */
 function inlineFavicon(): Plugin {
   return {
@@ -48,9 +60,10 @@ function inlineFavicon(): Plugin {
 }
 
 export default defineConfig({
-  plugins: SINGLE ? [react(), viteSingleFile(), inlineFavicon()] : [react(), preloadFonts(), copyFotos()],
+  plugins: SINGLE ? [react(), viteSingleFile(), inlineFavicon()] : [react(), preloadFonts(), copyFotos(), versionFile()],
   // styles/tokens.css vive en la raíz del repo (fuente de verdad del brand board).
   server: { fs: { allow: ['..'] } },
+  define: { __BUILD_ID__: JSON.stringify(BUILD_ID) },
   // El chunk 3D (three.js) pesa ~590 KB sin comprimir: se carga diferido y solo en equipos capaces.
   build: SINGLE
     ? { target: 'es2020', outDir: 'dist-html', chunkSizeWarningLimit: 4000 }
