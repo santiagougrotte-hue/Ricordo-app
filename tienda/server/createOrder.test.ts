@@ -42,14 +42,14 @@ describe.skipIf(!TEST_DB)('handleCreateOrder contra Netlify Database (Postgres r
   let q: Query;
   let pool: pg.Pool;
   const sent: { url: string; body: Record<string, unknown> }[] = [];
-  const env: ServerEnv = { TURNSTILE_SECRET_KEY: 'secreto', SESSION_SECRET: 's', RESEND_API_KEY: 're', TELEGRAM_BOT_TOKEN: 't', TELEGRAM_CHAT_ID: '1', SITE_URL: 'https://ricordo-pastas.netlify.app' };
+  const env: ServerEnv = { TURNSTILE_SECRET_KEY: 'secreto', SESSION_SECRET: 's', RESEND_API_KEY: 're', TELEGRAM_BOT_TOKEN: 't', TELEGRAM_CHAT_ID: '1', CALLMEBOT_APIKEY: 'k123', SITE_URL: 'https://ricordo-pastas.netlify.app' };
   const fakeFetch = vi.fn(async (url: string | URL | Request, init?: RequestInit) => {
     const u = String(url);
     if (u.includes('siteverify')) {
       const f = new URLSearchParams(String(init!.body));
       return Response.json({ success: f.get('secret') === 'secreto' && f.get('response') === 'ok' });
     }
-    sent.push({ url: u, body: JSON.parse(String(init!.body)) });
+    sent.push({ url: u, body: init?.body ? JSON.parse(String(init.body)) : {} });
     return Response.json({ ok: true });
   }) as unknown as typeof fetch;
   let ipN = 0;
@@ -83,6 +83,25 @@ describe.skipIf(!TEST_DB)('handleCreateOrder contra Netlify Database (Postgres r
     expect(String(mail.body.text)).toContain('3 cajas');
     expect(String(mail.body.text)).toContain('acepta que se lo lleven otro día');
     expect(sent.some((s) => s.url.includes('telegram'))).toBe(true);
+    // WhatsApp al dueño (CallMeBot): al número de la tienda, con productos, CP, total y día de entrega.
+    const wa = new URL(sent.find((s) => s.url.includes('callmebot'))!.url);
+    expect(wa.searchParams.get('phone')).toBe('+5491100000000');
+    expect(wa.searchParams.get('apikey')).toBe('k123');
+    const text = wa.searchParams.get('text')!;
+    expect(text).toContain('Nuevo pedido #1001');
+    expect(text).toContain('3 × Jamón, muzza y nuez');
+    expect(text).toContain('CP B1884ABC');
+    expect(text).toContain('Total: $30.900');
+    expect(text).toMatch(/Entrega: Sábado \d+\/\d+ a la mañana \(acepta otro día\)/);
+  });
+
+  it('WhatsApp a un número propio para avisos (WHATSAPP_NOTIFY_PHONE) y sin clave no se manda', async () => {
+    await handleCreateOrder({ ...BASE, flexibleDelivery: false }, { ...env, WHATSAPP_NOTIFY_PHONE: '54 9 11 2222-3333' }, { query: q, fetch: fakeFetch, ip: '8.8.8.1' });
+    expect(new URL(sent.find((s) => s.url.includes('callmebot'))!.url).searchParams.get('phone')).toBe('+5491122223333');
+    sent.length = 0;
+    await handleCreateOrder(BASE, { ...env, CALLMEBOT_APIKEY: undefined }, { query: q, fetch: fakeFetch, ip: '8.8.8.2' });
+    expect(sent.some((s) => s.url.includes('callmebot'))).toBe(false);
+    await q(`update products set stock = stock + 6 where id = $1`, [P1]); // devuelve las 6 cajas para las pruebas siguientes
   });
 
   it('CABA con 8 cajas: envío gratis y 10 % de descuento (tope)', async () => {

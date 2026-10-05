@@ -54,6 +54,7 @@ No hay que crear ninguna base a mano: **Netlify Database** (Postgres) se crea so
    - `SESSION_SECRET` (secreta): firma la sesión del panel.
    - `VITE_TURNSTILE_SITE_KEY` / `TURNSTILE_SECRET_KEY`: captcha. Hoy están las **claves de prueba** de Cloudflare (siempre pasan). Reemplazalas por las tuyas (gratis en Cloudflare → Turnstile) para tener protección real contra bots.
    - Opcionales: `RESEND_API_KEY` + `NOTIFY_FROM` (email de pedido nuevo), `TELEGRAM_BOT_TOKEN` + `TELEGRAM_CHAT_ID`.
+   - WhatsApp con cada pedido (productos, CP, total y día de entrega): `CALLMEBOT_APIKEY` (se saca gratis en callmebot.com, desde el WhatsApp que va a recibir los avisos). Llega al WhatsApp de la tienda (Ajustes) o a `WHATSAPP_NOTIFY_PHONE` si querés otro número.
 3. Entrá a `/admin` y cargá tus datos reales: productos y fotos, costos de envío de cada zona, WhatsApp, alias y email de aviso.
 
 ### Probar el backend en local

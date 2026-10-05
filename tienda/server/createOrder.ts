@@ -13,6 +13,10 @@ export interface ServerEnv {
   NOTIFY_FROM?: string;
   TELEGRAM_BOT_TOKEN?: string;
   TELEGRAM_CHAT_ID?: string;
+  /** WhatsApp al dueño con cada pedido, vía CallMeBot (gratis, para el propio número). */
+  CALLMEBOT_APIKEY?: string;
+  /** Número que recibe el aviso (54911…). Si no está, se usa el WhatsApp de la tienda (Ajustes). */
+  WHATSAPP_NOTIFY_PHONE?: string;
   SITE_URL?: string;
 }
 
@@ -212,6 +216,25 @@ export function orderSummaryText(r: OrderReceipt, input: OrderInput): string {
   ].join('\n');
 }
 
+/** Aviso corto para WhatsApp: productos, CP, total y día de entrega. */
+export function whatsappOrderText(r: OrderReceipt, input: OrderInput): string {
+  const items = r.lines.map((l) => `• ${l.quantity} × ${l.name}`).join('\n');
+  const where = r.deliveryMethod === 'pickup'
+    ? 'Retira en Berazategui'
+    : `${input.address}${input.locality ? ', ' + input.locality : ''} · CP ${input.postalCode}`;
+  return [
+    `Nuevo pedido #${r.number}`,
+    `${r.customerName} · ${input.customerPhone}`,
+    '',
+    items,
+    `${r.boxCount} ${r.boxCount === 1 ? 'caja' : 'cajas'}`,
+    '',
+    where,
+    `Entrega: ${r.deliveryMethod === 'pickup' ? 'a coordinar' : r.windowLabel}${r.deliveryMethod === 'delivery' && input.flexibleDelivery ? ' (acepta otro día)' : ''}`,
+    `Total: ${peso(r.total)} · ${r.paymentMethod === 'cash' ? 'efectivo' : 'transferencia'}`,
+  ].join('\n');
+}
+
 async function notifyOwner(r: OrderReceipt, input: OrderInput, env: ServerEnv, deps: Deps): Promise<void> {
   const text = orderSummaryText(r, input);
   const jobs: Promise<unknown>[] = [];
@@ -233,6 +256,17 @@ async function notifyOwner(r: OrderReceipt, input: OrderInput, env: ServerEnv, d
           signal: AbortSignal.timeout(5000),
         }),
       );
+    }
+  }
+  if (env.CALLMEBOT_APIKEY) {
+    let phone = (env.WHATSAPP_NOTIFY_PHONE ?? '').replace(/\D/g, '');
+    if (!phone) {
+      const [s] = await deps.query<{ whatsapp_phone: string }>(`select whatsapp_phone from store_settings limit 1`);
+      phone = (s?.whatsapp_phone ?? '').replace(/\D/g, '');
+    }
+    if (phone.length >= 10) {
+      const q = new URLSearchParams({ phone: `+${phone}`, text: whatsappOrderText(r, input), apikey: env.CALLMEBOT_APIKEY });
+      jobs.push(deps.fetch(`https://api.callmebot.com/whatsapp.php?${q}`, { signal: AbortSignal.timeout(8000) }));
     }
   }
   if (env.TELEGRAM_BOT_TOKEN && env.TELEGRAM_CHAT_ID) {

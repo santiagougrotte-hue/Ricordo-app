@@ -34,7 +34,9 @@ export function Confirmation() {
   }
 
   const msg = r
-    ? `Hola Ricordo! Soy ${r.customerName}, hice el pedido #${r.number} (${r.lines.map((l) => `${l.quantity} ${l.name}`).join(', ')}) por ${money(r.total)}. ${r.paymentMethod === 'transfer' ? 'Les paso el comprobante de la transferencia.' : 'Pago en efectivo.'}`
+    ? `Hola Ricordo! Soy ${r.customerName}, hice el pedido #${r.number}: ${r.lines.map((l) => `${l.quantity} × ${l.name}`).join(', ')}. ` +
+      `Total ${money(r.total)}. ${r.deliveryMethod === 'pickup' ? 'Lo retiro en Berazategui.' : `Entrega: ${r.windowLabel}.`} ` +
+      (r.paymentMethod === 'transfer' ? 'Les paso el comprobante de la transferencia.' : 'Pago en efectivo.')
     : `Hola Ricordo! Hice el pedido #${number}.`;
   const wa = settings ? whatsappLink(settings.whatsappPhone, msg) : null;
 

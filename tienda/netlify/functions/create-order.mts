@@ -16,6 +16,8 @@ export default async (req: Request, context: Context) => {
     NOTIFY_FROM: Netlify.env.get('NOTIFY_FROM'),
     TELEGRAM_BOT_TOKEN: Netlify.env.get('TELEGRAM_BOT_TOKEN'),
     TELEGRAM_CHAT_ID: Netlify.env.get('TELEGRAM_CHAT_ID'),
+    CALLMEBOT_APIKEY: Netlify.env.get('CALLMEBOT_APIKEY'),
+    WHATSAPP_NOTIFY_PHONE: Netlify.env.get('WHATSAPP_NOTIFY_PHONE'),
     SITE_URL: Netlify.env.get('URL'),
   };
   const result = await handleCreateOrder(body, env, { query, fetch, ip: context.ip, log: (m, x) => console.error('[create-order]', m, x ?? '') });
