@@ -1,6 +1,6 @@
 import type { StoreApi } from './types';
 import type { OrderInput, OrderResult, ShortItem } from '../types';
-import { cartTotals, discountAmount, discountPct, findZone } from '../shipping';
+import { cartTotals, discountAmount, discountPct, extraBoxes, findZone } from '../shipping';
 import { normalizePostalCode } from '../postal';
 import { deliveryDateFor, deliveryLabel } from '../delivery';
 import { readDb, writeDb } from './demoDb';
@@ -79,7 +79,7 @@ export function createDemoApi(): StoreApi {
         const free = z.freeFromBoxes !== null && boxes >= z.freeFromBoxes;
         shipping = free ? 0 : z.shippingCost;
         pct = discountPct(z, boxes);
-        discount = discountAmount(totals.boxSubtotal, pct);
+        discount = discountAmount(totals.boxSubtotal, boxes, extraBoxes(z, boxes), pct);
         zoneName = z.name;
         cp = pc;
         locality = look.locality.name;

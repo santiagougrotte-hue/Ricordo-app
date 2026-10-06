@@ -4,6 +4,7 @@ import { handleCreateOrder, mapDbError, parseInput, type ServerEnv } from './cre
 import type { Query } from './db';
 import { freshDb, TEST_DB } from './testdb';
 import { deliveryDateFor } from '../src/lib/delivery';
+import { discountAmount } from '../src/lib/shipping';
 
 const P1 = '00000000-0000-4000-8000-000000000001'; // sorrentinos J&M&N $9800, stock 14
 const P2 = '00000000-0000-4000-8000-000000000002'; // ravioles ricota $8500, stock 2
@@ -108,15 +109,24 @@ describe.skipIf(!TEST_DB)('handleCreateOrder contra Netlify Database (Postgres r
     await q(`update products set stock = stock + 6 where id = $1`, [P1]); // devuelve las 6 cajas para las pruebas siguientes
   });
 
-  it('CABA con 8 cajas: envío gratis y 10 % de descuento (tope)', async () => {
+  it('CABA con 8 cajas: envío gratis y 10 % (tope) solo sobre las 2 cajas extra', async () => {
     const r = await run({ ...BASE, postalCode: 'C1425ABC', localityId: locs['CABA'], items: [{ productId: P5, quantity: 8 }] });
-    expect(r.body).toMatchObject({ ok: true, receipt: { subtotal: 71200, discountPct: 10, discount: 7120, shippingCost: 0, total: 64080, boxCount: 8 } });
+    // 2 cajas extra × 8900 × 10 % = 1780
+    expect(r.body).toMatchObject({ ok: true, receipt: { subtotal: 71200, discountPct: 10, discount: 1780, shippingCost: 0, total: 69420, boxCount: 8 } });
   });
 
   it('CABA con 7 cajas: 5 %; las salsas no suman cajas ni entran en el descuento', async () => {
     const r = await run({ ...BASE, postalCode: '1000', localityId: locs['CABA'], items: [{ productId: P1, quantity: 7 }, { productId: P3, quantity: 1 }] });
-    // cajas 7 × 9800 = 68600 → 5 % = 3430; la "salsa" (10200) se cobra entera
-    expect(r.body).toMatchObject({ ok: true, receipt: { subtotal: 78800, discountPct: 5, discount: 3430, shippingCost: 0, total: 75370, boxCount: 7 } });
+    // 1 caja extra × 9800 × 5 % = 490; la "salsa" (10200) se cobra entera y no entra en el promedio
+    expect(r.body).toMatchObject({ ok: true, receipt: { subtotal: 78800, discountPct: 5, discount: 490, shippingCost: 0, total: 78310, boxCount: 7 } });
+  });
+
+  it('gustos con precios distintos: el descuento va al precio promedio de caja, igual que en el carrito', async () => {
+    const r = await run({ ...BASE, postalCode: '1000', localityId: locs['CABA'], items: [{ productId: P1, quantity: 4 }, { productId: P5, quantity: 3 }] });
+    // (4 × 9800 + 3 × 8900) / 7 × 1 caja extra × 5 % = 470,71 → 471
+    expect(r.body).toMatchObject({ ok: true, receipt: { subtotal: 65900, discount: 471, total: 65429, boxCount: 7 } });
+    expect(discountAmount(65900, 7, 1, 5)).toBe(471);
+    await q(`update products set stock = stock + 4 where id = $1`, [P1]); // devuelve las cajas para las pruebas siguientes
   });
 
   it.each([

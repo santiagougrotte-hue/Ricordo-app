@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { byPartido, cartMessage, matchTypedLocality, cartTotals, discountPct, findZone as find, OTHER_LOCALITY, quote, type LocalityChoice } from './shipping';
+import { byPartido, cartMessage, discountAmount, matchTypedLocality, cartTotals, discountPct, findZone as find, OTHER_LOCALITY, quote, type LocalityChoice } from './shipping';
 import { SEED_LOCALITIES, SEED_SETTINGS, SEED_ZONES } from './api/seed-data';
 
 const loc = (name: string) => SEED_LOCALITIES.find((l) => l.name === name)!.id;
@@ -58,18 +58,25 @@ describe('quote', () => {
     expect(q).toMatchObject({ shippingCost: 2500, missingForFree: 1, canCheckout: true, total: 32500 });
     expect(cartMessage(q, bera)).toBe('Sumá 1 caja más y el envío a Berazategui es gratis.');
   });
-  it('CABA con 7 cajas: envío gratis y 5 % sobre las cajas', () => {
+  it('CABA con 7 cajas: envío gratis y 5 % solo sobre la caja extra; la salsa no entra', () => {
     const q = quote('delivery', caba, cart(7, 1), SEED_SETTINGS);
-    expect(q).toMatchObject({ shippingCost: 0, discountPct: 5, discount: 3500, total: 73000 - 3500, missingForNextDiscount: 1, nextDiscountPct: 10 });
-    expect(cartMessage(q, caba)).toBe('¡Envío gratis y 5% de descuento! Sumá 1 caja más y llegás al 10%.');
+    expect(q).toMatchObject({ shippingCost: 0, discountPct: 5, discountBoxes: 1, discount: 500, total: 73000 - 500, missingForNextDiscount: 1, nextDiscountPct: 10 });
+    expect(cartMessage(q, caba)).toBe('¡Envío gratis! Tus cajas extra tienen 5% de descuento. Sumá 1 caja más y llegás al 10%.');
   });
-  it('CABA con 6 cajas: gratis y avisa el descuento', () => {
-    expect(cartMessage(quote('delivery', caba, cart(6), SEED_SETTINGS), caba)).toBe('¡Envío gratis! Sumá 1 caja más y tenés 5% de descuento.');
+  it('CABA con 6 cajas: gratis y avisa desde qué caja hay descuento', () => {
+    expect(cartMessage(quote('delivery', caba, cart(6), SEED_SETTINGS), caba)).toBe('¡Envío gratis! Las cajas que sumes después de la 6.ª tienen hasta 10% de descuento.');
   });
-  it('CABA con 9 cajas: tope 10 %', () => {
+  it('CABA con 9 cajas: tope 10 % sobre las 3 extra; no muestra más mensajes de descuento', () => {
     const q = quote('delivery', caba, cart(9), SEED_SETTINGS);
-    expect(q).toMatchObject({ discountPct: 10, discount: 9000, missingForNextDiscount: null });
-    expect(cartMessage(q, caba)).toBe('¡Envío gratis y 10% de descuento!');
+    expect(q).toMatchObject({ discountPct: 10, discountBoxes: 3, discount: 3000, missingForNextDiscount: null });
+    expect(cartMessage(q, caba)).toBe('¡Envío gratis!');
+  });
+  it('gratis desde 4: umbral +1 = 5 % de 1 caja, +2 = 10 % de 2, +3 = 10 % de 3, +5 = 10 % de 5', () => {
+    expect([5, 6, 7, 9].map((n) => quote('delivery', bera, cart(n), SEED_SETTINGS).discount)).toEqual([500, 2000, 3000, 5000]);
+  });
+  it('precio promedio de las cajas cuando hay gustos con precios distintos', () => {
+    expect(discountAmount(4 * 9800 + 3 * 8900, 7, 1, 5)).toBe(471); // 65900 / 7 × 5 % = 470,71
+    expect(discountAmount(30000, 3, 0, 10)).toBe(0);
   });
   it('envío por distancia: usa el costo calculado; si todavía no hay, el fijo como aproximado', () => {
     const on = { ...SEED_SETTINGS, distanceEnabled: true };

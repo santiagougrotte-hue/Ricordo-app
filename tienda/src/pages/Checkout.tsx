@@ -4,7 +4,7 @@ import { useStore } from '../state/store';
 import { api } from '../lib/api';
 import { money } from '../lib/money';
 import { normalizePostalCode } from '../lib/postal';
-import { cartMessage, findZone, OTHER_LOCALITY, quote } from '../lib/shipping';
+import { cartMessage, discountLabel, findZone, OTHER_LOCALITY, quote } from '../lib/shipping';
 import { deliverySentence } from '../lib/delivery';
 import { whatsappLink } from '../lib/whatsapp';
 import type { OrderError, PaymentMethod } from '../lib/types';
@@ -306,7 +306,7 @@ export function Checkout() {
               </ul>
               <dl className="totals">
                 <div><dt>Subtotal</dt><dd>{money(subtotal)}</dd></div>
-                {q && q.discount > 0 && <div className="discount"><dt>Descuento {q.discountPct}%</dt><dd>−{money(q.discount)}</dd></div>}
+                {q && q.discount > 0 && <div className="discount"><dt>{discountLabel(q.discountPct, q.discountBoxes)}</dt><dd>−{money(q.discount)}</dd></div>}
                 <div>
                   <dt>{method === 'pickup' ? 'Retiro' : zone ? `Envío a ${zone.name}` : 'Envío'}</dt>
                   <dd>{!q || q.shippingCost === null ? '—' : q.shippingCost === 0 ? 'Gratis' : `${q.shippingEstimated ? 'aprox. ' : ''}${money(q.shippingCost)}`}</dd>

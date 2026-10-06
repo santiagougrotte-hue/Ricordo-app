@@ -220,7 +220,7 @@ export function orderSummaryText(r: OrderReceipt, input: OrderInput): string {
     `Pago: ${r.paymentMethod === 'cash' ? 'efectivo' : 'transferencia'}`,
     '',
     lines,
-    `Subtotal ${peso(r.subtotal)}${r.discount ? ` · Descuento ${r.discountPct}% −${peso(r.discount)}` : ''} · Envío ${r.shippingCost ? peso(r.shippingCost) : 'gratis'}`,
+    `Subtotal ${peso(r.subtotal)}${r.discount ? ` · Descuento ${r.discountPct}% en cajas extra −${peso(r.discount)}` : ''} · Envío ${r.shippingCost ? peso(r.shippingCost) : 'gratis'}`,
     input.notes ? `\nNotas: ${input.notes}` : '',
   ].join('\n');
 }

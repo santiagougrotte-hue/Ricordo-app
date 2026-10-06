@@ -52,8 +52,13 @@ export function discountPct(zone: Pick<ShippingZone, 'freeFromBoxes' | 'discount
   return Math.min(zone.discountMax, zone.discountPerBox * (boxes - zone.freeFromBoxes));
 }
 
-/** Igual que round() de Postgres para positivos. */
-export const discountAmount = (boxSubtotal: number, pct: number) => Math.round((boxSubtotal * pct) / 100);
+/** Cajas que pasan el umbral de envío gratis: son las únicas que llevan descuento. */
+export const extraBoxes = (zone: Pick<ShippingZone, 'freeFromBoxes'>, boxes: number) =>
+  zone.freeFromBoxes === null ? 0 : Math.max(0, boxes - zone.freeFromBoxes);
+
+/** Descuento sobre las cajas extra, al precio promedio de caja. Igual que create_order (round de Postgres). */
+export const discountAmount = (boxSubtotal: number, boxes: number, extra: number, pct: number) =>
+  boxes > 0 && extra > 0 && pct > 0 ? Math.round((boxSubtotal * extra * pct) / (boxes * 100)) : 0;
 
 export interface Quote {
   method: DeliveryMethod;
@@ -68,6 +73,10 @@ export interface Quote {
   missingForFree: number | null;
   discountPct: number;
   discount: number;
+  /** Cajas que llevan el descuento (las que pasan el envío gratis). */
+  discountBoxes: number;
+  /** Tope de descuento de la zona (0 = la zona no tiene descuento). */
+  discountMax: number;
   /** Cajas que faltan para el siguiente escalón de descuento (null si no hay más). */
   missingForNextDiscount: number | null;
   nextDiscountPct: number | null;
@@ -81,7 +90,7 @@ export function quote(method: DeliveryMethod, lookup: ZoneLookup, cart: CartTota
   const { boxes, subtotal } = cart;
   const pickupOk = settings.pickupEnabled && boxes >= settings.pickupMinBoxes && boxes > 0;
   const base = {
-    method, boxes, discountPct: 0, discount: 0, missingForNextDiscount: null, nextDiscountPct: null, suggestPickup: false,
+    method, boxes, discountPct: 0, discount: 0, discountBoxes: 0, discountMax: 0, missingForNextDiscount: null, nextDiscountPct: null, suggestPickup: false,
     freeFromBoxes: null, missingForFree: null, shippingEstimated: false,
   };
   if (method === 'pickup') {
@@ -98,7 +107,8 @@ export function quote(method: DeliveryMethod, lookup: ZoneLookup, cart: CartTota
   const free = z.freeFromBoxes !== null && boxes >= z.freeFromBoxes;
   const missing = Math.max(z.minBoxes - boxes, 0);
   const pct = discountPct(z, boxes);
-  const discount = discountAmount(cart.boxSubtotal, pct);
+  const extra = pct > 0 ? extraBoxes(z, boxes) : 0;
+  const discount = discountAmount(cart.boxSubtotal, boxes, extra, pct);
   // Sin clave de OpenRouteService el costo fijo es el definitivo (no es "aproximado").
   const distanceOn = z.distancePricing && settings.distanceEnabled === true;
   const byDistance = distanceOn && distanceCost !== null;
@@ -120,6 +130,8 @@ export function quote(method: DeliveryMethod, lookup: ZoneLookup, cart: CartTota
     missingForFree: z.freeFromBoxes === null ? null : Math.max(z.freeFromBoxes - boxes, 0),
     discountPct: pct,
     discount,
+    discountBoxes: extra,
+    discountMax: z.freeFromBoxes !== null && z.discountPerBox > 0 ? z.discountMax : 0,
     missingForNextDiscount,
     nextDiscountPct,
     total: subtotal - discount + shippingCost,
@@ -145,15 +157,16 @@ export function cartMessage(q: Quote, lookup: ZoneLookup): string {
   }
   if (q.missingForFree !== null && q.missingForFree > 0) return `Sumá ${cajas(q.missingForFree)} más y el envío a ${zone} es gratis.`;
   if (q.freeFromBoxes === null) return `Listo para pedir. Envío a ${zone}.`;
+  if (q.discountMax === 0 || q.missingForNextDiscount === null) return '¡Envío gratis!';
   if (q.discountPct === 0) {
-    return q.missingForNextDiscount !== null
-      ? `¡Envío gratis! Sumá ${cajas(q.missingForNextDiscount)} más y tenés ${q.nextDiscountPct}% de descuento.`
-      : '¡Envío gratis!';
+    return `¡Envío gratis! Las cajas que sumes después de la ${q.freeFromBoxes}.ª tienen hasta ${q.discountMax}% de descuento.`;
   }
-  return q.missingForNextDiscount !== null
-    ? `¡Envío gratis y ${q.discountPct}% de descuento! Sumá ${cajas(q.missingForNextDiscount)} más y llegás al ${q.nextDiscountPct}%.`
-    : `¡Envío gratis y ${q.discountPct}% de descuento!`;
+  return `¡Envío gratis! Tus cajas extra tienen ${q.discountPct}% de descuento. Sumá ${cajas(q.missingForNextDiscount)} más y llegás al ${q.nextDiscountPct}%.`;
 }
+
+/** Texto del renglón de descuento: aclara que va solo sobre las cajas extra. */
+export const discountLabel = (pct: number, extraBoxes?: number) =>
+  extraBoxes ? `Descuento ${pct}% en ${extraBoxes === 1 ? '1 caja extra' : `${extraBoxes} cajas extra`}` : `Descuento ${pct}% en cajas extra`;
 
 /** Cantidad de cajas desde la que se llega al tope de descuento (null si la zona no tiene descuento). */
 export function maxDiscountAt(z: Pick<ShippingZone, 'freeFromBoxes' | 'discountPerBox' | 'discountMax'>): number | null {

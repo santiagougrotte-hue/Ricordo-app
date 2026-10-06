@@ -1,7 +1,7 @@
 import { Link, useNavigate } from 'react-router-dom';
 import { useStore } from '../state/store';
 import { money } from '../lib/money';
-import { cartMessage, maxDiscountAt } from '../lib/shipping';
+import { cartMessage, discountLabel, maxDiscountAt } from '../lib/shipping';
 import { PASTA_LABEL } from '../lib/types';
 import { Sheet } from './Sheet';
 import { Qty } from './Qty';
@@ -25,7 +25,7 @@ export function CartDrawer() {
     <>
       <dl className="totals">
         <div><dt>Subtotal</dt><dd>{money(subtotal)}</dd></div>
-        {q && q.discount > 0 && <div className="discount"><dt>Descuento {q.discountPct}%</dt><dd>−{money(q.discount)}</dd></div>}
+        {q && q.discount > 0 && <div className="discount"><dt>{discountLabel(q.discountPct, q.discountBoxes)}</dt><dd>−{money(q.discount)}</dd></div>}
         <div>
           <dt>{method === 'pickup' ? 'Retiro en Berazategui' : zone ? `Envío a ${zone.name}` : 'Envío'}</dt>
           <dd>{!q || q.shippingCost === null ? '—' : q.shippingCost === 0 ? 'Gratis' : `${q.shippingEstimated ? 'aprox. ' : ''}${money(q.shippingCost)}`}</dd>

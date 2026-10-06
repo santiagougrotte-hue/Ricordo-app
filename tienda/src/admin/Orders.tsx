@@ -3,6 +3,7 @@ import { useAdmin } from './AdminContext';
 import { adminApi } from '../lib/api/admin';
 import { STATUS_FLOW, STATUS_LABEL, type AdminOrder, type OrderStatus } from '../lib/api/adminTypes';
 import { money } from '../lib/money';
+import { discountLabel } from '../lib/shipping';
 import { Sheet } from '../components/Sheet';
 import { Icon } from '../components/Icon';
 import { ago, arDateTime, arWhatsapp, download, ordersCsv, shortDate, arDay } from './util';
@@ -212,7 +213,7 @@ function OrderDetail({ order: o }: { order: AdminOrder }) {
         </ul>
         <dl className="totals">
           <div><dt>Subtotal</dt><dd>{money(o.subtotal)}</dd></div>
-          {o.discount > 0 && <div className="discount"><dt>Descuento {o.discountPct}%</dt><dd>−{money(o.discount)}</dd></div>}
+          {o.discount > 0 && <div className="discount"><dt>{discountLabel(o.discountPct)}</dt><dd>−{money(o.discount)}</dd></div>}
           <div><dt>Envío{o.distancePriced && o.km ? ` (${o.km} km ida y vuelta)` : ''}</dt><dd>{o.shippingCost ? money(o.shippingCost) : 'Gratis'}</dd></div>
           <div className="grand"><dt>Total</dt><dd>{money(o.total)}</dd></div>
         </dl>
