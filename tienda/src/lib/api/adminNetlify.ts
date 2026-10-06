@@ -136,5 +136,18 @@ export function createAdminNetlify(): AdminApi {
     async testWhatsapp() {
       return (await post<{ message: string }>('notify-test')).message;
     },
+    async getPush() {
+      return api<{ publicKey: string; devices: number }>('push');
+    },
+    async subscribePush(subscription, label) {
+      await post('push/subscribe', { subscription, label });
+    },
+    async unsubscribePush(endpoint) {
+      await post('push/unsubscribe', { endpoint });
+    },
+    async testPush() {
+      const r = await post<{ sent: number; failed: number }>('push/test');
+      return r.sent === 1 ? 'Listo: mandamos el aviso de prueba. Tiene que llegarte en unos segundos.' : `Listo: mandamos el aviso de prueba a ${r.sent} celulares.`;
+    },
   };
 }

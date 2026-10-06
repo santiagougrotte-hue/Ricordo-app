@@ -180,6 +180,16 @@ export function createAdminDemo(): AdminApi {
     async testWhatsapp() {
       return 'En modo demo no se mandan mensajes. En la tienda publicada te llega un WhatsApp de prueba.';
     },
+    async getPush() {
+      throw new Error('En modo demo no hay avisos al celular. Activalos en la tienda publicada.');
+    },
+    async subscribePush() {
+      throw new Error('En modo demo no hay avisos al celular.');
+    },
+    async unsubscribePush() {},
+    async testPush() {
+      return 'En modo demo no se mandan avisos.';
+    },
     async saveSettings(s) {
       const db = readDb();
       db.settings = s;

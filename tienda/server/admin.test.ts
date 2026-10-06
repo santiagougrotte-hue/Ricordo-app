@@ -214,6 +214,22 @@ describe.skipIf(!TEST_DB)('API del panel contra Netlify Database (Postgres real)
     const r = await call('POST', 'logout');
     expect(r.setCookie).toMatch(/Max-Age=0/);
   });
+
+  it('avisos push: clave pública, registro validado, baja y prueba sin celulares', async () => {
+    const g = await call('GET', 'push');
+    expect(g.status).toBe(200);
+    expect(g.data).toMatchObject({ devices: 0 });
+    expect(g.data.publicKey).toMatch(/^[A-Za-z0-9_-]{80,}$/);
+    expect((await call('POST', 'push/test')).status).toBe(400);
+    expect((await call('POST', 'push/subscribe', { body: { subscription: { endpoint: 'http://inseguro', keys: { p256dh: 'a', auth: 'b' } } } })).status).toBe(400);
+    const sub = { endpoint: 'https://fcm.googleapis.com/fcm/send/xyz', keys: { p256dh: 'BOr' + 'a'.repeat(84), auth: 'abcdefghijklmnopqrstuv' } };
+    expect((await call('POST', 'push/subscribe', { body: { subscription: sub, label: 'Android · Chrome' } })).status).toBe(200);
+    expect((await call('POST', 'push/subscribe', { body: { subscription: sub, label: 'Android · Chrome' } })).status).toBe(200); // repetir no duplica
+    expect((await call('GET', 'push')).data.devices).toBe(1);
+    expect((await call('POST', 'push/unsubscribe', { body: { endpoint: sub.endpoint } })).status).toBe(200);
+    expect((await call('GET', 'push')).data.devices).toBe(0);
+    expect((await call('GET', 'push', { auth: false })).status).toBe(401);
+  });
 });
 
 describe.skipIf(!TEST_DB)('migraciones: gusto real cargado', () => {

@@ -21,3 +21,10 @@
   for = "/version.json"
   [headers.values]
     Cache-Control = "no-cache"
+
+# El service worker del panel siempre se revisa (así los cambios llegan enseguida).
+[[headers]]
+  for = "/admin-sw.js"
+  [headers.values]
+    Cache-Control = "no-cache"
+    Service-Worker-Allowed = "/admin"

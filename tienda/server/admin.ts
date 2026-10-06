@@ -6,6 +6,7 @@ import { allow, clearCookie, ipHash, json, readCookie, sameText, sessionCookie, 
 import { mapLocality, mapProduct, mapSettings, mapZone, PRODUCTS_SQL } from './catalog';
 import { loadBands, mapShippingConfig } from './distance';
 import { sendWhatsapp } from './createOrder';
+import { sendPush, validSubscription, vapidKeys } from './push';
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 type Row = Record<string, any>;
@@ -17,6 +18,7 @@ export interface AdminEnv {
   CALLMEBOT_APIKEY?: string;
   WHATSAPP_NOTIFY_PHONE?: string;
   ORS_API_KEY?: string;
+  SITE_URL?: string;
 }
 export interface AdminDeps {
   query: Query;
@@ -301,6 +303,37 @@ export async function handleAdmin(req: Request, path: string, env: AdminEnv, dep
   if (path === 'notify-test' && method === 'POST') {
     const r = await sendWhatsapp('Ricordo: prueba de aviso. Así te van a llegar los pedidos nuevos.', env, { query: q, fetch: deps.fetch ?? fetch });
     return r.ok ? json(r) : bad(r.message, 400);
+  }
+
+  // ── Notificaciones push al celular ──
+  if (path === 'push' && method === 'GET') {
+    const { publicKey } = await vapidKeys(q);
+    const [c] = await q<{ n: number }>(`select count(*)::int as n from push_subscriptions`);
+    return json({ publicKey, devices: c.n });
+  }
+  if (path === 'push/subscribe' && method === 'POST') {
+    const b = await body();
+    const sub = validSubscription(b.subscription);
+    if (!sub) return bad('Suscripción inválida');
+    const label = typeof b.label === 'string' ? b.label.slice(0, 80) : '';
+    await q(`insert into push_subscriptions (endpoint, p256dh, auth, label) values ($1, $2, $3, $4)
+             on conflict (endpoint) do update set p256dh = excluded.p256dh, auth = excluded.auth, label = excluded.label`,
+      [sub.endpoint, sub.keys.p256dh, sub.keys.auth, label]);
+    return json({ ok: true });
+  }
+  if (path === 'push/unsubscribe' && method === 'POST') {
+    const b = await body();
+    if (typeof b.endpoint !== 'string') return bad('Falta el endpoint');
+    await q(`delete from push_subscriptions where endpoint = $1`, [b.endpoint]);
+    return json({ ok: true });
+  }
+  if (path === 'push/test' && method === 'POST') {
+    const r = await sendPush(
+      { title: '🔔 Ricordo: prueba de aviso', body: 'Así te van a llegar los pedidos nuevos, aunque el panel esté cerrado.', url: '/admin/pedidos', tag: 'prueba' },
+      { query: q, fetch: deps.fetch ?? fetch, siteUrl: env.SITE_URL },
+    );
+    if (r.sent === 0 && r.failed === 0) return bad('Todavía no activaste los avisos en ningún celular.');
+    return r.sent > 0 ? json(r) : bad('No se pudo mandar el aviso. Desactivá y volvé a activar los avisos en este celular.', 502);
   }
 
   // ── Ajustes ──

@@ -3,6 +3,7 @@ import { adminApi } from '../lib/api/admin';
 import type { AdminSettings } from '../lib/api/adminTypes';
 import { DAYS, cutoffWithDate } from '../lib/delivery';
 import { useLoad } from './useLoad';
+import { PushCard } from './PushCard';
 
 export function SettingsPage() {
   const settings = useLoad(() => adminApi.getSettings());
@@ -31,6 +32,7 @@ export function SettingsPage() {
   return (
     <>
       <h1 className="d-l">Ajustes</h1>
+      <PushCard />
       <section className="adm-form adm-section">
         <h2 className="d-m">Tienda</h2>
         <div className="adm-grid2">

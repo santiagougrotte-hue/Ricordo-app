@@ -4,6 +4,7 @@
 // 5) arma el comprobante  6) avisa al dueño (email / Telegram). Si el aviso falla, el pedido igual queda.
 import type { OrderInput, OrderReceipt, OrderResult, ShortItem } from '../src/lib/types';
 import { orderMessage } from '../src/lib/orderMessage';
+import { sendPush, type PushPayload } from './push';
 import type { Query } from './db';
 import { allow, ipHash } from './http';
 import { distanceFor } from './distance';
@@ -232,6 +233,17 @@ export function orderSummaryText(r: OrderReceipt, input: OrderInput): string {
   ].join('\n');
 }
 
+/** Notificación al celular: corta, para ver de un vistazo qué entró. */
+export function pushForOrder(r: OrderReceipt): PushPayload {
+  const where = r.deliveryMethod === 'pickup' ? 'Retira' : [r.locality, r.windowLabel].filter(Boolean).join(' · ');
+  return {
+    title: `🥟 Nuevo pedido #${r.number} · ${peso(r.total)}`,
+    body: `${r.customerName} · ${r.boxCount} ${r.boxCount === 1 ? 'caja' : 'cajas'}${where ? ` · ${where}` : ''}`,
+    url: '/admin/pedidos',
+    tag: `pedido-${r.number}`,
+  };
+}
+
 /** Aviso por WhatsApp: el mismo resumen que manda el cliente, con el link para escribirle. */
 export function whatsappOrderText(r: OrderReceipt, input: OrderInput): string {
   const fromInput: Partial<OrderReceipt> = {
@@ -295,6 +307,7 @@ async function notifyOwner(r: OrderReceipt, input: OrderInput, env: ServerEnv, d
     }
   }
   if (env.CALLMEBOT_APIKEY) jobs.push(sendWhatsapp(whatsappOrderText(r, input), env, deps));
+  jobs.push(sendPush(pushForOrder(r), { query: deps.query, fetch: deps.fetch, siteUrl: env.SITE_URL }));
   if (env.TELEGRAM_BOT_TOKEN && env.TELEGRAM_CHAT_ID) {
     jobs.push(
       deps.fetch(`https://api.telegram.org/bot${env.TELEGRAM_BOT_TOKEN}/sendMessage`, {

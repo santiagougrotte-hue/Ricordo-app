@@ -15,7 +15,22 @@ import { Zones } from './Zones';
 import { SettingsPage } from './SettingsPage';
 import './admin.css';
 
+/** El panel se puede instalar en el celular (ícono propio): hace falta en iPhone para recibir avisos. */
+function useInstallablePanel() {
+  useEffect(() => {
+    const tags = [
+      Object.assign(document.createElement('link'), { rel: 'manifest', href: '/admin.webmanifest' }),
+      Object.assign(document.createElement('link'), { rel: 'apple-touch-icon', href: '/admin-apple-touch.png' }),
+      Object.assign(document.createElement('meta'), { name: 'apple-mobile-web-app-title', content: 'Ricordo' }),
+      Object.assign(document.createElement('meta'), { name: 'apple-mobile-web-app-capable', content: 'yes' }),
+    ];
+    tags.forEach((t) => document.head.appendChild(t));
+    return () => tags.forEach((t) => t.remove());
+  }, []);
+}
+
 export function AdminRoot() {
+  useInstallablePanel();
   const [session, setSession] = useState<{ email: string } | null | undefined>(undefined);
   useEffect(() => {
     adminApi.getSession().then(setSession, () => setSession(null));

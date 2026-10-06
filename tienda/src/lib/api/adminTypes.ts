@@ -117,6 +117,11 @@ export interface AdminApi {
   saveSettings(s: AdminSettings): Promise<void>;
   /** Manda un WhatsApp de prueba al número de avisos. Devuelve el resultado legible. */
   testWhatsapp(): Promise<string>;
+  /** Avisos push al celular: clave pública y cuántos celulares los tienen activados. */
+  getPush(): Promise<{ publicKey: string; devices: number }>;
+  subscribePush(subscription: PushSubscriptionJSON, label: string): Promise<void>;
+  unsubscribePush(endpoint: string): Promise<void>;
+  testPush(): Promise<string>;
 }
 
 /** Cálculo del envío por distancia (privado: tiene la ubicación de origen). */
