@@ -2,6 +2,7 @@ import { useEffect } from 'react';
 import { Link, useLocation, useNavigate, useParams } from 'react-router-dom';
 import { useStore } from '../state/store';
 import { money } from '../lib/money';
+import { orderMessage } from '../lib/orderMessage';
 import { discountLabel } from '../lib/shipping';
 import { whatsappLink } from '../lib/whatsapp';
 import type { OrderReceipt } from '../lib/types';
@@ -35,10 +36,8 @@ export function Confirmation() {
   }
 
   const msg = r
-    ? `Hola Ricordo! Soy ${r.customerName}, hice el pedido #${r.number}: ${r.lines.map((l) => `${l.quantity} × ${l.name}`).join(', ')}. ` +
-      `Total ${money(r.total)}. ${r.deliveryMethod === 'pickup' ? 'Lo retiro en Berazategui.' : `Entrega: ${r.windowLabel}.`} ` +
-      (r.paymentMethod === 'transfer' ? 'Les paso el comprobante de la transferencia.' : 'Pago en efectivo.')
-    : `Hola Ricordo! Hice el pedido #${number}.`;
+    ? orderMessage(r, { to: 'cliente', transferInfo: settings?.transferInfo })
+    : `¡Hola Ricordo! 👋 Hice el pedido #${number}.`;
   const wa = settings ? whatsappLink(settings.whatsappPhone, msg) : null;
 
   return (

@@ -134,6 +134,8 @@ export function createDemoApi(): StoreApi {
           orderId: order.id, number, subtotal, discount, discountPct: pct, shippingCost: shipping, total: order.total, boxCount: boxes,
           deliveryMethod: order.deliveryMethod, deliveryDate: date, windowLabel: label, locality, paymentMethod: input.paymentMethod, customerName: order.customerName,
           lines: order.items.map((i) => ({ name: i.productName, quantity: i.quantity, unitPrice: i.unitPrice })),
+          createdAt: order.createdAt, customerPhone: phone, address: order.address, postalCode: cp, notes: order.notes,
+          flexibleDelivery: order.flexibleDelivery,
         },
       };
     },

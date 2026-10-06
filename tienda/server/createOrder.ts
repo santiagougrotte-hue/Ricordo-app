@@ -3,6 +3,7 @@
 // 4) llama a create_order() en Netlify Database (una transacción: stock, precios, envío, total)
 // 5) arma el comprobante  6) avisa al dueño (email / Telegram). Si el aviso falla, el pedido igual queda.
 import type { OrderInput, OrderReceipt, OrderResult, ShortItem } from '../src/lib/types';
+import { orderMessage } from '../src/lib/orderMessage';
 import type { Query } from './db';
 import { allow, ipHash } from './http';
 import { distanceFor } from './distance';
@@ -185,10 +186,13 @@ async function loadReceipt(created: { order_id: string; order_number: number; to
       number: string; subtotal: number; discount: number; discount_pct: number; shipping_cost: number; total: number; box_count: number;
       delivery_method: OrderReceipt['deliveryMethod']; delivery_date: string | null;
       delivery_window_label: string; payment_method: OrderReceipt['paymentMethod']; customer_name: string; locality: string | null;
+      created_at: string; customer_phone: string; address: string | null; postal_code: string | null; notes: string | null;
+      flexible_delivery: boolean; lat: string | null; lng: string | null;
       items: { product_name: string; quantity: number; unit_price: number }[];
     }>(
       `select o.number, o.subtotal, o.discount, o.discount_pct, o.shipping_cost, o.total, o.box_count, o.delivery_method,
               to_char(o.delivery_date, 'YYYY-MM-DD') as delivery_date, o.delivery_window_label, o.payment_method, o.customer_name, o.locality,
+              o.created_at, o.customer_phone, o.address, o.postal_code, o.notes, o.flexible_delivery, o.lat, o.lng,
               (select json_agg(json_build_object('product_name', product_name, 'quantity', quantity, 'unit_price', unit_price)) from order_items where order_id = o.id) as items
        from orders o where o.id = $1`,
       [created.order_id],
@@ -199,6 +203,9 @@ async function loadReceipt(created: { order_id: string; order_number: number; to
       shippingCost: o.shipping_cost, total: o.total, boxCount: o.box_count, deliveryMethod: o.delivery_method, deliveryDate: o.delivery_date,
       windowLabel: o.delivery_window_label, paymentMethod: o.payment_method, customerName: o.customer_name, locality: o.locality,
       lines: (o.items ?? []).map((i) => ({ name: i.product_name, quantity: i.quantity, unitPrice: i.unit_price })),
+      createdAt: new Date(o.created_at).toISOString(), customerPhone: o.customer_phone, address: o.address, postalCode: o.postal_code,
+      notes: o.notes, flexibleDelivery: o.flexible_delivery,
+      lat: o.lat === null ? null : Number(o.lat), lng: o.lng === null ? null : Number(o.lng),
     };
   } catch {
     return fallback;
@@ -225,23 +232,14 @@ export function orderSummaryText(r: OrderReceipt, input: OrderInput): string {
   ].join('\n');
 }
 
-/** Aviso corto para WhatsApp: productos, CP, total y día de entrega. */
+/** Aviso por WhatsApp: el mismo resumen que manda el cliente, con el link para escribirle. */
 export function whatsappOrderText(r: OrderReceipt, input: OrderInput): string {
-  const items = r.lines.map((l) => `• ${l.quantity} × ${l.name}`).join('\n');
-  const where = r.deliveryMethod === 'pickup'
-    ? 'Retira en Berazategui'
-    : `${input.address}${r.locality ? ', ' + r.locality : ''} · CP ${input.postalCode}`;
-  return [
-    `Nuevo pedido #${r.number}`,
-    `${r.customerName} · ${input.customerPhone}`,
-    '',
-    items,
-    `${r.boxCount} ${r.boxCount === 1 ? 'caja' : 'cajas'}`,
-    '',
-    where,
-    `Entrega: ${r.deliveryMethod === 'pickup' ? 'a coordinar' : r.windowLabel}${r.deliveryMethod === 'delivery' && input.flexibleDelivery ? ' (acepta otro día)' : ''}`,
-    `Total: ${peso(r.total)} · ${r.paymentMethod === 'cash' ? 'efectivo' : 'transferencia'}`,
-  ].join('\n');
+  const fromInput: Partial<OrderReceipt> = {
+    customerPhone: input.customerPhone, address: input.deliveryMethod === 'delivery' ? input.address : null,
+    postalCode: input.deliveryMethod === 'delivery' ? input.postalCode : null, notes: input.notes || null,
+    flexibleDelivery: input.deliveryMethod === 'delivery' && input.flexibleDelivery, createdAt: new Date().toISOString(),
+  };
+  return orderMessage({ ...fromInput, ...r }, { to: 'aviso' });
 }
 
 /** Manda un WhatsApp al dueño vía CallMeBot. Número: WHATSAPP_NOTIFY_PHONE o el WhatsApp de la tienda (Ajustes). */

@@ -93,11 +93,17 @@ describe.skipIf(!TEST_DB)('handleCreateOrder contra Netlify Database (Postgres r
     expect(wa.searchParams.get('phone')).toBe('5491100000000');
     expect(wa.searchParams.get('apikey')).toBe('k123');
     const text = wa.searchParams.get('text')!;
-    expect(text).toContain('Nuevo pedido #1001');
-    expect(text).toContain('3 × Jamón, muzza y nuez');
-    expect(text).toContain('Calle 14 1234, Berazategui · CP B1884ABC');
-    expect(text).toContain('Total: $31.900');
-    expect(text).toMatch(/Entrega: Sábado \d+\/\d+ a la mañana \(acepta otro día\)/);
+    expect(text).toContain('*Pedido #1001*');
+    expect(text).toContain('👤 Ana Pérez');
+    expect(text).toContain('📱 11 5555-1234');
+    expect(text).toContain('*3 ×* Jamón, muzza y nuez');
+    expect(text).toContain('$9.800 c/u · $29.400');
+    expect(text).toMatch(/📍 Calle 14 1234, Berazategui · CP \S*1884/);
+    expect(text).toContain('Envío: +$2.500');
+    expect(text).toContain('*TOTAL: $31.900*');
+    expect(text).toMatch(/\*Llega:\* Sábado \d+\/\d+ a la mañana/);
+    expect(text).toContain('se lo pueden llevar otro día');
+    expect(text).toContain('💬 Escribirle: https://wa.me/5491155551234');
   });
 
   it('WhatsApp a un número propio para avisos (WHATSAPP_NOTIFY_PHONE) y sin clave no se manda', async () => {

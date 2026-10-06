@@ -128,6 +128,15 @@ export interface OrderReceipt {
   paymentMethod: PaymentMethod;
   lines: { name: string; quantity: number; unitPrice: number }[];
   customerName: string;
+  /** Datos para el resumen de WhatsApp (los del propio cliente, nunca de otro). */
+  createdAt?: string;
+  customerPhone?: string;
+  address?: string | null;
+  postalCode?: string | null;
+  notes?: string | null;
+  flexibleDelivery?: boolean;
+  lat?: number | null;
+  lng?: number | null;
 }
 
 export interface ShortItem {
