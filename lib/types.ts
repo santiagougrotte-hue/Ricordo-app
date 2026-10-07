@@ -349,6 +349,29 @@ export interface CargaHistoricaFondo {
   fecha: string;
 }
 
+/** Los 4 sectores de plata del negocio entre los que se puede mover dinero con una transferencia
+ * interna — nunca ingreso ni gasto real, solo reasignación. */
+export type FondoInterno = "operativa" | "reinversion" | "seguridad" | "reposicion";
+
+/** Movimiento de plata entre dos sectores internos (préstamo o simple movimiento). Un préstamo sin
+ * `devolucion_de` es el original; su(s) devolución(es) son transferencias nuevas con
+ * `devolucion_de` apuntando al id del préstamo que devuelven (podés tener varias, por devoluciones
+ * parciales). Nunca toca el EERR ni el saldo total de caja — es pura reasignación entre fondos. */
+export interface TransferenciaFondo {
+  id: string;
+  /** "YYYY-MM-DD" */
+  fecha: string;
+  origen: FondoInterno;
+  destino: FondoInterno;
+  monto: number;
+  motivo: string;
+  tipo: "prestamo" | "movimiento";
+  /** "YYYY-MM" — solo en préstamos. */
+  devolver_en?: string;
+  /** Id del préstamo que esta transferencia devuelve (la convierte en una devolución). */
+  devolucion_de?: string;
+}
+
 export interface CajaInteligente {
   porcentaje_reinversion: number;
   porcentaje_seguridad: number;
@@ -361,6 +384,7 @@ export interface CajaInteligente {
   cargas_historicas: CargaHistoricaFondo[];
   usos_reinversion: CajaInteligenteUso[];
   usos_seguridad: CajaInteligenteUso[];
+  transferencias_fondos?: TransferenciaFondo[];
 }
 
 export interface ConfigEnvios {
@@ -518,6 +542,7 @@ export function emptyData(): RicordoData {
       cargas_historicas: [],
       usos_reinversion: [],
       usos_seguridad: [],
+      transferencias_fondos: [],
     },
     config_envios: {
       litro_nafta: 1200,

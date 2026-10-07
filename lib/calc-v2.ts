@@ -23,7 +23,7 @@ import type {
   TipoUnidadVenta,
   TipoItemStock,
 } from "./types-v2";
-import type { DistribucionGanancia } from "./types";
+import type { DistribucionGanancia, FondoInterno, TransferenciaFondo } from "./types";
 import { fARS, fFechaCorta, fNum, fPct, inPeriod, inYear, isAfter } from "./calc";
 
 export { fARS, fFechaCorta, fNum, fPct, inPeriod, inYear, isAfter };
@@ -1744,16 +1744,19 @@ export function calcularFondosReinversion(data: RicordoDataV2): FondosReinversio
   const gastadoReinversion = ci.usos_reinversion.reduce((acc, u) => acc + u.monto, 0);
   const gastadoSeguridad = ci.usos_seguridad.reduce((acc, u) => acc + u.monto, 0);
 
+  const netoReinversion = netoTransferenciasFondo(data, "reinversion");
+  const netoSeguridad = netoTransferenciasFondo(data, "seguridad");
+
   return {
     reinversion: {
       asignado: Math.round(asignadoReinversion),
       gastado: Math.round(gastadoReinversion),
-      disponible: Math.round(asignadoReinversion - gastadoReinversion) || 0,
+      disponible: Math.round(asignadoReinversion - gastadoReinversion + netoReinversion) || 0,
     },
     seguridad: {
       asignado: Math.round(asignadoSeguridad),
       gastado: Math.round(gastadoSeguridad),
-      disponible: Math.round(asignadoSeguridad - gastadoSeguridad) || 0,
+      disponible: Math.round(asignadoSeguridad - gastadoSeguridad + netoSeguridad) || 0,
     },
   };
 }
@@ -1765,7 +1768,8 @@ export function calcularFondoReposicion(data: RicordoDataV2): number {
   const f = data.configuracion.fondo_reposicion;
   const aportes = f.aportes.reduce((acc, a) => acc + a.monto, 0);
   const usos = f.usos.reduce((acc, u) => acc + u.monto, 0);
-  return Math.round(aportes - usos) || 0;
+  const neto = netoTransferenciasFondo(data, "reposicion");
+  return Math.round(aportes - usos + neto) || 0;
 }
 
 /** Dinero libre/disponible: lo que realmente se puede usar sin comprometer pagos ya previsibles ni
@@ -1787,6 +1791,130 @@ export function calcularDineroLibre(data: RicordoDataV2, hoy: string): DineroLib
   const fondos_reservados = fondos.reinversion.disponible + fondos.seguridad.disponible + calcularFondoReposicion(data);
   const dinero_libre = Math.round(dinero_en_cuentas - cuentas_por_pagar - fondos_reservados) || 0;
   return { dinero_en_cuentas, cuentas_por_pagar, fondos_reservados, dinero_libre };
+}
+
+// --- Transferencias internas entre sectores de plata del negocio ------------------------------
+// Una transferencia interna es pura reasignación entre los 4 "sectores" de plata del negocio:
+// nunca es ingreso ni gasto, nunca toca el EERR ni el saldo total de caja (saldoCaja). El
+// disponible de cada sector reservado (seguridad/reinversión/reposición) ya incluye el neto de sus
+// transferencias (ver arriba, calcularFondosReinversion/calcularFondoReposicion); el de Caja
+// operativa es simplemente calcularDineroLibre, que ya baja/sube solo porque los fondos reservados
+// bajan/suben — no necesita su propio cálculo.
+
+export const FONDO_INTERNO_LABELS: Record<FondoInterno, string> = {
+  operativa: "Caja operativa",
+  seguridad: "Margen de seguridad",
+  reinversion: "Reinversión",
+  reposicion: "Fondo de reposición",
+};
+
+function transferenciasFondos(data: RicordoDataV2): TransferenciaFondo[] {
+  return data.configuracion.caja_inteligente.transferencias_fondos ?? [];
+}
+
+/** Neto de transferencias de un fondo: lo que entró (como destino) menos lo que salió (como
+ * origen). Una devolución es una transferencia más (origen = fondo que devuelve), así que ya queda
+ * contada acá sin tratamiento especial. */
+export function netoTransferenciasFondo(data: RicordoDataV2, fondo: FondoInterno): number {
+  const neto = transferenciasFondos(data).reduce((acc, t) => {
+    if (t.destino === fondo) return acc + t.monto;
+    if (t.origen === fondo) return acc - t.monto;
+    return acc;
+  }, 0);
+  return Math.round(neto) || 0;
+}
+
+export interface SaldoFondoInterno {
+  fondo: FondoInterno;
+  label: string;
+  disponible: number;
+}
+
+/** Disponible HOY de los 4 sectores. */
+export function saldosFondos(data: RicordoDataV2, hoy: string): SaldoFondoInterno[] {
+  const fondos = calcularFondosReinversion(data);
+  const reposicion = calcularFondoReposicion(data);
+  const dineroLibre = calcularDineroLibre(data, hoy).dinero_libre;
+  const disponiblePorFondo: Record<FondoInterno, number> = {
+    operativa: dineroLibre,
+    seguridad: fondos.seguridad.disponible,
+    reinversion: fondos.reinversion.disponible,
+    reposicion,
+  };
+  return (Object.keys(FONDO_INTERNO_LABELS) as FondoInterno[]).map((fondo) => ({
+    fondo,
+    label: FONDO_INTERNO_LABELS[fondo],
+    disponible: disponiblePorFondo[fondo],
+  }));
+}
+
+export type EstadoPrestamoInterno = "Pendiente" | "Parcial" | "Devuelto" | "Vencido";
+
+export interface PrestamoInterno extends TransferenciaFondo {
+  devuelto: number;
+  falta: number;
+  estado: EstadoPrestamoInterno;
+}
+
+/** Préstamos entre fondos (transferencias tipo "prestamo" que no son ellas mismas una devolución),
+ * con cuánto ya se devolvió (suma de sus devoluciones vía `devolucion_de`), cuánto falta, y su
+ * estado. Vencido manda sobre Parcial: una devolución parcial de un préstamo ya vencido sigue
+ * mostrando Vencido, no Parcial. */
+export function prestamosInternos(data: RicordoDataV2, hoy: string): PrestamoInterno[] {
+  const todas = transferenciasFondos(data);
+  const mesActual = hoy.slice(0, 7);
+  return todas
+    .filter((t) => t.tipo === "prestamo" && !t.devolucion_de)
+    .map((t) => {
+      const devuelto = todas.filter((d) => d.devolucion_de === t.id).reduce((acc, d) => acc + d.monto, 0);
+      const falta = Math.max(0, Math.round(t.monto - devuelto));
+      let estado: EstadoPrestamoInterno;
+      if (falta <= 0) estado = "Devuelto";
+      else if (t.devolver_en && t.devolver_en < mesActual) estado = "Vencido";
+      else if (devuelto > 0) estado = "Parcial";
+      else estado = "Pendiente";
+      return { ...t, devuelto: Math.round(devuelto), falta, estado };
+    })
+    .sort((a, b) => b.fecha.localeCompare(a.fecha));
+}
+
+/** Préstamos con saldo pendiente cuyo mes de devolución ya llegó o pasó — para el aviso de
+ * "hay que devolver esto este mes" (Finanzas → Resumen y la propia pantalla de transferencias). */
+export function devolucionesPendientesMes(data: RicordoDataV2, mesReferenciaActual: string, hoy: string): PrestamoInterno[] {
+  return prestamosInternos(data, hoy).filter((p) => p.falta > 0 && !!p.devolver_en && p.devolver_en <= mesReferenciaActual);
+}
+
+export interface TransferenciaRecienteItem extends TransferenciaFondo {
+  es_devolucion: boolean;
+  /** Solo para préstamos: lo que falta devolver hoy. */
+  saldo_restante?: number;
+  estado?: EstadoPrestamoInterno;
+}
+
+/** Transferencias de los últimos `dias` días + cualquier préstamo todavía sin devolver aunque sea
+ * más viejo (para no perder de vista una deuda interna, vencida o no), de la más nueva a la más
+ * vieja. */
+export function transferenciasRecientes(data: RicordoDataV2, hoy: string, dias = 15): TransferenciaRecienteItem[] {
+  const todas = transferenciasFondos(data);
+  const desde = sumarDias(hoy, -dias);
+  const prestamoPorId = new Map(prestamosInternos(data, hoy).map((p) => [p.id, p]));
+
+  return todas
+    .filter((t) => {
+      if (t.fecha >= desde) return true;
+      const prestamo = !t.devolucion_de && t.tipo === "prestamo" ? prestamoPorId.get(t.id) : undefined;
+      return !!prestamo && prestamo.falta > 0;
+    })
+    .map((t) => {
+      const prestamo = !t.devolucion_de && t.tipo === "prestamo" ? prestamoPorId.get(t.id) : undefined;
+      return {
+        ...t,
+        es_devolucion: !!t.devolucion_de,
+        saldo_restante: prestamo?.falta,
+        estado: prestamo?.estado,
+      };
+    })
+    .sort((a, b) => b.fecha.localeCompare(a.fecha));
 }
 
 // --- Normalización de canal (Productos) ------------------------------------------------------

@@ -25,6 +25,7 @@ import {
   SearchInput,
   InfoRow,
   Sep,
+  Alert,
 } from "@/components/ui";
 import { Modal } from "@/components/Modal";
 import {
@@ -59,9 +60,24 @@ import {
   estadoDistribucionMes,
   calcularRentabilidadEnvios,
   calcularEerrEstructurado,
+  saldosFondos,
+  prestamosInternos,
+  devolucionesPendientesMes,
+  FONDO_INTERNO_LABELS,
 } from "@/lib/calc-v2";
-import type { Eerr, EerrLinea, CriterioEnvioPedido, VistaMargen, CuentaPorCobrar, CuentaPorPagar } from "@/lib/calc-v2";
+import type {
+  Eerr,
+  EerrLinea,
+  CriterioEnvioPedido,
+  VistaMargen,
+  CuentaPorCobrar,
+  CuentaPorPagar,
+  PrestamoInterno,
+  EstadoPrestamoInterno,
+} from "@/lib/calc-v2";
 import type { Activo } from "@/lib/types-v2";
+import type { FondoInterno } from "@/lib/types";
+import { useRouter } from "@/lib/nav-context";
 
 function nombreCategoria(data: ReturnType<typeof useStoreV2>["data"], id: string | undefined) {
   return data.categorias.find((c) => c.id === id)?.nombre ?? "—";
@@ -357,6 +373,7 @@ const PREFIJOS_GASTO: Record<string, (sub: string) => string> = {
 function GastosTab() {
   const { data, setData } = useStoreV2();
   const { toast } = useToast();
+  const hoy = hoyIso();
   const [modalOpen, setModalOpen] = useState(false);
   const [form, setForm] = useState({
     grupo: "Costo Fijo" as keyof typeof PREFIJOS_GASTO,
@@ -365,6 +382,8 @@ function GastosTab() {
     monto: 0,
     fecha: new Date().toISOString().slice(0, 10),
   });
+  const [cubrirConFondo, setCubrirConFondo] = useState(false);
+  const [cobertura, setCobertura] = useState({ fondo: "seguridad" as FondoInterno, monto: 0, devolver_en: "" });
 
   const gastos = useMemo(() => {
     const prefijos = ["Costo Fijo — ", "Costo Indirecto — ", "Gasto Operativo — ", "Gastos Financieros — "];
@@ -373,10 +392,31 @@ function GastosTab() {
       .sort((a, b) => b.fecha.localeCompare(a.fecha));
   }, [data]);
 
+  const saldos = useMemo(() => saldosFondos(data, hoy), [data, hoy]);
+  const saldoFondoCobertura = saldos.find((s) => s.fondo === cobertura.fondo)?.disponible ?? 0;
+
   function guardar() {
     if (!form.concepto.trim() || form.monto <= 0) {
       toast("Completá el concepto y un monto mayor a 0", "error");
       return;
+    }
+    if (cubrirConFondo) {
+      if (cobertura.monto <= 0) {
+        toast("Ingresá un monto a cubrir mayor a 0", "error");
+        return;
+      }
+      if (cobertura.monto > form.monto) {
+        toast("No podés cubrir más que el total del gasto", "error");
+        return;
+      }
+      if (cobertura.monto > saldoFondoCobertura) {
+        toast(`No hay suficiente disponible en ${FONDO_INTERNO_LABELS[cobertura.fondo]}`, "error");
+        return;
+      }
+      if (!cobertura.devolver_en) {
+        toast("Elegí el mes de devolución", "error");
+        return;
+      }
     }
     const nombreCat = PREFIJOS_GASTO[form.grupo](form.subcategoria || "General");
     setData((d) => {
@@ -393,11 +433,34 @@ function GastosTab() {
           ...d.movimientos_financieros,
           { id: uid("MOVF"), fecha: form.fecha, tipo: "egreso", categoria_id: categoria.id, concepto: form.concepto, monto: form.monto, estado: "confirmado" },
         ],
+        configuracion: !cubrirConFondo
+          ? d.configuracion
+          : {
+              ...d.configuracion,
+              caja_inteligente: {
+                ...d.configuracion.caja_inteligente,
+                transferencias_fondos: [
+                  ...(d.configuracion.caja_inteligente.transferencias_fondos ?? []),
+                  {
+                    id: uid("TRF"),
+                    fecha: form.fecha,
+                    origen: cobertura.fondo,
+                    destino: "operativa",
+                    monto: cobertura.monto,
+                    motivo: `Cubrir gasto — ${form.concepto}`,
+                    tipo: "prestamo",
+                    devolver_en: cobertura.devolver_en,
+                  },
+                ],
+              },
+            },
       };
     });
-    toast("Gasto registrado");
+    toast(cubrirConFondo ? "Gasto registrado y préstamo interno creado" : "Gasto registrado");
     setModalOpen(false);
     setForm({ grupo: "Costo Fijo", subcategoria: "", concepto: "", monto: 0, fecha: new Date().toISOString().slice(0, 10) });
+    setCubrirConFondo(false);
+    setCobertura({ fondo: "seguridad", monto: 0, devolver_en: "" });
   }
 
   return (
@@ -480,6 +543,30 @@ function GastosTab() {
             <Input type="date" value={form.fecha} onChange={(e) => setForm({ ...form, fecha: e.target.value })} />
           </Field>
         </FormGrid>
+
+        <label className="mt-3.5 flex items-center gap-2 text-[12.5px] text-text2">
+          <input type="checkbox" checked={cubrirConFondo} onChange={(e) => setCubrirConFondo(e.target.checked)} />
+          Cubrir parte con un fondo
+        </label>
+        {cubrirConFondo && (
+          <FormGrid>
+            <Field label="Fondo">
+              <Select value={cobertura.fondo} onChange={(e) => setCobertura({ ...cobertura, fondo: e.target.value as FondoInterno })}>
+                {saldos.map((s) => (
+                  <option key={s.fondo} value={s.fondo}>
+                    {s.label} — {fARS(s.disponible)} disponible
+                  </option>
+                ))}
+              </Select>
+            </Field>
+            <Field label="Monto a cubrir">
+              <Input type="number" value={cobertura.monto} onChange={(e) => setCobertura({ ...cobertura, monto: Number(e.target.value) })} />
+            </Field>
+            <Field label="Devolver en (mes)">
+              <Input type="month" value={cobertura.devolver_en} onChange={(e) => setCobertura({ ...cobertura, devolver_en: e.target.value })} />
+            </Field>
+          </FormGrid>
+        )}
       </Modal>
     </div>
   );
@@ -3124,6 +3211,7 @@ function CuentasPorPagarTab() {
 function ResumenTab() {
   const { data } = useStoreV2();
   const { mes, anio } = usePeriod();
+  const router = useRouter();
   const hoy = hoyIso();
 
   const desde = primerDiaMes(mes, anio);
@@ -3137,10 +3225,19 @@ function ResumenTab() {
   const porPagar = useMemo(() => calcularCuentasPorPagar(data, hoy).reduce((acc, c) => acc + c.saldo, 0), [data, hoy]);
   const proyeccion = useMemo(() => calcularProyeccionCaja(data, hoy), [data, hoy]);
   const proy30 = proyeccion.puntos.find((p) => p.dias === 30);
+  const devolucionesDelMes = useMemo(() => devolucionesPendientesMes(data, hoy.slice(0, 7), hoy), [data, hoy]);
 
   return (
     <div>
       <p className="mb-4 text-[12.5px] text-text3">Lo esencial de {MESES[mes - 1]} {anio} — el detalle de cada número está en su propia pestaña.</p>
+      {devolucionesDelMes.length > 0 && (
+        <button className="mb-2.5 block w-full text-left" onClick={() => router.go("finanzas", "capital/transferencias")}>
+          <Alert kind="warning">
+            Hay {devolucionesDelMes.length} préstamo(s) interno(s) para devolver este mes, por un total de{" "}
+            {fARS(devolucionesDelMes.reduce((acc, p) => acc + p.falta, 0))}. Tocá para ver Finanzas → Capital → Transferencias internas.
+          </Alert>
+        </button>
+      )}
       <StatGrid>
         <KpiCard label="Saldo en cuentas" value={fARS(saldo)} color={saldo >= 0 ? "green" : "red"} />
         <KpiCard label="Dinero libre" value={fARS(libre.dinero_libre)} color={libre.dinero_libre >= 0 ? "blue" : "red"} sub="Descontando lo que ya está comprometido" />
@@ -3266,8 +3363,411 @@ function AportesFinanciacionTab() {
   );
 }
 
-function CapitalTab() {
-  const [subtab, setSubtab] = useState("activos");
+function fondoDistinto(preferido: FondoInterno, evitar: FondoInterno): FondoInterno {
+  if (preferido !== evitar) return preferido;
+  const orden: FondoInterno[] = ["operativa", "seguridad", "reinversion", "reposicion"];
+  return orden.find((f) => f !== evitar) ?? "operativa";
+}
+
+function transferenciaVacia(hoy: string): {
+  fecha: string;
+  tipo: "prestamo" | "movimiento";
+  origen: FondoInterno;
+  destino: FondoInterno;
+  monto: number;
+  devolver_en: string;
+  motivo: string;
+} {
+  return { fecha: hoy, tipo: "prestamo", origen: "seguridad", destino: "operativa", monto: 0, devolver_en: "", motivo: "" };
+}
+
+const ESTADO_PRESTAMO_BADGE: Record<EstadoPrestamoInterno, "green" | "orange" | "red" | "blue"> = {
+  Pendiente: "blue",
+  Parcial: "orange",
+  Devuelto: "green",
+  Vencido: "red",
+};
+
+function TransferenciasInternasTab() {
+  const { data, setData } = useStoreV2();
+  const { toast } = useToast();
+  const hoy = hoyIso();
+
+  const [modalOpen, setModalOpen] = useState(false);
+  const [form, setForm] = useState(transferenciaVacia(hoy));
+  const [devolviendo, setDevolviendo] = useState<PrestamoInterno | null>(null);
+  const [devolucionForm, setDevolucionForm] = useState({ fecha: hoy, monto: 0 });
+
+  const saldos = useMemo(() => saldosFondos(data, hoy), [data, hoy]);
+  const saldoPorFondo = useMemo(() => new Map(saldos.map((s) => [s.fondo, s.disponible])), [saldos]);
+  const prestamos = useMemo(() => prestamosInternos(data, hoy), [data, hoy]);
+  const historial = useMemo(
+    () => [...(data.configuracion.caja_inteligente.transferencias_fondos ?? [])].sort((a, b) => b.fecha.localeCompare(a.fecha)),
+    [data]
+  );
+  const totalPendiente = prestamos.reduce((acc, p) => acc + p.falta, 0);
+  const devolucionesDelMes = useMemo(() => devolucionesPendientesMes(data, hoy.slice(0, 7), hoy), [data, hoy]);
+
+  const saldoOrigen = saldoPorFondo.get(form.origen) ?? 0;
+  const saldoDestino = saldoPorFondo.get(form.destino) ?? 0;
+  const excede = form.monto > 0 && form.monto > saldoOrigen;
+
+  function abrirConOrigen(fondo: FondoInterno) {
+    setForm({ ...transferenciaVacia(hoy), origen: fondo, destino: fondoDistinto(fondo === "operativa" ? "seguridad" : "operativa", fondo) });
+    setModalOpen(true);
+  }
+
+  function registrar() {
+    if (!form.motivo.trim()) {
+      toast("El motivo es obligatorio", "error");
+      return;
+    }
+    if (form.monto <= 0) {
+      toast("Ingresá un monto mayor a 0", "error");
+      return;
+    }
+    if (form.origen === form.destino) {
+      toast("Elegí dos sectores distintos", "error");
+      return;
+    }
+    if (form.monto > saldoOrigen) {
+      toast(`No hay suficiente disponible en ${FONDO_INTERNO_LABELS[form.origen]}`, "error");
+      return;
+    }
+    if (form.tipo === "prestamo" && !form.devolver_en) {
+      toast("Elegí el mes de devolución", "error");
+      return;
+    }
+    setData((d) => ({
+      ...d,
+      configuracion: {
+        ...d.configuracion,
+        caja_inteligente: {
+          ...d.configuracion.caja_inteligente,
+          transferencias_fondos: [
+            ...(d.configuracion.caja_inteligente.transferencias_fondos ?? []),
+            {
+              id: uid("TRF"),
+              fecha: form.fecha,
+              origen: form.origen,
+              destino: form.destino,
+              monto: form.monto,
+              motivo: form.motivo,
+              tipo: form.tipo,
+              devolver_en: form.tipo === "prestamo" ? form.devolver_en : undefined,
+            },
+          ],
+        },
+      },
+    }));
+    toast(form.tipo === "prestamo" ? "Préstamo registrado" : "Movimiento registrado");
+    setModalOpen(false);
+    setForm(transferenciaVacia(hoy));
+  }
+
+  function abrirDevolver(p: PrestamoInterno) {
+    setDevolviendo(p);
+    setDevolucionForm({ fecha: hoy, monto: p.falta });
+  }
+
+  function confirmarDevolucion() {
+    if (!devolviendo) return;
+    if (devolucionForm.monto <= 0) {
+      toast("Ingresá un monto mayor a 0", "error");
+      return;
+    }
+    if (devolucionForm.monto > devolviendo.falta) {
+      toast("No podés devolver más de lo que falta", "error");
+      return;
+    }
+    const saldoQuienDevuelve = saldoPorFondo.get(devolviendo.destino) ?? 0;
+    if (devolucionForm.monto > saldoQuienDevuelve) {
+      toast(`No hay suficiente disponible en ${FONDO_INTERNO_LABELS[devolviendo.destino]}`, "error");
+      return;
+    }
+    setData((d) => ({
+      ...d,
+      configuracion: {
+        ...d.configuracion,
+        caja_inteligente: {
+          ...d.configuracion.caja_inteligente,
+          transferencias_fondos: [
+            ...(d.configuracion.caja_inteligente.transferencias_fondos ?? []),
+            {
+              id: uid("TRF"),
+              fecha: devolucionForm.fecha,
+              origen: devolviendo.destino,
+              destino: devolviendo.origen,
+              monto: devolucionForm.monto,
+              motivo: `Devolución — ${devolviendo.motivo}`,
+              tipo: "movimiento",
+              devolucion_de: devolviendo.id,
+            },
+          ],
+        },
+      },
+    }));
+    toast("Devolución registrada");
+    setDevolviendo(null);
+  }
+
+  function eliminarPrestamo(id: string) {
+    setData((d) => ({
+      ...d,
+      configuracion: {
+        ...d.configuracion,
+        caja_inteligente: {
+          ...d.configuracion.caja_inteligente,
+          transferencias_fondos: (d.configuracion.caja_inteligente.transferencias_fondos ?? []).filter(
+            (t) => t.id !== id && t.devolucion_de !== id
+          ),
+        },
+      },
+    }));
+    toast("Préstamo eliminado");
+  }
+
+  return (
+    <div>
+      {devolucionesDelMes.length > 0 && (
+        <Alert kind="warning">
+          Hay {devolucionesDelMes.length} préstamo(s) interno(s) para devolver este mes, por un total de{" "}
+          {fARS(devolucionesDelMes.reduce((acc, p) => acc + p.falta, 0))}.
+        </Alert>
+      )}
+
+      <Card title="Disponible por sector" className="mb-4">
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
+          {saldos.map((s) => (
+            <button
+              key={s.fondo}
+              onClick={() => abrirConOrigen(s.fondo)}
+              className={`rounded-[var(--radius-card)] border border-border p-3.5 text-left transition-colors hover:border-accent ${
+                s.disponible > 0 ? "bg-green-dim" : s.disponible < 0 ? "bg-red-dim" : "bg-surface2"
+              }`}
+            >
+              <div className="text-[11px] font-bold uppercase tracking-wide text-text2">{s.label}</div>
+              <div className={`mt-1 text-xl font-[750] ${s.disponible > 0 ? "text-green" : s.disponible < 0 ? "text-red" : "text-text3"}`}>
+                {fARS(s.disponible)}
+              </div>
+            </button>
+          ))}
+        </div>
+        <div className="mt-4 flex flex-wrap items-center justify-between gap-2">
+          <div className="text-[12.5px] text-text3">
+            Total de préstamos por devolver: <span className="font-semibold text-text">{fARS(totalPendiente)}</span>
+          </div>
+          <Button
+            onClick={() => {
+              setForm(transferenciaVacia(hoy));
+              setModalOpen(true);
+            }}
+          >
+            + Transferencia interna
+          </Button>
+        </div>
+      </Card>
+
+      <Card title="Préstamos entre fondos" className="mb-4">
+        {prestamos.length === 0 ? (
+          <EmptyState text="No hay préstamos internos registrados." />
+        ) : (
+          <TableWrap>
+            <table className="w-full">
+              <thead>
+                <tr>
+                  <Th>Fecha</Th>
+                  <Th>De → a</Th>
+                  <Th>Motivo</Th>
+                  <Th>Prestado</Th>
+                  <Th>Devuelto</Th>
+                  <Th>Falta</Th>
+                  <Th>Devolver en</Th>
+                  <Th>Estado</Th>
+                  <Th>Acciones</Th>
+                </tr>
+              </thead>
+              <tbody>
+                {prestamos.map((p) => (
+                  <TrHover key={p.id}>
+                    <Td>{p.fecha}</Td>
+                    <Td>
+                      {FONDO_INTERNO_LABELS[p.origen]} → {FONDO_INTERNO_LABELS[p.destino]}
+                    </Td>
+                    <Td main>{p.motivo}</Td>
+                    <Td>{fARS(p.monto)}</Td>
+                    <Td className="text-green">{fARS(p.devuelto)}</Td>
+                    <Td className={p.falta > 0 ? "text-red" : ""}>{fARS(p.falta)}</Td>
+                    <Td>{p.devolver_en ?? "—"}</Td>
+                    <Td>
+                      <Badge color={ESTADO_PRESTAMO_BADGE[p.estado]}>{p.estado}</Badge>
+                    </Td>
+                    <Td>
+                      <div className="flex gap-1.5">
+                        {p.falta > 0 && (
+                          <Button size="sm" variant="ghost" onClick={() => abrirDevolver(p)}>
+                            Devolver
+                          </Button>
+                        )}
+                        <Button size="sm" variant="danger" onClick={() => eliminarPrestamo(p.id)}>
+                          Eliminar
+                        </Button>
+                      </div>
+                    </Td>
+                  </TrHover>
+                ))}
+              </tbody>
+            </table>
+          </TableWrap>
+        )}
+      </Card>
+
+      <Card title="Historial de transferencias">
+        {historial.length === 0 ? (
+          <EmptyState text="Todavía no hay transferencias internas registradas." />
+        ) : (
+          <TableWrap>
+            <table className="w-full">
+              <thead>
+                <tr>
+                  <Th>Fecha</Th>
+                  <Th>Tipo</Th>
+                  <Th>Origen</Th>
+                  <Th>Destino</Th>
+                  <Th>Motivo</Th>
+                  <Th>Monto</Th>
+                </tr>
+              </thead>
+              <tbody>
+                {historial.map((t) => (
+                  <TrHover key={t.id}>
+                    <Td>{t.fecha}</Td>
+                    <Td>
+                      <Badge color={t.devolucion_de ? "green" : t.tipo === "prestamo" ? "orange" : "blue"}>
+                        {t.devolucion_de ? "Devolución" : t.tipo === "prestamo" ? "Préstamo" : "Movimiento"}
+                      </Badge>
+                    </Td>
+                    <Td>{FONDO_INTERNO_LABELS[t.origen]}</Td>
+                    <Td>{FONDO_INTERNO_LABELS[t.destino]}</Td>
+                    <Td main>{t.motivo}</Td>
+                    <Td>{fARS(t.monto)}</Td>
+                  </TrHover>
+                ))}
+              </tbody>
+            </table>
+          </TableWrap>
+        )}
+      </Card>
+
+      <Modal
+        open={modalOpen}
+        onClose={() => setModalOpen(false)}
+        title="Nueva transferencia interna"
+        footer={
+          <>
+            <Button variant="ghost" onClick={() => setModalOpen(false)}>
+              Cancelar
+            </Button>
+            <Button onClick={registrar} disabled={excede}>
+              Registrar
+            </Button>
+          </>
+        }
+      >
+        <FormGrid>
+          <Field label="Fecha">
+            <Input type="date" value={form.fecha} onChange={(e) => setForm({ ...form, fecha: e.target.value })} />
+          </Field>
+          <Field label="Tipo">
+            <Select value={form.tipo} onChange={(e) => setForm({ ...form, tipo: e.target.value as "prestamo" | "movimiento" })}>
+              <option value="prestamo">Préstamo</option>
+              <option value="movimiento">Movimiento</option>
+            </Select>
+          </Field>
+          <Field label="Sale de">
+            <Select
+              value={form.origen}
+              onChange={(e) => {
+                const origen = e.target.value as FondoInterno;
+                setForm({ ...form, origen, destino: origen === form.destino ? fondoDistinto(form.destino, origen) : form.destino });
+              }}
+            >
+              {saldos.map((s) => (
+                <option key={s.fondo} value={s.fondo}>
+                  {s.label} — {fARS(s.disponible)} disponible
+                </option>
+              ))}
+            </Select>
+          </Field>
+          <Field label="Va a">
+            <Select value={form.destino} onChange={(e) => setForm({ ...form, destino: e.target.value as FondoInterno })}>
+              {saldos
+                .filter((s) => s.fondo !== form.origen)
+                .map((s) => (
+                  <option key={s.fondo} value={s.fondo}>
+                    {s.label} — {fARS(s.disponible)} disponible
+                  </option>
+                ))}
+            </Select>
+          </Field>
+          <Field label="Monto">
+            <Input type="number" value={form.monto} onChange={(e) => setForm({ ...form, monto: Number(e.target.value) })} />
+          </Field>
+          {form.tipo === "prestamo" && (
+            <Field label="Devolver en (mes)">
+              <Input type="month" value={form.devolver_en} onChange={(e) => setForm({ ...form, devolver_en: e.target.value })} />
+            </Field>
+          )}
+          <Field label="Motivo" full>
+            <Input value={form.motivo} onChange={(e) => setForm({ ...form, motivo: e.target.value })} />
+          </Field>
+        </FormGrid>
+
+        <div
+          className={`mt-3.5 rounded-md border px-3.5 py-2.5 text-[12.5px] ${
+            excede ? "border-red/20 bg-red-dim text-red" : "border-border bg-surface2 text-text2"
+          }`}
+        >
+          {FONDO_INTERNO_LABELS[form.origen]} {fARS(saldoOrigen)} → {fARS(saldoOrigen - form.monto)} | {FONDO_INTERNO_LABELS[form.destino]}{" "}
+          {fARS(saldoDestino)} → {fARS(saldoDestino + form.monto)}
+          {excede && " — supera lo disponible en el origen"}
+        </div>
+      </Modal>
+
+      <Modal
+        open={!!devolviendo}
+        onClose={() => setDevolviendo(null)}
+        title="Devolver préstamo"
+        footer={
+          <>
+            <Button variant="ghost" onClick={() => setDevolviendo(null)}>
+              Cancelar
+            </Button>
+            <Button onClick={confirmarDevolucion}>Registrar devolución</Button>
+          </>
+        }
+      >
+        {devolviendo && (
+          <FormGrid>
+            <Field label="Fecha">
+              <Input type="date" value={devolucionForm.fecha} onChange={(e) => setDevolucionForm({ ...devolucionForm, fecha: e.target.value })} />
+            </Field>
+            <Field label={`Monto (falta ${fARS(devolviendo.falta)})`}>
+              <Input
+                type="number"
+                value={devolucionForm.monto}
+                onChange={(e) => setDevolucionForm({ ...devolucionForm, monto: Number(e.target.value) })}
+              />
+            </Field>
+          </FormGrid>
+        )}
+      </Modal>
+    </div>
+  );
+}
+
+function CapitalTab({ subtabInicial }: { subtabInicial?: string }) {
+  const [subtab, setSubtab] = useState(subtabInicial || "activos");
   return (
     <div>
       <FilterTabs
@@ -3277,17 +3777,21 @@ function CapitalTab() {
           { value: "activos", label: "Activos" },
           { value: "reservas", label: "Reservas" },
           { value: "financiacion", label: "Aportes y financiación" },
+          { value: "transferencias", label: "Transferencias internas" },
         ]}
       />
       {subtab === "activos" && <ActivosTab />}
       {subtab === "reservas" && <ReinversionTab />}
       {subtab === "financiacion" && <AportesFinanciacionTab />}
+      {subtab === "transferencias" && <TransferenciasInternasTab />}
     </div>
   );
 }
 
 export function Finanzas() {
-  const [tab, setTab] = useState("resumen");
+  const { tab: tabInicial } = useRouter();
+  const [tabPrincipalInicial, subtabCapitalInicial] = (tabInicial ?? "").split("/");
+  const [tab, setTab] = useState(tabPrincipalInicial || "resumen");
   return (
     <div>
       <PageHeader title="Finanzas" sub="Resumen, tesorería, resultados, compras e inventario, y capital" />
@@ -3306,7 +3810,7 @@ export function Finanzas() {
       {tab === "tesoreria" && <TesoreriaTab />}
       {tab === "resultados" && <ResultadosTab />}
       {tab === "compras-inventario" && <ComprasCmvInventarioVista />}
-      {tab === "capital" && <CapitalTab />}
+      {tab === "capital" && <CapitalTab subtabInicial={subtabCapitalInicial} />}
     </div>
   );
 }

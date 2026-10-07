@@ -707,6 +707,7 @@ export function emptyDataV2(): RicordoDataV2 {
         cargas_historicas: [],
         usos_reinversion: [],
         usos_seguridad: [],
+        transferencias_fondos: [],
       },
       fondo_reposicion: { aportes: [], usos: [] },
       apariencia: { tema: "oscuro", acento_preset: "violeta", acento_hex: "#8b5cf6" },

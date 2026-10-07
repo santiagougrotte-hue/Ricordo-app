@@ -30,12 +30,16 @@ import {
   itemsSinCostoDeterminado,
   fARS,
   fNum,
+  fFechaCorta,
   inPeriod,
   primerDiaMes,
   ultimoDiaMes,
   mesAnterior,
   sumarDias,
+  transferenciasRecientes,
+  FONDO_INTERNO_LABELS,
 } from "@/lib/calc-v2";
+import type { TransferenciaRecienteItem } from "@/lib/calc-v2";
 import {
   pctCambio,
   calcularMetricasVentas,
@@ -88,6 +92,21 @@ function FilaConclusion({ conclusion }: { conclusion: Conclusion }) {
       )}
     </li>
   );
+}
+
+function textoTransferencia(item: TransferenciaRecienteItem): { texto: string; kind: "warning" | "success" | "info" } {
+  const origen = FONDO_INTERNO_LABELS[item.origen];
+  const destino = FONDO_INTERNO_LABELS[item.destino];
+  const fecha = fFechaCorta(item.fecha);
+  if (item.es_devolucion) {
+    return { texto: `${fecha} · Devolviste ${fARS(item.monto)} de ${origen} a ${destino} (${item.motivo})`, kind: "success" };
+  }
+  if (item.tipo === "prestamo") {
+    const falta = item.saldo_restante ?? 0;
+    const sufijo = falta > 0 ? ` · Falta devolver ${fARS(falta)} (en ${item.devolver_en})` : "";
+    return { texto: `${fecha} · Sacaste ${fARS(item.monto)} de ${origen} → ${destino} (${item.motivo})${sufijo}`, kind: falta > 0 ? "warning" : "info" };
+  }
+  return { texto: `${fecha} · Moviste ${fARS(item.monto)} de ${origen} → ${destino} (${item.motivo})`, kind: "info" };
 }
 
 export function Inicio() {
@@ -203,6 +222,11 @@ export function Inicio() {
     return data.pedidos.filter((p) => p.fecha === manana && (p.estado === "Confirmado" || p.estado === "Produccion"));
   }, [data]);
 
+  const transferenciasInicio = useMemo(() => {
+    const hoy = new Date().toISOString().slice(0, 10);
+    return transferenciasRecientes(data, hoy, 15);
+  }, [data]);
+
   const clienteNombre = (id: string) => data.clientes.find((c) => c.id === id)?.nombre ?? "—";
   const valorEvolucion = (e: (typeof evolucion)[number]) => (metricaEvolucion === "facturacion" ? e.facturacion : metricaEvolucion === "cajas" ? e.cajas : e.pedidos);
   const formatoEvolucion = (v: number) => (metricaEvolucion === "facturacion" ? fARS(v) : fNum(v, 0));
@@ -286,6 +310,15 @@ export function Inicio() {
           </Alert>
         </button>
       )}
+
+      {transferenciasInicio.map((item) => {
+        const { texto, kind } = textoTransferencia(item);
+        return (
+          <button key={item.id} className="mb-2.5 block w-full text-left" onClick={() => router.go("finanzas", "capital/transferencias")}>
+            <Alert kind={kind}>{texto}</Alert>
+          </button>
+        );
+      })}
 
       {resumen.length > 0 && (
         <Card title="Resumen inteligente" className="mb-4">
