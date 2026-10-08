@@ -86,9 +86,26 @@ export interface Cliente {
   id: string;
   nombre: string;
   canal: Canal;
+  /** Dirección en texto libre, tal como se cargaba antes de los campos estructurados —
+   * nunca se elimina ni se reemplaza automáticamente por los campos de abajo. */
   direccion?: string;
   telefono?: string;
   email?: string;
+  calle?: string;
+  numero?: string;
+  localidad?: string;
+  partido?: string;
+  provincia?: string;
+  codigo_postal?: string;
+  latitud?: number;
+  longitud?: number;
+  /** Id de lugar del proveedor de mapas (Google Place ID / Mapbox feature id, etc.) —
+   * evita volver a geocodificar la misma dirección. */
+  place_id_externo?: string;
+  /** true una vez que el usuario confirmó la dirección estructurada (autocompletado + pin en
+   * el mapa) — mientras no esté validada, no se puede confiar en latitud/longitud para rutas. */
+  direccion_validada?: boolean;
+  observaciones_entrega?: string;
 }
 
 export type ComponenteReceta = "masa" | "relleno" | "packaging";
@@ -307,12 +324,67 @@ export interface CajaInteligenteUso {
   monto: number;
 }
 
+/** Reparto automático de la ganancia neta de UN mes (mes_referencia, "2026-08") entre Reinversión
+ * y Margen de seguridad — nunca de las ventas brutas. `ganancia_neta` queda grabada como una foto
+ * del resultado_neto del EERR al momento de distribuir, para poder avisar si el EERR de ese mes
+ * cambió después (sin tocar la distribución sola). Un mes solo se distribuye una vez. */
+export interface DistribucionGanancia {
+  id: string;
+  mes_referencia: string;
+  ganancia_neta: number;
+  monto_reinversion: number;
+  monto_seguridad: number;
+  fecha: string;
+}
+
+/** Dinero de un fondo que ya existía antes de este sistema (o que se reserva por fuera del reparto
+ * automático) — nunca genera ingreso ni toca el Estado de Resultados, solo asigna un monto que ya
+ * es real a Reinversión o a Margen de seguridad. */
+export interface CargaHistoricaFondo {
+  id: string;
+  mes_referencia: string;
+  destino: "reinversion" | "seguridad";
+  monto: number;
+  nota?: string;
+  fecha: string;
+}
+
+/** Los 4 sectores de plata del negocio entre los que se puede mover dinero con una transferencia
+ * interna — nunca ingreso ni gasto real, solo reasignación. */
+export type FondoInterno = "operativa" | "reinversion" | "seguridad" | "reposicion";
+
+/** Movimiento de plata entre dos sectores internos (préstamo o simple movimiento). Un préstamo sin
+ * `devolucion_de` es el original; su(s) devolución(es) son transferencias nuevas con
+ * `devolucion_de` apuntando al id del préstamo que devuelven (podés tener varias, por devoluciones
+ * parciales). Nunca toca el EERR ni el saldo total de caja — es pura reasignación entre fondos. */
+export interface TransferenciaFondo {
+  id: string;
+  /** "YYYY-MM-DD" */
+  fecha: string;
+  origen: FondoInterno;
+  destino: FondoInterno;
+  monto: number;
+  motivo: string;
+  tipo: "prestamo" | "movimiento";
+  /** "YYYY-MM" — solo en préstamos. */
+  devolver_en?: string;
+  /** Id del préstamo que esta transferencia devuelve (la convierte en una devolución). */
+  devolucion_de?: string;
+}
+
 export interface CajaInteligente {
   porcentaje_reinversion: number;
   porcentaje_seguridad: number;
+  /** Legacy: aportes mensuales del modelo anterior (monto único, dividido por el % vigente al
+   * mostrarlo, sin destino propio guardado) — se conserva tal cual para no perder historial, pero
+   * ya no se carga nada nuevo acá: lo nuevo va a `distribuciones`/`cargas_historicas`, que sí
+   * guardan el destino real. */
   asignaciones: { id: string; fecha: string; monto: number }[];
+  distribuciones: DistribucionGanancia[];
+  cargas_historicas: CargaHistoricaFondo[];
   usos_reinversion: CajaInteligenteUso[];
   usos_seguridad: CajaInteligenteUso[];
+  transferencias_fondos?: TransferenciaFondo[];
 }
 
 export interface ConfigEnvios {
@@ -466,8 +538,11 @@ export function emptyData(): RicordoData {
       porcentaje_reinversion: 70,
       porcentaje_seguridad: 30,
       asignaciones: [],
+      distribuciones: [],
+      cargas_historicas: [],
       usos_reinversion: [],
       usos_seguridad: [],
+      transferencias_fondos: [],
     },
     config_envios: {
       litro_nafta: 1200,

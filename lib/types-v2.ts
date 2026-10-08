@@ -1,0 +1,726 @@
+// Esquema V2 de Ricordo — mismo documento único por negocio (una fila en Supabase, `app_state`),
+// reordenado en forma normalizada (arrays de registros que se referencian por id, sin tablas
+// Postgres reales). Reemplaza gradualmente `RicordoData` (./types.ts): ver `lib/migration/v2.ts`
+// para el motor que transforma el esquema viejo a este, y el plan de refactor para el contexto
+// completo de por qué (nombres duplicados que eran variantes de un solo producto, dos fuentes de
+// receta desincronizadas, costos fijos/indirectos/operativos que eran la misma cosa clasificada
+// distinto, saldos "de arrastre" sueltos por toda la app).
+
+import type { Adjunto, Cliente, Proveedor, CajaInteligente } from "./types";
+
+export type Canal = "Minorista" | "Mayorista";
+export type EstadoPedido = "Confirmado" | "Produccion" | "Entregado" | "Cancelado";
+export type TipoInsumo = "ingrediente" | "packaging";
+export type EtapaReceta = "masa" | "relleno" | "salsa" | "terminacion" | "packaging";
+export type TipoInventarioMovimiento = "compra" | "produccion" | "consumo" | "venta" | "conteo" | "ajuste" | "merma";
+export type TipoMovimientoFinanciero = "ingreso" | "egreso" | "transferencia";
+export type EstadoMovimientoFinanciero = "confirmado" | "pendiente";
+export type OperacionAjusteReceta = "sumar" | "restar" | "reemplazar";
+export type EstadoPagoCompra = "pagado" | "pendiente";
+export type AmbitoCategoria = "producto" | "insumo" | "financiero";
+
+/** Vocabulario controlado nuevo — reemplaza los strings libres de categoría que hoy tiene cada
+ * entidad (Producto.categoria, Ingrediente.categoria, CostoFijo/CostoIndirecto/GastoOperativo
+ * .categoria), unificados detrás de un id en vez de repetir el texto en cada registro. */
+export interface Categoria {
+  id: string;
+  nombre: string;
+  ambito: AmbitoCategoria;
+  activo: boolean;
+}
+
+// --- Ventas -----------------------------------------------------------------------------------
+
+/** Cabecera del pedido — antes cada línea de detalle duplicaba fecha/cliente/canal/método de
+ * pago; ahora esos datos viven una sola vez por pedido. */
+export interface Pedido {
+  id: string;
+  fecha: string;
+  cliente_id: string;
+  estado: EstadoPedido;
+  canal: Canal;
+  metodo_pago?: string;
+  descuento: number;
+  /** Envío cobrado al cliente — forma parte de la venta (ventas netas), no es un costo. */
+  costo_envio: number;
+  /** Costo real del envío (combustible/logística) — puede ser distinto de `costo_envio`.
+   * Opcional: si no está cargado, las pantallas de rentabilidad asumen `costo_envio` como
+   * aproximación (mismo comportamiento que antes de que este campo existiera). Nunca genera un
+   * movimiento de caja ni una entrada de costos indirectos aparte — se calcula en vivo desde acá
+   * cada vez que se necesita (EERR, Margen por sabor), así que no puede duplicarse ni desincronizarse. */
+  costo_real_envio?: number;
+  total: number;
+  /** Fecha esperada de cobro (opcional) — permite calcular vencidas y proyectar caja. */
+  fecha_vencimiento?: string;
+  notas?: string;
+  adjunto?: Adjunto;
+  /** Snapshot de la dirección de entrega tomado al confirmar el pedido — el cliente puede mudarse
+   * después y el pedido histórico debe seguir mostrando dónde se entregó realmente en su momento,
+   * nunca la dirección actual del cliente. */
+  direccion_entrega_snapshot?: string;
+  latitud_entrega?: number;
+  longitud_entrega?: number;
+}
+
+/** Línea de un pedido. `producto_variante_id` puede ser null si la línea vieja no matcheaba
+ * ningún producto vigente al migrar (queda marcada en `datos_pendientes_revision`, nunca se
+ * inventa una referencia). `nombre_historico`/`precio_unitario` se preservan tal como estaban en
+ * el momento de la venta aunque el producto cambie de nombre o precio después. */
+export interface PedidoItem {
+  id: string;
+  pedido_id: string;
+  producto_variante_id: string | null;
+  nombre_historico: string;
+  cantidad: number;
+  precio_unitario: number;
+  descuento: number;
+  subtotal: number;
+  /** Costo de 1 unidad (materia prima + packaging, sin mano de obra) de la variante en el momento
+   * de la venta — congelado al guardar el pedido (ver Ventas → Pedidos). Si no está cargado (ítems
+   * viejos, de antes de que existiera este campo) el CMV lo recalcula en vivo con el costo ACTUAL
+   * de la receta, como se hacía antes — nunca se inventa un valor para completar este campo
+   * después del hecho. */
+  costo_unitario_historico?: number;
+  /** Mano de obra de 1 unidad de la variante en el momento de la venta — mismo criterio que
+   * `costo_unitario_historico`: congelado al guardar, con fallback al cálculo en vivo
+   * (`costoManoDeObraVariante`) si el ítem no lo tiene. */
+  mano_obra_unitaria_historica?: number;
+}
+
+// --- Productos --------------------------------------------------------------------------------
+
+/** Producto base (el "sabor"/familia) — dueño de la receta compartida. Reemplaza el uso de
+ * `Producto.id === Producto.id_base` del esquema viejo como forma implícita de marcar "soy la
+ * base de mi familia". */
+export interface Producto {
+  id: string;
+  nombre: string;
+  categoria_id?: string;
+  activo: boolean;
+  foto?: Adjunto;
+}
+
+/** Presentación comercial de un producto base — antes era "otro Producto más" con su propia
+ * receta que se desincronizaba de las demás variantes; ahora solo guarda cómo difiere del
+ * envase/canal, y hereda la receta de `producto_id` vía `recetas`/`receta_items` +
+ * `ajustes_receta_variante`. */
+/** Qué representa una unidad de venta de esta variante — usado por Analítica de Ventas para
+ * saber qué contar como "caja" (ej. no sumar salsa/complementos como si fueran cajas de pasta).
+ * Sin cargar (`undefined`), se asume "caja": el catálogo real de Ricordo es mayoritariamente cajas
+ * de pasta, así que ese es el default seguro para no forzar una carga manual sobre todo lo que ya
+ * existe — se corrige puntualmente en las variantes que no lo son. */
+export type TipoUnidadVenta = "caja" | "unidad" | "pote" | "bolsa" | "otro";
+
+export interface ProductoVariante {
+  id: string;
+  producto_id: string;
+  nombre: string;
+  canal?: Canal;
+  presentacion?: string;
+  incluye_salsa?: boolean;
+  unidades_por_paquete?: number;
+  precio_venta: number;
+  activo: boolean;
+  gramos_masa_por_caja?: number;
+  gramos_relleno_por_caja?: number;
+  tipo_unidad_venta?: TipoUnidadVenta;
+  /** Si esta variante usa un relleno producido aparte (Preparacion) en vez de cargarlo como
+   * insumos directos en su receta compartida — al estar seteado, `gramos_relleno_por_caja` pasa a
+   * significar "consumo de esa preparación por caja", el costeo descuenta ese relleno del stock de
+   * preparaciones (ya producido, con su propio costo) en vez de recalcularlo desde insumos crudos,
+   * y la etapa "relleno" de la receta compartida se ignora en el costeo para no duplicar el costo
+   * (los insumos de esa etapa ya se consumieron/costearon al elaborar el lote de relleno). */
+  preparacion_relleno_id?: string;
+}
+
+// --- Recetas ------------------------------------------------------------------------------------
+
+/** Una sola receta por producto base — reemplaza la coexistencia de `receta_masa_unidad` /
+ * `receta_relleno_unidad` (modelo nuevo) y `RecetaLinea` por producto (modelo viejo) como dos
+ * fuentes que podían contradecirse. */
+export interface Receta {
+  id: string;
+  producto_id: string;
+  nombre: string;
+  rendimiento?: number;
+  unidad_rendimiento?: string;
+  activa: boolean;
+  /** Minutos de mano de obra para producir 1 unidad individual (mismo criterio que masa/relleno:
+   * si la receta es compartida, escala × unidades_por_paquete de cada variante; si es una receta
+   * propia/standalone de una variante vieja no migrada, el valor ya representa el total de esa
+   * presentación y no vuelve a escalar). Se convierte a costo con configuracion.costo_mano_obra_hora. */
+  minutos_por_unidad?: number;
+}
+
+export interface RecetaItem {
+  id: string;
+  receta_id: string;
+  insumo_id: string;
+  etapa: EtapaReceta;
+  cantidad: number;
+  unidad?: string;
+}
+
+/** Override puntual de una variante sobre la receta heredada del producto base — reemplaza
+ * `ExcepcionLinea` (que reemplaza la cantidad calculada de esa línea). `operacion: "reemplazar"`
+ * es el caso de uso principal (equivalente a la excepción vieja); "sumar"/"restar" quedan
+ * disponibles para ajustes aditivos que hoy no existen pero el nuevo modelo ya soporta sin
+ * cambios de esquema. */
+export interface AjusteRecetaVariante {
+  id: string;
+  variante_id: string;
+  insumo_id: string;
+  operacion: OperacionAjusteReceta;
+  cantidad: number;
+  etapa?: EtapaReceta;
+}
+
+/** Complementos (ej. una porción de salsa de OTRO producto base, con su propia cantidad,
+ * independiente de `unidades_por_paquete`) no son un ajuste a nivel insumo — apuntan a la receta
+ * completa de otro producto. Se modelan aparte de `AjusteRecetaVariante` (que es insumo a
+ * insumo) para no forzar una relación producto→insumo donde no la hay. Decisión de diseño, no de
+ * negocio: no estaba explícito en el pedido original, se agrega para no perder este caso. */
+export interface ComplementoVariante {
+  id: string;
+  variante_id: string;
+  producto_id: string;
+  cantidad: number;
+}
+
+// --- Insumos / Inventario ------------------------------------------------------------------------
+
+/** Fusión de Ingrediente + Packaging — mismo campo de precio (precio_actual, con historial en
+ * `historial_precios`), distinguidos por `tipo`. */
+export interface Insumo {
+  id: string;
+  nombre: string;
+  tipo: TipoInsumo;
+  categoria_id?: string;
+  unidad: string;
+  precio_actual: number;
+  controla_stock: boolean;
+  stock_minimo?: number;
+  /** Solo aplica a insumos comprados por unidad que pesan (ej. huevo) — igual que en el esquema
+   * viejo, usado por Planificación para escalar por peso. */
+  peso_unitario_g?: number;
+  activo: boolean;
+}
+
+/** Libro único de movimientos de inventario — el stock de cualquier insumo o producto terminado
+ * se calcula sumando estos movimientos, nunca se guarda como saldo aparte. Un ajuste manual es
+ * un movimiento tipo "ajuste", auditable, no un número suelto tipo `stock_manual`. */
+export interface InventarioMovimiento {
+  id: string;
+  fecha: string;
+  tipo: TipoInventarioMovimiento;
+  /** Qué operación generó este movimiento (compra, produccion, pedido, conteo, manual) — junto
+   * con `origen_id` da trazabilidad completa hacia el registro que lo originó. */
+  origen_tipo?: string;
+  origen_id?: string;
+  item_tipo: TipoItemStock;
+  item_id: string;
+  /** Signo: positivo entra al stock, negativo sale. */
+  cantidad: number;
+  unidad?: string;
+  notas?: string;
+  /** Si item_tipo === "preparacion": a qué lote pertenece este movimiento (el que lo generó, o
+   * uno de consumo/merma/ajuste posterior) — permite saber cuánto queda de CADA lote, no solo el
+   * total de la preparación. */
+  lote_id?: string;
+}
+
+export interface HistorialPrecio {
+  id: string;
+  insumo_id: string;
+  fecha: string;
+  precio: number;
+  unidad?: string;
+  origen_tipo?: string;
+  origen_id?: string;
+}
+
+// --- Operaciones: Compras / Proveedores / Producción --------------------------------------------
+
+export interface CompraItem {
+  id: string;
+  compra_id: string;
+  insumo_id: string;
+  cantidad: number;
+  unidad?: string;
+  precio_unitario: number;
+  subtotal: number;
+}
+
+export interface Compra {
+  id: string;
+  fecha: string;
+  proveedor_id: string;
+  descripcion?: string;
+  estado_pago: EstadoPagoCompra;
+  metodo_pago?: string;
+  total: number;
+  /** Fecha esperada de pago (opcional) — permite calcular vencidas y proyectar caja. */
+  fecha_vencimiento?: string;
+  notas?: string;
+  adjunto?: Adjunto;
+}
+
+export interface Produccion {
+  id: string;
+  producto_variante_id: string;
+  cantidad: number;
+  fecha: string;
+  notas?: string;
+}
+
+export interface PlanProduccionMes {
+  id: string;
+  mes: number;
+  anio: number;
+  producto_id: string;
+  cajas_mes: number;
+  cajas_semana: number;
+  fecha_guardado: string;
+}
+
+// --- Entregas y rutas -------------------------------------------------------------------------
+
+export type EstadoRuta = "planificada" | "en_curso" | "completada" | "cancelada";
+
+/** Una ruta de reparto de un día — guarda el costo económico real (nafta/peajes/otros), no solo
+ * un link de mapa: eso es lo que permite comparar el costo de entregar contra lo cobrado por
+ * envío (Sección 29). Los campos `*_snapshot` fijan el precio de combustible y consumo del
+ * vehículo vigentes al momento de crear la ruta — si después cambian en Configuración, esta ruta
+ * ya planificada/completada no debe recalcularse sola. */
+export interface RutaEntrega {
+  id: string;
+  fecha: string;
+  estado: EstadoRuta;
+  direccion_origen: string;
+  lat_origen: number | null;
+  lng_origen: number | null;
+  regresa_origen: boolean;
+  distancia_total_km: number;
+  duracion_estimada_min: number;
+  precio_litro_snapshot: number;
+  consumo_100km_snapshot: number;
+  litros_estimados: number;
+  costo_nafta_estimado: number;
+  peajes: number;
+  estacionamiento: number;
+  otros_costos: number;
+  costo_total_ruta: number;
+  metodo_distribucion_costo: MetodoDistribucionCostoRuta;
+  proveedor_mapa: ProveedorMapa;
+  created_at: string;
+  updated_at: string;
+}
+
+/** Una parada de una ruta — `direccion_snapshot`/`lat`/`lng` se copian del pedido (o del cliente
+ * si el pedido no tiene snapshot propio) al armar la ruta, para que un cambio posterior de
+ * dirección del cliente no reescriba una parada ya planificada. */
+export interface RutaParada {
+  id: string;
+  ruta_id: string;
+  pedido_id: string;
+  orden: number;
+  direccion_snapshot: string;
+  lat: number | null;
+  lng: number | null;
+  ventana_desde?: string;
+  ventana_hasta?: string;
+  distancia_tramo_km: number;
+  duracion_tramo_min: number;
+  costo_asignado: number;
+  estado: "pendiente" | "entregado" | "no_entregado";
+}
+
+// --- Finanzas -------------------------------------------------------------------------------------
+
+/** Unifica caja_movimientos, transferencias_internas, costos_fijos, costos_indirectos y
+ * gastos_operativos: todos son, en el fondo, un movimiento de plata con tipo + categoría, no
+ * módulos de datos separados. Un costo fijo recurrente se migra a un movimiento por cada mes en
+ * que estuvo activo (ver `lib/migration/v2.ts`), no a un registro "vivo" que se recalcula. */
+export interface MovimientoFinanciero {
+  id: string;
+  fecha: string;
+  tipo: TipoMovimientoFinanciero;
+  categoria_id?: string;
+  concepto: string;
+  monto: number;
+  metodo_pago?: string;
+  /** Solo tienen sentido para tipo "transferencia" (entre cuentas propias). */
+  cuenta_origen_id?: string;
+  cuenta_destino_id?: string;
+  origen_tipo?: string;
+  origen_id?: string;
+  estado: EstadoMovimientoFinanciero;
+  notas?: string;
+}
+
+/** Fusiona Amortizacion + GastoInversion (este último nunca tuvo pantalla ni lógica que lo
+ * leyera — ver reporte de migración). */
+export interface Activo {
+  id: string;
+  nombre: string;
+  categoria_id?: string;
+  fecha_compra: string;
+  costo: number;
+  vida_util_meses: number;
+  amortizacion_mensual: number;
+  activo: boolean;
+}
+
+// --- Configuración ---------------------------------------------------------------------------------
+
+/** Sin proveedor real configurado, no se puede geocodificar ni calcular una ruta real — solo se
+ * ofrece una estimación en línea recta (haversine), marcada como tal en toda la UI. "osrm" calcula
+ * ruta real por calles usando el servidor público de demostración de OSRM (Open Source Routing
+ * Machine, project-osrm.org) — no requiere API key. Nunca se inventa una distancia de ruta real
+ * sin un proveedor que la calcule. */
+export type ProveedorMapa = "ninguno" | "haversine" | "osrm";
+
+/** Cómo repartir el costo económico de una ruta con varias paradas entre los pedidos que la
+ * componen — nunca se duplica el costo total en cada pedido. "equitativo" divide el costo total
+ * en partes iguales; "por_distancia_tramo" reparte proporcional al tramo de cada parada. */
+export type MetodoDistribucionCostoRuta = "equitativo" | "por_distancia_tramo";
+
+export interface ConfiguracionEnvios {
+  litro_nafta: number;
+  consumo_100km: number;
+  margen_gratis: number;
+  margen_fijo: number;
+  margen_exacto: number;
+  precio_envio_fijo: number;
+  direccion_base?: string;
+  lat_base?: number;
+  lng_base?: number;
+  vehiculo?: string;
+  fecha_actualizacion_combustible?: string;
+  regresar_a_base_default?: boolean;
+  proveedor_mapa?: ProveedorMapa;
+  metodo_distribucion_costo?: MetodoDistribucionCostoRuta;
+  peajes_default?: number;
+  otros_costos_default?: number;
+}
+
+export interface ConfiguracionPlanificacion {
+  ventana_meses_referencia: number;
+  umbral_desvio_semana_pct: number;
+}
+
+/** Agrupa todo lo que hoy vive disperso como campos sueltos de nivel superior: umbrales, tipo de
+ * cambio, saldos "de arrastre" (renombrados a "saldo_inicial_*" — mismo valor, nombre que no
+ * sugiere que se recalculan solos), config de envíos y planificación. */
+export interface Configuracion {
+  envios: ConfiguracionEnvios;
+  planificacion: ConfiguracionPlanificacion;
+  umbral_dias_mayorista_riesgo: number;
+  umbral_compras_consumo_amber: number;
+  umbral_compras_consumo_red: number;
+  umbral_stock_bajo_producto: number;
+  tipo_cambio: { valor: number; fuente: string };
+  /** Alícuota de Impuesto a las Ganancias (%) usada por el Estado de Resultados con la estructura
+   * pedida (Ventas/CMV/R.bruto/Gastos adm.comerc./Amortizaciones/Intereses/IIGG/Resultado neto) —
+   * configurable porque la alícuota real puede cambiar, nunca se hardcodea el número dentro del
+   * cálculo. */
+  alicuota_iigg: number;
+  /** Costo de mano de obra por hora — se usa en el costeo de productos (Receta.minutos_por_unidad)
+   * para calcular un costo de mano de obra por variante, además de insumos/packaging. Default 0:
+   * nunca se inventa un valor, hasta que se cargue explícitamente no suma nada al costeo. */
+  costo_mano_obra_hora: number;
+  /** `id` de la `ProductoVariante` que representa un frasco de salsa adicional en ventas
+   * Mayorista (Ventas → Pedidos, sección Productos) — nunca se busca por nombre ni se hardcodea
+   * un precio: el campo "Salsa" de la fila solo aparece cuando esto está configurado, y usa
+   * siempre el `precio_venta` real de la variante elegida acá. */
+  variante_salsa_adicional_id?: string;
+  saldo_inicial_cmv: number;
+  saldo_inicial_compras: number;
+  fecha_corte_cmv: string | null;
+  fecha_corte_compras: string | null;
+  saldo_inicial_caja: number;
+  efectivo_en_mano: number;
+  /** `id` de pedido_item confirmados en la conciliación de Caja como intencionalmente sin cobrar. */
+  conciliacion_ignorados: string[];
+  caja_inteligente: CajaInteligente;
+  /** Fondo de reposición de maquinaria: plata que se decide reservar A PROPÓSITO para el día que
+   * haya que reponer una máquina — separado por completo de la amortización contable (que es un
+   * gasto económico del EERR, no una salida de caja). Reservar acá es una decisión manual, nunca
+   * automática. */
+  fondo_reposicion: FondoReposicion;
+  apariencia: ConfiguracionApariencia;
+}
+
+export type Tema = "oscuro" | "claro" | "sistema";
+
+/** Personalización de apariencia (Sección 34) — solo cambia tema y color de acento, nunca los
+ * colores semánticos (verde=correcto, rojo=error/crítico, naranja/amarillo=atención), que viven
+ * aparte en app/globals.css y no se tocan desde acá. */
+export interface ConfiguracionApariencia {
+  tema: Tema;
+  /** id de un preset de PRESETS_ACENTO (lib/tema.ts), o "personalizado" si `acento_hex` fue
+   * elegido a mano con el selector de color. */
+  acento_preset: string;
+  acento_hex: string;
+}
+
+export interface FondoInternoMovimiento {
+  id: string;
+  fecha: string;
+  concepto: string;
+  monto: number;
+}
+
+export interface FondoReposicion {
+  aportes: FondoInternoMovimiento[];
+  usos: FondoInternoMovimiento[];
+}
+
+// --- Pendientes de revisión / legacy -----------------------------------------------------------
+
+export type EstadoRevisionItem = "pendiente" | "resuelto" | "ignorado";
+
+/** Cualquier dato que la migración no pudo resolver con certeza — nunca se corrige ni se
+ * inventa un valor, se deja acá con el motivo para revisión humana. Sin `estado` (dato migrado
+ * antes de esta pantalla) se trata como "pendiente". */
+export interface RevisionItem {
+  id: string;
+  seccion: string;
+  entidad_id?: string;
+  motivo: string;
+  detalle?: Record<string, unknown>;
+  estado?: EstadoRevisionItem;
+  /** Quién y cuándo lo resolvió o lo ignoró — nunca se sobreescribe solo, queda como registro. */
+  resuelto_por?: string;
+  resuelto_en?: string;
+  /** Obligatoria para "ignorado" (justificación de por qué no hace falta corregirlo); opcional
+   * para "resuelto" (qué se corrigió y dónde, ya que la corrección real pasa en la pantalla del
+   * dato — Ventas, Productos, etc. — no acá). */
+  nota_resolucion?: string;
+}
+
+// --- Preparaciones intermedias (rellenos, masas, salsas base) --------------------------------
+// Stock propio, independiente de insumos (materia prima) y de producto_variante (producto
+// terminado vendible) — un tercer tipo de ítem de inventario (ver `TipoItemStock`). Se produce
+// con su propia receta de insumos (PreparacionRecetaItem) y se consume después al elaborar
+// cajas de un producto que la usa (ProductoVariante.preparacion_relleno_id).
+
+export type TipoItemStock = "insumo" | "preparacion" | "producto_variante";
+
+export interface Preparacion {
+  id: string;
+  nombre: string;
+  /** Unidad de stock — "g" o "kg" normalmente, nunca se asume volumen = peso sin esta carga. */
+  unidad: string;
+  controla_stock: boolean;
+  stock_minimo?: number;
+  activo: boolean;
+}
+
+/** Ingredientes para producir `Preparacion.rendimiento_referencia` (en `Preparacion.unidad`) de
+ * esta preparación — mismo criterio que `RecetaItem`, pero para una preparación en vez de un
+ * producto base. Se escala proporcionalmente al planificar una cantidad distinta. */
+export interface PreparacionRecetaItem {
+  id: string;
+  preparacion_id: string;
+  insumo_id: string;
+  cantidad: number;
+  unidad?: string;
+}
+
+export interface PreparacionReceta {
+  id: string;
+  preparacion_id: string;
+  /** Rendimiento de referencia de las cantidades cargadas en PreparacionRecetaItem — nunca
+   * asumido, se carga a mano (ej. "estas cantidades rinden 5000 g de relleno"). */
+  rendimiento_referencia: number;
+}
+
+/** Un lote físico de preparación ya elaborada — unidad de trazabilidad (de dónde salió, cuándo,
+ * con qué costo) y la unidad que `calcularStock`/reservas usan para descontar consumo real. */
+export interface LotePreparacion {
+  id: string;
+  preparacion_id: string;
+  fecha_elaboracion: string;
+  /** Cantidad realmente obtenida (puede diferir de la planificada por cocción/merma) — nunca se
+   * asume igual a lo planificado. */
+  cantidad_obtenida: number;
+  /** Costo total del lote (consumo real de insumos × precio al momento de elaborar), congelado —
+   * no cambia si después sube el precio de un insumo. */
+  costo_total: number;
+  ubicacion?: string;
+  vencimiento?: string;
+  orden_produccion_id?: string;
+  notas?: string;
+}
+
+export type EstadoReserva = "activa" | "liberada" | "consumida";
+
+/** Cantidad de un ítem de stock comprometida para una orden de producción o un pedido, SIN
+ * descontarla todavía del stock físico — `calcularStockDisponible` = físico − reservas activas.
+ * Cancelar lo que la originó libera la reserva (nunca se borra, queda como registro); confirmarlo
+ * la marca consumida (y ahí sí se genera el movimiento de stock real, una sola vez). */
+export interface Reserva {
+  id: string;
+  item_tipo: TipoItemStock;
+  item_id: string;
+  cantidad: number;
+  origen_tipo: "orden_produccion" | "pedido";
+  origen_id: string;
+  estado: EstadoReserva;
+  fecha: string;
+}
+
+export type EstadoOrdenProduccion = "pendiente" | "en_elaboracion" | "terminado" | "cancelado";
+
+/** Tablero de producción (Pendiente → En elaboración → Terminado) — reemplaza, para lo que se
+ * planifica desde ahora, al log plano `Produccion` (que se conserva tal cual para no romper el
+ * historial ya cargado). Cada orden es de una preparación (relleno) o de un producto terminado
+ * (cajas), nunca ambos a la vez. */
+export interface OrdenProduccion {
+  id: string;
+  tipo: "preparacion" | "producto_terminado";
+  item_id: string;
+  cantidad_planeada: number;
+  unidad: string;
+  estado: EstadoOrdenProduccion;
+  fecha_prevista: string;
+  fecha_creacion: string;
+  pedidos_asociados?: string[];
+  notas?: string;
+  responsable?: string;
+  /** Se completan solo al confirmar (estado -> terminado). */
+  cantidad_real?: number;
+  fecha_confirmacion?: string;
+  /** Si tipo === "producto_terminado" y la receta usa relleno de una preparación: de qué lote(s)
+   * se consumió, para trazabilidad (Sección 6: "relacioná las cajas con los lotes utilizados"). */
+  lotes_relleno_consumidos?: { lote_id: string; cantidad: number }[];
+  /** Si tipo === "preparacion": el lote que esta orden generó al confirmarse. */
+  lote_generado_id?: string;
+}
+
+export interface RicordoDataV2 {
+  categorias: Categoria[];
+  clientes: Cliente[];
+  pedidos: Pedido[];
+  pedido_items: PedidoItem[];
+  productos: Producto[];
+  producto_variantes: ProductoVariante[];
+  recetas: Receta[];
+  receta_items: RecetaItem[];
+  ajustes_receta_variante: AjusteRecetaVariante[];
+  complementos_variante: ComplementoVariante[];
+  insumos: Insumo[];
+  inventario_movimientos: InventarioMovimiento[];
+  historial_precios: HistorialPrecio[];
+  compras: Compra[];
+  compra_items: CompraItem[];
+  proveedores: Proveedor[];
+  produccion: Produccion[];
+  plan_produccion: PlanProduccionMes[];
+  preparaciones: Preparacion[];
+  preparacion_recetas: PreparacionReceta[];
+  preparacion_receta_items: PreparacionRecetaItem[];
+  lotes_preparacion: LotePreparacion[];
+  reservas: Reserva[];
+  ordenes_produccion: OrdenProduccion[];
+  rutas_entrega: RutaEntrega[];
+  ruta_paradas: RutaParada[];
+  movimientos_financieros: MovimientoFinanciero[];
+  activos: Activo[];
+  configuracion: Configuracion;
+  datos_pendientes_revision: RevisionItem[];
+  /** Todo lo que no es seguro descartar pero tampoco tiene un lugar claro en el esquema nuevo
+   * (af_elasticidades, af_cap_trabajo, af_payback_items, ia_log, pulso,
+   * borrador_compra_pendiente) — se preserva tal cual si tenía datos al momento de migrar. */
+  legacy: Record<string, unknown>;
+}
+
+export interface RicordoDocument {
+  schema_version: 2;
+  metadata: { migrado_en: string; desde_version: 1 };
+  data: RicordoDataV2;
+}
+
+export function emptyDataV2(): RicordoDataV2 {
+  return {
+    categorias: [],
+    clientes: [],
+    pedidos: [],
+    pedido_items: [],
+    productos: [],
+    producto_variantes: [],
+    recetas: [],
+    receta_items: [],
+    ajustes_receta_variante: [],
+    complementos_variante: [],
+    insumos: [],
+    inventario_movimientos: [],
+    historial_precios: [],
+    compras: [],
+    compra_items: [],
+    proveedores: [],
+    produccion: [],
+    plan_produccion: [],
+    preparaciones: [],
+    preparacion_recetas: [],
+    preparacion_receta_items: [],
+    lotes_preparacion: [],
+    reservas: [],
+    ordenes_produccion: [],
+    rutas_entrega: [],
+    ruta_paradas: [],
+    movimientos_financieros: [],
+    activos: [],
+    configuracion: {
+      envios: {
+        litro_nafta: 1200,
+        consumo_100km: 7,
+        margen_gratis: 65,
+        margen_fijo: 60,
+        margen_exacto: 55,
+        precio_envio_fijo: 2000,
+        regresar_a_base_default: true,
+        proveedor_mapa: "ninguno",
+        metodo_distribucion_costo: "equitativo",
+      },
+      planificacion: { ventana_meses_referencia: 3, umbral_desvio_semana_pct: 15 },
+      umbral_dias_mayorista_riesgo: 45,
+      umbral_compras_consumo_amber: 20,
+      umbral_compras_consumo_red: 40,
+      umbral_stock_bajo_producto: 10,
+      tipo_cambio: { valor: 1000, fuente: "manual" },
+      alicuota_iigg: 35,
+      costo_mano_obra_hora: 0,
+      saldo_inicial_cmv: 0,
+      saldo_inicial_compras: 0,
+      fecha_corte_cmv: null,
+      fecha_corte_compras: null,
+      saldo_inicial_caja: 0,
+      efectivo_en_mano: 0,
+      conciliacion_ignorados: [],
+      caja_inteligente: {
+        porcentaje_reinversion: 60,
+        porcentaje_seguridad: 40,
+        asignaciones: [],
+        distribuciones: [],
+        cargas_historicas: [],
+        usos_reinversion: [],
+        usos_seguridad: [],
+        transferencias_fondos: [],
+      },
+      fondo_reposicion: { aportes: [], usos: [] },
+      apariencia: { tema: "oscuro", acento_preset: "violeta", acento_hex: "#8b5cf6" },
+    },
+    datos_pendientes_revision: [],
+    legacy: {},
+  };
+}
+
+export function emptyDocument(): RicordoDocument {
+  return {
+    schema_version: 2,
+    metadata: { migrado_en: new Date().toISOString(), desde_version: 1 },
+    data: emptyDataV2(),
+  };
+}

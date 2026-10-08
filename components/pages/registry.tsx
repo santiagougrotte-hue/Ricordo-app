@@ -1,86 +1,18 @@
 import React from "react";
-import { NAV } from "@/lib/nav";
-import { Placeholder } from "./Placeholder";
-import { Dashboard } from "./Dashboard";
-import { Pedidos } from "./Pedidos";
-import { Clientes } from "./Clientes";
-import { Productos } from "./Productos";
-import { Recetas } from "./Recetas";
-import { Insumos } from "./Insumos";
-import { Compras } from "./Compras";
-import { Proveedores } from "./Proveedores";
-import { InformeControl } from "./InformeControl";
-import { Familias } from "./Familias";
-import { Stock } from "./Stock";
-import { Produccion } from "./Produccion";
-import { PlanProduccion } from "./PlanProduccion";
-import { Envios } from "./Envios";
-import { Caja } from "./Caja";
-import { Posicion } from "./Posicion";
-import { Flujo } from "./Flujo";
-import { Proyeccion } from "./Proyeccion";
-import { CajaInteligente } from "./CajaInteligente";
-import { Transferencias } from "./Transferencias";
-import { EERR } from "./EERR";
-import { CostosFijos } from "./CostosFijos";
-import { CostosIndirectos } from "./CostosIndirectos";
-import { Amortizaciones } from "./Amortizaciones";
-import { PuntoEquilibrio } from "./PuntoEquilibrio";
-import { CMV } from "./CMV";
-import { HistorialPrecios } from "./HistorialPrecios";
-import { AnRentabilidad } from "./AnRentabilidad";
-import { AnProductos } from "./AnProductos";
-import { AnClientes } from "./AnClientes";
-import { AnAnual } from "./AnAnual";
-import { Simulador } from "./Simulador";
-import { PEVivo } from "./PEVivo";
-import { Costeo } from "./Costeo";
-import { ROI } from "./ROI";
-import { Elasticidad } from "./Elasticidad";
-import { CapTrabajo } from "./CapTrabajo";
-import { Payback } from "./Payback";
-import { Config } from "./Config";
+import { Inicio } from "@/components/pages-v2/Inicio";
+import { Ventas } from "@/components/pages-v2/Ventas";
+import { Productos } from "@/components/pages-v2/Productos";
+import { Inventario } from "@/components/pages-v2/Inventario";
+import { Operaciones } from "@/components/pages-v2/Operaciones";
+import { Finanzas } from "@/components/pages-v2/Finanzas";
+import { Configuracion } from "@/components/pages-v2/Configuracion";
 
-export const PAGES: Record<string, React.ComponentType> = Object.fromEntries(
-  NAV.flatMap((g) => g.items.map((i) => [i.key, Placeholder]))
-);
-
-PAGES.dashboard = Dashboard;
-PAGES.pedidos = Pedidos;
-PAGES.clientes = Clientes;
-PAGES.productos = Productos;
-PAGES.recetas = Recetas;
-PAGES.insumos = Insumos;
-PAGES.compras = Compras;
-PAGES.proveedores = Proveedores;
-PAGES["informe-control"] = InformeControl;
-PAGES.familias = Familias;
-PAGES.stock = Stock;
-PAGES.produccion = Produccion;
-PAGES["planificacion-produccion"] = PlanProduccion;
-PAGES.envios = Envios;
-PAGES.caja = Caja;
-PAGES.posicion = Posicion;
-PAGES.flujo = Flujo;
-PAGES.proyeccion = Proyeccion;
-PAGES["caja-inteligente"] = CajaInteligente;
-PAGES.transferencias = Transferencias;
-PAGES.eerr = EERR;
-PAGES["costos-fijos"] = CostosFijos;
-PAGES["costos-indirectos"] = CostosIndirectos;
-PAGES.amortizaciones = Amortizaciones;
-PAGES["punto-equilibrio"] = PuntoEquilibrio;
-PAGES.cmv = CMV;
-PAGES["historial-precios"] = HistorialPrecios;
-PAGES["an-rentabilidad"] = AnRentabilidad;
-PAGES["an-productos"] = AnProductos;
-PAGES["an-clientes"] = AnClientes;
-PAGES["an-anual"] = AnAnual;
-PAGES.simulador = Simulador;
-PAGES["pe-vivo"] = PEVivo;
-PAGES.costeo = Costeo;
-PAGES.roi = ROI;
-PAGES.elasticidad = Elasticidad;
-PAGES["cap-trabajo"] = CapTrabajo;
-PAGES.payback = Payback;
-PAGES.config = Config;
+export const PAGES: Record<string, React.ComponentType> = {
+  inicio: Inicio,
+  ventas: Ventas,
+  productos: Productos,
+  inventario: Inventario,
+  operaciones: Operaciones,
+  finanzas: Finanzas,
+  config: Configuracion,
+};

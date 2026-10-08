@@ -4,12 +4,12 @@ import React from "react";
 import { Sidebar } from "@/components/Sidebar";
 import { Header } from "@/components/Header";
 import { useRouter } from "@/lib/nav-context";
-import { useStore } from "@/lib/store";
+import { useStoreV2 } from "@/lib/store-v2";
 import { PAGES } from "@/components/pages/registry";
 
 export default function Home() {
   const { page, collapsed, setMobileOpen } = useRouter();
-  const { ready } = useStore();
+  const { ready } = useStoreV2();
 
   const PageComponent = PAGES[page];
 

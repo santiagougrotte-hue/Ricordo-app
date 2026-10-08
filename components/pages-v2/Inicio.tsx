@@ -1,0 +1,517 @@
+"use client";
+
+import React, { useMemo, useState } from "react";
+import { ShoppingCart, PackagePlus, Factory, ClipboardList, Receipt } from "lucide-react";
+import { useStoreV2 } from "@/lib/store-v2";
+import { useRouter } from "@/lib/nav-context";
+import { usePeriod, MESES } from "@/lib/period";
+import {
+  PageHeader,
+  Card,
+  StatGrid,
+  KpiCard,
+  QuickActionButton,
+  TableWrap,
+  Th,
+  Td,
+  TrHover,
+  EmptyState,
+  Badge,
+  Alert,
+  FilterTabs,
+  Select,
+} from "@/components/ui";
+import { GraficoLinea, IndicadorCrecimiento } from "@/components/charts";
+import {
+  cmvPeriodo,
+  saldoCaja,
+  calcularStock,
+  cobrosPeriodo,
+  itemsSinCostoDeterminado,
+  fARS,
+  fNum,
+  fFechaCorta,
+  inPeriod,
+  primerDiaMes,
+  ultimoDiaMes,
+  mesAnterior,
+  sumarDias,
+  transferenciasRecientes,
+  FONDO_INTERNO_LABELS,
+} from "@/lib/calc-v2";
+import type { TransferenciaRecienteItem } from "@/lib/calc-v2";
+import {
+  pctCambio,
+  calcularMetricasVentas,
+  calcularVentasPorCanal,
+  calcularVentasPorGusto,
+  calcularEvolucionMensual,
+  calcularVentasPendientes,
+} from "@/lib/analitica-ventas";
+import { generarResumenInteligente } from "@/lib/resumen-inteligente";
+import { necesidadCajas, stockRestanteLote } from "@/lib/produccion-v2";
+import type { Conclusion } from "@/lib/resumen-inteligente";
+import type { EstadoPedido, Canal } from "@/lib/types-v2";
+
+const ESTADO_COLOR: Record<EstadoPedido, "blue" | "orange" | "green" | "red"> = {
+  Confirmado: "blue",
+  Produccion: "orange",
+  Entregado: "green",
+  Cancelado: "red",
+};
+
+type MetricaEvolucion = "facturacion" | "cajas" | "pedidos";
+const METRICA_LABEL: Record<MetricaEvolucion, string> = { facturacion: "Facturación", cajas: "Cajas", pedidos: "Pedidos" };
+
+const CATEGORIA_COLOR: Record<Conclusion["categoria"], "green" | "red" | "blue"> = { positivo: "green", negativo: "red", neutral: "blue" };
+
+function FilaConclusion({ conclusion }: { conclusion: Conclusion }) {
+  const [expandido, setExpandido] = useState(false);
+  return (
+    <li className="rounded-md border border-border bg-surface2/40 p-3 text-[12.5px]">
+      <div className="flex items-start gap-2">
+        <Badge color={CATEGORIA_COLOR[conclusion.categoria]}>●</Badge>
+        <div className="flex-1 text-text2">{conclusion.texto}</div>
+      </div>
+      <button className="mt-1.5 text-[11px] font-medium text-accent hover:underline" onClick={() => setExpandido((v) => !v)}>
+        {expandido ? "Ocultar datos" : "¿Por qué?"}
+      </button>
+      {expandido && (
+        <TableWrap>
+          <table className="mt-2 w-full">
+            <tbody>
+              {Object.entries(conclusion.datos).map(([clave, valor]) => (
+                <tr key={clave}>
+                  <Td className="text-text3">{clave}</Td>
+                  <Td className="font-medium text-text">{valor === null ? "—" : typeof valor === "number" ? fNum(valor, 2) : valor}</Td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </TableWrap>
+      )}
+    </li>
+  );
+}
+
+function textoTransferencia(item: TransferenciaRecienteItem): { texto: string; kind: "warning" | "success" | "info" } {
+  const origen = FONDO_INTERNO_LABELS[item.origen];
+  const destino = FONDO_INTERNO_LABELS[item.destino];
+  const fecha = fFechaCorta(item.fecha);
+  if (item.es_devolucion) {
+    return { texto: `${fecha} · Devolviste ${fARS(item.monto)} de ${origen} a ${destino} (${item.motivo})`, kind: "success" };
+  }
+  if (item.tipo === "prestamo") {
+    const falta = item.saldo_restante ?? 0;
+    const sufijo = falta > 0 ? ` · Falta devolver ${fARS(falta)} (en ${item.devolver_en})` : "";
+    return { texto: `${fecha} · Sacaste ${fARS(item.monto)} de ${origen} → ${destino} (${item.motivo})${sufijo}`, kind: falta > 0 ? "warning" : "info" };
+  }
+  return { texto: `${fecha} · Moviste ${fARS(item.monto)} de ${origen} → ${destino} (${item.motivo})`, kind: "info" };
+}
+
+export function Inicio() {
+  const { data } = useStoreV2();
+  const router = useRouter();
+  const { mes, anio } = usePeriod();
+  const [canalFiltro, setCanalFiltro] = useState<Canal | "todos">("todos");
+  const [metricaEvolucion, setMetricaEvolucion] = useState<MetricaEvolucion>("facturacion");
+
+  const desde = primerDiaMes(mes, anio);
+  const hasta = ultimoDiaMes(mes, anio);
+  const anterior = mesAnterior(mes, anio);
+  const desdeAnt = primerDiaMes(anterior.mes, anterior.anio);
+  const hastaAnt = ultimoDiaMes(anterior.mes, anterior.anio);
+  const canalParaMetricas = canalFiltro === "todos" ? undefined : canalFiltro;
+
+  const metricas = useMemo(
+    () => calcularMetricasVentas(data, desde, hasta, canalParaMetricas),
+    [data, desde, hasta, canalParaMetricas]
+  );
+  const metricasAnt = useMemo(
+    () => calcularMetricasVentas(data, desdeAnt, hastaAnt, canalParaMetricas),
+    [data, desdeAnt, hastaAnt, canalParaMetricas]
+  );
+  const facturacionPendiente = useMemo(() => calcularVentasPendientes(data, desde, hasta), [data, desde, hasta]);
+  const porCanal = useMemo(() => calcularVentasPorCanal(data, desde, hasta), [data, desde, hasta]);
+  const topGustos = useMemo(() => calcularVentasPorGusto(data, desde, hasta, canalParaMetricas).slice(0, 5), [data, desde, hasta, canalParaMetricas]);
+  const evolucion = useMemo(() => calcularEvolucionMensual(data, anio, canalParaMetricas), [data, anio, canalParaMetricas]);
+  const resumen = useMemo(() => generarResumenInteligente(data, mes, anio), [data, mes, anio]);
+
+  const pedidosDelMes = useMemo(() => data.pedidos.filter((p) => inPeriod(p.fecha, mes, anio)), [data.pedidos, mes, anio]);
+  const cmv = useMemo(() => cmvPeriodo(data, pedidosDelMes), [data, pedidosDelMes]);
+  const margenBruto = metricas.ventas_totales > 0 ? ((metricas.ventas_totales - cmv) / metricas.ventas_totales) * 100 : 0;
+  const caja = useMemo(() => saldoCaja(data), [data]);
+  const cobros = useMemo(() => cobrosPeriodo(data, desde, hasta), [data, desde, hasta]);
+  // Si hay ventas del período cuyo costo no se pudo determinar (producto sin receta cargada, o sin
+  // variante vinculada), el margen/ganancia que se muestra está incompleto — nunca se inventa el
+  // costo faltante, se avisa en vez de mostrar un número que parece completo sin serlo.
+  const itemsSinCosto = useMemo(() => itemsSinCostoDeterminado(data, desde, hasta, canalParaMetricas), [data, desde, hasta, canalParaMetricas]);
+  const productosSinCosto = useMemo(
+    () => Array.from(new Set(itemsSinCosto.map((i) => i.nombre_historico))),
+    [itemsSinCosto]
+  );
+
+  const pedidosPendientes = useMemo(
+    () => data.pedidos.filter((p) => p.estado === "Confirmado" || p.estado === "Produccion").sort((a, b) => a.fecha.localeCompare(b.fecha)),
+    [data.pedidos]
+  );
+  // Proxy de "producción pendiente" con lo que existe hoy: pedidos ya marcados "En producción"
+  // (Ventas → Pedidos) y sus líneas — todavía no hay un tablero de producción propio con estados
+  // Pendiente/En elaboración/Terminado por preparación, eso es una mejora más grande aparte.
+  const pedidosEnProduccion = useMemo(
+    () => data.pedidos.filter((p) => p.estado === "Produccion").sort((a, b) => a.fecha.localeCompare(b.fecha)),
+    [data.pedidos]
+  );
+  const itemsEnProduccion = useMemo(() => {
+    const idsPedidos = new Set(pedidosEnProduccion.map((p) => p.id));
+    const items = data.pedido_items.filter((i) => idsPedidos.has(i.pedido_id));
+    const porVariante = new Map<string, { nombre: string; cantidad: number; pedidos: Set<string> }>();
+    for (const item of items) {
+      const clave = item.producto_variante_id ?? item.id;
+      const actual = porVariante.get(clave) ?? { nombre: item.nombre_historico, cantidad: 0, pedidos: new Set<string>() };
+      actual.cantidad += item.cantidad;
+      actual.pedidos.add(item.pedido_id);
+      porVariante.set(clave, actual);
+    }
+    return Array.from(porVariante.values())
+      .map((v) => ({ nombre: v.nombre, cantidad: v.cantidad, pedidos: v.pedidos.size }))
+      .sort((a, b) => b.cantidad - a.cantidad);
+  }, [data.pedido_items, pedidosEnProduccion]);
+
+  const comprasPendientes = useMemo(() => data.compras.filter((c) => c.estado_pago === "pendiente"), [data.compras]);
+  const totalComprasPendientes = comprasPendientes.reduce((acc, c) => acc + c.total, 0);
+
+  const alertasStock = useMemo(
+    () =>
+      data.insumos
+        .filter((i) => i.controla_stock && i.activo)
+        .map((i) => ({ insumo: i, stock: calcularStock(data, "insumo", i.id) }))
+        .filter(({ insumo, stock }) => insumo.stock_minimo != null && stock < insumo.stock_minimo),
+    [data]
+  );
+
+  // Alertas de producción (Sección 9) — reglas verificables sobre datos reales, nunca una
+  // estimación inventada: faltante de relleno recalculado en vivo sobre cada orden activa, lotes
+  // con vencimiento cargado dentro de 7 días, y pedidos de mañana sin entregar.
+  const alertasRellenoFaltante = useMemo(() => {
+    const resultado: { ordenId: string; nombreVariante: string; nombrePreparacion: string; faltanteG: number }[] = [];
+    for (const orden of data.ordenes_produccion) {
+      if (orden.tipo !== "producto_terminado" || (orden.estado !== "pendiente" && orden.estado !== "en_elaboracion")) continue;
+      const variante = data.producto_variantes.find((v) => v.id === orden.item_id);
+      if (!variante) continue;
+      const necesidad = necesidadCajas(data, variante, orden.cantidad_planeada);
+      if (necesidad.relleno && necesidad.relleno.faltante_g > 0) {
+        const preparacion = data.preparaciones.find((p) => p.id === necesidad.relleno!.preparacion_id);
+        resultado.push({ ordenId: orden.id, nombreVariante: variante.nombre, nombrePreparacion: preparacion?.nombre ?? "(preparación)", faltanteG: necesidad.relleno.faltante_g });
+      }
+    }
+    return resultado;
+  }, [data]);
+
+  const lotesPorVencer = useMemo(() => {
+    const hoy = new Date().toISOString().slice(0, 10);
+    const en7Dias = sumarDias(hoy, 7);
+    return data.lotes_preparacion
+      .filter((l) => l.vencimiento && l.vencimiento <= en7Dias)
+      .map((l) => ({ lote: l, restante: stockRestanteLote(data, l.id), preparacion: data.preparaciones.find((p) => p.id === l.preparacion_id) }))
+      .filter((l) => l.restante > 0);
+  }, [data]);
+
+  const pedidosMananaSinEntregar = useMemo(() => {
+    const manana = sumarDias(new Date().toISOString().slice(0, 10), 1);
+    return data.pedidos.filter((p) => p.fecha === manana && (p.estado === "Confirmado" || p.estado === "Produccion"));
+  }, [data]);
+
+  const transferenciasInicio = useMemo(() => {
+    const hoy = new Date().toISOString().slice(0, 10);
+    return transferenciasRecientes(data, hoy, 15);
+  }, [data]);
+
+  const clienteNombre = (id: string) => data.clientes.find((c) => c.id === id)?.nombre ?? "—";
+  const valorEvolucion = (e: (typeof evolucion)[number]) => (metricaEvolucion === "facturacion" ? e.facturacion : metricaEvolucion === "cajas" ? e.cajas : e.pedidos);
+  const formatoEvolucion = (v: number) => (metricaEvolucion === "facturacion" ? fARS(v) : fNum(v, 0));
+
+  return (
+    <div>
+      <PageHeader title="Inicio" sub={`Resumen de ${MESES[mes - 1]} ${anio}`} />
+
+      <div className="mb-4 flex flex-wrap gap-2.5">
+        <QuickActionButton icon={ShoppingCart} label="Nuevo pedido / venta" onClick={() => router.go("ventas", "pedidos")} />
+        <QuickActionButton icon={PackagePlus} label="Cargar compra" onClick={() => router.go("operaciones", "compras")} />
+        <QuickActionButton icon={Factory} label="Planificar producción" onClick={() => router.go("operaciones", "produccion")} />
+        <QuickActionButton icon={ClipboardList} label="Ver pedidos pendientes" onClick={() => router.go("ventas", "pedidos")} />
+      </div>
+
+      <div className="mb-4 flex flex-wrap items-center gap-3">
+        <span className="text-[11px] font-semibold uppercase tracking-wide text-text3">Canal</span>
+        <FilterTabs
+          value={canalFiltro}
+          onChange={(v) => setCanalFiltro(v as Canal | "todos")}
+          options={[
+            { value: "todos", label: "Todos" },
+            { value: "Minorista", label: "Minorista" },
+            { value: "Mayorista", label: "Mayorista" },
+          ]}
+        />
+      </div>
+
+      <StatGrid>
+        <KpiCard label="Facturación del mes" value={fARS(metricas.ventas_totales)} color="gold" icon={Receipt} />
+        <KpiCard label="Cobrado del mes" value={fARS(cobros)} sub="Caja real, no lo facturado" color="gold" icon={Receipt} />
+        <KpiCard label="Pedidos entregados" value={fNum(metricas.cantidad_pedidos, 0)} color="blue" icon={ShoppingCart} />
+        <KpiCard label="Cajas vendidas" value={fNum(metricas.cajas_vendidas, 0)} color="blue" icon={ShoppingCart} />
+        <KpiCard label="Ticket promedio" value={fARS(metricas.ticket_promedio)} color="gold" />
+        <KpiCard
+          label="Margen bruto"
+          value={fNum(margenBruto, 1) + "%"}
+          sub={productosSinCosto.length > 0 ? `Parcial: sin costo cargado para ${productosSinCosto.join(", ")}` : undefined}
+          color={productosSinCosto.length > 0 ? "orange" : margenBruto >= 0 ? "green" : "red"}
+        />
+        <KpiCard label="Saldo de caja" value={fARS(caja)} color={caja >= 0 ? "green" : "red"} />
+        <KpiCard
+          label="Pedidos pendientes"
+          value={fNum(pedidosPendientes.length, 0)}
+          sub={`Facturación comprometida: ${fARS(facturacionPendiente)}`}
+          color="orange"
+          icon={ClipboardList}
+        />
+        <KpiCard label="Compras sin pagar" value={fARS(totalComprasPendientes)} sub={`${comprasPendientes.length} compra(s)`} color="orange" icon={PackagePlus} />
+      </StatGrid>
+
+      {alertasStock.length > 0 && (
+        <Alert kind="warning">
+          {alertasStock.length} insumo(s) por debajo del stock mínimo: {alertasStock.map(({ insumo }) => insumo.nombre).join(", ")}.
+        </Alert>
+      )}
+
+      {alertasRellenoFaltante.map((a) => (
+        <button key={a.ordenId} className="mb-2.5 block w-full text-left" onClick={() => router.go("operaciones", "produccion")}>
+          <Alert kind="danger">
+            Falta {a.nombrePreparacion.toLowerCase().startsWith("relleno") ? a.nombrePreparacion : `relleno de ${a.nombrePreparacion}`} para completar la producción
+            planificada de {a.nombreVariante} — faltan {fNum(a.faltanteG, 0)} g. Tocá para ver la orden en Operaciones → Producción.
+          </Alert>
+        </button>
+      ))}
+
+      {lotesPorVencer.map(({ lote, restante, preparacion }) => (
+        <button key={lote.id} className="mb-2.5 block w-full text-left" onClick={() => router.go("inventario", "preparaciones")}>
+          <Alert kind="warning">
+            Este lote de {preparacion?.nombre ?? "preparación"} ({fNum(restante, 0)} {preparacion?.unidad ?? ""} restantes) se acerca a su
+            vencimiento ({lote.vencimiento}). Tocá para ver el lote en Inventario → Preparaciones.
+          </Alert>
+        </button>
+      ))}
+
+      {pedidosMananaSinEntregar.length > 0 && (
+        <button className="mb-2.5 block w-full text-left" onClick={() => router.go("ventas", "pedidos")}>
+          <Alert kind="warning">
+            Hay {pedidosMananaSinEntregar.length} pedido(s) para mañana todavía sin marcar Entregado — revisá si la producción
+            está lista. Tocá para ver Ventas → Pedidos.
+          </Alert>
+        </button>
+      )}
+
+      {transferenciasInicio.map((item) => {
+        const { texto, kind } = textoTransferencia(item);
+        return (
+          <button key={item.id} className="mb-2.5 block w-full text-left" onClick={() => router.go("finanzas", "capital/transferencias")}>
+            <Alert kind={kind}>{texto}</Alert>
+          </button>
+        );
+      })}
+
+      {resumen.length > 0 && (
+        <Card title="Resumen inteligente" className="mb-4">
+          <p className="mb-3 text-[12.5px] text-text3">
+            Conclusiones calculadas a partir de los datos cargados este mes — nunca inventadas. Cada una tiene un
+            &ldquo;¿Por qué?&rdquo; con los números exactos usados.
+          </p>
+          <ul className="flex flex-col gap-2">
+            {resumen.map((c) => (
+              <FilaConclusion key={c.id} conclusion={c} />
+            ))}
+          </ul>
+        </Card>
+      )}
+
+      <div className="mb-4 grid grid-cols-1 gap-4 lg:grid-cols-2">
+        <Card title="Crecimiento vs. mes anterior">
+          <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-4">
+            <IndicadorCrecimiento label="Facturación" valor={pctCambio(metricas.ventas_totales, metricasAnt.ventas_totales)} />
+            <IndicadorCrecimiento label="Pedidos" valor={pctCambio(metricas.cantidad_pedidos, metricasAnt.cantidad_pedidos)} />
+            <IndicadorCrecimiento label="Cajas" valor={pctCambio(metricas.cajas_vendidas, metricasAnt.cajas_vendidas)} />
+            <IndicadorCrecimiento label="Ticket promedio" valor={pctCambio(metricas.ticket_promedio, metricasAnt.ticket_promedio)} />
+          </div>
+        </Card>
+
+        <Card title="Mayorista vs. Minorista">
+          <TableWrap>
+            <table className="w-full">
+              <thead>
+                <tr>
+                  <Th>Canal</Th>
+                  <Th>Facturación</Th>
+                  <Th>Cajas</Th>
+                  <Th>Ticket prom.</Th>
+                  <Th>Participación</Th>
+                </tr>
+              </thead>
+              <tbody>
+                {porCanal.map((c) => (
+                  <TrHover key={c.canal}>
+                    <Td main>{c.canal}</Td>
+                    <Td>{fARS(c.ventas_totales)}</Td>
+                    <Td>{fNum(c.cajas_vendidas, 0)}</Td>
+                    <Td>{fARS(c.ticket_promedio)}</Td>
+                    <Td>{c.participacion_pct === null ? "—" : fNum(c.participacion_pct, 1) + "%"}</Td>
+                  </TrHover>
+                ))}
+              </tbody>
+            </table>
+          </TableWrap>
+        </Card>
+      </div>
+
+      <Card
+        title="Evolución de ventas"
+        className="mb-4"
+        right={
+          <Select value={metricaEvolucion} onChange={(e) => setMetricaEvolucion(e.target.value as MetricaEvolucion)} style={{ width: 130 }}>
+            {(Object.keys(METRICA_LABEL) as MetricaEvolucion[]).map((m) => (
+              <option key={m} value={m}>
+                {METRICA_LABEL[m]}
+              </option>
+            ))}
+          </Select>
+        }
+      >
+        <p className="mb-2 text-[12.5px] text-text3">
+          {METRICA_LABEL[metricaEvolucion]} mes a mes durante {anio}. Para comparar contra {anio - 1} o un rango
+          personalizado, ver Ventas → Analítica.
+        </p>
+        <GraficoLinea puntos={evolucion.map((e) => ({ label: e.label, valor: valorEvolucion(e) }))} />
+        <div className="mt-1 text-right text-[11px] text-text3">Este mes: {formatoEvolucion(valorEvolucion(evolucion[mes - 1]))}</div>
+      </Card>
+
+      <div className="mb-4 grid grid-cols-1 gap-4 lg:grid-cols-2">
+        <Card title="Cajas vendidas por gusto">
+          {topGustos.length === 0 ? (
+            <EmptyState text="Sin ventas registradas en el período." />
+          ) : (
+            <TableWrap>
+              <table className="w-full">
+                <thead>
+                  <tr>
+                    <Th>Producto</Th>
+                    <Th>Cajas</Th>
+                    <Th>Facturación</Th>
+                    <Th>% de cajas</Th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {topGustos.map((g) => (
+                    <TrHover key={g.producto_id}>
+                      <Td main>{g.producto_nombre}</Td>
+                      <Td>{fNum(g.cajas, 0)}</Td>
+                      <Td>{fARS(g.facturacion)}</Td>
+                      <Td>{g.pct_cajas === null ? "—" : fNum(g.pct_cajas, 1) + "%"}</Td>
+                    </TrHover>
+                  ))}
+                </tbody>
+              </table>
+            </TableWrap>
+          )}
+        </Card>
+
+        <Card title="Próximos pedidos">
+          {pedidosPendientes.length === 0 ? (
+            <EmptyState text="No hay pedidos confirmados o en producción." />
+          ) : (
+            <TableWrap>
+              <table className="w-full">
+                <thead>
+                  <tr>
+                    <Th>Fecha</Th>
+                    <Th>Cliente</Th>
+                    <Th>Total</Th>
+                    <Th>Estado</Th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {pedidosPendientes.slice(0, 8).map((p) => (
+                    <TrHover key={p.id}>
+                      <Td>{p.fecha}</Td>
+                      <Td main>{clienteNombre(p.cliente_id)}</Td>
+                      <Td>{fARS(p.total)}</Td>
+                      <Td>
+                        <Badge color={ESTADO_COLOR[p.estado]}>{p.estado}</Badge>
+                      </Td>
+                    </TrHover>
+                  ))}
+                </tbody>
+              </table>
+            </TableWrap>
+          )}
+        </Card>
+      </div>
+
+      <Card title="Producción pendiente" className="mb-4">
+        <p className="mb-3 text-[12.5px] text-text3">
+          Pedidos marcados &ldquo;En producción&rdquo; (Ventas → Pedidos) y lo que falta elaborar para completarlos —
+          todavía no hay un tablero de producción con lotes/rellenos propio; eso es una mejora más grande, pendiente.
+        </p>
+        {itemsEnProduccion.length === 0 ? (
+          <EmptyState text="No hay pedidos en producción en este momento." />
+        ) : (
+          <TableWrap>
+            <table className="w-full">
+              <thead>
+                <tr>
+                  <Th>Producto</Th>
+                  <Th>Cantidad</Th>
+                  <Th>Pedidos</Th>
+                </tr>
+              </thead>
+              <tbody>
+                {itemsEnProduccion.map((it) => (
+                  <TrHover key={it.nombre}>
+                    <Td main>{it.nombre}</Td>
+                    <Td>{fNum(it.cantidad, 0)}</Td>
+                    <Td className="text-text3">{it.pedidos}</Td>
+                  </TrHover>
+                ))}
+              </tbody>
+            </table>
+          </TableWrap>
+        )}
+      </Card>
+
+      <Card title="Stock bajo mínimo">
+        {alertasStock.length === 0 ? (
+          <EmptyState text="Todos los insumos están por encima de su stock mínimo." />
+        ) : (
+          <TableWrap>
+            <table className="w-full">
+              <thead>
+                <tr>
+                  <Th>Insumo</Th>
+                  <Th>Stock actual</Th>
+                  <Th>Mínimo</Th>
+                </tr>
+              </thead>
+              <tbody>
+                {alertasStock.map(({ insumo, stock }) => (
+                  <TrHover key={insumo.id}>
+                    <Td main>{insumo.nombre}</Td>
+                    <Td className="text-red">{fNum(stock, 2)}</Td>
+                    <Td>{fNum(insumo.stock_minimo ?? 0, 2)}</Td>
+                  </TrHover>
+                ))}
+              </tbody>
+            </table>
+          </TableWrap>
+        )}
+      </Card>
+    </div>
+  );
+}

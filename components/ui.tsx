@@ -58,17 +58,22 @@ export function KpiCard({
   value,
   sub,
   color = "none",
+  icon: Icon,
 }: {
   label: string;
   value: React.ReactNode;
   sub?: React.ReactNode;
   color?: Color;
+  icon?: LucideIcon;
 }) {
   return (
     <div
       className={`rounded-[var(--radius-card)] border border-border ${colorBorder[color]} border-t-2 bg-surface p-4 shadow-[var(--shadow-card)]`}
     >
-      <div className="text-[10px] font-bold uppercase tracking-[1.2px] text-text2">{label}</div>
+      <div className="flex items-center justify-between gap-2">
+        <div className="text-[10px] font-bold uppercase tracking-[1.2px] text-text2">{label}</div>
+        {Icon && <Icon className={`h-[15px] w-[15px] shrink-0 stroke-[1.75] ${colorValue[color]}`} />}
+      </div>
       <div
         className={`my-1.5 text-2xl leading-none font-[750] tracking-[-0.8px] [font-variant-numeric:tabular-nums] ${colorValue[color]}`}
       >
@@ -76,6 +81,22 @@ export function KpiCard({
       </div>
       {sub && <div className="text-[11px] text-text3">{sub}</div>}
     </div>
+  );
+}
+
+/** Botón grande de acceso rápido (Inicio → Accesos rápidos) — icono + texto, siempre navega a una
+ * pantalla real (nunca un botón decorativo sin acción). */
+export function QuickActionButton({ icon: Icon, label, onClick }: { icon: LucideIcon; label: string; onClick: () => void }) {
+  return (
+    <button
+      onClick={onClick}
+      className="flex flex-1 min-w-[140px] items-center gap-2.5 rounded-[var(--radius-card)] border border-border bg-surface p-3.5 text-left shadow-[var(--shadow-card)] transition-colors hover:border-accent hover:bg-accent-dim"
+    >
+      <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-accent-dim text-accent">
+        <Icon className="h-[18px] w-[18px] stroke-[1.75]" />
+      </span>
+      <span className="text-[12.5px] font-medium text-text">{label}</span>
+    </button>
   );
 }
 

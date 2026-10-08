@@ -23,8 +23,15 @@ export function fARS(n: number | null | undefined): string {
   });
 }
 
-/** Convierte una fecha ISO ("2026-07-30" o con hora) al formato DD/MM/YYYY usado en la interfaz. */
+/** Convierte una fecha ISO ("2026-07-30" o con hora) al formato DD/MM/YYYY usado en la interfaz.
+ * Si es solo fecha (sin hora), se formatea directo como string: pasarla por `Date` la toma como
+ * UTC medianoche, que en Argentina (UTC-3) cae en el día anterior. */
 export function fFechaCorta(iso: string): string {
+  const soloFecha = /^(\d{4})-(\d{2})-(\d{2})$/.exec(iso);
+  if (soloFecha) {
+    const [, anio, mes, dia] = soloFecha;
+    return `${dia}/${mes}/${anio}`;
+  }
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return iso;
   return d.toLocaleDateString("es-AR", { day: "2-digit", month: "2-digit", year: "numeric" });

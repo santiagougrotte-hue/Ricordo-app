@@ -1,13 +1,15 @@
 "use client";
 
 import React from "react";
-import { StoreProvider } from "@/lib/store";
+import { StoreV2Provider } from "@/lib/store-v2";
 import { ToastProvider } from "@/lib/toast";
 import { PeriodProvider } from "@/lib/period";
 import { RouterProvider } from "@/lib/nav-context";
 import { AuthProvider, useAuth } from "@/lib/auth-context";
 import { supabaseConfigured } from "@/lib/supabase";
 import { Login } from "@/components/Login";
+import { SyncConflictModal } from "@/components/SyncConflictModal";
+import { ThemeApplier } from "@/components/ThemeApplier";
 
 function AuthGate({ children }: { children: React.ReactNode }) {
   const { session, ready } = useAuth();
@@ -20,13 +22,15 @@ function AuthGate({ children }: { children: React.ReactNode }) {
   }
 
   return (
-    <StoreProvider>
+    <StoreV2Provider>
+      <ThemeApplier />
       <ToastProvider>
         <PeriodProvider>
           <RouterProvider>{children}</RouterProvider>
         </PeriodProvider>
+        <SyncConflictModal />
       </ToastProvider>
-    </StoreProvider>
+    </StoreV2Provider>
   );
 }
 

@@ -41,7 +41,11 @@ body{font-family:'Segoe UI',system-ui,sans-serif;background:var(--bg);color:var(
 .nav-item .ni{font-size:14px;width:16px;text-align:center;flex-shrink:0}
 
 /* MAIN */
-#main{flex:1;overflow-y:auto;height:100vh}
+/* Bug preexistente corregido de paso (no relacionado con los 3 cambios pedidos): el sidebar es
+   position:fixed, así que #main necesitaba este margen desde el CSS — antes solo se aplicaba
+   recién al tocar el botón de colapsar, así que en la carga inicial el sidebar tapaba los
+   primeros ~230px de cada página (se veía en todas, no solo en las nuevas). */
+#main{flex:1;overflow-y:auto;height:100vh;margin-left:var(--sidebar);transition:margin-left 0.2s ease}
 .page{display:none;padding:24px 28px;min-height:100vh}
 .page.active{display:block}
 
@@ -216,6 +220,7 @@ select.fc{cursor:pointer}
   <div class="nav-item" onclick="nav('flujo')"><span class="ni">💵</span><span class="nav-label">Flujo de Caja</span></div>
   <div class="nav-item" onclick="nav('sueldo')"><span class="ni">👤</span><span class="nav-label">Mi Sueldo</span></div>
   <div class="nav-item" onclick="nav('eerr')"><span class="ni">📋</span><span class="nav-label">EERR</span></div>
+  <div class="nav-item" onclick="nav('cmv')"><span class="ni">📦</span><span class="nav-label">CMV</span></div>
   <div class="nav-group">Análisis</div>
   <div class="nav-item" onclick="nav('planificacion')"><span class="ni">📅</span><span class="nav-label">Planificación</span></div>
   <div class="nav-item" onclick="nav('planif_ind')"><span class="ni">🔮</span><span class="nav-label">Proyección Mes</span></div>
@@ -445,13 +450,32 @@ select.fc{cursor:pointer}
     </div>
   </div>
   <div id="costos-fijos" class="ptab-content">
-    <div class="card" style="max-width:500px">
-      <div class="card-title">Costos Fijos Mensuales</div>
-      <button class="btn btn-primary btn-sm" onclick="openM('m-costo-fijo')" style="margin-bottom:14px">+ Agregar</button>
+    <div class="card">
+      <div class="card-title">Costos Fijos Cargados</div>
+      <button class="btn btn-primary btn-sm" onclick="abrirModalCostoFijo()" style="margin-bottom:14px">+ Agregar</button>
       <div class="tbl-wrap"><table>
-        <thead><tr><th>Concepto</th><th>Categoría</th><th>Monto Mensual</th><th>Acciones</th></tr></thead>
+        <thead><tr><th>Concepto</th><th>Categoría</th><th>Monto</th><th>Período</th><th>Fecha de pago</th><th>Pagado desde</th><th>Acciones</th></tr></thead>
         <tbody id="tbody-cf"></tbody>
       </table></div>
+    </div>
+
+    <div class="card">
+      <div class="ph" style="margin-bottom:10px">
+        <div class="ph-left"><div class="card-title" style="margin-bottom:0">Cuadro de Costos Fijos por Mes</div></div>
+        <div class="ph-right">
+          <label style="font-size:11px;color:var(--text3)">Desde</label>
+          <input class="fc" id="cfc-desde" type="month" style="width:130px" onchange="renderCuadroCF()">
+          <label style="font-size:11px;color:var(--text3)">Hasta</label>
+          <input class="fc" id="cfc-hasta" type="month" style="width:130px" onchange="renderCuadroCF()">
+        </div>
+      </div>
+      <div id="cfc-stats" class="stats" style="margin-bottom:14px"></div>
+      <div class="tbl-wrap"><table id="tbl-cuadro-cf">
+        <thead id="thead-cuadro-cf"></thead>
+        <tbody id="tbody-cuadro-cf"></tbody>
+        <tfoot id="tfoot-cuadro-cf"></tfoot>
+      </table></div>
+      <div style="margin-top:10px;font-size:11.5px;color:var(--text3)"><span class="badge bo" style="margin-right:6px">prepago</span>mes ya cubierto por un pago hecho en un mes anterior</div>
     </div>
   </div>
   <div id="costos-resumen" class="ptab-content">
@@ -474,7 +498,31 @@ select.fc{cursor:pointer}
       </select>
     </div>
   </div>
-  <div id="caja-content"></div>
+  <div class="page-tabs">
+    <div class="ptab active" onclick="showPTab('caja','distribucion',this)">Distribución</div>
+    <div class="ptab" onclick="showPTab('caja','fondos',this)">Fondos y Préstamos</div>
+  </div>
+  <div id="caja-distribucion" class="ptab-content active">
+    <div id="caja-content"></div>
+  </div>
+  <div id="caja-fondos" class="ptab-content">
+    <div class="ph" style="margin-bottom:14px">
+      <div class="ph-left"><p>Cuentas internas del negocio — nunca son ingreso ni gasto, solo mueven saldo entre fondos.</p></div>
+      <div class="ph-right">
+        <button class="btn btn-ghost btn-sm" onclick="openM('m-fondo')">+ Nuevo Fondo</button>
+        <button class="btn btn-primary btn-sm" onclick="abrirModalTransferencia()">+ Nueva Transferencia</button>
+      </div>
+    </div>
+    <div id="fondos-saldos" class="stats" style="margin-bottom:16px"></div>
+    <div id="fondos-prestamos-pend"></div>
+    <div class="card">
+      <div class="card-title">Historial de Transferencias</div>
+      <div class="tbl-wrap"><table>
+        <thead><tr><th>Fecha</th><th>Tipo</th><th>Origen</th><th>Destino</th><th>Monto</th><th>Motivo</th><th>Acciones</th></tr></thead>
+        <tbody id="tbody-transferencias"></tbody>
+      </table></div>
+    </div>
+  </div>
 </div>
 
 <!-- ══════════════════════ MI SUELDO ══════════════════════ -->
@@ -511,6 +559,24 @@ select.fc{cursor:pointer}
     </div>
   </div>
   <div id="eerr-content" class="g2"></div>
+</div>
+
+<!-- ══════════════════════ CMV ══════════════════════ -->
+<div id="page-cmv" class="page">
+  <div class="ph"><div class="ph-left"><h2>CMV</h2><p>Costo de Mercadería Vendida = Stock inicial + Compras − Stock final</p></div>
+    <div class="ph-right">
+      <select class="fc" id="cmv-mes" onchange="renderCMV()" style="width:100px">
+        <option value="1">Ene</option><option value="2">Feb</option><option value="3">Mar</option>
+        <option value="4">Abr</option><option value="5" selected>May</option><option value="6">Jun</option>
+        <option value="7">Jul</option><option value="8">Ago</option><option value="9">Sep</option>
+        <option value="10">Oct</option><option value="11">Nov</option><option value="12">Dic</option>
+      </select>
+      <select class="fc" id="cmv-anio" onchange="renderCMV()" style="width:80px">
+        <option value="2025">2025</option><option value="2026" selected>2026</option>
+      </select>
+    </div>
+  </div>
+  <div id="cmv-content"></div>
 </div>
 
 <!-- ══════════════════════ SIMULADOR ══════════════════════ -->
@@ -981,8 +1047,8 @@ select.fc{cursor:pointer}
 
 <!-- Modal Costo Fijo -->
 <div class="modal-bg" id="m-costo-fijo">
-  <div class="modal">
-    <div class="mh"><h3>Nuevo Costo Fijo</h3><button class="mclose" onclick="closeM('m-costo-fijo')">×</button></div>
+  <div class="modal wide">
+    <div class="mh"><h3 id="m-cf-title">Nuevo Costo Fijo</h3><button class="mclose" onclick="closeM('m-costo-fijo')">×</button></div>
     <div class="form-grid">
       <div class="fg two"><label>Concepto *</label><input class="fc" id="cf-concepto"></div>
       <div class="fg"><label>Categoría</label>
@@ -991,8 +1057,24 @@ select.fc{cursor:pointer}
           <option>Freezer</option><option>Monotributo</option><option>Alquiler</option><option>Otros</option>
         </select>
       </div>
-      <div class="fg"><label>Monto Mensual $</label><input class="fc" id="cf-monto" type="number"></div>
+      <div class="fg"><label>Monto Total $</label><input class="fc" id="cf-monto" type="number"></div>
     </div>
+    <div class="sep"></div>
+    <label style="display:flex;align-items:center;gap:8px;cursor:pointer;margin-bottom:10px">
+      <input type="checkbox" id="cf-con-periodo" onchange="toggleCampoPeriodoCF()" style="width:16px;height:16px">
+      <span style="font-size:12.5px;color:var(--text2)">Este pago cubre un período específico (si no, se repite todos los meses mientras esté activo)</span>
+    </label>
+    <div class="form-grid" id="cf-fg-periodo" style="display:none">
+      <div class="fg"><label>Fecha de pago</label><input class="fc" id="cf-fecha-pago" type="date"></div>
+      <div class="fg"><label>Mes desde</label><input class="fc" id="cf-mes-desde" type="month"></div>
+      <div class="fg"><label>Mes hasta</label><input class="fc" id="cf-mes-hasta" type="month"></div>
+    </div>
+    <div class="sep"></div>
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+      <label style="margin:0">Pagado desde (opcional)</label>
+      <button class="btn btn-ghost btn-sm" onclick="addPagoCF()">+ Agregar fondo</button>
+    </div>
+    <div id="cf-pagos-lineas"></div>
     <div class="mfooter">
       <button class="btn btn-ghost" onclick="closeM('m-costo-fijo')">Cancelar</button>
       <button class="btn btn-primary" onclick="saveCostoFijo()">Guardar</button>
@@ -1145,6 +1227,46 @@ select.fc{cursor:pointer}
   </div>
 </div>
 
+<!-- Modal Nuevo Fondo -->
+<div class="modal-bg" id="m-fondo">
+  <div class="modal">
+    <div class="mh"><h3>Nuevo Fondo</h3><button class="mclose" onclick="closeM('m-fondo')">×</button></div>
+    <div class="form-grid">
+      <div class="fg two"><label>Nombre del fondo *</label><input class="fc" id="fo-nombre" placeholder="Ej: Fondo de reposición"></div>
+      <div class="fg"><label>Saldo inicial $</label><input class="fc" id="fo-saldo" type="number" value="0"></div>
+    </div>
+    <div class="mfooter">
+      <button class="btn btn-ghost" onclick="closeM('m-fondo')">Cancelar</button>
+      <button class="btn btn-primary" onclick="saveFondo()">Guardar</button>
+    </div>
+  </div>
+</div>
+
+<!-- Modal Nueva Transferencia -->
+<div class="modal-bg" id="m-transferencia">
+  <div class="modal">
+    <div class="mh"><h3>Nueva Transferencia entre Fondos</h3><button class="mclose" onclick="closeM('m-transferencia')">×</button></div>
+    <div class="form-grid">
+      <div class="fg"><label>Fecha *</label><input class="fc" id="tr-fecha" type="date"></div>
+      <div class="fg"><label>Monto $ *</label><input class="fc" id="tr-monto" type="number"></div>
+      <div class="fg"><label>Origen (sale de) *</label><select class="fc" id="tr-origen"></select></div>
+      <div class="fg"><label>Destino (entra a) *</label><select class="fc" id="tr-destino"></select></div>
+      <div class="fg"><label>Tipo *</label>
+        <select class="fc" id="tr-tipo" onchange="toggleCampoDevolucion()">
+          <option value="movimiento">Movimiento (no se devuelve)</option>
+          <option value="prestamo">Préstamo (hay que devolverlo)</option>
+        </select>
+      </div>
+      <div class="fg" id="tr-fg-devolucion" style="display:none"><label>Mes en que se debería devolver</label><input class="fc" id="tr-mes-devolucion" type="month"></div>
+      <div class="fg full"><label>Motivo *</label><input class="fc" id="tr-motivo" placeholder="Ej: Cubrir parte del alquiler de oct-nov"></div>
+    </div>
+    <div class="mfooter">
+      <button class="btn btn-ghost" onclick="closeM('m-transferencia')">Cancelar</button>
+      <button class="btn btn-primary" onclick="saveTransferencia()">Registrar</button>
+    </div>
+  </div>
+</div>
+
 <script>
 // ════════════════════════════════════════════════
 // DATA
@@ -1219,10 +1341,38 @@ function loadDB() {
           p.canal = 'Mayorista';
         }
       });
+      migrarFondosYCostos(saved);
       return saved;
     }
   } catch(e) {}
-  return JSON.parse(JSON.stringify(INITIAL_DATA));
+  const fresh = JSON.parse(JSON.stringify(INITIAL_DATA));
+  migrarFondosYCostos(fresh);
+  return fresh;
+}
+
+// Migración Fase: Fondos internos / Transferencias / Costos fijos con prorrateo / CMV.
+// Nunca pisa datos ya cargados — solo completa campos nuevos con defaults seguros.
+function migrarFondosYCostos(saved) {
+  if(!saved.fondos || saved.fondos.length===0) {
+    saved.fondos = [
+      {id:'caja_operativa', nombre:'Caja operativa', saldo_inicial:0},
+      {id:'margen_seguridad', nombre:'Margen de seguridad', saldo_inicial:0}
+    ];
+  }
+  if(!saved.transferencias) saved.transferencias = [];
+  if(!saved.cmv_stock_final_manual) saved.cmv_stock_final_manual = {};
+  if(!saved.costos_fijos) saved.costos_fijos = [];
+  // Costos fijos ya cargados: sin período -> siguen siendo "recurrentes todo mes" (mismo
+  // comportamiento que antes, ver getCostosFijosImputadosMes). Nunca se les inventa una fecha de
+  // pago ni un período que no cargaron.
+  saved.costos_fijos.forEach(c => {
+    if(c.fecha_pago===undefined) c.fecha_pago = '';
+    if(c.mes_desde===undefined) c.mes_desde = null;
+    if(c.anio_desde===undefined) c.anio_desde = null;
+    if(c.mes_hasta===undefined) c.mes_hasta = null;
+    if(c.anio_hasta===undefined) c.anio_hasta = null;
+    if(!c.pagos) c.pagos = [];
+  });
 }
 function save() { localStorage.setItem(SK, JSON.stringify(DB)); }
 let DB = loadDB();
@@ -1277,6 +1427,110 @@ function calcCostoFila(r) {
 }
 
 function getTotalCF() { return DB.costos_fijos.filter(c=>c.activo==='Si').reduce((s,c)=>s+Number(c.monto||0),0); }
+
+// ════════════════════════════════════════════════
+// FONDOS INTERNOS / TRANSFERENCIAS (préstamos y movimientos)
+// ════════════════════════════════════════════════
+// Nunca son ingreso ni gasto del negocio — no tocan EERR ni ganancia, solo mueven saldo entre
+// fondos. Un préstamo y un movimiento afectan el saldo de origen/destino exactamente igual (la
+// plata sale de uno y entra al otro); la diferencia es solo que un préstamo queda registrado como
+// deuda pendiente hasta que se devuelva. Una devolución es, en sí misma, otra transferencia (tipo
+// 'movimiento', con prestamo_id apuntando al préstamo que salda) en sentido inverso — así el saldo
+// de cada fondo sale siempre de sumar/restar la misma lista, sin un cálculo aparte para devoluciones.
+
+function mesKey(mes, anio) { return `${anio}-${String(mes).padStart(2,'0')}`; }
+
+function saldoFondo(fondoId) {
+  const f = DB.fondos.find(x=>x.id===fondoId);
+  const inicial = f ? Number(f.saldo_inicial||0) : 0;
+  const entra = DB.transferencias.filter(t=>t.destino===fondoId).reduce((s,t)=>s+Number(t.monto||0),0);
+  const sale  = DB.transferencias.filter(t=>t.origen===fondoId).reduce((s,t)=>s+Number(t.monto||0),0);
+  return inicial + entra - sale;
+}
+
+function devueltoDePrestamo(prestamoId) {
+  return DB.transferencias.filter(t=>t.prestamo_id===prestamoId).reduce((s,t)=>s+Number(t.monto||0),0);
+}
+
+function saldoPendientePrestamo(prestamo) {
+  return Number(prestamo.monto||0) - devueltoDePrestamo(prestamo.id);
+}
+
+function prestamosPendientes() {
+  return DB.transferencias
+    .filter(t=>t.tipo==='prestamo')
+    .map(p=>({ ...p, pendiente: saldoPendientePrestamo(p) }))
+    .filter(p=>p.pendiente > 0.004); // margen de centavos por redondeo
+}
+
+// Un préstamo está "vencido" cuando tiene un mes de devolución esperado y ya pasó (comparando
+// strings 'YYYY-MM', que ordenan igual que fechas) y todavía queda saldo pendiente.
+function prestamoVencido(prestamo, mesActualKey) {
+  return !!prestamo.mes_devolucion_esperado && prestamo.mes_devolucion_esperado < mesActualKey && saldoPendientePrestamo(prestamo) > 0.004;
+}
+
+function nombreFondo(id) { const f = DB.fondos.find(x=>x.id===id); return f ? f.nombre : '(fondo eliminado)'; }
+
+// ════════════════════════════════════════════════
+// COSTOS FIJOS CON PRORRATEO
+// ════════════════════════════════════════════════
+// Un costo fijo "viejo" (sin mes_desde cargado) sigue aplicando su monto completo todos los meses
+// mientras esté activo — exactamente el comportamiento de antes, para no romper nada ya cargado.
+// Un costo fijo "con período" (mes_desde/mes_hasta cargados) reparte monto en partes iguales entre
+// los meses que cubre, y solo imputa esa parte en los meses dentro del rango.
+
+function esCFConPeriodo(c) { return c.mes_desde!=null && c.anio_desde!=null && c.mes_hasta!=null && c.anio_hasta!=null; }
+
+// Lista de {mes,anio} que cubre un costo fijo con período, inclusive en ambos extremos.
+function mesesCubiertosCF(c) {
+  const meses = [];
+  let m = Number(c.mes_desde), a = Number(c.anio_desde);
+  const mFin = Number(c.mes_hasta), aFin = Number(c.anio_hasta);
+  let guard = 0;
+  while((a < aFin || (a === aFin && m <= mFin)) && guard < 600) {
+    meses.push({mes:m, anio:a});
+    m++; if(m>12){ m=1; a++; }
+    guard++;
+  }
+  return meses;
+}
+
+function montoPorMesCF(c) {
+  const n = mesesCubiertosCF(c).length;
+  return n>0 ? Number(c.monto||0)/n : 0;
+}
+
+function cfCubreMes(c, mes, anio) {
+  return mesesCubiertosCF(c).some(x=>x.mes===mes && x.anio===anio);
+}
+
+// Reemplaza a getTotalCF() para EERR/resúmenes por mes — el devengado real de ese mes, nunca el
+// total cobrado en caja (eso es getCostosFijosPagadosCajaMes, abajo).
+function getCostosFijosImputadosMes(mes, anio) {
+  return DB.costos_fijos.filter(c=>c.activo==='Si').reduce((s,c) => {
+    if(!esCFConPeriodo(c)) return s + Number(c.monto||0); // recurrente de siempre
+    return s + (cfCubreMes(c,mes,anio) ? montoPorMesCF(c) : 0);
+  }, 0);
+}
+
+// Salida completa de caja en el mes en que se pagó (solo costos con fecha_pago cargada — un
+// recurrente de siempre no tiene un único pago puntual que mostrar acá).
+function getCostosFijosPagadosCajaMes(mes, anio) {
+  return DB.costos_fijos.filter(c=>c.fecha_pago).reduce((s,c) => {
+    const pp = c.fecha_pago.split('-');
+    return (Number(pp[1])===mes && Number(pp[0])===anio) ? s + Number(c.monto||0) : s;
+  }, 0);
+}
+
+// Plata ya pagada (fecha_pago <= fin de este mes) cuya parte devengada corresponde a MESES
+// FUTUROS todavía no llegados — lo que "quedó prepagado" mirado desde (mes,anio).
+function getCostosFijosPrepagadosDesdeMes(mes, anio) {
+  const key = mesKey(mes, anio);
+  return DB.costos_fijos.filter(c=>esCFConPeriodo(c) && c.fecha_pago && c.fecha_pago.slice(0,7) <= key).reduce((s,c) => {
+    const futuros = mesesCubiertosCF(c).filter(x=>mesKey(x.mes,x.anio) > key).length;
+    return s + futuros * montoPorMesCF(c);
+  }, 0);
+}
 
 function getTotalCajasProducidas() { return DB.produccion.reduce((s,p)=>s+Number(p.cantidad||0),0); }
 
@@ -1347,6 +1601,104 @@ function getComprasIngredientesMes(mes,anio) {
   }).reduce((s,c)=>s+Number(c.subtotal||0),0);
 }
 
+// ════════════════════════════════════════════════
+// CMV (Costo de Mercadería Vendida) = Stock inicial + Compras − Stock final
+// ════════════════════════════════════════════════
+// Valorizado SIEMPRE a costo (nunca a precio de venta). Esta app no trackea un stock de
+// "rellenos"/semi-elaborados aparte del de materia prima (no hay esa etapa de inventario acá) —
+// el costo de esos ingredientes ya queda cubierto dentro de "materia prima". Packaging tampoco
+// tiene cantidad en stock (solo precio de referencia): se trata como consumido al comprarse,
+// igual que ya hace el resto del costeo de esta app.
+
+function finDeMes(mes, anio) { const ultimoDia = new Date(anio, mes, 0).getDate(); return `${anio}-${String(mes).padStart(2,'0')}-${String(ultimoDia).padStart(2,'0')}`; }
+function mesAnteriorCMV(mes, anio) { return mes===1 ? {mes:12, anio:anio-1} : {mes:mes-1, anio}; }
+
+function getValorMPHastaFecha(fechaLimite) {
+  return DB.ingredientes.reduce((tot,ing) => tot + getStockIngrediente(ing.id, fechaLimite).actual * getIngPrecio(ing.id), 0);
+}
+
+// Costo unitario representativo de un gusto — el de su primer producto activo (si un gusto tiene
+// varios formatos con costo distinto, es una aproximación: no hay forma de saber en qué formato
+// está el stock físico sin cargar esa distinción aparte, cosa que esta app no hace hoy).
+function costoUnitarioGusto(gustoId) {
+  const prod = DB.productos.find(p=>p.gusto===gustoId && p.activo==='Si') || DB.productos.find(p=>p.gusto===gustoId);
+  return prod ? getCostoProducto(prod.id).total : 0;
+}
+
+function getValorProductoTerminadoHastaFecha(fechaLimite) {
+  const stockGusto = getStockPorGusto(fechaLimite);
+  return Object.keys(DB.gustos||{}).reduce((tot, gustoId) => {
+    const s = stockGusto[gustoId] || {disponible:0};
+    return tot + Math.max(0, s.disponible) * costoUnitarioGusto(gustoId);
+  }, 0);
+}
+
+function getStockFinalValorizadoCalculado(mes, anio) {
+  const fechaLimite = finDeMes(mes, anio);
+  return getValorMPHastaFecha(fechaLimite) + getValorProductoTerminadoHastaFecha(fechaLimite);
+}
+
+function stockFinalEsManual(mes, anio) {
+  const manual = (DB.cmv_stock_final_manual||{})[mesKey(mes,anio)];
+  return manual!==undefined && manual!=='';
+}
+
+// Stock final de un mes: el conteo físico manual si se cargó para ese mes puntual, o el calculado
+// si no — nunca mezcla los dos criterios dentro del mismo mes.
+function getStockFinalValorizadoMes(mes, anio) {
+  const manual = (DB.cmv_stock_final_manual||{})[mesKey(mes,anio)];
+  return (manual!==undefined && manual!=='') ? Number(manual) : getStockFinalValorizadoCalculado(mes, anio);
+}
+
+// Stock inicial del mes = stock final del mes anterior (la misma fuente, manual o calculada,
+// nunca un cálculo aparte) — regla explícita del pedido.
+function getStockInicialMes(mes, anio) {
+  const ant = mesAnteriorCMV(mes, anio);
+  return getStockFinalValorizadoMes(ant.mes, ant.anio);
+}
+
+function getComprasTotalMes(mes, anio) {
+  return (DB.compras||[]).filter(c=>{
+    if(!c.fecha) return false;
+    const pp = c.fecha.split('-');
+    return Number(pp[1])===mes && Number(pp[0])===anio;
+  }).reduce((s,c)=>s+Number(c.subtotal||0),0);
+}
+
+function getComprasPorCategoriaMes(mes, anio) {
+  const porCategoria = {};
+  (DB.compras||[]).filter(c=>{
+    if(!c.fecha) return false;
+    const pp = c.fecha.split('-');
+    return Number(pp[1])===mes && Number(pp[0])===anio;
+  }).forEach(c=>{
+    const cat = c.tipo || 'Otro';
+    porCategoria[cat] = (porCategoria[cat]||0) + Number(c.subtotal||0);
+  });
+  return porCategoria;
+}
+
+function getCMVMes(mes, anio) {
+  const stockInicial = getStockInicialMes(mes, anio);
+  const compras = getComprasTotalMes(mes, anio);
+  const stockFinal = getStockFinalValorizadoMes(mes, anio);
+  return { stockInicial, compras, stockFinal, cmv: stockInicial + compras - stockFinal, stockFinalManual: stockFinalEsManual(mes,anio) };
+}
+
+function getCMVResumenMes(mes, anio) {
+  const r = getCMVMes(mes, anio);
+  const ventas = getTotalVentas(mes, anio);
+  return {
+    ...r,
+    ventas,
+    pctSobreVentas: ventas>0 ? r.cmv/ventas : null,
+    margenBruto: ventas - r.cmv,
+    margenBrutoPct: ventas>0 ? (ventas - r.cmv)/ventas : null,
+    diferenciaComprasCMV: r.compras - r.cmv, // + quedó en stock, − se consumió del stock anterior
+    categorias: getComprasPorCategoriaMes(mes, anio)
+  };
+}
+
 function getGastosVarMes(mes,anio) {
   return DB.gastos.filter(g=>{
     if(!g.fecha) return false;
@@ -1413,7 +1765,7 @@ function nav(page) {
     proveedores:renderProveedores, ingredientes:renderIngredientes,
     packaging:renderPackaging, promociones:renderPromociones, compras:renderCompras,
     gastos:renderGastos, costos:renderCostos, caja:renderCaja, sueldo:renderSueldo,
-    eerr:renderEERR, simulador:initSim, historial_precios:renderHistorialPrecios,
+    eerr:renderEERR, cmv:renderCMV, simulador:initSim, historial_precios:renderHistorialPrecios,
     inventario:renderInventario, flujo:renderFlujo
   };
   if(renders[page]) renders[page]();
@@ -1431,6 +1783,8 @@ function showPTab(page, tab, el) {
   if(page==='costos'&&tab==='directos') renderCostosDir();
   if(page==='costos'&&tab==='fijos') renderCF();
   if(page==='costos'&&tab==='indirectos') renderIndirectos();
+  if(page==='caja'&&tab==='distribucion') renderCaja();
+  if(page==='caja'&&tab==='fondos') renderFondos();
 }
 
 // ════════════════════════════════════════════════
@@ -1901,15 +2255,17 @@ function getGustoDeProducto(prodId) {
   return p ? (p.gusto||'') : '';
 }
 
-function getStockPorGusto() {
+function getStockPorGusto(fechaLimite=null) {
+  // fechaLimite (opcional): mismo criterio que getStockIngrediente — null = todo el historial
+  // (comportamiento de siempre), usado también por el CMV para valorizar a fin de un mes puntual.
   const prodPorGusto = {};
-  DB.produccion.forEach(p => {
+  DB.produccion.filter(p=>!fechaLimite||!p.fecha||p.fecha<=fechaLimite).forEach(p => {
     const g = getGustoDeProducto(p.id_producto);
     if(!g) return;
     prodPorGusto[g] = (prodPorGusto[g]||0) + Number(p.cantidad||0);
   });
   const vendPorGusto = {};
-  DB.pedidos.filter(p=>['Listo','Recibido','Entregado'].includes(p.estado)).forEach(p => {
+  DB.pedidos.filter(p=>['Listo','Recibido','Entregado'].includes(p.estado)&&(!fechaLimite||!p.fecha||p.fecha<=fechaLimite)).forEach(p => {
     const g = getGustoDeProducto(p.id_producto);
     if(!g) return;
     vendPorGusto[g] = (vendPorGusto[g]||0) + Number(p.cantidad||0);
@@ -2657,26 +3013,146 @@ function renderCostosDir(){
 }
 
 function renderCF(){
-  const total=getTotalCF();
-  $('tbody-cf').innerHTML=DB.costos_fijos.map(c=>`<tr>
+  $('tbody-cf').innerHTML=DB.costos_fijos.map(c=>{
+    const periodo = esCFConPeriodo(c) ? `${c.mes_desde}/${c.anio_desde} a ${c.mes_hasta}/${c.anio_hasta}` : '<span style="color:var(--text3)">Recurrente</span>';
+    const pagadoDesde = (c.pagos||[]).length ? c.pagos.map(p=>nombreFondo(p.fondo_id)+' '+fmt(p.monto)).join(', ') : '—';
+    return `<tr>
     <td class="td-main">${c.concepto}</td>
     <td><span class="badge bb">${c.categoria}</span></td>
     <td style="color:var(--accent)">${fmt(c.monto)}</td>
+    <td style="font-size:11.5px">${periodo}</td>
+    <td style="font-size:11.5px">${c.fecha_pago||'—'}</td>
+    <td style="font-size:11.5px">${pagadoDesde}</td>
     <td><div style="display:flex;gap:4px">
+      <button class="btn btn-ghost btn-sm" onclick="abrirModalCostoFijo('${c.id}')">Editar</button>
       <button class="btn btn-ghost btn-sm" onclick="toggleCF('${c.id}')">${c.activo==='Si'?'Pausar':'Activar'}</button>
       <button class="btn btn-danger btn-icon" onclick="delCF('${c.id}')">×</button>
     </div></td>
-  </tr>`).join('');
+  </tr>`;
+  }).join('') || '<tr><td colspan="7"><div class="empty"><p>Sin costos fijos cargados</p></div></td></tr>';
+  renderCuadroCF();
+}
+
+let cfEditId = null, cfPagosLines = [];
+
+function abrirModalCostoFijo(id=null){
+  cfEditId = id;
+  const c = id ? DB.costos_fijos.find(x=>x.id===id) : null;
+  $('m-cf-title').textContent = id ? 'Editar Costo Fijo' : 'Nuevo Costo Fijo';
+  $('cf-concepto').value = c?.concepto||'';
+  $('cf-cat').value = c?.categoria||'Otros';
+  $('cf-monto').value = c?.monto||'';
+  const conPeriodo = c ? esCFConPeriodo(c) : false;
+  $('cf-con-periodo').checked = conPeriodo;
+  $('cf-fecha-pago').value = c?.fecha_pago||'';
+  $('cf-mes-desde').value = conPeriodo ? `${c.anio_desde}-${String(c.mes_desde).padStart(2,'0')}` : '';
+  $('cf-mes-hasta').value = conPeriodo ? `${c.anio_hasta}-${String(c.mes_hasta).padStart(2,'0')}` : '';
+  toggleCampoPeriodoCF();
+  cfPagosLines = c && c.pagos ? JSON.parse(JSON.stringify(c.pagos)) : [];
+  renderPagosCFLineas();
+  openM('m-costo-fijo');
+}
+
+function toggleCampoPeriodoCF(){
+  $('cf-fg-periodo').style.display = $('cf-con-periodo').checked ? '' : 'none';
+}
+
+function addPagoCF(){
+  if(DB.fondos.length===0) return alert('Creá primero al menos un fondo en Caja Inteligente → Fondos y Préstamos');
+  cfPagosLines.push({fondo_id: DB.fondos[0].id, monto: 0});
+  renderPagosCFLineas();
+}
+function actualizarPagoCF(idx, field, val){ cfPagosLines[idx][field] = field==='monto' ? Number(val||0) : val; }
+function quitarPagoCF(idx){ cfPagosLines.splice(idx,1); renderPagosCFLineas(); }
+
+function renderPagosCFLineas(){
+  $('cf-pagos-lineas').innerHTML = cfPagosLines.length ? cfPagosLines.map((p,idx)=>`
+    <div style="display:flex;gap:8px;align-items:center;margin-bottom:8px">
+      <select class="fc" onchange="actualizarPagoCF(${idx},'fondo_id',this.value)" style="flex:2">
+        ${DB.fondos.map(f=>`<option value="${f.id}" ${f.id===p.fondo_id?'selected':''}>${f.nombre}</option>`).join('')}
+      </select>
+      <input class="fc" type="number" value="${p.monto}" placeholder="Monto" style="flex:1" onchange="actualizarPagoCF(${idx},'monto',this.value)">
+      <button class="btn btn-danger btn-icon" onclick="quitarPagoCF(${idx})">×</button>
+    </div>
+  `).join('') : '<div style="font-size:11.5px;color:var(--text3)">Sin fondos asignados — opcional, solo para registrar de dónde salió la plata.</div>';
 }
 
 function saveCostoFijo(){
-  const id=nextId('CF',DB.costos_fijos);
-  DB.costos_fijos.push({id,concepto:$('cf-concepto').value,categoria:$('cf-cat').value,monto:Number($('cf-monto').value||0),activo:'Si'});
+  const concepto = $('cf-concepto').value.trim();
+  const monto = Number($('cf-monto').value||0);
+  if(!concepto) return alert('Ingresá un concepto');
+  if(!monto || monto<=0) return alert('Ingresá un monto mayor a 0');
+  const conPeriodo = $('cf-con-periodo').checked;
+  let mes_desde=null, anio_desde=null, mes_hasta=null, anio_hasta=null;
+  if(conPeriodo){
+    const desde = $('cf-mes-desde').value, hasta = $('cf-mes-hasta').value;
+    if(!desde || !hasta) return alert('Completá el mes desde y hasta del período');
+    [anio_desde, mes_desde] = desde.split('-').map(Number);
+    [anio_hasta, mes_hasta] = hasta.split('-').map(Number);
+    if(anio_hasta<anio_desde || (anio_hasta===anio_desde && mes_hasta<mes_desde)) return alert('El mes "hasta" tiene que ser igual o posterior al "desde"');
+  }
+  const datos = {
+    concepto, categoria: $('cf-cat').value, monto,
+    fecha_pago: conPeriodo ? ($('cf-fecha-pago').value||'') : '',
+    mes_desde, anio_desde, mes_hasta, anio_hasta,
+    pagos: cfPagosLines.filter(p=>p.monto>0)
+  };
+  if(cfEditId){
+    DB.costos_fijos = DB.costos_fijos.map(c=>c.id===cfEditId ? {...c, ...datos} : c);
+  } else {
+    DB.costos_fijos.push({id: nextId('CF',DB.costos_fijos), activo:'Si', ...datos});
+  }
   save();closeM('m-costo-fijo');renderCF();
 }
 
 function toggleCF(id){const c=DB.costos_fijos.find(x=>x.id===id);if(c)c.activo=c.activo==='Si'?'No':'Si';save();renderCF();}
 function delCF(id){if(!confirm('¿Eliminar?'))return;DB.costos_fijos=DB.costos_fijos.filter(c=>c.id!==id);save();renderCF();}
+
+// ── Cuadro visual de Costos Fijos por mes ──
+function rangoMesesCuadroCF(){
+  const hoy = new Date();
+  const desdeInput = $('cfc-desde'), hastaInput = $('cfc-hasta');
+  if(desdeInput && !desdeInput.value) desdeInput.value = `${hoy.getFullYear()}-${String(Math.max(1,hoy.getMonth())).padStart(2,'0')}`;
+  if(hastaInput && !hastaInput.value) hastaInput.value = `${hoy.getFullYear()}-${String(Math.min(12,hoy.getMonth()+3)).padStart(2,'0')}`;
+  const [aD,mD] = (desdeInput?.value||`${hoy.getFullYear()}-01`).split('-').map(Number);
+  const [aH,mH] = (hastaInput?.value||`${hoy.getFullYear()}-12`).split('-').map(Number);
+  const meses = [];
+  let m=mD, a=aD, guard=0;
+  while((a<aH || (a===aH && m<=mH)) && guard<120){ meses.push({mes:m, anio:a}); m++; if(m>12){m=1;a++;} guard++; }
+  return meses;
+}
+
+function renderCuadroCF(){
+  if(!$('tbl-cuadro-cf')) return;
+  const meses = rangoMesesCuadroCF();
+  const hoy = new Date(), mesActual=hoy.getMonth()+1, anioActual=hoy.getFullYear();
+
+  $('thead-cuadro-cf').innerHTML = '<tr><th>Concepto</th>' + meses.map(x=>`<th>${x.mes}/${x.anio}</th>`).join('') + '<th>Total</th></tr>';
+
+  const activos = DB.costos_fijos.filter(c=>c.activo==='Si');
+  let filas = '';
+  const totalesPorMes = meses.map(()=>0);
+  activos.forEach(c=>{
+    let totalFila = 0;
+    const celdas = meses.map((x,i)=>{
+      let valor = 0;
+      if(!esCFConPeriodo(c)) valor = c.monto;
+      else if(cfCubreMes(c,x.mes,x.anio)) valor = montoPorMesCF(c);
+      totalFila += valor; totalesPorMes[i] += valor;
+      const esPrepago = esCFConPeriodo(c) && c.fecha_pago && c.fecha_pago.slice(0,7) < mesKey(x.mes,x.anio) && valor>0;
+      return `<td>${valor>0?fmt(valor):'—'}${esPrepago?' <span class="badge bo" style="margin-left:4px">prepago</span>':''}</td>`;
+    }).join('');
+    filas += `<tr><td class="td-main">${c.concepto}</td>${celdas}<td style="font-weight:600">${fmt(totalFila)}</td></tr>`;
+  });
+  $('tbody-cuadro-cf').innerHTML = filas || `<tr><td colspan="${meses.length+2}"><div class="empty"><p>Sin costos fijos activos</p></div></td></tr>`;
+  $('tfoot-cuadro-cf').innerHTML = '<tr style="font-weight:600"><td>Total del mes</td>' + totalesPorMes.map(t=>`<td>${fmt(t)}</td>`).join('') + `<td>${fmt(totalesPorMes.reduce((s,v)=>s+v,0))}</td></tr>`;
+
+  $('cfc-stats').innerHTML = `
+    <div class="sc gold"><div class="sc-label">Total Costos Fijos (mes actual)</div><div class="sc-value">${fmt(getCostosFijosImputadosMes(mesActual,anioActual))}</div><div class="sc-sub">Devengado, criterio EERR</div></div>
+    <div class="sc"><div class="sc-label">Pagado en Caja (mes actual)</div><div class="sc-value">${fmt(getCostosFijosPagadosCajaMes(mesActual,anioActual))}</div><div class="sc-sub">Salida completa en la fecha de pago</div></div>
+    <div class="sc blue"><div class="sc-label">Prepagado para Meses Futuros</div><div class="sc-value">${fmt(getCostosFijosPrepagadosDesdeMes(mesActual,anioActual))}</div><div class="sc-sub">Ya pagado, todavía no devengado</div></div>
+  `;
+}
 
 function renderIndirectos(){
   const total   = DB.costos_indirectos.reduce((s,i)=>s+Number(i.monto||0),0);
@@ -2736,9 +3212,9 @@ function renderCostosResumen(){
   const anio=Number(($('eerr-anio')||{value:2026}).value);
   const peds=getPedidosMes(mes,anio);
   const ventas=peds.reduce((s,p)=>s+Number(p.subtotal||0),0);
-  const costoMP=getCostoVentas(mes,anio);
+  const costoMP=getCMVMes(mes,anio).cmv;
   const totalInd=DB.costos_indirectos.reduce((s,i)=>s+Number(i.monto||0),0);
-  const cf=getTotalCF();
+  const cf=getCostosFijosImputadosMes(mes,anio);
   const gn=ventas-costoMP-totalInd-cf;
   $('costos-resumen-content').innerHTML=`
     <div class="g2">
@@ -2913,6 +3389,136 @@ function guardarSaldoAnterior() {
   save(); closeM('m-saldo-anterior'); renderCaja();
 }
 
+// ════════════════════════════════════════════════
+// FONDOS INTERNOS / TRANSFERENCIAS — render y acciones
+// ════════════════════════════════════════════════
+
+function saveFondo() {
+  const nombre = $('fo-nombre').value.trim();
+  if(!nombre) return alert('Ingresá un nombre para el fondo');
+  const id = 'fondo_' + Date.now();
+  DB.fondos.push({ id, nombre, saldo_inicial: Number($('fo-saldo').value||0) });
+  save();
+  $('fo-nombre').value=''; $('fo-saldo').value='0';
+  closeM('m-fondo');
+  renderFondos();
+}
+
+function abrirModalTransferencia(prefill) {
+  const selects = [$('tr-origen'), $('tr-destino')];
+  selects.forEach(sel => {
+    sel.innerHTML = DB.fondos.map(f=>`<option value="${f.id}">${f.nombre} (${fmt(saldoFondo(f.id))})</option>`).join('');
+  });
+  $('tr-fecha').value = today();
+  $('tr-monto').value = '';
+  $('tr-tipo').value = 'movimiento';
+  $('tr-mes-devolucion').value = '';
+  $('tr-motivo').value = '';
+  if(prefill) {
+    if(prefill.origen) $('tr-origen').value = prefill.origen;
+    if(prefill.destino) $('tr-destino').value = prefill.destino;
+    if(prefill.monto) $('tr-monto').value = prefill.monto;
+    if(prefill.tipo) $('tr-tipo').value = prefill.tipo;
+    if(prefill.motivo) $('tr-motivo').value = prefill.motivo;
+  }
+  toggleCampoDevolucion();
+  openM('m-transferencia');
+}
+
+function toggleCampoDevolucion() {
+  $('tr-fg-devolucion').style.display = $('tr-tipo').value==='prestamo' ? '' : 'none';
+}
+
+function saveTransferencia() {
+  const origen = $('tr-origen').value, destino = $('tr-destino').value;
+  const monto = Number($('tr-monto').value||0);
+  const motivo = $('tr-motivo').value.trim();
+  if(!origen || !destino) return alert('Elegí fondo de origen y destino');
+  if(origen===destino) return alert('El origen y el destino tienen que ser fondos distintos');
+  if(!monto || monto<=0) return alert('Ingresá un monto mayor a 0');
+  if(!motivo) return alert('Ingresá un motivo');
+  const tipo = $('tr-tipo').value;
+  const id = 'TRF-' + Date.now();
+  DB.transferencias.push({
+    id, fecha: $('tr-fecha').value||today(), monto, origen, destino, motivo, tipo,
+    mes_devolucion_esperado: tipo==='prestamo' ? ($('tr-mes-devolucion').value||'') : '',
+    prestamo_id: null
+  });
+  save();
+  closeM('m-transferencia');
+  renderFondos();
+}
+
+function registrarDevolucion(prestamoId) {
+  const p = DB.transferencias.find(t=>t.id===prestamoId);
+  if(!p) return;
+  const pendiente = saldoPendientePrestamo(p);
+  const monto = Number(prompt('Devolver de "' + nombreFondo(p.destino) + '" a "' + nombreFondo(p.origen) + '"\nPendiente: ' + fmt(pendiente) + '\n¿Cuánto devolvés ahora?', pendiente));
+  if(!monto || monto<=0) return;
+  if(monto > pendiente + 0.01 && !confirm('Estás devolviendo ' + fmt(monto) + ' pero el pendiente es ' + fmt(pendiente) + '. ¿Devolver igual?')) return;
+  DB.transferencias.push({
+    id: 'TRF-' + Date.now(), fecha: today(), monto,
+    origen: p.destino, destino: p.origen, // la plata vuelve en sentido contrario al préstamo
+    motivo: 'Devolución de préstamo — ' + p.motivo,
+    tipo: 'movimiento', mes_devolucion_esperado: '', prestamo_id: p.id
+  });
+  save();
+  renderFondos();
+}
+
+function delTransferencia(id) {
+  if(!confirm('¿Eliminar esta transferencia? Si era un préstamo, sus devoluciones ya registradas quedan sin el préstamo original al que estaban ligadas.')) return;
+  DB.transferencias = DB.transferencias.filter(t=>t.id!==id);
+  save();
+  renderFondos();
+}
+
+function renderFondos() {
+  if(!$('fondos-saldos')) return;
+  const mesActualKey = mesKey(Number(($('caja-mes')||{value:new Date().getMonth()+1}).value), Number(($('caja-anio')||{value:new Date().getFullYear()}).value));
+
+  $('fondos-saldos').innerHTML = DB.fondos.map(f => `
+    <div class="sc ${saldoFondo(f.id)<0?'red':'gold'}">
+      <div class="sc-label">${f.nombre}</div>
+      <div class="sc-value">${fmt(saldoFondo(f.id))}</div>
+      <div class="sc-sub">Saldo inicial: ${fmt(f.saldo_inicial)}</div>
+    </div>
+  `).join('');
+
+  const pendientes = prestamosPendientes();
+  if(pendientes.length === 0) {
+    $('fondos-prestamos-pend').innerHTML = '';
+  } else {
+    $('fondos-prestamos-pend').innerHTML = `
+      <div class="card" style="margin-bottom:16px;border-color:rgba(224,140,92,0.3)">
+        <div class="card-title" style="color:var(--orange)">⚠️ Préstamos Pendientes de Devolución</div>
+        ${pendientes.map(p => {
+          const vencido = prestamoVencido(p, mesActualKey);
+          return `<div class="inforow">
+            <div class="ir-label">
+              <strong>${fmt(p.pendiente)}</strong> pendiente de ${fmt(p.monto)} — ${nombreFondo(p.destino)} le debe a ${nombreFondo(p.origen)}
+              ${vencido?'<span class="badge br" style="margin-left:6px">Vencido</span>':''}
+              <span style="font-size:11px;color:var(--text3);display:block">${p.fecha} — ${p.motivo}${p.mes_devolucion_esperado?' — debía devolverse en '+p.mes_devolucion_esperado:''}</span>
+            </div>
+            <button class="btn btn-green btn-sm" onclick="registrarDevolucion('${p.id}')">↩ Devolver</button>
+          </div>`;
+        }).join('')}
+      </div>`;
+  }
+
+  $('tbody-transferencias').innerHTML = DB.transferencias.length
+    ? [...DB.transferencias].reverse().map(t => `<tr>
+        <td>${t.fecha}</td>
+        <td><span class="badge ${t.tipo==='prestamo'?'bo':'bb'}">${t.tipo==='prestamo'?'Préstamo':'Movimiento'}</span></td>
+        <td class="td-main">${nombreFondo(t.origen)}</td>
+        <td class="td-main">${nombreFondo(t.destino)}</td>
+        <td style="color:var(--accent)">${fmt(t.monto)}</td>
+        <td>${t.motivo}</td>
+        <td><button class="btn btn-danger btn-icon" onclick="delTransferencia('${t.id}')">×</button></td>
+      </tr>`).join('')
+    : '<tr><td colspan="7"><div class="empty"><p>Sin transferencias registradas</p></div></td></tr>';
+}
+
 
 function devolverPrestamoDesde(id) {
   const mes  = Number(($('caja-mes')||{value:5}).value);
@@ -2984,9 +3590,9 @@ function renderEERR(){
   const mes=Number($('eerr-mes').value), anio=Number($('eerr-anio').value);
   const peds    = getPedidosMes(mes, anio);
   const ventas  = peds.reduce((s,p)=>s+Number(p.subtotal||0),0);
-  const costoMP = getCostoVentas(mes, anio);
+  const costoMP = getCMVMes(mes, anio).cmv; // CMV real (Stock inicial + Compras − Stock final), no el costo de receta ni el total de compras
   const gb      = ventas - costoMP;
-  const cf      = getTotalCF();
+  const cf      = getCostosFijosImputadosMes(mes, anio); // devengado del mes (prorrateado si el costo cubre un período)
   const gv      = getGastosVarMes(mes, anio);
   const indTotal= getTotalIndirectosMes(mes, anio);
   const mo      = getMOdelMes(mes, anio);
@@ -3012,7 +3618,7 @@ function renderEERR(){
       <div class="inforow"><div class="ir-label">(+) Ventas</div><div class="ir-value gold">${fmt(ventas)}</div></div>
 
       <div style="font-size:10px;font-weight:600;color:var(--text3);padding:8px 0;text-transform:uppercase;letter-spacing:1.5px;margin-top:4px">COSTOS DIRECTOS</div>
-      <div class="inforow"><div class="ir-label">(-) Costo Directo Vendido (MP + Pkg)</div><div class="ir-value red">-${fmt(costoMP)}</div></div>
+      <div class="inforow"><div class="ir-label">(-) CMV (Costo de Mercadería Vendida)</div><div class="ir-value red">-${fmt(costoMP)}</div></div>
       <div class="inforow" style="background:rgba(78,201,148,0.05);padding:8px;border-radius:4px;margin:4px 0">
         <div class="ir-label"><strong>= GANANCIA BRUTA</strong></div><div class="ir-value green"><strong>${fmt(gb)}</strong></div>
       </div>
@@ -3057,6 +3663,74 @@ function renderEERR(){
         <div class="sep"></div>
         <div class="inforow"><div class="ir-label">Cajas Producidas</div><div class="ir-value">${getTotalCajasDelMes(mes,anio)}</div></div>
         <div class="inforow"><div class="ir-label">Costo Indirecto / Caja</div><div class="ir-value gold">${fmt(getTotalCajasDelMes(mes,anio)>0?indTotal/getTotalCajasDelMes(mes,anio):0)}</div></div>
+      </div>
+    </div>`;
+}
+
+// ════════════════════════════════════════════════
+// CMV — render
+// ════════════════════════════════════════════════
+
+const CATEGORIA_LABEL_CMV = {Ingrediente:'Materia Prima', Packaging:'Packaging'};
+
+function guardarStockFinalManualCMV(){
+  const mes=Number($('cmv-mes').value), anio=Number($('cmv-anio').value);
+  const key = mesKey(mes,anio);
+  const val = $('cmv-stock-manual').value;
+  if(!DB.cmv_stock_final_manual) DB.cmv_stock_final_manual = {};
+  if(val===''){ delete DB.cmv_stock_final_manual[key]; }
+  else { DB.cmv_stock_final_manual[key] = Number(val); }
+  save();
+  renderCMV();
+}
+
+function renderCMV(){
+  const mes=Number($('cmv-mes').value), anio=Number($('cmv-anio').value);
+  const r = getCMVResumenMes(mes, anio);
+  const manualVal = (DB.cmv_stock_final_manual||{})[mesKey(mes,anio)];
+
+  const catsHtml = Object.keys(r.categorias).length
+    ? Object.entries(r.categorias).map(([cat,monto])=>`<div class="inforow"><div class="ir-label">· ${CATEGORIA_LABEL_CMV[cat]||cat}</div><div class="ir-value">${fmt(monto)}</div></div>`).join('')
+    : '<div style="color:var(--text3);font-size:12px;padding:6px 0">Sin compras este mes</div>';
+
+  $('cmv-content').innerHTML = `
+    <div class="g2">
+      <div class="card">
+        <div class="card-title">Cálculo paso a paso</div>
+        <div class="inforow"><div class="ir-label">Stock inicial</div><div class="ir-value">${fmt(r.stockInicial)}</div></div>
+        <div class="inforow"><div class="ir-label">(+) Compras del mes</div><div class="ir-value green">+${fmt(r.compras)}</div></div>
+        <div class="inforow"><div class="ir-label">(−) Stock final${r.stockFinalManual?' <span class="badge bo">conteo manual</span>':''}</div><div class="ir-value red">-${fmt(r.stockFinal)}</div></div>
+        <div class="sep"></div>
+        <div class="inforow" style="background:rgba(232,201,122,0.08);padding:10px;border-radius:6px">
+          <div class="ir-label"><strong>= CMV</strong></div><div class="ir-value gold" style="font-size:20px"><strong>${fmt(r.cmv)}</strong></div>
+        </div>
+        <div class="sep"></div>
+        <div style="font-size:11px;color:var(--text3);margin-bottom:6px">Desglose de compras por categoría</div>
+        ${catsHtml}
+        <div class="sep"></div>
+        <label style="font-size:11px;color:var(--text3);text-transform:uppercase;letter-spacing:1px">Ajustar stock final a mano (conteo físico)</label>
+        <div style="display:flex;gap:8px;margin-top:6px">
+          <input class="fc" id="cmv-stock-manual" type="number" placeholder="Valorizado calculado: ${Math.round(getStockFinalValorizadoCalculado(mes,anio))}" value="${manualVal!==undefined?manualVal:''}">
+          <button class="btn btn-primary btn-sm" onclick="guardarStockFinalManualCMV()">Guardar</button>
+        </div>
+        <div style="font-size:11px;color:var(--text3);margin-top:4px">Vacío = usar el valor calculado desde Inventario MP + Stock de producto terminado.</div>
+      </div>
+      <div class="card">
+        <div class="card-title">Indicadores</div>
+        <div class="inforow"><div class="ir-label">Ventas del mes</div><div class="ir-value gold">${fmt(r.ventas)}</div></div>
+        <div class="inforow"><div class="ir-label">CMV % de ventas</div><div class="ir-value ${r.pctSobreVentas!==null&&r.pctSobreVentas>0.5?'red':''}">${r.pctSobreVentas!==null?pct(r.pctSobreVentas):'—'}</div></div>
+        <div class="inforow"><div class="ir-label">Margen Bruto (Ventas − CMV)</div><div class="ir-value green">${fmt(r.margenBruto)}</div></div>
+        <div class="inforow"><div class="ir-label">Margen Bruto %</div><div class="ir-value">${r.margenBrutoPct!==null?pct(r.margenBrutoPct):'—'}</div></div>
+        <div class="sep"></div>
+        <div class="inforow">
+          <div class="ir-label">Compras vs. CMV</div>
+          <div class="ir-value ${r.diferenciaComprasCMV>=0?'blue':'orange'}">${r.diferenciaComprasCMV>=0?'+':''}${fmt(r.diferenciaComprasCMV)}</div>
+        </div>
+        <div style="font-size:11px;color:var(--text3);margin-top:4px">
+          ${r.diferenciaComprasCMV>=0
+            ? 'Se compró más de lo que se vendió — quedó en stock.'
+            : 'Se vendió más de lo comprado este mes — se consumió stock del mes anterior.'}
+        </div>
       </div>
     </div>`;
 }
@@ -3204,14 +3878,17 @@ function debugCanal(){
 // INVENTARIO MP
 // ════════════════════════════════════════════════
 
-function getStockIngrediente(ingId) {
+function getStockIngrediente(ingId, fechaLimite=null) {
+  // fechaLimite (opcional, 'YYYY-MM-DD'): solo cuenta compras/producción hasta esa fecha inclusive
+  // — lo usa el CMV para valorizar el stock a fin de un mes puntual, sin tocar el comportamiento
+  // de siempre (fechaLimite=null = todo el historial, igual que antes de este parámetro).
   // Stock inicial cargado manualmente
   const inicial = (DB.stock_inicial||[])
     .filter(s=>s.ing_id===ingId)
     .reduce((s,x)=>s+Number(x.cantidad||0),0);
   // Compras del ingrediente
   const comprado = (DB.compras||[])
-    .filter(c=>c.tipo==='Ingrediente'&&c.id_item===ingId)
+    .filter(c=>c.tipo==='Ingrediente'&&c.id_item===ingId&&(!fechaLimite||!c.fecha||c.fecha<=fechaLimite))
     .reduce((s,c)=>s+Number(c.cantidad||0),0);
   // Usado en producción
   let usado = 0;
@@ -3225,7 +3902,7 @@ function getStockIngrediente(ingId) {
         const item = rec.ingredientes.find(i=>i.nombre.toLowerCase()===ing.nombre.toLowerCase());
         if(item) {
           const cajasProd = DB.produccion
-            .filter(p=>p.id_producto===prodId)
+            .filter(p=>p.id_producto===prodId&&(!fechaLimite||!p.fecha||p.fecha<=fechaLimite))
             .reduce((s,p)=>s+Number(p.cantidad||0),0);
           usado += item.cantidad * cajasProd;
         }
@@ -3233,7 +3910,7 @@ function getStockIngrediente(ingId) {
     } else {
       recetasIng.forEach(r => {
         const cajasProd = DB.produccion
-          .filter(p=>p.id_producto===r.id_producto)
+          .filter(p=>p.id_producto===r.id_producto&&(!fechaLimite||!p.fecha||p.fecha<=fechaLimite))
           .reduce((s,p)=>s+Number(p.cantidad||0),0);
         usado += Number(r.cantidad||0) * cajasProd;
       });
