@@ -280,8 +280,8 @@ describe.skipIf(!TEST_DB)('migraciones: gusto real cargado', () => {
     const byName = Object.fromEntries(c.localities.map((l) => [l.name, [l.kmRoundTrip, l.tollRoundTrip]]));
     // los km que pasó el dueño (ida y vuelta)
     expect(byName).toMatchObject({
-      Ranelagh: [12, 0], Ezpeleta: [11, 0], 'Plátanos': [17, 0], 'Quilmes Centro': [40, 16000], 'Quilmes Oeste': [28, 0],
-      Bernal: [48, 16000], Wilde: [56, 16000], 'Sarandí': [60, 16000], Avellaneda: [75, 16000],
+      Ranelagh: [12, 0], Ezpeleta: [11, 0], 'Plátanos': [17, 0], 'Quilmes Centro': [40, 8000], 'Quilmes Oeste': [28, 0],
+      Bernal: [48, 8000], Wilde: [56, 8000], 'Sarandí': [60, 8000], Avellaneda: [75, 8000], CABA: [85, 12000],
     });
     expect(c.localities.every((l) => l.kmRoundTrip !== null)).toBe(true);
     expect(c.settings.shippingByBoxes).toEqual({ absorbPerBox: 3500, rounding: 500, fuelPrice: 2080, consumption100km: 7 });

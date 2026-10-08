@@ -21,15 +21,16 @@ select v.name, 'Avellaneda', z.id, v.ord from (values ('Sarandí', 17), ('Avella
 join shipping_zones z on z.name = 'Quilmes / Bernal / Wilde'
 where not exists (select 1 from localities l where l.name = v.name);
 
--- Km ida y vuelta desde la casa del dueño (los marcados ~ son estimados: corregir en el panel) y peaje ida y vuelta.
+-- Km ida y vuelta desde la casa del dueño (los marcados ~ son estimados: corregir en el panel) y peaje ida y vuelta
+-- en hora pico (dueño, 9/10): Capital $12.000, Quilmes/Bernal $8.000. La Plata a confirmar.
 update localities l set km_round_trip = v.km, toll_round_trip = v.toll
 from (values
-  ('Ranelagh', 12, 0), ('Ezpeleta', 11, 0), ('Plátanos', 17, 0), ('Quilmes Centro', 40, 16000), ('Quilmes Oeste', 28, 0),
-  ('Bernal', 48, 16000), ('Wilde', 56, 16000), ('Sarandí', 60, 16000), ('Avellaneda', 75, 16000),
+  ('Ranelagh', 12, 0), ('Ezpeleta', 11, 0), ('Plátanos', 17, 0), ('Quilmes Centro', 40, 8000), ('Quilmes Oeste', 28, 0),
+  ('Bernal', 48, 8000), ('Wilde', 56, 8000), ('Sarandí', 60, 8000), ('Avellaneda', 75, 8000),
   -- ~ estimados
   ('Guillermo E. Hudson', 16, 0), ('Juan María Gutiérrez', 18, 0), ('Berazategui Centro', 8, 0), ('Berazategui Oeste', 12, 0),
-  ('Villa España', 10, 0), ('Sourigues', 14, 0), ('Ezpeleta Oeste', 16, 0), ('Bernal Oeste', 36, 0), ('Don Bosco', 52, 16000),
-  ('CABA', 85, 16000), ('City Bell', 60, 16000), ('Gonnet', 64, 16000), ('La Plata', 80, 16000)
+  ('Villa España', 10, 0), ('Sourigues', 14, 0), ('Ezpeleta Oeste', 16, 0), ('Bernal Oeste', 36, 0), ('Don Bosco', 52, 8000),
+  ('CABA', 85, 12000), ('City Bell', 60, 16000), ('Gonnet', 64, 16000), ('La Plata', 80, 16000)
 ) as v(name, km, toll)
 where l.name = v.name;
 

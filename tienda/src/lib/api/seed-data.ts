@@ -231,10 +231,10 @@ export const SEED_ZONES: ShippingZone[] = [
 const LOC: [string, string, string, number, number][] = [
   ['Guillermo E. Hudson', 'Berazategui', 'zone-0', 16, 0], ['Plátanos', 'Berazategui', 'zone-0', 17, 0], ['Ranelagh', 'Berazategui', 'zone-0', 12, 0], ['Juan María Gutiérrez', 'Berazategui', 'zone-0', 18, 0],
   ['Berazategui Centro', 'Berazategui', 'zone-1', 8, 0], ['Berazategui Oeste', 'Berazategui', 'zone-1', 12, 0], ['Villa España', 'Berazategui', 'zone-1', 10, 0], ['Sourigues', 'Berazategui', 'zone-1', 14, 0],
-  ['Quilmes Centro', 'Quilmes', 'zone-2', 40, 16000], ['Quilmes Oeste', 'Quilmes', 'zone-2', 28, 0], ['Bernal', 'Quilmes', 'zone-2', 48, 16000], ['Bernal Oeste', 'Quilmes', 'zone-2', 36, 0],
-  ['Don Bosco', 'Quilmes', 'zone-2', 52, 16000], ['Ezpeleta', 'Quilmes', 'zone-2', 11, 0], ['Ezpeleta Oeste', 'Quilmes', 'zone-2', 16, 0], ['Wilde', 'Avellaneda', 'zone-2', 56, 16000],
-  ['Sarandí', 'Avellaneda', 'zone-2', 60, 16000], ['Avellaneda', 'Avellaneda', 'zone-2', 75, 16000],
-  ['CABA', 'CABA', 'zone-3', 85, 16000],
+  ['Quilmes Centro', 'Quilmes', 'zone-2', 40, 8000], ['Quilmes Oeste', 'Quilmes', 'zone-2', 28, 0], ['Bernal', 'Quilmes', 'zone-2', 48, 8000], ['Bernal Oeste', 'Quilmes', 'zone-2', 36, 0],
+  ['Don Bosco', 'Quilmes', 'zone-2', 52, 8000], ['Ezpeleta', 'Quilmes', 'zone-2', 11, 0], ['Ezpeleta Oeste', 'Quilmes', 'zone-2', 16, 0], ['Wilde', 'Avellaneda', 'zone-2', 56, 8000],
+  ['Sarandí', 'Avellaneda', 'zone-2', 60, 8000], ['Avellaneda', 'Avellaneda', 'zone-2', 75, 8000],
+  ['CABA', 'CABA', 'zone-3', 85, 12000],
   ['City Bell', 'La Plata', 'zone-4', 60, 16000], ['Gonnet', 'La Plata', 'zone-4', 64, 16000], ['La Plata', 'La Plata', 'zone-4', 80, 16000],
 ];
 export const SEED_LOCALITIES: Locality[] = LOC.map(([name, partido, zoneId, kmRoundTrip, tollRoundTrip], i) => ({ id: i + 1, name, partido, zoneId, kmRoundTrip, tollRoundTrip }));
