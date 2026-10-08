@@ -13,7 +13,7 @@ function publicSettings(db: ReturnType<typeof readDb>): StoreSettings {
   void _private;
   const c = db.shippingConfig;
   return c.pricingMode === 'boxes'
-    ? { ...pub, shippingByBoxes: { absorbPerBox: c.absorbPerBox ?? 0, rounding: c.rounding, fuelPrice: c.fuelPrice, consumption100km: c.consumption100km, productMarginPct: c.productMarginPct ?? 43, minMarginPct: c.minMarginPct ?? 35 } }
+    ? { ...pub, shippingByBoxes: { absorbPerBox: c.absorbPerBox ?? 0, rounding: c.rounding, fuelPrice: c.fuelPrice, consumption100km: c.consumption100km, productMarginPct: c.productMarginPct ?? 43, minMarginPct: c.minMarginPct ?? 28, maxShipping: c.maxShipping ?? 0 } }
     : pub;
 }
 

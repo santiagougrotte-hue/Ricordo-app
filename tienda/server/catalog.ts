@@ -27,7 +27,7 @@ export async function getCatalog(q: Query, opts: { distanceEnabled?: boolean } =
     q(`select * from shipping_zones where active order by sort_order`),
     q(`select l.* from localities l join shipping_zones z on z.id = l.zone_id where l.active and z.active order by l.sort_order, l.name`),
     q(`select * from store_public_settings()`),
-    q(`select pricing_mode, absorb_per_box, rounding, fuel_price, consumption_100km, product_margin_pct, min_margin_pct from shipping_config limit 1`),
+    q(`select pricing_mode, absorb_per_box, rounding, fuel_price, consumption_100km, product_margin_pct, min_margin_pct, max_shipping from shipping_config limit 1`),
     q(`select * from shipping_bands order by up_to_km nulls last`),
   ]);
   return {
@@ -46,7 +46,7 @@ export async function getCatalog(q: Query, opts: { distanceEnabled?: boolean } =
       // Envío por cajas: el carrito resta lo que absorbe cada caja al costo del viaje (no expone el origen).
       shippingByBoxes: (cfg as Row | undefined)?.pricing_mode === 'boxes'
         ? { absorbPerBox: (cfg as Row).absorb_per_box, rounding: (cfg as Row).rounding, fuelPrice: (cfg as Row).fuel_price, consumption100km: Number((cfg as Row).consumption_100km),
-            productMarginPct: (cfg as Row).product_margin_pct, minMarginPct: (cfg as Row).min_margin_pct }
+            productMarginPct: (cfg as Row).product_margin_pct, minMarginPct: (cfg as Row).min_margin_pct, maxShipping: (cfg as Row).max_shipping }
         : undefined,
     },
   };

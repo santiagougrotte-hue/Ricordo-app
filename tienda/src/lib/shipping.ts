@@ -92,17 +92,20 @@ export interface Quote {
 /**
  * Envío por localidad cuidando un margen mínimo por pedido (aunque vaya un solo cliente). Igual que create_order:
  *   holgura = subtotal de cajas × (margen de las cajas − margen mínimo) − viaje   (en enteros × 100)
- *   holgura < 0 → el envío cobra lo justo para llegar al mínimo (nunca menos que el envío mínimo)
+ *   holgura < 0 → el envío cobra lo justo para llegar al mínimo (nunca menos que el envío mínimo ni más que el tope)
  *   holgura ≥ 0 → envío mínimo hasta el envío gratis de la zona; desde ahí, gratis.
  */
 export function marginShipping(
   trip: number, boxSubtotal: number, boxes: number,
   z: Pick<ShippingZone, 'freeFromBoxes' | 'minFee'>,
-  cfg: { productMarginPct?: number; minMarginPct?: number; rounding: number },
+  cfg: { productMarginPct?: number; minMarginPct?: number; maxShipping?: number; rounding: number },
 ): { shipping: number; slack: number } {
-  const g = cfg.productMarginPct ?? 43, t = cfg.minMarginPct ?? 35, floor = z.minFee ?? 0;
+  const g = cfg.productMarginPct ?? 43, t = cfg.minMarginPct ?? 28, floor = z.minFee ?? 0;
   const slack = (g - t) * boxSubtotal - 100 * trip;
-  if (slack < 0) return { shipping: Math.max(floor, Math.ceil(-slack / ((100 - t) * cfg.rounding)) * cfg.rounding), slack };
+  if (slack < 0) {
+    const need = Math.max(floor, Math.ceil(-slack / ((100 - t) * cfg.rounding)) * cfg.rounding);
+    return { shipping: cfg.maxShipping ? Math.max(floor, Math.min(need, cfg.maxShipping)) : need, slack };
+  }
   if (z.freeFromBoxes === null || boxes < z.freeFromBoxes) return { shipping: floor, slack };
   return { shipping: 0, slack };
 }
@@ -147,7 +150,7 @@ export function quote(method: DeliveryMethod, lookup: ZoneLookup, cart: CartTota
   const m = marginMode ? atBoxes(boxes) : null;
   const shippingCost = m ? m.shipping : free ? 0 : byDistance ? distanceCost : z.shippingCost;
   // El descuento por volumen solo si el envío es gratis y no baja el margen del mínimo.
-  const discountOk = !m || (m.shipping === 0 && discount * (100 - (perBox!.minMarginPct ?? 35)) <= m.slack);
+  const discountOk = !m || (m.shipping === 0 && discount * (100 - (perBox!.minMarginPct ?? 28)) <= m.slack);
   let freeAt: number | null = z.freeFromBoxes;
   if (m) {
     freeAt = null;

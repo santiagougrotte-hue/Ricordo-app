@@ -1,10 +1,11 @@
 -- Envío por localidad: cada localidad tiene sus km (ida, aproximados) y su peaje, editables en el panel.
 -- El cliente elige la localidad en el checkout y manda la dirección por WhatsApp después de confirmar.
--- El envío cuida un margen mínimo (35%) en cada pedido, aunque en la salida vaya un solo cliente:
+-- El envío cuida un margen mínimo (28%) en cada pedido, aunque en la salida vaya un solo cliente, con un tope ($12.000):
 --   viaje = km ida y vuelta × consumo × nafta + peaje (de la localidad)
 --   holgura = cajas × (margen de las cajas − margen mínimo) − viaje
 --   si la holgura no alcanza, el envío cobra lo justo para llegar al mínimo; si alcanza, envío mínimo ($1.000)
 --   hasta el envío gratis de la zona y después gratis. El descuento por volumen solo si no baja del mínimo.
+--   Ningún envío pasa del tope (equilibrio para zonas lejanas: ahí el margen puede quedar más bajo si va un solo pedido).
 alter table orders drop constraint delivery_needs_address;   -- la dirección llega por WhatsApp
 
 alter table localities
@@ -14,7 +15,8 @@ alter table shipping_zones add column min_fee int not null default 1000 check (m
 -- Margen de las cajas después de insumos y mano de obra (promedio del CRM: 43%) y margen mínimo por pedido.
 alter table shipping_config
   add column product_margin_pct int not null default 43 check (product_margin_pct between 0 and 100),
-  add column min_margin_pct     int not null default 35 check (min_margin_pct between 0 and 99);
+  add column min_margin_pct     int not null default 28 check (min_margin_pct between 0 and 99),
+  add column max_shipping       int not null default 12000 check (max_shipping >= 0);   -- 0 = sin tope
 
 -- Todas las zonas calculan por localidad, con envío mínimo de $1.000.
 update shipping_zones set distance_pricing = true;
@@ -120,6 +122,7 @@ begin
         -- el margen de las cajas no cubre el viaje: el envío cobra lo justo para llegar al mínimo
         v_shipping := greatest(v_zone.min_fee,
           (ceil(-v_slack::numeric / ((100 - v_ship.min_margin_pct) * v_ship.rounding)) * v_ship.rounding)::int);
+        if v_ship.max_shipping > 0 then v_shipping := greatest(v_zone.min_fee, least(v_shipping, v_ship.max_shipping)); end if;
       elsif v_zone.free_from_boxes is null or v_boxes < v_zone.free_from_boxes then
         v_shipping := v_zone.min_fee;   -- lo cubre, pero hasta el envío gratis se cobra el mínimo (conviene sumar cajas)
       else

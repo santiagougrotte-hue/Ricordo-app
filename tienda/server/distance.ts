@@ -20,6 +20,8 @@ export interface ShippingConfig {
   /** Modo por localidad: margen de las cajas y margen mínimo por pedido (%). */
   productMarginPct: number;
   minMarginPct: number;
+  /** Tope de envío (0 = sin tope). */
+  maxShipping: number;
   fuelPrice: number;
   consumption100km: number;
   rounding: number;
@@ -27,7 +29,7 @@ export interface ShippingConfig {
 
 export const mapShippingConfig = (r: Row): ShippingConfig => ({
   originLat: Number(r.origin_lat), originLng: Number(r.origin_lng),
-  pricingMode: r.pricing_mode === 'fuel' || r.pricing_mode === 'boxes' ? r.pricing_mode : 'bands', absorbPerBox: r.absorb_per_box ?? 0, productMarginPct: r.product_margin_pct ?? 43, minMarginPct: r.min_margin_pct ?? 35,
+  pricingMode: r.pricing_mode === 'fuel' || r.pricing_mode === 'boxes' ? r.pricing_mode : 'bands', absorbPerBox: r.absorb_per_box ?? 0, productMarginPct: r.product_margin_pct ?? 43, minMarginPct: r.min_margin_pct ?? 28, maxShipping: r.max_shipping ?? 0,
   fuelPrice: r.fuel_price, consumption100km: Number(r.consumption_100km), rounding: r.rounding,
 });
 

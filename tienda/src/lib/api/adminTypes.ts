@@ -137,6 +137,8 @@ export interface ShippingConfig {
   /** Modo por localidad: margen de las cajas (después de insumos y mano de obra) y margen mínimo por pedido. */
   productMarginPct?: number;
   minMarginPct?: number;
+  /** Tope de envío (0 = sin tope). */
+  maxShipping?: number;
   /** Escalones: hasta X km de ida, $precio. upToKm null = "más lejos". */
   bands?: { upToKm: number | null; price: number }[];
   fuelPrice: number;

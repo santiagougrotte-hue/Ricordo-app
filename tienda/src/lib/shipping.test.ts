@@ -163,6 +163,15 @@ describe('envío por localidad cuidando un margen mínimo de 35% (cajas al 43%, 
   it('las salsas no cuentan para cubrir el viaje', () => {
     expect(q('Quilmes Centro', 4, 3).shippingCost).toBe(16500);
   });
+  it('equilibrio: margen mínimo 28% y tope de envío $12.000 (cajas de $12.375)', () => {
+    const S2 = { ...SEED_SETTINGS, shippingByBoxes: { absorbPerBox: 0, rounding: 500, fuelPrice: 2080, consumption100km: 7, productMarginPct: 43, minMarginPct: 28, maxShipping: 12000 } };
+    const cart2 = (b: number) => cartTotals([{ product: { price: 12375, countsAsBox: true }, quantity: b }]);
+    const ship2 = (name: string, b: number) => quote('delivery', realZone(loc(name)), cart2(b), S2).shippingCost;
+    expect([4, 5, 6].map((b) => ship2('Quilmes Centro', b))).toEqual([9000, 6500, 4000]);
+    expect([4, 5, 6].map((b) => ship2('Avellaneda', b))).toEqual([12000, 12000, 11000]); // tope
+    expect(ship2('CABA', 5)).toBe(12000);
+    expect(ship2('Berazategui Centro', 3)).toBe(1000);
+  });
   it('marginShipping: cuentas enteras, igual que create_order', () => {
     const cfg = { productMarginPct: 43, minMarginPct: 35, rounding: 500 };
     expect(marginShipping(13824, 40000, 4, { freeFromBoxes: 6, minFee: 1000 }, cfg)).toEqual({ shipping: 16500, slack: -1062400 });

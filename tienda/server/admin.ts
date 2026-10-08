@@ -300,6 +300,8 @@ export async function handleAdmin(req: Request, path: string, env: AdminEnv, dep
     const pm = c.productMarginPct === undefined ? null : int(c.productMarginPct);
     const mm = c.minMarginPct === undefined ? null : int(c.minMarginPct);
     if ((c.productMarginPct !== undefined && (pm === null || pm > 100)) || (c.minMarginPct !== undefined && (mm === null || mm > 99))) return bad('Los márgenes van de 0 a 99 %.');
+    const maxShip = c.maxShipping === undefined ? null : int(c.maxShipping);
+    if (c.maxShipping !== undefined && maxShip === null) return bad('Revisá el tope de envío (pesos enteros, 0 = sin tope).');
     if (c.absorbPerBox !== undefined && absorb === null) return bad('Revisá cuánto absorbés por caja (pesos enteros).');
     // Escalones: km crecientes, precios enteros; el último puede ser "más lejos" (sin km).
     let bands: { upToKm: number | null; price: number }[] | null = null;
@@ -314,8 +316,9 @@ export async function handleAdmin(req: Request, path: string, env: AdminEnv, dep
     const [old] = await q(`select origin_lat, origin_lng from shipping_config limit 1`);
     await q(`update shipping_config set origin_lat=$1, origin_lng=$2, fuel_price=$3, consumption_100km=$4, rounding=$5, pricing_mode=$6,
              absorb_per_box = coalesce($7, absorb_per_box),
-             product_margin_pct = coalesce($8, product_margin_pct), min_margin_pct = coalesce($9, min_margin_pct)`,
-      [lat, lng, c.fuelPrice, Math.round(cons * 10) / 10, c.rounding, mode, absorb, pm, mm]);
+             product_margin_pct = coalesce($8, product_margin_pct), min_margin_pct = coalesce($9, min_margin_pct),
+             max_shipping = coalesce($10, max_shipping)`,
+      [lat, lng, c.fuelPrice, Math.round(cons * 10) / 10, c.rounding, mode, absorb, pm, mm, maxShip]);
     if (bands) {
       await q(`delete from shipping_bands`);
       for (const b of bands) await q(`insert into shipping_bands (up_to_km, price) values ($1, $2)`, [b.upToKm, b.price]);

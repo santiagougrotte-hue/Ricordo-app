@@ -301,7 +301,8 @@ function DistanceConfig() {
           </p>
           <div className="adm-grid2">
             <div className="field"><label className="field-label" htmlFor="c-pm">Margen de tus cajas (%)</label><input id="c-pm" className="input" type="number" min={0} max={100} inputMode="numeric" value={c.productMarginPct ?? 43} onChange={n('productMarginPct')} /><p className="small muted">Después de insumos y tu mano de obra.</p></div>
-            <div className="field"><label className="field-label" htmlFor="c-mm">Margen mínimo por pedido (%)</label><input id="c-mm" className="input" type="number" min={0} max={99} inputMode="numeric" value={c.minMarginPct ?? 35} onChange={n('minMarginPct')} /></div>
+            <div className="field"><label className="field-label" htmlFor="c-mm">Margen mínimo por pedido (%)</label><input id="c-mm" className="input" type="number" min={0} max={99} inputMode="numeric" value={c.minMarginPct ?? 28} onChange={n('minMarginPct')} /></div>
+            <div className="field"><label className="field-label" htmlFor="c-mx">Tope de envío ($)</label><input id="c-mx" className="input" type="number" min={0} step={500} inputMode="numeric" value={c.maxShipping ?? 0} onChange={n('maxShipping')} /><p className="small muted">Ningún envío cobra más que esto (0 = sin tope). En zonas lejanas, si vas por un solo pedido, el margen puede quedar más bajo.</p></div>
             <div className="field"><label className="field-label" htmlFor="c-f">Nafta ($ por litro)</label><input id="c-f" className="input" type="number" min={1} inputMode="numeric" value={c.fuelPrice} onChange={n('fuelPrice')} /></div>
             <div className="field"><label className="field-label" htmlFor="c-c">Consumo (litros cada 100 km)</label><input id="c-c" className="input" type="number" min={1} step={0.1} inputMode="decimal" value={c.consumption100km} onChange={n('consumption100km')} /></div>
             <div className="field"><label className="field-label" htmlFor="c-r">Redondear de a ($)</label><input id="c-r" className="input" type="number" min={1} inputMode="numeric" value={c.rounding} onChange={n('rounding')} /></div>
@@ -328,7 +329,7 @@ function DistanceConfig() {
 /** Ejemplo en vivo: Quilmes Centro (40 km ida y vuelta, $8.000 de peaje), cajas de $12.000, envío mínimo $1.000, gratis desde 6. */
 function BoxesExample({ c }: { c: ShippingConfig }) {
   const trip = Math.round(40 * (c.consumption100km / 100) * c.fuelPrice + 8000);
-  const cfg = { productMarginPct: c.productMarginPct, minMarginPct: c.minMarginPct, rounding: c.rounding || 1 };
+  const cfg = { productMarginPct: c.productMarginPct, minMarginPct: c.minMarginPct, maxShipping: c.maxShipping, rounding: c.rounding || 1 };
   const z = { freeFromBoxes: 6, minFee: 1000 };
   return (
     <p className="small muted">
