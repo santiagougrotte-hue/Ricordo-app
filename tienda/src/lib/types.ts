@@ -95,7 +95,7 @@ export interface StoreSettings {
   /** Escalones de envío por km de ida (vacío si se cobra con la fórmula de nafta o sin cálculo por distancia). */
   shippingBands?: { upToKm: number | null; price: number }[];
   /** Envío por cajas: envío = viaje − cajas × absorbPerBox (redondeado hacia arriba). */
-  shippingByBoxes?: { absorbPerBox: number; rounding: number; fuelPrice?: number; consumption100km?: number; clientSharePct?: number };
+  shippingByBoxes?: { absorbPerBox: number; rounding: number; fuelPrice?: number; consumption100km?: number; productMarginPct?: number; minMarginPct?: number };
 }
 
 export interface CartLine {

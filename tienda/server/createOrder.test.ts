@@ -230,24 +230,26 @@ describe.skipIf(!TEST_DB)('handleCreateOrder contra Netlify Database (Postgres r
     await q(`update shipping_config set pricing_mode = 'bands'`);
   });
 
-  it('envío por localidad: el pedido mínimo paga la mitad del viaje (km y peaje de la localidad) y baja con cada caja hasta el gratis', async () => {
-    await q(`update products set stock = 50 where id = $1`, [P5]);
-    await q(`update shipping_config set pricing_mode = 'boxes', fuel_price = 2080, consumption_100km = 7, client_share_pct = 50, rounding = 500`);
+  it('envío por localidad: cuida un margen mínimo de 35% aunque vaya un solo pedido', async () => {
+    await q(`update products set stock = 80 where id = $1`, [P5]);
+    await q(`update shipping_config set pricing_mode = 'boxes', fuel_price = 2080, consumption_100km = 7, product_margin_pct = 43, min_margin_pct = 35, rounding = 500`);
     await q(`update shipping_zones set distance_pricing = true, min_fee = 1000, shipping_cost = 6000, min_boxes = 4, free_from_boxes = 6 where name = 'Quilmes / Bernal / Wilde'`);
     await q(`update localities set km_round_trip = 40, toll_round_trip = 8000 where name = 'Quilmes'`);
     await q(`update localities set km_round_trip = 28, toll_round_trip = 0 where name = 'Quilmes Oeste'`);
     const run2 = (locality: string, boxes: number, ip: string) =>
       handleCreateOrder({ ...BASE, address: '', postalCode: '', localityId: locs[locality], items: [{ productId: P5, quantity: boxes }] }, env, { query: q, fetch: fakeFetch, ip });
-    // Quilmes: 40 km × 7 l/100 × $2080 + $8000 = $13824 → mitad $6912 → $7000; 5 cajas: la mitad → $3500; 6: gratis
-    expect((await run2('Quilmes', 4, '6.6.6.1')).body).toMatchObject({ ok: true, receipt: { shippingCost: 7000, total: 4 * 8900 + 7000 } });
-    expect((await run2('Quilmes', 5, '6.6.6.2')).body).toMatchObject({ ok: true, receipt: { shippingCost: 3500 } });
-    expect((await run2('Quilmes', 6, '6.6.6.3')).body).toMatchObject({ ok: true, receipt: { shippingCost: 0 } });
-    // Quilmes Oeste: 28 km sin peaje → $4077 → mitad $2038 → $2500; 5 cajas: nunca menos que el mínimo → $1500 (2038/2=1019 → 1500)
-    expect((await run2('Quilmes Oeste', 4, '6.6.6.4')).body).toMatchObject({ ok: true, receipt: { shippingCost: 2500 } });
-    expect((await run2('Quilmes Oeste', 5, '6.6.6.5')).body).toMatchObject({ ok: true, receipt: { shippingCost: 1500 } });
-    // Localidad sin km: el envío de la zona ($6000) es el del pedido mínimo
+    // Quilmes: viaje $13.824; cajas de $8.900 → 4 cajas: (13824×100 − 8×35600) / 65 = $16.886 → $17.000
+    expect((await run2('Quilmes', 4, '6.6.6.1')).body).toMatchObject({ ok: true, receipt: { shippingCost: 17000, total: 4 * 8900 + 17000 } });
+    expect((await run2('Quilmes', 6, '6.6.6.2')).body).toMatchObject({ ok: true, receipt: { shippingCost: 15000, discount: 0 } });
+    // Quilmes Oeste: viaje $4.077 → 4 cajas $2.000; 5 cajas: el mínimo $1.000; 6 cajas: gratis
+    expect((await run2('Quilmes Oeste', 4, '6.6.6.3')).body).toMatchObject({ ok: true, receipt: { shippingCost: 2000 } });
+    expect((await run2('Quilmes Oeste', 5, '6.6.6.4')).body).toMatchObject({ ok: true, receipt: { shippingCost: 1000 } });
+    expect((await run2('Quilmes Oeste', 6, '6.6.6.5')).body).toMatchObject({ ok: true, receipt: { shippingCost: 0 } });
+    // Con 7 cajas el descuento por volumen (5% de 1 caja = $445) no baja el margen del 35%: entra
+    expect((await run2('Quilmes Oeste', 7, '6.6.6.6')).body).toMatchObject({ ok: true, receipt: { shippingCost: 0, discount: 445 } });
+    // Localidad sin km: costo fijo de la zona
     await q(`update localities set km_round_trip = null where name = 'Quilmes'`);
-    expect((await run2('Quilmes', 4, '6.6.6.6')).body).toMatchObject({ ok: true, receipt: { shippingCost: 6000 } });
+    expect((await run2('Quilmes', 4, '6.6.6.7')).body).toMatchObject({ ok: true, receipt: { shippingCost: 6000 } });
     await legacyShipping(q);
     await q(`update products set stock = 20 where id = $1`, [P5]);
   });

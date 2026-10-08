@@ -134,8 +134,9 @@ export interface ShippingConfig {
   pricingMode: 'bands' | 'fuel' | 'boxes';
   /** Modo por cajas: cuánto del margen de cada caja va a pagar el viaje. */
   absorbPerBox?: number;
-  /** Modo por localidad: % del viaje que paga el cliente con el pedido mínimo. */
-  clientSharePct?: number;
+  /** Modo por localidad: margen de las cajas (después de insumos y mano de obra) y margen mínimo por pedido. */
+  productMarginPct?: number;
+  minMarginPct?: number;
   /** Escalones: hasta X km de ida, $precio. upToKm null = "más lejos". */
   bands?: { upToKm: number | null; price: number }[];
   fuelPrice: number;

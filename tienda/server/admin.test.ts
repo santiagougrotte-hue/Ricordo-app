@@ -167,7 +167,7 @@ describe.skipIf(!TEST_DB)('API del panel contra Netlify Database (Postgres real)
     const got = (await call('GET', 'shipping-config')).data;
     expect(got.enabled).toBe(false); // sin ORS_API_KEY
     const cfg = got.config;
-    expect(cfg).toEqual({ originLat: -34.765, originLng: -58.212, pricingMode: 'bands', absorbPerBox: 3500, clientSharePct: 50, fuelPrice: 1700, consumption100km: 7, rounding: 500 });
+    expect(cfg).toEqual({ originLat: -34.765, originLng: -58.212, pricingMode: 'bands', absorbPerBox: 3500, productMarginPct: 43, minMarginPct: 35, fuelPrice: 1700, consumption100km: 7, rounding: 500 });
     expect(got.bands).toHaveLength(7);
     // Escalones: validación y guardado (sin tocar el origen no se borra la caché)
     expect((await call('POST', 'shipping-config', { body: { ...cfg, bands: [{ upToKm: 5, price: 1000 }, { upToKm: 5, price: 2000 }] } })).status).toBe(400);
@@ -270,7 +270,7 @@ describe.skipIf(!TEST_DB)('migraciones: gusto real cargado', () => {
     expect(c.products[4]).toMatchObject({ pastaType: 'salsa', price: 4500, stock: 0, countsAsBox: false, filling: 'Tomate, albahaca, ajo, laurel y aceite de oliva' });
     expect(c.products[4].media.map((m) => m.url)).toEqual(['/fotos/salsa-potes.webp', '/fotos/salsa-casera.webp']);
     expect(c.zones.map((z) => [z.name, z.minBoxes, z.freeFromBoxes, z.deliveryWeekday, z.deliveryMoment, z.distancePricing, z.minFee])).toEqual([
-      // envío por localidad (9/10): la mitad del viaje con el pedido mínimo, piso $1.000, gratis desde el umbral
+      // envío por localidad (9/10): cuida 35% de margen por pedido; envío mínimo $1.000 hasta el gratis
       ['Hudson / Plátanos / Ranelagh', 3, 4, 5, 'a la noche', true, 1000],
       ['Berazategui', 3, 4, 6, 'a la mañana', true, 1000],
       ['Quilmes / Bernal / Wilde', 4, 6, 6, 'a la mañana', true, 1000],
@@ -284,7 +284,7 @@ describe.skipIf(!TEST_DB)('migraciones: gusto real cargado', () => {
       Bernal: [48, 8000], Wilde: [56, 8000], 'Sarandí': [60, 8000], Avellaneda: [75, 8000], CABA: [85, 12000],
     });
     expect(c.localities.every((l) => l.kmRoundTrip !== null)).toBe(true);
-    expect(c.settings.shippingByBoxes).toEqual({ absorbPerBox: 3500, rounding: 500, fuelPrice: 2080, consumption100km: 7, clientSharePct: 50 });
+    expect(c.settings.shippingByBoxes).toEqual({ absorbPerBox: 3500, rounding: 500, fuelPrice: 2080, consumption100km: 7, productMarginPct: 43, minMarginPct: 35 });
     expect((await q<{ pricing_mode: string; fuel_price: number }>(`select pricing_mode, fuel_price from shipping_config`))[0]).toEqual({ pricing_mode: 'boxes', fuel_price: 2080 });
     const zoneOf = (name: string) => c.zones.find((z) => z.id === c.localities.find((l) => l.name === name)!.zoneId)!.name;
     expect(c.localities).toHaveLength(22);

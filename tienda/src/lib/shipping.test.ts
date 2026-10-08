@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { byPartido, cartMessage, stepShipping, discountAmount, matchTypedLocality, cartTotals, discountPct, findZone as find, OTHER_LOCALITY, quote, type LocalityChoice } from './shipping';
+import { byPartido, cartMessage, marginShipping, discountAmount, matchTypedLocality, cartTotals, discountPct, findZone as find, OTHER_LOCALITY, quote, type LocalityChoice } from './shipping';
 import { SEED_LOCALITIES, SEED_SETTINGS, SEED_ZONES as REAL_ZONES } from './api/seed-data';
 
 // Estas pruebas se escribieron con los valores anteriores a "envío por cajas" (fijos 1500…6000, CABA fijo).
@@ -120,43 +120,52 @@ describe('localidad escrita por el cliente', () => {
   it('si no está en la lista → null (no llegamos)', () => expect(matchTypedLocality('Florencio Varela', SEED_LOCALITIES)).toBeNull());
 });
 
-describe('envío por localidad: con el pedido mínimo, la mitad del viaje; baja con cada caja hasta el gratis', () => {
-  const S = { ...SEED_SETTINGS, shippingByBoxes: { absorbPerBox: 3500, rounding: 500, fuelPrice: 2080, consumption100km: 7, clientSharePct: 50 } };
-  const ship = (name: string, boxes: number) => quote('delivery', realZone(loc(name)), cart(boxes), S).shippingCost;
-  it('cada localidad paga distinto según sus km y su peaje (pedido mínimo)', () => {
-    expect(ship('Berazategui Centro', 3)).toBe(1000); // 8 km → viaje $1.165 → mitad $583 → mínimo $1.000
-    expect(ship('Plátanos', 3)).toBe(1500); // 17 km → $2.475 → $1.238
-    expect(ship('Ezpeleta', 4)).toBe(1000); // 11 km → $1.602 → $801
-    expect(ship('Quilmes Oeste', 4)).toBe(2500); // 28 km → $4.077 → $2.038
-    expect(ship('Quilmes Centro', 4)).toBe(7000); // 40 km + $8.000 → $13.824 → $6.912
-    expect(ship('Avellaneda', 4)).toBe(9500); // 75 km + $8.000 → $18.920 → $9.460
-    expect(ship('CABA', 5)).toBe(12500); // 85 km + $12.000 → $24.376 → $12.188
-    expect(ship('La Plata', 5)).toBe(14000); // 80 km + $16.000 → $27.648 → $13.824
-  });
-  it('cada caja extra lo baja en partes iguales hasta el envío gratis', () => {
-    expect([4, 5, 6].map((b) => ship('Quilmes Centro', b))).toEqual([7000, 3500, 0]);
-    expect([5, 6, 7, 8].map((b) => ship('CABA', b))).toEqual([12500, 8500, 4500, 0]);
-    expect([4, 5, 6].map((b) => ship('Quilmes Oeste', b))).toEqual([2500, 1500, 0]); // nunca menos que el mínimo
+describe('envío por localidad cuidando un margen mínimo de 35% (cajas al 43%, aunque vaya un solo pedido)', () => {
+  // en estas pruebas las cajas valen $10.000
+  const S = { ...SEED_SETTINGS, shippingByBoxes: { absorbPerBox: 3500, rounding: 500, fuelPrice: 2080, consumption100km: 7, productMarginPct: 43, minMarginPct: 35 } };
+  const q = (name: string, boxes: number, extras = 0) => quote('delivery', realZone(loc(name)), cart(boxes, extras), S);
+  const ship = (name: string, boxes: number) => q(name, boxes).shippingCost;
+  it('sin peaje el margen cubre el viaje: envío mínimo $1.000 hasta el gratis de la zona', () => {
     expect([3, 4].map((b) => ship('Berazategui Centro', b))).toEqual([1000, 0]);
+    expect([4, 5, 6].map((b) => ship('Ezpeleta', b))).toEqual([1000, 1000, 0]);
   });
-  it('el carrito avisa cuánto baja con una caja más', () => {
+  it('cuando las cajas no cubren el viaje, el envío cobra lo justo para llegar al 35%', () => {
+    expect([3, 4, 5, 6].map((b) => ship('Quilmes Oeste', b))).toEqual([3000, 1500, 1000, 0]);
+    // Quilmes Centro: 40 km + $8.000 = $13.824 → recién con 18 cajas de $10.000 queda gratis
+    expect([4, 6, 10, 17, 18].map((b) => ship('Quilmes Centro', b))).toEqual([16500, 14000, 9000, 1000, 0]);
+    expect(ship('CABA', 5)).toBe(31500);
+  });
+  it('el pedido siempre deja al menos 35% (con margen de cajas del 43%)', () => {
+    for (const name of ['Quilmes Centro', 'Avellaneda', 'CABA', 'La Plata', 'Quilmes Oeste']) {
+      const z = realZone(loc(name));
+      if (z.status !== 'found') throw new Error();
+      const trip = Math.round(z.locality.kmRoundTrip! * 0.07 * 2080 + z.locality.tollRoundTrip!);
+      for (let b = z.zone.minBoxes; b <= 20; b++) {
+        const r = q(name, b);
+        const revenue = b * 10000 - r.discount + r.shippingCost!;
+        const gain = b * 10000 * 0.43 - r.discount + r.shippingCost! - trip;
+        expect(gain / revenue).toBeGreaterThanOrEqual(0.35 - 1e-9);
+      }
+    }
+  });
+  it('el carrito avisa cuánto baja con una caja más y desde cuántas cajas es gratis', () => {
     const qc = realZone(loc('Quilmes Centro'));
     const q4 = quote('delivery', qc, cart(4), S);
-    expect(q4).toMatchObject({ shippingCost: 7000, nextBoxShipping: 3500, missingForFree: 2, shippingEstimated: false });
-    expect(cartMessage(q4, qc)).toBe('Sumá 1 caja más y el envío a Quilmes / Bernal / Wilde baja a $3.500. Con 2 cajas más, es gratis.');
-    expect(cartMessage(quote('delivery', qc, cart(5), S), qc)).toBe('Sumá 1 caja más y el envío a Quilmes / Bernal / Wilde es gratis.');
+    expect(q4).toMatchObject({ shippingCost: 16500, nextBoxShipping: 15500, missingForFree: 14 });
+    expect(cartMessage(q4, qc)).toBe('Sumá 1 caja más y el envío a Quilmes / Bernal / Wilde baja a $15.500. Con 14 cajas más, es gratis.');
+    const qo = realZone(loc('Quilmes Oeste'));
+    expect(cartMessage(quote('delivery', qo, cart(5), S), qo)).toBe('Sumá 1 caja más y el envío a Quilmes / Bernal / Wilde es gratis.');
   });
-  it('localidad sin km cargados: usa el envío de la zona como envío del pedido mínimo', () => {
-    const z = realZone(loc('CABA'));
-    if (z.status !== 'found') throw new Error();
-    expect(quote('delivery', { ...z, locality: { ...z.locality, kmRoundTrip: null } }, cart(5), S).shippingCost).toBe(7500);
+  it('el descuento por volumen solo si no baja el margen del mínimo', () => {
+    expect(q('Berazategui Centro', 5)).toMatchObject({ shippingCost: 0, discount: 500 }); // 5% de 1 caja: entra
+    expect(q('Quilmes Centro', 18)).toMatchObject({ shippingCost: 0, discount: 0, discountMax: 0 }); // no entra
   });
-  it('las salsas no cuentan como caja para bajar el envío', () => {
-    expect(quote('delivery', realZone(loc('Quilmes Centro')), cart(4, 3), S).shippingCost).toBe(7000);
+  it('las salsas no cuentan para cubrir el viaje', () => {
+    expect(q('Quilmes Centro', 4, 3).shippingCost).toBe(16500);
   });
-  it('stepShipping: cuentas enteras, sin errores de redondeo', () => {
-    expect(stepShipping(6912, 5, { minBoxes: 4, freeFromBoxes: 6 }, 1000, 500)).toBe(3500);
-    expect(stepShipping(3000, 5, { minBoxes: 4, freeFromBoxes: 6 }, 1000, 500)).toBe(1500);
-    expect(stepShipping(3000, 4, { minBoxes: 4, freeFromBoxes: null }, 1000, 500)).toBe(3000);
+  it('marginShipping: cuentas enteras, igual que create_order', () => {
+    const cfg = { productMarginPct: 43, minMarginPct: 35, rounding: 500 };
+    expect(marginShipping(13824, 40000, 4, { freeFromBoxes: 6, minFee: 1000 }, cfg)).toEqual({ shipping: 16500, slack: -1062400 });
+    expect(marginShipping(1165, 30000, 3, { freeFromBoxes: 4, minFee: 1000 }, cfg)).toEqual({ shipping: 1000, slack: 123500 });
   });
 });

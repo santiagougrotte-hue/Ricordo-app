@@ -4,7 +4,7 @@ import type { ShippingConfig } from '../lib/api/adminTypes';
 import type { Locality, ShippingZone } from '../lib/types';
 import { DAYS } from '../lib/delivery';
 import { money } from '../lib/money';
-import { stepShipping } from '../lib/shipping';
+import { marginShipping } from '../lib/shipping';
 import { useLoad } from './useLoad';
 
 type Zone = ShippingZone & { active: boolean };
@@ -295,12 +295,13 @@ function DistanceConfig() {
       ) : c.pricingMode === 'boxes' ? (
         <>
           <p className="small muted">
-            Viaje = km ida y vuelta de la localidad × consumo × nafta + peaje de la localidad. Con el pedido mínimo, el cliente paga el % del viaje
-            que pongas acá (nunca menos que el envío mínimo de la zona); cada caja extra lo baja en partes iguales hasta el envío gratis.
-            Los km y el peaje de cada localidad se cargan en la tabla de Localidades.
+            Viaje = km ida y vuelta de la localidad × consumo × nafta + peaje de la localidad. El envío cuida que cada pedido te deje al menos el
+            margen mínimo, aunque vayas por un solo pedido: si las cajas no alcanzan a cubrir el viaje, el envío cobra lo justo; si alcanzan, se cobra
+            el envío mínimo de la zona hasta el envío gratis. Los km y el peaje se cargan en la tabla de Localidades.
           </p>
           <div className="adm-grid2">
-            <div className="field"><label className="field-label" htmlFor="c-sh">El cliente paga del viaje (%)</label><input id="c-sh" className="input" type="number" min={0} max={100} inputMode="numeric" value={c.clientSharePct ?? 50} onChange={n('clientSharePct')} /></div>
+            <div className="field"><label className="field-label" htmlFor="c-pm">Margen de tus cajas (%)</label><input id="c-pm" className="input" type="number" min={0} max={100} inputMode="numeric" value={c.productMarginPct ?? 43} onChange={n('productMarginPct')} /><p className="small muted">Después de insumos y tu mano de obra.</p></div>
+            <div className="field"><label className="field-label" htmlFor="c-mm">Margen mínimo por pedido (%)</label><input id="c-mm" className="input" type="number" min={0} max={99} inputMode="numeric" value={c.minMarginPct ?? 35} onChange={n('minMarginPct')} /></div>
             <div className="field"><label className="field-label" htmlFor="c-f">Nafta ($ por litro)</label><input id="c-f" className="input" type="number" min={1} inputMode="numeric" value={c.fuelPrice} onChange={n('fuelPrice')} /></div>
             <div className="field"><label className="field-label" htmlFor="c-c">Consumo (litros cada 100 km)</label><input id="c-c" className="input" type="number" min={1} step={0.1} inputMode="decimal" value={c.consumption100km} onChange={n('consumption100km')} /></div>
             <div className="field"><label className="field-label" htmlFor="c-r">Redondear de a ($)</label><input id="c-r" className="input" type="number" min={1} inputMode="numeric" value={c.rounding} onChange={n('rounding')} /></div>
@@ -324,16 +325,15 @@ function DistanceConfig() {
   );
 }
 
-/** Ejemplo en vivo: Quilmes Centro (40 km ida y vuelta, $8.000 de peaje), mínimo 4 cajas, gratis desde 6. */
+/** Ejemplo en vivo: Quilmes Centro (40 km ida y vuelta, $8.000 de peaje), cajas de $12.000, envío mínimo $1.000, gratis desde 6. */
 function BoxesExample({ c }: { c: ShippingConfig }) {
   const trip = Math.round(40 * (c.consumption100km / 100) * c.fuelPrice + 8000);
-  const min = Math.max(1000, Math.round((trip * (c.clientSharePct ?? 50)) / 100));
-  const z = { minBoxes: 4, freeFromBoxes: 6 };
-  const r = c.rounding || 1;
+  const cfg = { productMarginPct: c.productMarginPct, minMarginPct: c.minMarginPct, rounding: c.rounding || 1 };
+  const z = { freeFromBoxes: 6, minFee: 1000 };
   return (
     <p className="small muted">
-      Ejemplo, 40 km ida y vuelta con $8.000 de peaje: viaje {money(trip)}.{' '}
-      {[4, 5, 6].map((b) => { const v = stepShipping(min, b, z, 1000, r); return `${b} cajas → ${v === 0 ? 'gratis' : money(v)}`; }).join(' · ')}.
+      Ejemplo, 40 km ida y vuelta con $8.000 de peaje (viaje {money(trip)}), cajas de $12.000:{' '}
+      {[4, 6, 10, 15].map((b) => { const v = marginShipping(trip, b * 12000, b, z, cfg).shipping; return `${b} cajas → ${v === 0 ? 'gratis' : money(v)}`; }).join(' · ')}.
     </p>
   );
 }

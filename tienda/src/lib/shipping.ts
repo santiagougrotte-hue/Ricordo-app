@@ -90,17 +90,22 @@ export interface Quote {
 }
 
 /**
- * Envío por localidad: el del pedido mínimo baja en partes iguales con cada caja hasta el envío gratis,
- * nunca menos que el envío mínimo. Cuentas enteras para que dé igual que create_order.
+ * Envío por localidad cuidando un margen mínimo por pedido (aunque vaya un solo cliente). Igual que create_order:
+ *   holgura = subtotal de cajas × (margen de las cajas − margen mínimo) − viaje   (en enteros × 100)
+ *   holgura < 0 → el envío cobra lo justo para llegar al mínimo (nunca menos que el envío mínimo)
+ *   holgura ≥ 0 → envío mínimo hasta el envío gratis de la zona; desde ahí, gratis.
  */
-export function stepShipping(minOrder: number, boxes: number, z: Pick<ShippingZone, 'minBoxes' | 'freeFromBoxes'>, floor: number, rounding: number): number {
-  const free = z.freeFromBoxes;
-  if (free !== null && boxes >= free) return 0;
-  if (free === null || free <= z.minBoxes || boxes <= z.minBoxes) return Math.ceil(minOrder / rounding) * rounding;
-  const n = free - z.minBoxes;
-  return Math.ceil(Math.max(floor * n, minOrder * (free - boxes)) / (n * rounding)) * rounding;
+export function marginShipping(
+  trip: number, boxSubtotal: number, boxes: number,
+  z: Pick<ShippingZone, 'freeFromBoxes' | 'minFee'>,
+  cfg: { productMarginPct?: number; minMarginPct?: number; rounding: number },
+): { shipping: number; slack: number } {
+  const g = cfg.productMarginPct ?? 43, t = cfg.minMarginPct ?? 35, floor = z.minFee ?? 0;
+  const slack = (g - t) * boxSubtotal - 100 * trip;
+  if (slack < 0) return { shipping: Math.max(floor, Math.ceil(-slack / ((100 - t) * cfg.rounding)) * cfg.rounding), slack };
+  if (z.freeFromBoxes === null || boxes < z.freeFromBoxes) return { shipping: floor, slack };
+  return { shipping: 0, slack };
 }
-
 
 export function quote(method: DeliveryMethod, lookup: ZoneLookup, cart: CartTotals, settings: StoreSettings, distanceCost: number | null = null): Quote {
   const { boxes, subtotal } = cart;
@@ -135,16 +140,20 @@ export function quote(method: DeliveryMethod, lookup: ZoneLookup, cart: CartTota
   const locTrip = perBox && loc.kmRoundTrip != null && perBox.fuelPrice
     ? Math.round(loc.kmRoundTrip * ((perBox.consumption100km ?? 7) / 100) * perBox.fuelPrice + (loc.tollRoundTrip ?? 0))
     : null;
-  const floor = z.minFee ?? 0;
-  const minOrderShipping = locTrip !== null
-    ? Math.max(floor, Math.round((locTrip * (perBox!.clientSharePct ?? 50)) / 100))
-    : Math.max(floor, z.shippingCost);
-  const byBoxes = (b: number) => (perBox ? stepShipping(minOrderShipping, b, z, floor, perBox.rounding) : 0);
-  const shippingCost = free ? 0 : perBox ? byBoxes(boxes) : byDistance ? distanceCost : z.shippingCost;
-  const freeAt = z.freeFromBoxes;
-  const nextBoxShipping = !perBox || shippingCost === 0 ? null
-    : z.freeFromBoxes !== null && boxes + 1 >= z.freeFromBoxes ? 0
-    : byBoxes(boxes + 1);
+  const marginMode = perBox !== undefined && locTrip !== null;
+  // Margen mínimo: para "una caja más" se supone el precio promedio de las cajas del carrito.
+  const avgBox = boxes > 0 ? cart.boxSubtotal / boxes : 0;
+  const atBoxes = (b: number) => marginShipping(locTrip ?? 0, b === boxes ? cart.boxSubtotal : Math.round(avgBox * b), b, z, perBox!);
+  const m = marginMode ? atBoxes(boxes) : null;
+  const shippingCost = m ? m.shipping : free ? 0 : byDistance ? distanceCost : z.shippingCost;
+  // El descuento por volumen solo si el envío es gratis y no baja el margen del mínimo.
+  const discountOk = !m || (m.shipping === 0 && discount * (100 - (perBox!.minMarginPct ?? 35)) <= m.slack);
+  let freeAt: number | null = z.freeFromBoxes;
+  if (m) {
+    freeAt = null;
+    for (let b = Math.max(boxes, 1); b <= boxes + 40; b++) if (atBoxes(b).shipping === 0) { freeAt = b; break; }
+  }
+  const nextBoxShipping = m && m.shipping > 0 ? atBoxes(boxes + 1).shipping : null;
   let missingForNextDiscount: number | null = null;
   let nextDiscountPct: number | null = null;
   if (z.freeFromBoxes !== null && z.discountPerBox > 0 && pct < z.discountMax) {
@@ -159,15 +168,15 @@ export function quote(method: DeliveryMethod, lookup: ZoneLookup, cart: CartTota
     shippingCost,
     shippingEstimated: !free && distanceOn && !byDistance && locTrip === null,
     freeFromBoxes: z.freeFromBoxes,
-    missingForFree: freeAt === null || freeAt === Infinity ? null : Math.max(freeAt - boxes, 0),
+    missingForFree: freeAt === null ? null : Math.max(freeAt - boxes, 0),
     nextBoxShipping,
-    discountPct: pct,
-    discount,
-    discountBoxes: extra,
-    discountMax: z.freeFromBoxes !== null && z.discountPerBox > 0 ? z.discountMax : 0,
-    missingForNextDiscount,
-    nextDiscountPct,
-    total: subtotal - discount + shippingCost,
+    discountPct: discountOk ? pct : 0,
+    discount: discountOk ? discount : 0,
+    discountBoxes: discountOk ? extra : 0,
+    discountMax: discountOk && z.freeFromBoxes !== null && z.discountPerBox > 0 ? z.discountMax : 0,
+    missingForNextDiscount: discountOk ? missingForNextDiscount : null,
+    nextDiscountPct: discountOk ? nextDiscountPct : null,
+    total: subtotal - (discountOk ? discount : 0) + shippingCost,
     canCheckout: subtotal > 0 && missing === 0,
     suggestPickup: missing > 0 && pickupOk,
   };

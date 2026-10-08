@@ -1,15 +1,20 @@
 -- Envío por localidad: cada localidad tiene sus km (ida, aproximados) y su peaje, editables en el panel.
 -- El cliente elige la localidad en el checkout y manda la dirección por WhatsApp después de confirmar.
--- Envío con el pedido mínimo = la mitad del viaje (km ida y vuelta × consumo × nafta + peaje), con un piso
--- (envío mínimo de la zona, $1.000). Cada caja extra lo baja en partes iguales hasta el envío gratis de la zona.
+-- El envío cuida un margen mínimo (35%) en cada pedido, aunque en la salida vaya un solo cliente:
+--   viaje = km ida y vuelta × consumo × nafta + peaje (de la localidad)
+--   holgura = cajas × (margen de las cajas − margen mínimo) − viaje
+--   si la holgura no alcanza, el envío cobra lo justo para llegar al mínimo; si alcanza, envío mínimo ($1.000)
+--   hasta el envío gratis de la zona y después gratis. El descuento por volumen solo si no baja del mínimo.
 alter table orders drop constraint delivery_needs_address;   -- la dirección llega por WhatsApp
 
 alter table localities
   add column km_round_trip      numeric(5,1) check (km_round_trip is null or km_round_trip >= 0),
   add column toll_round_trip int not null default 0 check (toll_round_trip >= 0);
 alter table shipping_zones add column min_fee int not null default 1000 check (min_fee >= 0);
--- Qué parte del viaje paga el cliente con el pedido mínimo (el resto lo absorbe el margen).
-alter table shipping_config add column client_share_pct int not null default 50 check (client_share_pct between 0 and 100);
+-- Margen de las cajas después de insumos y mano de obra (promedio del CRM: 43%) y margen mínimo por pedido.
+alter table shipping_config
+  add column product_margin_pct int not null default 43 check (product_margin_pct between 0 and 100),
+  add column min_margin_pct     int not null default 35 check (min_margin_pct between 0 and 99);
 
 -- Todas las zonas calculan por localidad, con envío mínimo de $1.000.
 update shipping_zones set distance_pricing = true;
@@ -47,7 +52,7 @@ declare
   v_cp text; v_phone text; v_subtotal int := 0; v_boxes int := 0; v_box_subtotal int := 0;
   v_shipping int := 0; v_pct int := 0; v_discount int := 0; v_date date; v_label text; v_min int;
   v_days text[] := array['Domingo','Lunes','Martes','Miércoles','Jueves','Viernes','Sábado'];
-  v_ship shipping_config; v_trip int;
+  v_ship shipping_config; v_trip int; v_slack bigint;
 begin
   select * into v_cfg from store_settings limit 1;
   select * into v_ship from shipping_config limit 1;
@@ -107,32 +112,37 @@ begin
         detail = json_build_object('min_boxes', v_min, 'missing', v_min - v_boxes, 'boxes', v_boxes,
                                    'pickup_min_boxes', case when v_cfg.pickup_enabled then v_cfg.pickup_min_boxes end)::text;
     end if;
-    if v_zone.free_from_boxes is not null and v_boxes >= v_zone.free_from_boxes then
+    if v_zone.distance_pricing and v_ship.pricing_mode = 'boxes' and v_loc.km_round_trip is not null then
+      -- Margen mínimo por pedido, aunque vaya un solo cliente. Cuentas enteras (× 100) para que el carrito dé igual.
+      v_trip := round(v_loc.km_round_trip * v_ship.consumption_100km / 100 * v_ship.fuel_price + v_loc.toll_round_trip)::int;
+      v_slack := (v_ship.product_margin_pct - v_ship.min_margin_pct)::bigint * v_box_subtotal - 100::bigint * v_trip;
+      if v_slack < 0 then
+        -- el margen de las cajas no cubre el viaje: el envío cobra lo justo para llegar al mínimo
+        v_shipping := greatest(v_zone.min_fee,
+          (ceil(-v_slack::numeric / ((100 - v_ship.min_margin_pct) * v_ship.rounding)) * v_ship.rounding)::int);
+      elsif v_zone.free_from_boxes is null or v_boxes < v_zone.free_from_boxes then
+        v_shipping := v_zone.min_fee;   -- lo cubre, pero hasta el envío gratis se cobra el mínimo (conviene sumar cajas)
+      else
+        v_shipping := 0;
+        v_pct := least(v_zone.discount_max, v_zone.discount_per_box * (v_boxes - v_zone.free_from_boxes));
+        if v_pct > 0 then
+          v_discount := round(v_box_subtotal::numeric * (v_boxes - v_zone.free_from_boxes) * v_pct / (v_boxes * 100))::int;
+          if v_discount::bigint * (100 - v_ship.min_margin_pct) > v_slack then
+            v_pct := 0; v_discount := 0;   -- el descuento bajaría el margen del mínimo
+          end if;
+        end if;
+      end if;
+    elsif v_zone.free_from_boxes is not null and v_boxes >= v_zone.free_from_boxes then
       v_shipping := 0;
       v_pct := least(v_zone.discount_max, v_zone.discount_per_box * (v_boxes - v_zone.free_from_boxes));
-    elsif v_zone.distance_pricing and v_ship.pricing_mode = 'boxes' then
-      -- Por localidad: con el pedido mínimo el cliente paga una parte del viaje (km y peaje de la localidad);
-      -- cada caja extra lo baja en partes iguales hasta el envío gratis. Nunca menos que el envío mínimo de la zona.
-      if v_loc.km_round_trip is not null then
-        v_trip := round(v_loc.km_round_trip * v_ship.consumption_100km / 100 * v_ship.fuel_price + v_loc.toll_round_trip)::int;
-        v_trip := greatest(v_zone.min_fee, round(v_trip * v_ship.client_share_pct / 100.0)::int);   -- envío del pedido mínimo
-      else
-        v_trip := greatest(v_zone.min_fee, v_zone.shipping_cost);                                    -- sin km: el de la zona
-      end if;
-      if v_zone.free_from_boxes is not null and v_zone.free_from_boxes > v_zone.min_boxes and v_boxes > v_zone.min_boxes then
-        v_shipping := (ceil(greatest(v_zone.min_fee * (v_zone.free_from_boxes - v_zone.min_boxes), v_trip * (v_zone.free_from_boxes - v_boxes))::numeric
-                            / ((v_zone.free_from_boxes - v_zone.min_boxes) * v_ship.rounding)) * v_ship.rounding)::int;
-      else
-        v_shipping := (ceil(v_trip::numeric / v_ship.rounding) * v_ship.rounding)::int;
+      -- El descuento va solo sobre las cajas extra, a precio promedio de caja (las salsas no entran).
+      if v_pct > 0 then
+        v_discount := round(v_box_subtotal::numeric * (v_boxes - v_zone.free_from_boxes) * v_pct / (v_boxes * 100))::int;
       end if;
     elsif v_zone.distance_pricing and p_distance_cost is not null and p_distance_cost >= 0 then
       v_shipping := p_distance_cost;
     else
       v_shipping := v_zone.shipping_cost;
-    end if;
-    -- El descuento va solo sobre las cajas extra, a precio promedio de caja (las salsas no entran).
-    if v_pct > 0 then
-      v_discount := round(v_box_subtotal::numeric * (v_boxes - v_zone.free_from_boxes) * v_pct / (v_boxes * 100))::int;
     end if;
     v_date := delivery_date_for(v_zone.delivery_weekday);
     v_label := v_days[extract(dow from v_date)::int + 1] || ' ' || to_char(v_date, 'FMDD/FMMM')
