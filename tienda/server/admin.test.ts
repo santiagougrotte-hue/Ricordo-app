@@ -255,7 +255,7 @@ describe.skipIf(!TEST_DB)('migraciones: gusto real cargado', () => {
     // los productos de ejemplo (ocultos y sin pedidos) se borraron
     expect(await q(`select 1 from products where not active`)).toHaveLength(0);
     expect(await q(`select 1 from products where id::text like '00000000-0000-4000-8000-00000000000_'`)).toHaveLength(0);
-    expect(c.products.map((p) => p.name)).toEqual(['Cabutia', 'Osobuco', 'Espinaca', 'Jamón y queso']);
+    expect(c.products.map((p) => p.name)).toEqual(['Cabutia', 'Osobuco', 'Espinaca', 'Jamón y queso', 'Salsa de tomate']);
     expect(c.products[3]).toMatchObject({ price: 11000, pastaType: 'sorrentinos', featured: true, filling: 'Jamón cocido, muzzarella y queso sardo' });
     expect(c.products[3].media.map((m) => m.url)).toEqual(['/fotos/jamon-queso-mano.webp', '/fotos/jamon-queso-ingredientes.webp']);
     expect(c.products[2]).toMatchObject({ price: 13000, pastaType: 'ravioles', featured: true, filling: 'Espinaca, ricotta, sardo, muzzarella y nueces picadas' });
@@ -265,7 +265,10 @@ describe.skipIf(!TEST_DB)('migraciones: gusto real cargado', () => {
     expect(c.products[0]).toMatchObject({ price: 11500, unitsPerBox: 12, pastaType: 'sorrentinos', featured: true });
     expect(c.products[0].filling).toBe('Cabutia asada, ajo asado, muzzarella, sardo y almendras picadas');
     expect(c.products[0].media.map((m) => m.url)).toEqual(['/fotos/cabutia-mano.webp', '/fotos/cabutia-corte.webp', '/fotos/amasado-masa-nero.mp4', '/fotos/cabutia-ingredientes.webp']);
-    expect(c.products.every((p) => p.countsAsBox)).toBe(true);
+    expect(c.products.slice(0, 4).every((p) => p.countsAsBox)).toBe(true);
+    // la salsa: no cuenta como caja, $4.500, arranca sin stock, con sus dos fotos
+    expect(c.products[4]).toMatchObject({ pastaType: 'salsa', price: 4500, stock: 0, countsAsBox: false, filling: 'Tomate, albahaca, ajo, laurel y aceite de oliva' });
+    expect(c.products[4].media.map((m) => m.url)).toEqual(['/fotos/salsa-potes.webp', '/fotos/salsa-casera.webp']);
     expect(c.zones.map((z) => [z.name, z.shippingCost, z.minBoxes, z.freeFromBoxes, z.deliveryWeekday, z.deliveryMoment, z.distancePricing])).toEqual([
       // envío por cajas (8/10): Hudson y Berazategui fijo; el resto calcula, $ = envío con el pedido mínimo
       ['Hudson / Plátanos / Ranelagh', 2000, 3, 4, 5, 'a la noche', false],

@@ -9,6 +9,8 @@ import fotoEspinaca from '../../assets/fotos/espinaca-mano.webp';
 import fotoEspinacaIng from '../../assets/fotos/espinaca-ingredientes.webp';
 import fotoJyq from '../../assets/fotos/jamon-queso-mano.webp';
 import fotoJyqIng from '../../assets/fotos/jamon-queso-ingredientes.webp';
+import fotoSalsa from '../../assets/fotos/salsa-potes.webp';
+import fotoSalsa2 from '../../assets/fotos/salsa-casera.webp';
 
 // Datos de ejemplo — los mismos que netlify/database/migrations/*_example-data. Precios, rellenos y CPs son ilustrativos.
 // Gusto real (igual que netlify/database/migrations/*_gusto-cabutia).
@@ -97,6 +99,27 @@ export const JAMON_QUESO: Product = {
   ],
 };
 
+// Igual que netlify/database/migrations/*_salsa-de-tomate (en la demo, con stock para poder probarla).
+export const SALSA: Product = {
+  id: '00000000-0000-4000-8000-000000000020',
+  slug: 'salsa-de-tomate',
+  name: 'Salsa de tomate',
+  pastaType: 'salsa',
+  filling: 'Tomate, albahaca, ajo, laurel y aceite de oliva',
+  description: 'Salsa de tomate casera para acompañar tus pastas.',
+  unitsPerBox: 12,
+  price: 4500,
+  stock: 20,
+  lowStockThreshold: 3,
+  featured: false,
+  countsAsBox: false,
+  sortOrder: 20,
+  media: [
+    { id: 'm-salsa-1', url: fotoSalsa, kind: 'photo', alt: 'Potes de salsa de tomate Ricordo: tomate, albahaca, ajo, laurel y aceite de oliva', isCover: true, sortOrder: 0 },
+    { id: 'm-salsa-2', url: fotoSalsa2, kind: 'photo', alt: 'Salsa de tomate casera, $4.500', isCover: false, sortOrder: 1 },
+  ],
+};
+
 /** Productos de ejemplo: ocultos en la tienda (sirven de modelo en el panel). */
 export const EXAMPLE_IDS = [1, 2, 3, 4, 5].map((n) => `00000000-0000-4000-8000-00000000000${n}`);
 
@@ -105,6 +128,7 @@ export const SEED_PRODUCTS: Product[] = [
   OSOBUCO,
   ESPINACA,
   JAMON_QUESO,
+  SALSA,
   {
     id: '00000000-0000-4000-8000-000000000001',
     slug: 'sorrentinos-jamon-muzza-nuez',

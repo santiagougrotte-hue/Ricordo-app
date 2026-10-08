@@ -35,12 +35,12 @@ export function ProductLabel({ product, size = 'm', eager = false, level = 3, pa
       </Link>
       <div className="tag-box">
         <div className="tag-in">
-          <p className="label">{PASTA_LABEL[product.pastaType]} · caja x {product.unitsPerBox}</p>
+          <p className="label">{product.countsAsBox === false ? PASTA_LABEL[product.pastaType] : `${PASTA_LABEL[product.pastaType]} · caja x ${product.unitsPerBox}`}</p>
           <H className="prod-name"><Link to={href}>{product.name}</Link></H>
           {size === 'l' && <p className="prod-desc">{product.description}</p>}
           {low && <p className="hand low">¡quedan {product.stock}!</p>}
           <div className="prod-buy">
-            <p className="price">{money(product.price)}<small> la caja</small></p>
+            <p className="price">{money(product.price)}<small>{product.countsAsBox === false ? " c/u" : " la caja"}</small></p>
             {soldOut ? (
               <span className="sold-note">Vuelve pronto</span>
             ) : qty > 0 ? (

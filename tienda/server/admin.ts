@@ -30,7 +30,7 @@ export interface AdminDeps {
 
 const STATUSES = ['new', 'confirmed', 'preparing', 'shipped', 'delivered', 'cancelled'];
 const PAY = ['pending', 'paid', 'refunded'];
-const TYPES = ['ravioles', 'sorrentinos', 'cappellacci'];
+const TYPES = ['ravioles', 'sorrentinos', 'cappellacci', 'salsa'];
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const MEDIA_TYPES: Record<string, string> = { 'image/webp': 'webp', 'image/jpeg': 'jpg', 'image/png': 'png', 'video/mp4': 'mp4', 'video/webm': 'webm' };
 export const MAX_UPLOAD = 5.5 * 1024 * 1024; // límite de cuerpo de las funciones de Netlify (~6 MB)
@@ -136,12 +136,12 @@ export async function handleAdmin(req: Request, path: string, env: AdminEnv, dep
     try {
       if (d.id) {
         if (!UUID.test(d.id)) return bad('Producto inválido');
-        await q(`update products set slug=$2, name=$3, pasta_type=$4::pasta_type, filling=$5, description=$6, price=$7, stock=$8,
+        await q(`update products set slug=$2, name=$3, pasta_type=$4, filling=$5, description=$6, price=$7, stock=$8,
                    low_stock_threshold=$9, featured=$10, active=$11, sort_order=$12, counts_as_box=$13, updated_at=now() where id=$1`, [d.id, ...vals]);
         return json({ id: d.id });
       }
       const [r] = await q<{ id: string }>(`insert into products (slug, name, pasta_type, filling, description, price, stock, low_stock_threshold, featured, active, sort_order, counts_as_box)
-                                          values ($1,$2,$3::pasta_type,$4,$5,$6,$7,$8,$9,$10,$11,$12) returning id`, vals);
+                                          values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12) returning id`, vals);
       return json({ id: r.id });
     } catch (e) {
       return bad(/unique|duplicate/i.test((e as Error).message) ? 'duplicate slug' : (e as Error).message, 409);

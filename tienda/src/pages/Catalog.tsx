@@ -5,7 +5,7 @@ import { ProductLabel, ProductSkeleton } from '../components/ProductLabel';
 import { useDocumentTitle } from './useDocumentTitle';
 import { useReveal } from '../motion/useMotion';
 
-const TYPES: PastaType[] = ['ravioles', 'sorrentinos', 'cappellacci'];
+const TYPES: PastaType[] = ['ravioles', 'sorrentinos', 'cappellacci', 'salsa'];
 
 export function Catalog() {
   useDocumentTitle('Las cajas · Ricordo');

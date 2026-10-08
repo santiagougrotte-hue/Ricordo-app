@@ -1,4 +1,4 @@
-export type PastaType = 'ravioles' | 'sorrentinos' | 'cappellacci';
+export type PastaType = 'ravioles' | 'sorrentinos' | 'cappellacci' | 'salsa';
 export type DeliveryMethod = 'delivery' | 'pickup';
 export type PaymentMethod = 'transfer' | 'cash';
 
@@ -165,4 +165,5 @@ export const PASTA_LABEL: Record<PastaType, string> = {
   ravioles: 'Raviolones',  // los ravioles de Ricordo son raviolones
   sorrentinos: 'Sorrentinos',
   cappellacci: 'Cappellacci',
+  salsa: 'Salsa',
 };

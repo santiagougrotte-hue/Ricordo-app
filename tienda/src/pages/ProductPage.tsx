@@ -50,22 +50,22 @@ export function ProductPage() {
           <Stamp className="pdp-stamp" lines={['SIN', 'TACC']} label="Sin TACC" />
         </div>
         <div className="pdp-info">
-          <p className="label">{PASTA_LABEL[product.pastaType]} · caja x {product.unitsPerBox}</p>
+          <p className="label">{product.countsAsBox === false ? PASTA_LABEL[product.pastaType] : `${PASTA_LABEL[product.pastaType]} · caja x ${product.unitsPerBox}`}</p>
           <h1 className="d-xl pdp-name">{product.name}</h1>
           <p className="label pdp-lleva">Lo que lleva</p>
           <p className="pdp-filling">{product.filling}</p>
           <p className="pdp-desc">{product.description}</p>
 
-          <div className="tag-box pdp-tag" data-reveal="paper">
+          {product.countsAsBox !== false && <div className="tag-box pdp-tag" data-reveal="paper">
             <div className="tag-in">
               <div className="tag-row"><span className="label">Unidades</span><span className="fill">12 por caja</span></div>
               <div className="tag-row"><span className="label">Conservación</span><span className="fill">freezer, hasta 3 meses</span></div>
               <div className="tag-row"><span className="label">Cocción</span><span className="fill">del freezer a la olla, 4 minutos</span></div>
             </div>
-          </div>
+          </div>}
 
           <div className="pdp-buy">
-            <p className="price price-l">{money(product.price)}<small> la caja</small></p>
+            <p className="price price-l">{money(product.price)}<small>{product.countsAsBox === false ? ' c/u' : ' la caja'}</small></p>
             {low && <p className="hand low">¡quedan {product.stock}!</p>}
             {soldOut ? (
               <p className="block-reason">Este gusto se agotó. Volvemos a tenerlo en la próxima tanda.</p>
