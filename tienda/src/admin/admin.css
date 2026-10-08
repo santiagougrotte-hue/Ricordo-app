@@ -172,3 +172,4 @@
 .adm-push-actions .field-hint { margin: 0; }
 
 .adm-danger { color: var(--color-error); justify-self: start; }
+.adm-num { width: 6.5rem; }

@@ -4,7 +4,7 @@ import type { Locality, Product, ShippingZone, StoreSettings } from '../types';
 import { EXAMPLE_IDS, SEED_LOCALITIES, SEED_PRODUCTS, SEED_SETTINGS, SEED_ZONES } from './seed-data';
 import type { AdminOrder, AdminSettings, ShippingConfig } from './adminTypes';
 
-const KEY = 'ricordo-demo-db-v14';
+const KEY = 'ricordo-demo-db-v15';
 const CHANNEL = 'ricordo-demo';
 
 export interface DemoDb {

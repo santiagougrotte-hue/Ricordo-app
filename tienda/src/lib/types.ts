@@ -47,6 +47,8 @@ export interface ShippingZone {
   distancePricing: boolean;
   tollRoundTrip: number;
   avgOrdersPerRoute: number;
+  /** Envío mínimo hasta llegar al envío gratis (para que convenga llegar al gratis). */
+  minFee?: number;
 }
 
 /** La zona la define la localidad (los CP se superponen entre localidades). */
@@ -55,6 +57,9 @@ export interface Locality {
   name: string;
   partido: string;
   zoneId: string;
+  /** Km ida y vuelta desde la casa del dueño y peaje ida y vuelta: definen el costo del viaje. */
+  kmRoundTrip?: number | null;
+  tollRoundTrip?: number;
 }
 
 /** Sugerencia del buscador de direcciones. */
@@ -90,7 +95,7 @@ export interface StoreSettings {
   /** Escalones de envío por km de ida (vacío si se cobra con la fórmula de nafta o sin cálculo por distancia). */
   shippingBands?: { upToKm: number | null; price: number }[];
   /** Envío por cajas: envío = viaje − cajas × absorbPerBox (redondeado hacia arriba). */
-  shippingByBoxes?: { absorbPerBox: number; rounding: number };
+  shippingByBoxes?: { absorbPerBox: number; rounding: number; fuelPrice?: number; consumption100km?: number };
 }
 
 export interface CartLine {

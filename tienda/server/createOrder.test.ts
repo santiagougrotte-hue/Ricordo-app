@@ -141,12 +141,17 @@ describe.skipIf(!TEST_DB)('handleCreateOrder contra Netlify Database (Postgres r
     ['localidad que no existe', { localityId: 9999 }, 'RC002'],
     ['bajo el mínimo de cajas', { items: [{ productId: P1, quantity: 2 }] }, 'RC003'],
     ['las salsas no completan el mínimo', { items: [{ productId: P1, quantity: 2 }, { productId: P3, quantity: 4 }] }, 'RC003'],
-    ['CP inválido', { postalCode: 'hola' }, 'RC004'],
   ])('%s → 409 %s y no se crea nada', async (_n, patch, code) => {
     const before = await count();
     const r = await run({ ...BASE, localityId: locs['Berazategui'], ...patch });
     expect(r).toMatchObject({ status: 409, body: { ok: false, error: { code } } });
     expect(await count()).toBe(before);
+  });
+
+  it('sin dirección ni código postal: el pedido entra igual (la dirección llega por WhatsApp)', async () => {
+    const r = await run({ ...BASE, address: '', postalCode: '', localityId: locs['Berazategui'], items: [{ productId: P5, quantity: 3 }] });
+    expect(r.body).toMatchObject({ ok: true, receipt: { address: null, postalCode: null, locality: 'Berazategui' } });
+    await q(`update products set stock = stock + 3 where id = $1`, [P5]);
   });
 
   it('bajo el mínimo de envío: dice cuántas cajas faltan y el mínimo de retiro', async () => {

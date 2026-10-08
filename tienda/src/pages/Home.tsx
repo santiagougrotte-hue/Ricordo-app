@@ -143,7 +143,7 @@ export function Home() {
           <div>
             <h2 id="h-zonas" className="d-xl">¿Llegamos a tu casa?</h2>
             <p className="lede">
-              Repartimos en Berazategui, alrededores, CABA y La Plata. Poné tu dirección y te decimos la compra mínima, el envío y qué día llega.
+              Repartimos en Berazategui, Quilmes, Avellaneda, CABA y La Plata. Elegí tu localidad y te decimos la compra mínima, el envío y qué día llega.
               {settings && <> Tomamos pedidos hasta el {cutoffShort(settings)}.</>}
             </p>
             <p className="small muted">Cuantas más cajas, mejor: pasando el envío gratis, cada caja de más suma descuento.</p>

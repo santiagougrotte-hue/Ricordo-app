@@ -269,19 +269,25 @@ describe.skipIf(!TEST_DB)('migraciones: gusto real cargado', () => {
     // la salsa: no cuenta como caja, $4.500, arranca sin stock, con sus dos fotos
     expect(c.products[4]).toMatchObject({ pastaType: 'salsa', price: 4500, stock: 0, countsAsBox: false, filling: 'Tomate, albahaca, ajo, laurel y aceite de oliva' });
     expect(c.products[4].media.map((m) => m.url)).toEqual(['/fotos/salsa-potes.webp', '/fotos/salsa-casera.webp']);
-    expect(c.zones.map((z) => [z.name, z.shippingCost, z.minBoxes, z.freeFromBoxes, z.deliveryWeekday, z.deliveryMoment, z.distancePricing])).toEqual([
-      // envío por cajas (8/10): Hudson y Berazategui fijo; el resto calcula, $ = envío con el pedido mínimo
-      ['Hudson / Plátanos / Ranelagh', 2000, 3, 4, 5, 'a la noche', false],
-      ['Berazategui', 1500, 3, 4, 6, 'a la mañana', false],
-      ['Quilmes / Bernal / Wilde', 6000, 4, 6, 6, 'a la mañana', true],
-      ['CABA', 7500, 5, 8, 6, 'a la mañana', true],
-      ['City Bell / La Plata', 9000, 5, 8, 0, '', true],
+    expect(c.zones.map((z) => [z.name, z.minBoxes, z.freeFromBoxes, z.deliveryWeekday, z.deliveryMoment, z.distancePricing, z.minFee])).toEqual([
+      // envío por localidad (9/10): todas calculan con km y peaje de la localidad; envío mínimo hasta el gratis
+      ['Hudson / Plátanos / Ranelagh', 3, 4, 5, 'a la noche', true, 2000],
+      ['Berazategui', 3, 4, 6, 'a la mañana', true, 1500],
+      ['Quilmes / Bernal / Wilde', 4, 6, 6, 'a la mañana', true, 1500],
+      ['CABA', 5, 8, 6, 'a la mañana', true, 1500],
+      ['City Bell / La Plata', 5, 8, 0, '', true, 1500],
     ]);
-    expect(c.zones.filter((z) => z.distancePricing).map((z) => z.tollRoundTrip)).toEqual([16000, 16000, 16000]);
-    expect(c.settings.shippingByBoxes).toEqual({ absorbPerBox: 3500, rounding: 500 });
+    const byName = Object.fromEntries(c.localities.map((l) => [l.name, [l.kmRoundTrip, l.tollRoundTrip]]));
+    // los km que pasó el dueño (ida y vuelta)
+    expect(byName).toMatchObject({
+      Ranelagh: [12, 0], Ezpeleta: [11, 0], 'Plátanos': [17, 0], 'Quilmes Centro': [40, 16000], 'Quilmes Oeste': [28, 0],
+      Bernal: [48, 16000], Wilde: [56, 16000], 'Sarandí': [60, 16000], Avellaneda: [75, 16000],
+    });
+    expect(c.localities.every((l) => l.kmRoundTrip !== null)).toBe(true);
+    expect(c.settings.shippingByBoxes).toEqual({ absorbPerBox: 3500, rounding: 500, fuelPrice: 2080, consumption100km: 7 });
     expect((await q<{ pricing_mode: string; fuel_price: number }>(`select pricing_mode, fuel_price from shipping_config`))[0]).toEqual({ pricing_mode: 'boxes', fuel_price: 2080 });
     const zoneOf = (name: string) => c.zones.find((z) => z.id === c.localities.find((l) => l.name === name)!.zoneId)!.name;
-    expect(c.localities).toHaveLength(20);
+    expect(c.localities).toHaveLength(22);
     expect([zoneOf('Ranelagh'), zoneOf('Villa España'), zoneOf('Wilde'), zoneOf('Gonnet')]).toEqual(['Hudson / Plátanos / Ranelagh', 'Berazategui', 'Quilmes / Bernal / Wilde', 'City Bell / La Plata']);
     expect(c.zones.every((z) => z.discountPerBox === 5 && z.discountMax === 10)).toBe(true);
     expect(c.settings).toMatchObject({ pickupMinBoxes: 2, cutoffWeekday: 4, cutoffTime: '13:00' });

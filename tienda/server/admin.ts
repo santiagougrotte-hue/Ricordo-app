@@ -227,21 +227,23 @@ export async function handleAdmin(req: Request, path: string, env: AdminEnv, dep
     const cost = int(z.shippingCost), min = int(z.minBoxes), free = z.freeFromBoxes === null ? null : int(z.freeFromBoxes, 1);
     const per = int(z.discountPerBox), max = int(z.discountMax), wd = int(z.deliveryWeekday), toll = int(z.tollRoundTrip);
     const avg = Number(z.avgOrdersPerRoute);
+    const minFee = z.minFee === undefined ? 0 : int(z.minFee);
+    if (minFee === null) return bad('Revisá el envío mínimo.');
     if (!String(z.name ?? '').trim()) return bad('Poné un nombre a la zona.');
     if (cost === null || min === null || (z.freeFromBoxes !== null && free === null)) return bad('Revisá el envío, el mínimo y el envío gratis.');
     if (free !== null && free <= min) return bad('El envío gratis tiene que empezar con más cajas que el mínimo.');
     if (per === null || per > 100 || max === null || max > 100) return bad('Los descuentos van de 0 a 100 %.');
     if (wd === null || wd > 6) return bad('Día de entrega inválido');
     if (toll === null || !(avg >= 1 && avg < 1000)) return bad('Revisá el peaje y los pedidos promedio por ruta (1 o más).');
-    const vals = [String(z.name).trim(), cost, min, free, wd, String(z.deliveryMoment ?? '').trim().slice(0, 40), per, max, !!z.distancePricing, toll, Math.round(avg * 10) / 10, !!z.active];
+    const vals = [String(z.name).trim(), cost, min, free, wd, String(z.deliveryMoment ?? '').trim().slice(0, 40), per, max, !!z.distancePricing, toll, Math.round(avg * 10) / 10, !!z.active, minFee];
     if (z.id) {
       if (!UUID.test(z.id)) return bad('Zona inválida');
       await q(`update shipping_zones set name=$2, shipping_cost=$3, min_boxes=$4, free_from_boxes=$5, delivery_weekday=$6, delivery_moment=$7,
-                 discount_per_box=$8, discount_max=$9, distance_pricing=$10, toll_round_trip=$11, avg_orders_per_route=$12, active=$13 where id=$1`, [z.id, ...vals]);
+                 discount_per_box=$8, discount_max=$9, distance_pricing=$10, toll_round_trip=$11, avg_orders_per_route=$12, active=$13, min_fee=$14 where id=$1`, [z.id, ...vals]);
     } else {
       await q(`insert into shipping_zones (name, shipping_cost, min_boxes, free_from_boxes, delivery_weekday, delivery_moment, discount_per_box,
-                 discount_max, distance_pricing, toll_round_trip, avg_orders_per_route, active, sort_order)
-               values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,(select coalesce(max(sort_order),0)+1 from shipping_zones))`, vals);
+                 discount_max, distance_pricing, toll_round_trip, avg_orders_per_route, active, min_fee, sort_order)
+               values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,(select coalesce(max(sort_order),0)+1 from shipping_zones))`, vals);
     }
     return json({ ok: true });
   }
@@ -261,13 +263,17 @@ export async function handleAdmin(req: Request, path: string, env: AdminEnv, dep
     const l = await body();
     const name = String(l.name ?? '').trim().slice(0, 80), partido = String(l.partido ?? '').trim().slice(0, 80);
     if (name.length < 2 || partido.length < 2 || !UUID.test(String(l.zoneId ?? ''))) return bad('Revisá el nombre, el partido y la zona.');
+    const km = l.kmRoundTrip === null || l.kmRoundTrip === undefined || l.kmRoundTrip === '' ? null : Math.round(Number(l.kmRoundTrip) * 10) / 10;
+    const ltoll = l.tollRoundTrip === undefined ? 0 : int(l.tollRoundTrip);
+    if ((km !== null && !(km >= 0 && km < 1000)) || ltoll === null) return bad('Revisá los km y el peaje (números enteros, en pesos).');
     try {
       if (l.id) {
         if (int(l.id, 1) === null) return bad('Localidad inválida');
-        await q(`update localities set name=$2, partido=$3, zone_id=$4, active=$5 where id=$1`, [l.id, name, partido, l.zoneId, !!l.active]);
+        await q(`update localities set name=$2, partido=$3, zone_id=$4, active=$5, km_round_trip=$6, toll_round_trip=$7 where id=$1`, [l.id, name, partido, l.zoneId, !!l.active, km, ltoll]);
       } else {
-        await q(`insert into localities (name, partido, zone_id, active, sort_order) values ($1,$2,$3,$4,(select coalesce(max(sort_order),0)+1 from localities))`,
-          [name, partido, l.zoneId, l.active !== false]);
+        await q(`insert into localities (name, partido, zone_id, active, km_round_trip, toll_round_trip, sort_order)
+                 values ($1,$2,$3,$4,$5,$6,(select coalesce(max(sort_order),0)+1 from localities))`,
+          [name, partido, l.zoneId, l.active !== false, km, ltoll]);
       }
     } catch (e) {
       return bad(/unique|duplicate/i.test((e as Error).message) ? `Ya existe ${name} (${partido}).` : 'No se pudo guardar', 409);

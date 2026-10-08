@@ -23,8 +23,8 @@ describe('matchLocality (resultado de OpenRouteService → nuestra localidad)', 
     expect(r.status).toBe('confirm');
     expect(r.status === 'confirm' && r.options.length).toBe(7);
   });
-  it('partido con una sola localidad → directo (Avellaneda → Wilde)', () =>
-    expect(matchLocality({ county: 'Avellaneda', locality: 'Sarandí' }, SEED_LOCALITIES)).toEqual({ status: 'found', localityId: id('Wilde') }));
+  it('localidad que está en la lista → directo (Sarandí)', () =>
+    expect(matchLocality({ county: 'Avellaneda', locality: 'Sarandí' }, SEED_LOCALITIES)).toEqual({ status: 'found', localityId: id('Sarandí') }));
   it('"Berazategui" sin barrio puede ser cualquier localidad del partido → se decide por cercanía', () =>
     expect(matchLocality({ locality: 'Berazategui', county: 'Partido de Berazategui' }, SEED_LOCALITIES).status).toBe('confirm'));
   it('sin localidad ni partido → que la escriba el cliente', () =>

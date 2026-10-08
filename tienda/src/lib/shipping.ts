@@ -122,15 +122,23 @@ export function quote(method: DeliveryMethod, lookup: ZoneLookup, cart: CartTota
   const distanceOn = z.distancePricing && settings.distanceEnabled === true;
   const byDistance = distanceOn && distanceCost !== null;
   const perBox = z.distancePricing ? settings.shippingByBoxes : undefined;
-  // Por cajas: sin dirección ubicada, el viaje se estima con el envío del pedido mínimo de la zona.
-  const trip = perBox ? (byDistance ? distanceCost : z.shippingCost + perBox.absorbPerBox * z.minBoxes) : 0;
-  const shippingCost = free ? 0 : perBox ? boxesShipping(trip, boxes, perBox) : byDistance ? distanceCost : z.shippingCost;
-  const freeAt = perBox && perBox.absorbPerBox > 0
+  // Por cajas: el viaje sale de los km y el peaje de la localidad (igual que create_order).
+  // Sin km cargados, se estima con el envío del pedido mínimo de la zona.
+  const loc = lookup.locality;
+  const locTrip = perBox && loc.kmRoundTrip != null && perBox.fuelPrice
+    ? Math.round(loc.kmRoundTrip * ((perBox.consumption100km ?? 7) / 100) * perBox.fuelPrice + (loc.tollRoundTrip ?? 0))
+    : null;
+  const trip = perBox ? (locTrip ?? (byDistance ? distanceCost : z.shippingCost + perBox.absorbPerBox * z.minBoxes)) : 0;
+  // Hasta el envío gratis se cobra al menos el envío mínimo de la zona (así conviene llegar al gratis).
+  const floor = z.minFee ?? 0;
+  const byBoxes = (b: number) => Math.max(floor, boxesShipping(trip, b, perBox!));
+  const shippingCost = free ? 0 : perBox ? byBoxes(boxes) : byDistance ? distanceCost : z.shippingCost;
+  const freeAt = perBox && perBox.absorbPerBox > 0 && floor === 0
     ? Math.min(z.freeFromBoxes ?? Infinity, Math.ceil(trip / perBox.absorbPerBox))
     : z.freeFromBoxes;
   const nextBoxShipping = !perBox || shippingCost === 0 ? null
     : z.freeFromBoxes !== null && boxes + 1 >= z.freeFromBoxes ? 0
-    : boxesShipping(trip, boxes + 1, perBox);
+    : byBoxes(boxes + 1);
   let missingForNextDiscount: number | null = null;
   let nextDiscountPct: number | null = null;
   if (z.freeFromBoxes !== null && z.discountPerBox > 0 && pct < z.discountMax) {
@@ -143,7 +151,7 @@ export function quote(method: DeliveryMethod, lookup: ZoneLookup, cart: CartTota
     minBoxes: z.minBoxes,
     missingForMin: missing,
     shippingCost,
-    shippingEstimated: !free && distanceOn && !byDistance,
+    shippingEstimated: !free && distanceOn && !byDistance && locTrip === null,
     freeFromBoxes: z.freeFromBoxes,
     missingForFree: freeAt === null || freeAt === Infinity ? null : Math.max(freeAt - boxes, 0),
     nextBoxShipping,
@@ -174,7 +182,7 @@ export function cartMessage(q: Quote, lookup: ZoneLookup): string {
     const pick = q.suggestPickup ? ` O retiralo en Berazategui: con ${cajas(q.boxes)} ya podés.` : '';
     return `Sumá ${cajas(q.missingForMin)} más para hacer tu pedido con envío a ${zone}.${pick}`;
   }
-  if (q.nextBoxShipping !== null && q.missingForFree !== null && q.missingForFree > 1) {
+  if (q.nextBoxShipping !== null && q.shippingCost !== null && q.nextBoxShipping < q.shippingCost && q.missingForFree !== null && q.missingForFree > 1) {
     return `Sumá 1 caja más y el envío a ${zone} baja a ${money(q.nextBoxShipping)}. Con ${cajas(q.missingForFree)} más, es gratis.`;
   }
   if (q.missingForFree !== null && q.missingForFree > 0) return `Sumá ${cajas(q.missingForFree)} más y el envío a ${zone} es gratis.`;

@@ -217,25 +217,27 @@ export const SEED_PRODUCTS: Product[] = [
 ];
 
 // Igual que netlify/database/migrations/*_localidades-distancia. Costos fijos de ejemplo.
-const Z = { discountPerBox: 5, discountMax: 10, tollRoundTrip: 0, avgOrdersPerRoute: 1 };
+const Z = { discountPerBox: 5, discountMax: 10, tollRoundTrip: 0, avgOrdersPerRoute: 1, minFee: 1500 };
 export const SEED_ZONES: ShippingZone[] = [
-  // Igual que la migración envio-por-cajas: Hudson y Berazategui fijo; el resto, por cajas ($ = envío con el pedido mínimo).
-  { id: 'zone-0', name: 'Hudson / Plátanos / Ranelagh', shippingCost: 2000, minBoxes: 3, freeFromBoxes: 4, deliveryWeekday: 5, deliveryMoment: 'a la noche', distancePricing: false, ...Z },
-  { id: 'zone-1', name: 'Berazategui', shippingCost: 1500, minBoxes: 3, freeFromBoxes: 4, deliveryWeekday: 6, deliveryMoment: 'a la mañana', distancePricing: false, ...Z },
+  // Igual que las migraciones envio-por-cajas y envio-por-localidad: todas calculan por localidad, con envío mínimo.
+  { id: 'zone-0', name: 'Hudson / Plátanos / Ranelagh', shippingCost: 2000, minBoxes: 3, freeFromBoxes: 4, deliveryWeekday: 5, deliveryMoment: 'a la noche', distancePricing: true, ...Z, minFee: 2000 },
+  { id: 'zone-1', name: 'Berazategui', shippingCost: 1500, minBoxes: 3, freeFromBoxes: 4, deliveryWeekday: 6, deliveryMoment: 'a la mañana', distancePricing: true, ...Z },
   { id: 'zone-2', name: 'Quilmes / Bernal / Wilde', shippingCost: 6000, minBoxes: 4, freeFromBoxes: 6, deliveryWeekday: 6, deliveryMoment: 'a la mañana', distancePricing: true, ...Z, tollRoundTrip: 16000 },
   { id: 'zone-3', name: 'CABA', shippingCost: 7500, minBoxes: 5, freeFromBoxes: 8, deliveryWeekday: 6, deliveryMoment: 'a la mañana', distancePricing: true, ...Z, tollRoundTrip: 16000 },
   { id: 'zone-4', name: 'City Bell / La Plata', shippingCost: 9000, minBoxes: 5, freeFromBoxes: 8, deliveryWeekday: 0, deliveryMoment: '', distancePricing: true, ...Z, tollRoundTrip: 16000 },
 ];
 
-const LOC: [string, string, string][] = [
-  ['Guillermo E. Hudson', 'Berazategui', 'zone-0'], ['Plátanos', 'Berazategui', 'zone-0'], ['Ranelagh', 'Berazategui', 'zone-0'], ['Juan María Gutiérrez', 'Berazategui', 'zone-0'],
-  ['Berazategui', 'Berazategui', 'zone-1'], ['Berazategui Oeste', 'Berazategui', 'zone-1'], ['Villa España', 'Berazategui', 'zone-1'], ['Sourigues', 'Berazategui', 'zone-1'],
-  ['Quilmes', 'Quilmes', 'zone-2'], ['Quilmes Oeste', 'Quilmes', 'zone-2'], ['Bernal', 'Quilmes', 'zone-2'], ['Bernal Oeste', 'Quilmes', 'zone-2'],
-  ['Don Bosco', 'Quilmes', 'zone-2'], ['Ezpeleta', 'Quilmes', 'zone-2'], ['Ezpeleta Oeste', 'Quilmes', 'zone-2'], ['Wilde', 'Avellaneda', 'zone-2'],
-  ['CABA', 'CABA', 'zone-3'],
-  ['City Bell', 'La Plata', 'zone-4'], ['Gonnet', 'La Plata', 'zone-4'], ['La Plata', 'La Plata', 'zone-4'],
+// Igual que la migración envio-por-localidad: [localidad, partido, zona, km ida y vuelta, peaje ida y vuelta].
+const LOC: [string, string, string, number, number][] = [
+  ['Guillermo E. Hudson', 'Berazategui', 'zone-0', 16, 0], ['Plátanos', 'Berazategui', 'zone-0', 17, 0], ['Ranelagh', 'Berazategui', 'zone-0', 12, 0], ['Juan María Gutiérrez', 'Berazategui', 'zone-0', 18, 0],
+  ['Berazategui Centro', 'Berazategui', 'zone-1', 8, 0], ['Berazategui Oeste', 'Berazategui', 'zone-1', 12, 0], ['Villa España', 'Berazategui', 'zone-1', 10, 0], ['Sourigues', 'Berazategui', 'zone-1', 14, 0],
+  ['Quilmes Centro', 'Quilmes', 'zone-2', 40, 16000], ['Quilmes Oeste', 'Quilmes', 'zone-2', 28, 0], ['Bernal', 'Quilmes', 'zone-2', 48, 16000], ['Bernal Oeste', 'Quilmes', 'zone-2', 36, 0],
+  ['Don Bosco', 'Quilmes', 'zone-2', 52, 16000], ['Ezpeleta', 'Quilmes', 'zone-2', 11, 0], ['Ezpeleta Oeste', 'Quilmes', 'zone-2', 16, 0], ['Wilde', 'Avellaneda', 'zone-2', 56, 16000],
+  ['Sarandí', 'Avellaneda', 'zone-2', 60, 16000], ['Avellaneda', 'Avellaneda', 'zone-2', 75, 16000],
+  ['CABA', 'CABA', 'zone-3', 85, 16000],
+  ['City Bell', 'La Plata', 'zone-4', 60, 16000], ['Gonnet', 'La Plata', 'zone-4', 64, 16000], ['La Plata', 'La Plata', 'zone-4', 80, 16000],
 ];
-export const SEED_LOCALITIES: Locality[] = LOC.map(([name, partido, zoneId], i) => ({ id: i + 1, name, partido, zoneId }));
+export const SEED_LOCALITIES: Locality[] = LOC.map(([name, partido, zoneId, kmRoundTrip, tollRoundTrip], i) => ({ id: i + 1, name, partido, zoneId, kmRoundTrip, tollRoundTrip }));
 
 export const SEED_SETTINGS: StoreSettings = {
   pickupEnabled: true,

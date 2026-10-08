@@ -42,7 +42,7 @@ export function Header() {
         </button>
       </header>
       <Sheet open={postalOpen} onClose={closePostal} title="¿A dónde te lo llevamos?" side="bottom">
-        <p className="muted">Con tu dirección te decimos la compra mínima, desde cuántas cajas el envío es gratis, cuánto sale y qué día llega.</p>
+        <p className="muted">Con tu localidad te decimos la compra mínima, desde cuántas cajas el envío es gratis, cuánto sale y qué día llega.</p>
         <LocalityForm onDone={closePostal} />
         {settings?.pickupEnabled && <PickupNote />}
       </Sheet>

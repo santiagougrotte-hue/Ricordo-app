@@ -73,6 +73,9 @@ export function orderMessage(r: OrderReceipt, { to, transferInfo }: MessageOptio
     add(
       '🚚 *Envío a domicilio*',
       r.address && `📍 ${r.address}${r.locality ? `, ${r.locality}` : ''}${r.postalCode ? ` · CP ${r.postalCode}` : ''}`,
+      // Sin dirección en el pedido: la manda el cliente por WhatsApp.
+      !r.address && r.locality && `📍 ${r.locality}`,
+      !r.address && (to === 'cliente' ? '🏠 *Mi dirección:* (calle, número, piso/depto y entre calles)' : '🏠 _La dirección la manda por WhatsApp_'),
       map && `🗺️ Ubicación: ${map}`,
       r.windowLabel && `🗓️ *Llega:* ${r.windowLabel}`,
       r.flexibleDelivery && (to === 'cliente' ? '🔁 Si pasan antes por mi zona, me lo pueden llevar otro día' : '🔁 Si pasan antes por la zona, se lo pueden llevar otro día'),

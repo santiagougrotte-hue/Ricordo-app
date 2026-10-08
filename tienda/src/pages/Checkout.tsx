@@ -3,14 +3,13 @@ import { Link, useNavigate } from 'react-router-dom';
 import { useStore } from '../state/store';
 import { api } from '../lib/api';
 import { money } from '../lib/money';
-import { normalizePostalCode } from '../lib/postal';
-import { cartMessage, discountLabel, findZone, OTHER_LOCALITY, quote } from '../lib/shipping';
+import { cartMessage, discountLabel, findZone, quote } from '../lib/shipping';
 import { deliverySentence } from '../lib/delivery';
 import { whatsappLink } from '../lib/whatsapp';
 import type { OrderError, PaymentMethod } from '../lib/types';
 import { Icon } from '../components/Icon';
 import { MethodToggle } from '../components/MethodToggle';
-import { AddressSearch, LocalitySelect, TownInput } from '../components/LocalityForm';
+import { LocalitySelect } from '../components/LocalityForm';
 import { Turnstile, type TurnstileHandle } from '../components/Turnstile';
 import { useDocumentTitle } from './useDocumentTitle';
 
@@ -30,13 +29,12 @@ const cajas = (n: number) => `${n} ${n === 1 ? 'caja' : 'cajas'}`;
 export function Checkout() {
   useDocumentTitle('Tu pedido · Ricordo');
   const s = useStore();
-  const { items, subtotal, totals, method, setMethod, settings, zones, localities, localityChoice, setLocalityChoice, status, setQuantity, reload, address, setAddress, distance, distanceOn } = s;
+  const { items, subtotal, totals, method, setMethod, settings, zones, localities, localityChoice, setLocalityChoice, status, setQuantity, reload, address, setAddress, distance } = s;
   const navigate = useNavigate();
   const [f, setF] = useState<Form>(() => ({
     name: '', phone: '', email: '', address: address.street, postalCode: address.postalCode ?? '', notes: '', payment: '', flexible: false,
   }));
   const [errors, setErrors] = useState<Errors>({});
-  const [unit, setUnit] = useState('');
   const [serverError, setServerError] = useState<string | null>(null);
   const [sending, setSending] = useState(false);
   const [token, setToken] = useState<string | null>(null);
@@ -47,9 +45,8 @@ export function Checkout() {
   const zone = method === 'delivery' && lookup.status === 'found' ? lookup.zone : null;
   const localityId = lookup.status === 'found' ? lookup.locality.id : null;
 
-  // El envío por distancia lo calcula la tienda con la dirección guardada (la misma que ve en el carrito).
+  // El envío sale de la localidad (km y peaje cargados en el panel).
   const distanceCost = distance.cost;
-  const measuring = distance.loading;
   const q = settings ? quote(method, lookup, totals, settings, distanceCost) : null;
 
   // Precarga la confirmación: si no, el router muestra el checkout vacío mientras baja ese código.
@@ -80,9 +77,7 @@ export function Checkout() {
     if (digits.length < 8 || digits.length > 15) e.phone = 'Necesitamos un celular con WhatsApp, con característica (ej. 11 5555 1234).';
     if (f.email.trim() && !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(f.email.trim())) e.email = 'Revisá el email (o dejalo vacío).';
     if (method === 'delivery') {
-      if (f.address.trim().length < 5) e.address = 'Calle, número y piso/depto si tiene.';
-      if (!normalizePostalCode(f.postalCode)) e.postalCode = 'Escribí 4 números (1884) o el CP completo (B1884ABC).';
-      if (lookup.status === 'empty') e.locality = settings?.distanceEnabled ? 'Escribí tu dirección y elegila de la lista (o escribí tu localidad).' : 'Elegí tu localidad.';
+      if (lookup.status === 'empty') e.locality = 'Elegí tu localidad.';
       else if (lookup.status === 'not_found') e.locality = 'Todavía no llegamos a tu zona, escribinos por WhatsApp. También podés elegir retiro en Berazategui.';
     }
     if (!f.payment) e.payment = 'Elegí cómo pagás.';
@@ -131,10 +126,9 @@ export function Checkout() {
     const delivery = method === 'delivery';
     const res = await api.createOrder({
       customerName: f.name, customerPhone: f.phone.replace(/\D/g, ''), customerEmail: f.email,
-      deliveryMethod: method, address: delivery ? f.address : '',
-      postalCode: delivery ? f.postalCode : '', localityId: delivery ? localityId : null,
-      // piso/depto va en las notas: la dirección queda limpia para ubicarla en el mapa
-      notes: [unit.trim() && method === 'delivery' ? `Piso/depto: ${unit.trim()}` : '', f.notes].filter(Boolean).join(' · '), paymentMethod: f.payment as PaymentMethod, flexibleDelivery: delivery && f.flexible,
+      // la dirección la manda por WhatsApp después de confirmar
+      deliveryMethod: method, address: '', postalCode: '', localityId: delivery ? localityId : null,
+      notes: f.notes, paymentMethod: f.payment as PaymentMethod, flexibleDelivery: delivery && f.flexible,
       items: items.map((i) => ({ productId: i.product.id, quantity: i.quantity })),
       turnstileToken: token ?? undefined,
     });
@@ -194,46 +188,7 @@ export function Checkout() {
                     {settings?.pickupEnabled && <button type="button" className="btn btn-line" onClick={() => setMethod('pickup')}><Icon name="local" /> Retiro en Berazategui</button>}
                   </p>
                 )}
-                {settings?.distanceEnabled ? (
-                  <AddressSearch
-                    id="f-address"
-                    label="Dirección"
-                    initial={f.address}
-                    error={errors.address}
-                    onText={(v) => {
-                      setF((x) => ({ ...x, address: v }));
-                      setAddress({ street: v, postalCode: address.postalCode });
-                      if (errors.address) setErrors((x) => ({ ...x, address: undefined }));
-                    }}
-                    onPick={(sg) => {
-                      setF((v) => ({ ...v, address: sg.address, postalCode: sg.postalCode ?? v.postalCode }));
-                      setAddress({ street: sg.address, postalCode: sg.postalCode });
-                      if (sg.match.status === 'found') setLocalityChoice(sg.match.localityId);
-                      else if (sg.match.status === 'not_found') setLocalityChoice(OTHER_LOCALITY);
-                      else setLocalityChoice(null); // la escribe abajo
-                      if (errors.address) setErrors((x) => ({ ...x, address: undefined }));
-                    }}
-                  />
-                ) : (
-                  <Field id="address" label="Dirección" error={errors.address}>
-                    <input id="f-address" className="input" autoComplete="street-address" placeholder="Calle 14 1234, 2°B" value={f.address} onChange={set('address')} {...err('address')} />
-                  </Field>
-                )}
-                {settings?.distanceEnabled ? (
-                  // Con buscador: la localidad sale de la dirección; si no, la escribe el cliente.
-                  lookup.status === 'found' ? (
-                    <p className="co-loc">
-                      Localidad: <b>{lookup.locality.name}</b> <span className="muted">(zona {lookup.zone.name})</span>{' '}
-                      <button type="button" className="link" onClick={() => setLocalityChoice(null)}>no es esa</button>
-                    </p>
-                  ) : lookup.status === 'empty' && f.address.trim().length >= 5 ? (
-                    <>
-                      <TownInput id="f-locality" localities={localities} onDone={(c) => { setLocalityChoice(c); setErrors((x) => ({ ...x, locality: undefined })); }} />
-                      {errors.locality && <p id="f-locality-err" className="field-error">{errors.locality}</p>}
-                    </>
-                  ) : errors.locality ? <p id="f-locality-err" className="field-error">{errors.locality}</p> : null
-                ) : (
-                  <div className="field">
+                <div className="field">
                   <label className="field-label" htmlFor="f-locality">Localidad</label>
                   <LocalitySelect
                     id="f-locality"
@@ -248,21 +203,7 @@ export function Checkout() {
                   {zone && !errors.locality && <p className="field-hint">Zona {zone.name}</p>}
                   {errors.locality && <p id="f-locality-err" className="field-error">{errors.locality}</p>}
                 </div>
-                )}
-                <Field id="unit" label="Piso / depto / entre calles (opcional)">
-                  <input id="f-unit" className="input" placeholder="2°B, entre 15 y 16" value={unit} onChange={(e) => setUnit(e.target.value)} />
-                </Field>
-                <Field id="postalCode" label="Código postal" error={errors.postalCode}>
-                  <input id="f-postalCode" className="input input-cp" autoComplete="postal-code" placeholder="1884" value={f.postalCode} onChange={set('postalCode')} {...err('postalCode')} />
-                </Field>
-                {distanceOn && (
-                  <p className="small muted" aria-live="polite">
-                    {measuring ? 'Calculando el envío según la distancia…'
-                      : distanceCost !== null ? `Envío según la distancia a tu dirección${distance.km ? ` (${String(Math.round(distance.km * 5) / 10).replace('.', ',')} km)` : ''}.`
-                      : f.address.trim().length >= 5 ? 'No pudimos ubicar la dirección con precisión: usamos el costo de la zona.'
-                      : 'Con tu dirección calculamos el envío según la distancia.'}
-                  </p>
-                )}
+                <p className="small muted">La dirección (calle, número, piso/depto y entre calles) nos la mandás por WhatsApp cuando confirmes el pedido.</p>
                 {zone && settings && (
                   <p className="co-when"><Icon name="moto" size={20} /> <span>{deliverySentence(zone, settings)}.</span></p>
                 )}

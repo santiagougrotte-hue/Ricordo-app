@@ -27,7 +27,7 @@ createServer(async (nreq, nres) => {
   const req = new Request(url, { method: nreq.method, headers: nreq.headers as Record<string, string>, body: ['GET', 'HEAD'].includes(nreq.method!) ? undefined : Buffer.concat(chunks) });
   let res: Response;
   try {
-    if (url.pathname === '/api/catalog') res = Response.json(await getCatalog(query, { distanceEnabled: !!process.env.ORS_API_KEY }));
+    if (url.pathname === '/api/catalog') res = Response.json(await getCatalog(query, { distanceEnabled: false }));
     else if (url.pathname === '/api/create-order') {
       const r = await handleCreateOrder(await req.json().catch(() => null), { TURNSTILE_SECRET_KEY: 'test', SESSION_SECRET: process.env.SESSION_SECRET }, { query, fetch: fakeFetch, ip: String(Math.random()) });
       res = Response.json(r.body, { status: r.status });

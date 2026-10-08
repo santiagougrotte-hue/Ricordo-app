@@ -13,7 +13,7 @@ type Draft = Omit<Zone, 'id'> & { id: string | null };
 
 const NEW: Draft = {
   id: null, name: '', shippingCost: 0, minBoxes: 3, freeFromBoxes: 4, deliveryWeekday: 6, deliveryMoment: 'a la mañana',
-  discountPerBox: 5, discountMax: 10, distancePricing: true, tollRoundTrip: 0, avgOrdersPerRoute: 1, active: true,
+  discountPerBox: 5, discountMax: 10, distancePricing: true, tollRoundTrip: 0, avgOrdersPerRoute: 1, minFee: 1500, active: true,
 };
 const MOMENTS = ['a la mañana', 'a la tarde', 'a la noche', ''];
 const cap = (s: string) => s[0].toUpperCase() + s.slice(1);
@@ -49,7 +49,7 @@ function ZoneCard({ initial, locs, onSaved, onCancel }: { initial: Draft; locs: 
   const [d, setD] = useState<Draft>(initial);
   const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
   const id = initial.id ?? 'nueva';
-  const num = (k: 'shippingCost' | 'minBoxes' | 'discountPerBox' | 'discountMax' | 'tollRoundTrip', max = Infinity) => (e: React.ChangeEvent<HTMLInputElement>) =>
+  const num = (k: 'shippingCost' | 'minBoxes' | 'discountPerBox' | 'discountMax' | 'tollRoundTrip' | 'minFee', max = Infinity) => (e: React.ChangeEvent<HTMLInputElement>) =>
     setD({ ...d, [k]: Math.min(max, Math.max(0, Math.floor(+e.target.value || 0))) });
 
   async function save() {
@@ -109,6 +109,12 @@ function ZoneCard({ initial, locs, onSaved, onCancel }: { initial: Draft; locs: 
             <input id={`z-s-${id}`} className="input" type="number" min={0} inputMode="numeric" value={d.shippingCost} onChange={num('shippingCost')} />
           </div>
           {d.distancePricing && (
+            <div className="field">
+              <label className="field-label" htmlFor={`z-mf-${id}`}>Envío mínimo hasta el gratis ($)</label>
+              <input id={`z-mf-${id}`} className="input" type="number" min={0} step={500} inputMode="numeric" value={d.minFee ?? 0} onChange={num('minFee')} />
+            </div>
+          )}
+          {d.distancePricing && (
             <>
               <div className="field"><label className="field-label" htmlFor={`z-t-${id}`}>Peaje ida y vuelta ($)</label><input id={`z-t-${id}`} className="input" type="number" min={0} inputMode="numeric" value={d.tollRoundTrip} onChange={num('tollRoundTrip')} /></div>
               <div className="field">
@@ -138,7 +144,7 @@ function ZoneCard({ initial, locs, onSaved, onCancel }: { initial: Draft; locs: 
 
 /** Localidades: cada una apunta a una zona. */
 function Localities({ zones, list, onSaved }: { zones: Zone[]; list: Loc[]; onSaved: () => void }) {
-  const [draft, setDraft] = useState({ name: '', partido: '', zoneId: zones[0]?.id ?? '' });
+  const [draft, setDraft] = useState({ name: '', partido: '', zoneId: zones[0]?.id ?? '', km: '', toll: '0' });
   const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
   async function run(f: () => Promise<void>, ok: string) {
     try { await f(); setMsg({ ok: true, text: ok }); onSaved(); } catch (e) { setMsg({ ok: false, text: e instanceof Error ? e.message : 'No se pudo guardar' }); }
@@ -146,10 +152,13 @@ function Localities({ zones, list, onSaved }: { zones: Zone[]; list: Loc[]; onSa
   return (
     <section className="adm-section" aria-labelledby="h-locs">
       <h2 id="h-locs" className="d-m">Localidades</h2>
-      <p className="small muted">El cliente elige su localidad de esta lista, agrupada por partido. Cambiá la zona de una localidad y se guarda al instante.</p>
+      <p className="small muted">
+        El cliente elige su localidad de esta lista, agrupada por partido. Los <b>km ida y vuelta</b> (desde tu casa) y el <b>peaje ida y vuelta</b> definen
+        el costo del viaje para el envío. Los cambios se guardan al instante (los km y el peaje, al salir del casillero).
+      </p>
       <div className="adm-table-wrap">
         <table className="adm-table">
-          <thead><tr><th scope="col">Localidad</th><th scope="col">Partido</th><th scope="col">Zona</th><th scope="col">Activa</th><th scope="col"><span className="sr">Acciones</span></th></tr></thead>
+          <thead><tr><th scope="col">Localidad</th><th scope="col">Partido</th><th scope="col">Zona</th><th scope="col">Km ida y vuelta</th><th scope="col">Peaje i/v ($)</th><th scope="col">Activa</th><th scope="col"><span className="sr">Acciones</span></th></tr></thead>
           <tbody>
             {list.map((l) => (
               <tr key={l.id} className={l.active ? '' : 'off'}>
@@ -160,6 +169,14 @@ function Localities({ zones, list, onSaved }: { zones: Zone[]; list: Loc[]; onSa
                     {zones.map((z) => <option key={z.id} value={z.id}>{z.name}</option>)}
                   </select>
                 </td>
+                <td>
+                  <input className="input adm-num" type="number" min={0} step={0.5} inputMode="decimal" aria-label={`Km ida y vuelta a ${l.name}`} defaultValue={l.kmRoundTrip ?? ''}
+                    onBlur={(e) => { const v = e.target.value === '' ? null : Number(e.target.value); if (v !== (l.kmRoundTrip ?? null)) void run(() => adminApi.saveLocality({ ...l, kmRoundTrip: v }), `Km de ${l.name} guardados.`); }} />
+                </td>
+                <td>
+                  <input className="input adm-num" type="number" min={0} step={500} inputMode="numeric" aria-label={`Peaje ida y vuelta a ${l.name}`} defaultValue={l.tollRoundTrip ?? 0}
+                    onBlur={(e) => { const v = Math.max(0, Math.round(Number(e.target.value) || 0)); if (v !== (l.tollRoundTrip ?? 0)) void run(() => adminApi.saveLocality({ ...l, tollRoundTrip: v }), `Peaje de ${l.name} guardado.`); }} />
+                </td>
                 <td><input type="checkbox" aria-label={`${l.name} activa`} checked={l.active} onChange={(e) => void run(() => adminApi.saveLocality({ ...l, active: e.target.checked }), 'Guardado.')} /></td>
                 <td><button type="button" className="link" onClick={() => { if (confirm(`¿Borrar ${l.name}?`)) void run(() => adminApi.deleteLocality(l.id), 'Borrada.'); }}>Borrar</button></td>
               </tr>
@@ -167,7 +184,7 @@ function Localities({ zones, list, onSaved }: { zones: Zone[]; list: Loc[]; onSa
           </tbody>
         </table>
       </div>
-      <form className="adm-form adm-loc-add" onSubmit={(e) => { e.preventDefault(); void run(async () => { await adminApi.saveLocality({ id: null, ...draft, name: draft.name.trim(), partido: draft.partido.trim(), active: true }); setDraft({ ...draft, name: '' }); }, 'Localidad agregada.'); }}>
+      <form className="adm-form adm-loc-add" onSubmit={(e) => { e.preventDefault(); void run(async () => { await adminApi.saveLocality({ id: null, name: draft.name.trim(), partido: draft.partido.trim(), zoneId: draft.zoneId, active: true, kmRoundTrip: draft.km === '' ? null : Number(draft.km), tollRoundTrip: Math.round(Number(draft.toll) || 0) }); setDraft({ ...draft, name: '', km: '' }); }, 'Localidad agregada.'); }}>
         <p className="label">Agregar localidad</p>
         <div className="adm-grid3">
           <div className="field"><label className="field-label" htmlFor="l-n">Localidad</label><input id="l-n" className="input" required minLength={2} value={draft.name} onChange={(e) => setDraft({ ...draft, name: e.target.value })} placeholder="El Pato" /></div>
@@ -175,6 +192,8 @@ function Localities({ zones, list, onSaved }: { zones: Zone[]; list: Loc[]; onSa
           <div className="field"><label className="field-label" htmlFor="l-z">Zona</label>
             <select id="l-z" className="input" value={draft.zoneId} onChange={(e) => setDraft({ ...draft, zoneId: e.target.value })}>{zones.map((z) => <option key={z.id} value={z.id}>{z.name}</option>)}</select>
           </div>
+          <div className="field"><label className="field-label" htmlFor="l-k">Km ida y vuelta</label><input id="l-k" className="input" type="number" min={0} step={0.5} inputMode="decimal" value={draft.km} onChange={(e) => setDraft({ ...draft, km: e.target.value })} placeholder="24" /></div>
+          <div className="field"><label className="field-label" htmlFor="l-t">Peaje ida y vuelta ($)</label><input id="l-t" className="input" type="number" min={0} step={500} inputMode="numeric" value={draft.toll} onChange={(e) => setDraft({ ...draft, toll: e.target.value })} /></div>
         </div>
         <button type="submit" className="btn btn-ink">Agregar</button>
       </form>

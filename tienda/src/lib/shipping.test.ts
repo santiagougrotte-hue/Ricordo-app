@@ -50,7 +50,7 @@ describe('descuento por volumen', () => {
 });
 
 describe('quote', () => {
-  const bera = findZone(0, loc('Berazategui')); // mínimo 3, gratis desde 4, envío fijo 2500 (por distancia)
+  const bera = findZone(0, loc('Berazategui Centro')); // mínimo 3, gratis desde 4, envío fijo 2500 (por distancia)
   const caba = findZone(0, loc('CABA')); // costo fijo 5000, gratis desde 6
   it('bajo el mínimo: no deja avanzar, dice cuántas cajas faltan y sugiere retiro', () => {
     const q = quote('delivery', bera, cart(2), SEED_SETTINGS);
@@ -120,34 +120,41 @@ describe('localidad escrita por el cliente', () => {
   it('si no está en la lista → null (no llegamos)', () => expect(matchTypedLocality('Florencio Varela', SEED_LOCALITIES)).toBeNull());
 });
 
-describe('envío por cajas (el viaje lo paga un cliente; cada caja absorbe $3.500)', () => {
-  const S = { ...SEED_SETTINGS, distanceEnabled: true, shippingByBoxes: { absorbPerBox: 3500, rounding: 500 } };
+describe('envío por localidad y por cajas (cada caja absorbe $3.500; envío mínimo hasta el gratis)', () => {
+  const S = { ...SEED_SETTINGS, shippingByBoxes: { absorbPerBox: 3500, rounding: 500, fuelPrice: 2080, consumption100km: 7 } };
   const perBox = S.shippingByBoxes;
   it('viaje − cajas × 3500, redondeado hacia arriba a $500, nunca menos de 0', () => {
-    expect([4, 5, 6].map((b) => boxesShipping(19790, b, perBox))).toEqual([6000, 2500, 0]); // Quilmes
-    expect([5, 6, 7, 8].map((b) => boxesShipping(24740, b, perBox))).toEqual([7500, 4000, 500, 0]); // CABA
+    expect([4, 5, 6].map((b) => boxesShipping(19790, b, perBox))).toEqual([6000, 2500, 0]);
   });
-  it('Quilmes con la dirección medida: 4 cajas $6.000; 5 cajas $2.500; avisa cuánto baja con una caja más', () => {
-    const quilmes = realZone(loc('Quilmes'));
-    const q4 = quote('delivery', quilmes, cart(4), S, 19790);
-    expect(q4).toMatchObject({ shippingCost: 6000, nextBoxShipping: 2500, missingForFree: 2, total: 46000 });
-    expect(cartMessage(q4, quilmes)).toBe('Sumá 1 caja más y el envío a Quilmes / Bernal / Wilde baja a $2.500. Con 2 cajas más, es gratis.');
-    const q5 = quote('delivery', quilmes, cart(5), S, 19790);
-    expect(q5).toMatchObject({ shippingCost: 2500, missingForFree: 1 });
-    expect(cartMessage(q5, quilmes)).toBe('Sumá 1 caja más y el envío a Quilmes / Bernal / Wilde es gratis.');
-    expect(quote('delivery', quilmes, cart(6), S, 19790)).toMatchObject({ shippingCost: 0, discount: 0 });
+  it('Quilmes Centro (40 km ida y vuelta + $16.000 de peaje = viaje $21.824): 4 cajas $8.000; 5 cajas $4.500; 6 cajas gratis', () => {
+    const q = realZone(loc('Quilmes Centro'));
+    const q4 = quote('delivery', q, cart(4), S);
+    expect(q4).toMatchObject({ shippingCost: 8000, nextBoxShipping: 4500, missingForFree: 2, shippingEstimated: false });
+    expect(cartMessage(q4, q)).toBe('Sumá 1 caja más y el envío a Quilmes / Bernal / Wilde baja a $4.500. Con 2 cajas más, es gratis.');
+    const q5 = quote('delivery', q, cart(5), S);
+    expect(q5).toMatchObject({ shippingCost: 4500, missingForFree: 1 });
+    expect(cartMessage(q5, q)).toBe('Sumá 1 caja más y el envío a Quilmes / Bernal / Wilde es gratis.');
+    expect(quote('delivery', q, cart(6), S).shippingCost).toBe(0);
   });
-  it('sin dirección ubicada: el viaje se estima con el envío del pedido mínimo de la zona (aprox.)', () => {
-    const caba = realZone(loc('CABA')); // $7.500 con 5 cajas → viaje estimado 7500 + 5 × 3500 = 25000
-    expect(quote('delivery', caba, cart(5), S, null)).toMatchObject({ shippingCost: 7500, shippingEstimated: true });
-    expect(quote('delivery', caba, cart(6), S, null).shippingCost).toBe(4000);
+  it('sin peaje el viaje es corto: con el pedido mínimo se cobra el envío mínimo igual, para que convenga llegar al gratis', () => {
+    const qo = realZone(loc('Quilmes Oeste'));
+    const q4 = quote('delivery', qo, cart(4), S);
+    expect(q4.shippingCost).toBe(1500);
+    expect(cartMessage(q4, qo)).toBe('Sumá 2 cajas más y el envío a Quilmes / Bernal / Wilde es gratis.');
+    expect(quote('delivery', realZone(loc('Plátanos')), cart(3), S).shippingCost).toBe(2000); // Hudson: mínimo $2.000
+    expect(quote('delivery', realZone(loc('Berazategui Centro')), cart(3), S).shippingCost).toBe(1500);
+    expect(quote('delivery', realZone(loc('Plátanos')), cart(4), S).shippingCost).toBe(0);
+  });
+  it('CABA (85 km ida y vuelta + peaje = $28.376): 5 cajas $11.000, 6 $7.500, 7 $4.000, 8 gratis', () => {
+    expect([5, 6, 7, 8].map((b) => quote('delivery', realZone(loc('CABA')), cart(b), S).shippingCost)).toEqual([11000, 7500, 4000, 0]);
+  });
+  it('localidad sin km cargados: el viaje se estima con el envío del pedido mínimo de la zona', () => {
+    const z = realZone(loc('CABA'));
+    if (z.status !== 'found') throw new Error();
+    const sinKm = { ...z, locality: { ...z.locality, kmRoundTrip: null } };
+    expect(quote('delivery', sinKm, cart(5), S).shippingCost).toBe(7500); // 7500 + 5 × 3500 − 5 × 3500
   });
   it('las salsas no cuentan como caja para bajar el envío', () => {
-    expect(quote('delivery', realZone(loc('Quilmes')), cart(4, 3), S, 19790).shippingCost).toBe(6000);
-  });
-  it('Hudson y Berazategui: envío fijo hasta el envío gratis', () => {
-    expect(quote('delivery', realZone(loc('Berazategui')), cart(3), S, null)).toMatchObject({ shippingCost: 1500, nextBoxShipping: null });
-    expect(quote('delivery', realZone(loc('Plátanos')), cart(3), S, null).shippingCost).toBe(2000);
-    expect(quote('delivery', realZone(loc('Plátanos')), cart(4), S, null).shippingCost).toBe(0);
+    expect(quote('delivery', realZone(loc('Quilmes Centro')), cart(4, 3), S).shippingCost).toBe(8000);
   });
 });

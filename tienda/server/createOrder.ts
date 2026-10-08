@@ -155,8 +155,8 @@ export async function handleCreateOrder(raw: unknown, env: ServerEnv, deps: Deps
       `select * from create_order($1, $2, $3, $4::delivery_method, $5, $6, $7::smallint, $8, $9::payment_method, $10::jsonb, $11, $12, $13, $14, $15)`,
       [
         parsed.customerName, parsed.customerPhone, parsed.customerEmail || null, parsed.deliveryMethod,
-        parsed.deliveryMethod === 'delivery' ? parsed.address : null,
-        parsed.deliveryMethod === 'delivery' ? parsed.postalCode : null,
+        parsed.deliveryMethod === 'delivery' && parsed.address.trim() ? parsed.address : null,
+        parsed.deliveryMethod === 'delivery' && parsed.postalCode.trim() ? parsed.postalCode : null,
         parsed.deliveryMethod === 'delivery' ? parsed.localityId : null,
         parsed.notes || null, parsed.paymentMethod,
         JSON.stringify(parsed.items.map((i) => ({ product_id: i.productId, quantity: i.quantity }))),
@@ -219,7 +219,9 @@ export function orderSummaryText(r: OrderReceipt, input: OrderInput): string {
   const lines = r.lines.map((l) => `• ${l.quantity} × ${l.name} — ${peso(l.quantity * l.unitPrice)}`).join('\n');
   const where = r.deliveryMethod === 'pickup'
     ? 'Retira en Berazategui'
-    : `Envío a ${input.address}${r.locality ? ', ' + r.locality : ''} (CP ${input.postalCode})`;
+    : input.address.trim()
+      ? `Envío a ${input.address}${r.locality ? ', ' + r.locality : ''}${input.postalCode ? ` (CP ${input.postalCode})` : ''}`
+      : `Envío a ${r.locality ?? 'su localidad'} (la dirección la manda por WhatsApp)`;
   return [
     `Pedido #${r.number} — ${peso(r.total)} — ${r.boxCount} ${r.boxCount === 1 ? 'caja' : 'cajas'}`,
     `${r.customerName} · ${input.customerPhone}${input.customerEmail ? ' · ' + input.customerEmail : ''}`,
@@ -247,7 +249,7 @@ export function pushForOrder(r: OrderReceipt): PushPayload {
 /** Aviso por WhatsApp: el mismo resumen que manda el cliente, con el link para escribirle. */
 export function whatsappOrderText(r: OrderReceipt, input: OrderInput): string {
   const fromInput: Partial<OrderReceipt> = {
-    customerPhone: input.customerPhone, address: input.deliveryMethod === 'delivery' ? input.address : null,
+    customerPhone: input.customerPhone, address: input.deliveryMethod === 'delivery' && input.address.trim() ? input.address : null,
     postalCode: input.deliveryMethod === 'delivery' ? input.postalCode : null, notes: input.notes || null,
     flexibleDelivery: input.deliveryMethod === 'delivery' && input.flexibleDelivery, createdAt: new Date().toISOString(),
   };

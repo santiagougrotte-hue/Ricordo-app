@@ -75,6 +75,9 @@ export function Confirmation() {
         <div className="confirm-next">
           <h2 className="d-m">Qué sigue</h2>
           <ol className="next-steps">
+            {r?.deliveryMethod === 'delivery' && !r.address && (
+              <li><strong>Mandanos tu dirección por WhatsApp</strong> (calle, número, piso/depto y entre calles): tocá el botón de abajo, completala en el mensaje y envialo.</li>
+            )}
             {r?.paymentMethod === 'transfer' ? (
               <li>Transferí {money(r.total)}{settings?.transferInfo ? <> a <strong>{settings.transferInfo}</strong></> : ''} y mandanos el comprobante.</li>
             ) : (
@@ -85,7 +88,7 @@ export function Confirmation() {
           </ol>
           {wa && (
             <a className="btn btn-ink btn-big btn-wide" href={wa} target="_blank" rel="noopener noreferrer">
-              <Icon name="charla" /> Escribir por WhatsApp
+              <Icon name="charla" /> {r?.deliveryMethod === 'delivery' && !r.address ? 'Mandar mi dirección por WhatsApp' : 'Escribir por WhatsApp'}
             </a>
           )}
           <p className="center"><Link to="/cajas" className="link">Seguir mirando</Link></p>

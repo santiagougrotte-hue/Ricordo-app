@@ -1,10 +1,21 @@
 import type { StoreApi } from './types';
 import type { OrderInput, OrderResult, ShortItem } from '../types';
-import { boxesShipping, cartTotals, discountAmount, discountPct, extraBoxes, findZone } from '../shipping';
+import { cartTotals, discountAmount, discountPct, extraBoxes, findZone, quote } from '../shipping';
 import { normalizePostalCode } from '../postal';
 import { deliveryDateFor, deliveryLabel } from '../delivery';
 import { readDb, writeDb } from './demoDb';
 import type { AdminOrder } from './adminTypes';
+import type { StoreSettings } from '../types';
+
+/** Ajustes públicos de la demo (sin el email privado), con el cálculo por cajas si está activo. */
+function publicSettings(db: ReturnType<typeof readDb>): StoreSettings {
+  const { notifyEmail: _private, ...pub } = db.settings;
+  void _private;
+  const c = db.shippingConfig;
+  return c.pricingMode === 'boxes'
+    ? { ...pub, shippingByBoxes: { absorbPerBox: c.absorbPerBox ?? 0, rounding: c.rounding, fuelPrice: c.fuelPrice, consumption100km: c.consumption100km } }
+    : pub;
+}
 
 // Modo demo: corre sin servidor. Replica las reglas de create_order() para poder probar el flujo.
 const wait = (ms: number) => new Promise((r) => setTimeout(r, ms));
@@ -37,11 +48,7 @@ export function createDemoApi(): StoreApi {
       return { distanceCost: null, km: null };
     },
     async getSettings() {
-      const db = readDb();
-      const { notifyEmail: _private, ...pub } = db.settings;
-      void _private;
-      const c = db.shippingConfig;
-      return c.pricingMode === 'boxes' ? { ...pub, shippingByBoxes: { absorbPerBox: c.absorbPerBox ?? 0, rounding: c.rounding } } : pub;
+      return publicSettings(readDb());
     },
     async createOrder(input: OrderInput): Promise<OrderResult> {
       await wait(600);
@@ -71,17 +78,15 @@ export function createDemoApi(): StoreApi {
       if (input.deliveryMethod === 'delivery') {
         const look = findZone(activeZones(), activeLocalities(), input.localityId);
         if (look.status !== 'found') return { ok: false, error: { code: 'RC002', message: 'Todavía no llegamos a esa localidad' } };
-        if (input.address.trim().length < 5) return { ok: false, error: { code: 'RC004', message: 'Falta la dirección' } };
+        // La dirección la manda por WhatsApp después de confirmar.
         const pc = normalizePostalCode(input.postalCode);
-        if (!pc) return { ok: false, error: { code: 'RC004', message: 'Revisá el código postal' } };
         const z = look.zone;
         if (boxes < z.minBoxes) {
           return { ok: false, error: { code: 'RC003', message: 'No alcanza el mínimo de cajas', minBoxes: z.minBoxes, missing: z.minBoxes - boxes, pickupMinBoxes: s.pickupEnabled ? s.pickupMinBoxes : null } };
         }
         const free = z.freeFromBoxes !== null && boxes >= z.freeFromBoxes;
-        const c = db.shippingConfig;
-        const perBox = c.pricingMode === 'boxes' ? { absorbPerBox: c.absorbPerBox ?? 0, rounding: c.rounding } : null;
-        shipping = free ? 0 : z.distancePricing && perBox ? boxesShipping(z.shippingCost + perBox.absorbPerBox * z.minBoxes, boxes, perBox) : z.shippingCost;
+        // Mismo cálculo que el carrito (y que create_order): km y peaje de la localidad, envío mínimo hasta el gratis.
+        shipping = free ? 0 : quote('delivery', look, totals, publicSettings(db))?.shippingCost ?? z.shippingCost;
         pct = discountPct(z, boxes);
         discount = discountAmount(totals.boxSubtotal, boxes, extraBoxes(z, boxes), pct);
         zoneName = z.name;

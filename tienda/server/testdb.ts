@@ -27,6 +27,12 @@ export async function freshDb(withExamples = true): Promise<{ q: Query; pool: pg
  */
 export async function legacyShipping(q: Query): Promise<void> {
   await q(`update shipping_config set pricing_mode = 'bands', fuel_price = 1700`);
+  // Antes del envío por localidad: sin km por localidad, sin envío mínimo y con los nombres de entonces.
+  await q(`update localities set km_round_trip = null, toll_round_trip = 0`);
+  await q(`update shipping_zones set min_fee = 0`);
+  await q(`update localities set name = 'Berazategui' where name = 'Berazategui Centro'`);
+  await q(`update localities set name = 'Quilmes' where name = 'Quilmes Centro'`);
+  await q(`delete from localities where name in ('Sarandí', 'Avellaneda')`);
   for (const [name, cost, free, dist, toll] of [
     ['Hudson / Plátanos / Ranelagh', 1500, 4, true, 0], ['Berazategui', 2500, 4, true, 0], ['Quilmes / Bernal / Wilde', 4500, 6, true, 0],
     ['CABA', 5000, 6, false, 0], ['City Bell / La Plata', 6000, 8, true, 0],
