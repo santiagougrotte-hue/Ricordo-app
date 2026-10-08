@@ -4,6 +4,7 @@ import type { ShippingConfig } from '../lib/api/adminTypes';
 import type { Locality, ShippingZone } from '../lib/types';
 import { DAYS } from '../lib/delivery';
 import { money } from '../lib/money';
+import { boxesShipping } from '../lib/shipping';
 import { useLoad } from './useLoad';
 
 type Zone = ShippingZone & { active: boolean };
@@ -101,10 +102,10 @@ function ZoneCard({ initial, locs, onSaved, onCancel }: { initial: Draft; locs: 
           <p className="small muted adm-zone-ex">Cada caja que pasa el envío gratis suma el %. {ex}</p>
         </div>
         <p className="label">Costo de envío</p>
-        <label className="switch"><input type="checkbox" checked={d.distancePricing} onChange={(e) => setD({ ...d, distancePricing: e.target.checked })} /><span>Calcular por distancia (nafta + peaje)</span></label>
+        <label className="switch"><input type="checkbox" checked={d.distancePricing} onChange={(e) => setD({ ...d, distancePricing: e.target.checked })} /><span>Calcular por distancia (km reales hasta la dirección)</span></label>
         <div className="adm-grid3">
           <div className="field">
-            <label className="field-label" htmlFor={`z-s-${id}`}>{d.distancePricing ? 'Costo fijo de respaldo ($)' : 'Costo fijo ($)'}</label>
+            <label className="field-label" htmlFor={`z-s-${id}`}>{d.distancePricing ? 'Envío de respaldo / pedido mínimo ($)' : 'Costo fijo ($)'}</label>
             <input id={`z-s-${id}`} className="input" type="number" min={0} inputMode="numeric" value={d.shippingCost} onChange={num('shippingCost')} />
           </div>
           {d.distancePricing && (
@@ -117,7 +118,7 @@ function ZoneCard({ initial, locs, onSaved, onCancel }: { initial: Draft; locs: 
             </>
           )}
         </div>
-        {d.distancePricing && <p className="small muted">El respaldo se usa si no se puede ubicar la dirección. Peaje y pedidos por ruta solo cuentan con el cálculo "Nafta + peaje".</p>}
+        {d.distancePricing && <p className="small muted">Si no se puede ubicar la dirección: con "Por cajas", es el envío del pedido mínimo (baja con cada caja); con los otros cálculos, es el envío fijo. El peaje cuenta en "Por cajas" y en "Nafta + peaje"; los pedidos por ruta, solo en "Nafta + peaje".</p>}
         <label className="switch"><input type="checkbox" checked={d.active} onChange={(e) => setD({ ...d, active: e.target.checked })} /><span>Zona activa</span></label>
         {msg && <p className={msg.ok ? 'field-hint' : 'field-error'} role="status">{msg.text}</p>}
         <div className="stack-row">
@@ -252,6 +253,7 @@ function DistanceConfig() {
         <legend className="field-label">Cómo se calcula</legend>
         <label className={c.pricingMode === 'bands' ? 'on' : ''}><input type="radio" name="mode" checked={c.pricingMode === 'bands'} onChange={() => setC({ ...c, pricingMode: 'bands' })} /> Escalones por km</label>
         <label className={c.pricingMode === 'fuel' ? 'on' : ''}><input type="radio" name="mode" checked={c.pricingMode === 'fuel'} onChange={() => setC({ ...c, pricingMode: 'fuel' })} /> Nafta + peaje</label>
+        <label className={c.pricingMode === 'boxes' ? 'on' : ''}><input type="radio" name="mode" checked={c.pricingMode === 'boxes'} onChange={() => setC({ ...c, pricingMode: 'boxes' })} /> Por cajas</label>
       </fieldset>
 
       {c.pricingMode === 'bands' ? (
@@ -271,6 +273,20 @@ function DistanceConfig() {
           </table>
           <button type="button" className="btn btn-line" onClick={() => setBands([...bands, { km: '', price: '' }])}>Agregar escalón</button>
         </>
+      ) : c.pricingMode === 'boxes' ? (
+        <>
+          <p className="small muted">
+            Si en la salida va un solo cliente, el viaje (nafta + peaje de la zona) lo paga ese pedido, pero cada caja aporta una parte de tu margen.
+            Envío = viaje − cajas × lo que absorbés por caja, redondeado hacia arriba. Con suficientes cajas, el envío es gratis.
+          </p>
+          <div className="adm-grid2">
+            <div className="field"><label className="field-label" htmlFor="c-ab">Absorbo por caja ($)</label><input id="c-ab" className="input" type="number" min={0} inputMode="numeric" value={c.absorbPerBox ?? 0} onChange={n('absorbPerBox')} /></div>
+            <div className="field"><label className="field-label" htmlFor="c-f">Nafta ($ por litro)</label><input id="c-f" className="input" type="number" min={1} inputMode="numeric" value={c.fuelPrice} onChange={n('fuelPrice')} /></div>
+            <div className="field"><label className="field-label" htmlFor="c-c">Consumo (litros cada 100 km)</label><input id="c-c" className="input" type="number" min={1} step={0.1} inputMode="decimal" value={c.consumption100km} onChange={n('consumption100km')} /></div>
+            <div className="field"><label className="field-label" htmlFor="c-r">Redondear de a ($)</label><input id="c-r" className="input" type="number" min={1} inputMode="numeric" value={c.rounding} onChange={n('rounding')} /></div>
+          </div>
+          <BoxesExample c={c} />
+        </>
       ) : (
         <>
           <p className="small muted">Envío = (km ida y vuelta × consumo × nafta + peaje de la zona) ÷ pedidos promedio por ruta, redondeado hacia arriba.</p>
@@ -285,5 +301,17 @@ function DistanceConfig() {
       {msg && <p className={msg.ok ? 'field-hint' : 'field-error'} role="status">{msg.text}</p>}
       <button type="button" className="btn btn-ink" onClick={() => void save()}>Guardar</button>
     </section>
+  );
+}
+
+/** Ejemplo en vivo del cálculo por cajas: un viaje de 30 km ida y vuelta con $16.000 de peaje. */
+function BoxesExample({ c }: { c: ShippingConfig }) {
+  const trip = Math.round(30 * (c.consumption100km / 100) * c.fuelPrice + 16000);
+  const perBox = { absorbPerBox: c.absorbPerBox ?? 0, rounding: c.rounding || 1 };
+  return (
+    <p className="small muted">
+      Ejemplo: viaje de 30 km ida y vuelta con $16.000 de peaje = {money(trip)}.{' '}
+      {[3, 4, 5, 6, 7, 8].map((b) => `${b} cajas → ${boxesShipping(trip, b, perBox) === 0 ? 'gratis' : money(boxesShipping(trip, b, perBox))}`).join(' · ')}.
+    </p>
   );
 }

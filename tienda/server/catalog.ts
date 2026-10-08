@@ -27,7 +27,7 @@ export async function getCatalog(q: Query, opts: { distanceEnabled?: boolean } =
     q(`select * from shipping_zones where active order by sort_order`),
     q(`select l.* from localities l join shipping_zones z on z.id = l.zone_id where l.active and z.active order by l.sort_order, l.name`),
     q(`select * from store_public_settings()`),
-    q(`select pricing_mode from shipping_config limit 1`),
+    q(`select pricing_mode, absorb_per_box, rounding from shipping_config limit 1`),
     q(`select * from shipping_bands order by up_to_km nulls last`),
   ]);
   return {
@@ -42,7 +42,11 @@ export async function getCatalog(q: Query, opts: { distanceEnabled?: boolean } =
       ...mapSettings(s as Row),
       distanceEnabled: !!opts.distanceEnabled,
       // La tabla de escalones es pública (se muestra en "¿Llegamos a tu casa?"); el origen no.
-      shippingBands: opts.distanceEnabled && (cfg as Row | undefined)?.pricing_mode !== 'fuel' ? bands.map(mapBand) : [],
+      shippingBands: opts.distanceEnabled && (cfg as Row | undefined)?.pricing_mode === 'bands' ? bands.map(mapBand) : [],
+      // Envío por cajas: el carrito resta lo que absorbe cada caja al costo del viaje (no expone el origen).
+      shippingByBoxes: (cfg as Row | undefined)?.pricing_mode === 'boxes'
+        ? { absorbPerBox: (cfg as Row).absorb_per_box, rounding: (cfg as Row).rounding }
+        : undefined,
     },
   };
 }

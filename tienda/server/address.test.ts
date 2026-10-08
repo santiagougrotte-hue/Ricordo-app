@@ -3,7 +3,7 @@ import type pg from 'pg';
 import { matchLocality, norm, searchAddress } from './address';
 import { distanceFor } from './distance';
 import type { Query } from './db';
-import { freshDb, TEST_DB } from './testdb';
+import { freshDb, legacyShipping, TEST_DB } from './testdb';
 import { SEED_LOCALITIES } from '../src/lib/api/seed-data';
 
 const id = (name: string) => SEED_LOCALITIES.find((l) => l.name === name)!.id;
@@ -60,6 +60,7 @@ describe.skipIf(!TEST_DB)('searchAddress contra la base (ORS simulado)', () => {
 
   beforeAll(async () => {
     ({ q, pool } = await freshDb());
+    await legacyShipping(q);
     await q(`update shipping_config set pricing_mode = 'fuel'`);
   });
   afterAll(() => pool.end());

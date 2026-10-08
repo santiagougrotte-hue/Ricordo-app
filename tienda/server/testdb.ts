@@ -20,3 +20,17 @@ export async function freshDb(withExamples = true): Promise<{ q: Query; pool: pg
   if (withExamples) await pool.query(examples);
   return { q: poolQuery(pool), pool };
 }
+
+/**
+ * Envío como estaba antes de "por cajas" (escalones por km, costos fijos 1500…6000, CABA fijo).
+ * Muchas pruebas se escribieron con esos valores; las de "por cajas" usan la configuración real.
+ */
+export async function legacyShipping(q: Query): Promise<void> {
+  await q(`update shipping_config set pricing_mode = 'bands', fuel_price = 1700`);
+  for (const [name, cost, free, dist, toll] of [
+    ['Hudson / Plátanos / Ranelagh', 1500, 4, true, 0], ['Berazategui', 2500, 4, true, 0], ['Quilmes / Bernal / Wilde', 4500, 6, true, 0],
+    ['CABA', 5000, 6, false, 0], ['City Bell / La Plata', 6000, 8, true, 0],
+  ] as const) {
+    await q(`update shipping_zones set shipping_cost = $2, free_from_boxes = $3, distance_pricing = $4, toll_round_trip = $5 where name = $1`, [name, cost, free, dist, toll]);
+  }
+}

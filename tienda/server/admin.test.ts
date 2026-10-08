@@ -3,7 +3,7 @@ import type pg from 'pg';
 import { handleAdmin, type AdminEnv } from './admin';
 import type { Query } from './db';
 import { memoryMedia } from './media';
-import { freshDb, TEST_DB } from './testdb';
+import { freshDb, legacyShipping, TEST_DB } from './testdb';
 import { getCatalog } from './catalog';
 
 const ENV: AdminEnv = { ADMIN_EMAIL: 'duenio@ricordo.com', ADMIN_PASSWORD: 'una-clave-larga-123', SESSION_SECRET: 'secreto-de-prueba' };
@@ -29,7 +29,10 @@ describe.skipIf(!TEST_DB)('API del panel contra Netlify Database (Postgres real)
     return { status: res.status, data: (await res.json()) as Record<string, any>, setCookie: res.headers.get('set-cookie') };
   }
 
-  beforeAll(async () => ({ q, pool } = await freshDb()));
+  beforeAll(async () => {
+    ({ q, pool } = await freshDb());
+    await legacyShipping(q);
+  });
   afterAll(() => pool.end());
 
   it('sin sesión: 401 en todo menos login/session', async () => {
@@ -164,7 +167,7 @@ describe.skipIf(!TEST_DB)('API del panel contra Netlify Database (Postgres real)
     const got = (await call('GET', 'shipping-config')).data;
     expect(got.enabled).toBe(false); // sin ORS_API_KEY
     const cfg = got.config;
-    expect(cfg).toEqual({ originLat: -34.765, originLng: -58.212, pricingMode: 'bands', fuelPrice: 1700, consumption100km: 7, rounding: 500 });
+    expect(cfg).toEqual({ originLat: -34.765, originLng: -58.212, pricingMode: 'bands', absorbPerBox: 3500, fuelPrice: 1700, consumption100km: 7, rounding: 500 });
     expect(got.bands).toHaveLength(7);
     // Escalones: validación y guardado (sin tocar el origen no se borra la caché)
     expect((await call('POST', 'shipping-config', { body: { ...cfg, bands: [{ upToKm: 5, price: 1000 }, { upToKm: 5, price: 2000 }] } })).status).toBe(400);
@@ -264,12 +267,16 @@ describe.skipIf(!TEST_DB)('migraciones: gusto real cargado', () => {
     expect(c.products[0].media.map((m) => m.url)).toEqual(['/fotos/cabutia-mano.webp', '/fotos/cabutia-corte.webp', '/fotos/amasado-masa-nero.mp4', '/fotos/cabutia-ingredientes.webp']);
     expect(c.products.every((p) => p.countsAsBox)).toBe(true);
     expect(c.zones.map((z) => [z.name, z.shippingCost, z.minBoxes, z.freeFromBoxes, z.deliveryWeekday, z.deliveryMoment, z.distancePricing])).toEqual([
-      ['Hudson / Plátanos / Ranelagh', 1500, 3, 4, 5, 'a la noche', true],
-      ['Berazategui', 2500, 3, 4, 6, 'a la mañana', true],
-      ['Quilmes / Bernal / Wilde', 4500, 4, 6, 6, 'a la mañana', true],
-      ['CABA', 5000, 5, 6, 6, 'a la mañana', false],
-      ['City Bell / La Plata', 6000, 5, 8, 0, '', true],
+      // envío por cajas (8/10): Hudson y Berazategui fijo; el resto calcula, $ = envío con el pedido mínimo
+      ['Hudson / Plátanos / Ranelagh', 2000, 3, 4, 5, 'a la noche', false],
+      ['Berazategui', 1500, 3, 4, 6, 'a la mañana', false],
+      ['Quilmes / Bernal / Wilde', 6000, 4, 6, 6, 'a la mañana', true],
+      ['CABA', 7500, 5, 8, 6, 'a la mañana', true],
+      ['City Bell / La Plata', 9000, 5, 8, 0, '', true],
     ]);
+    expect(c.zones.filter((z) => z.distancePricing).map((z) => z.tollRoundTrip)).toEqual([16000, 16000, 16000]);
+    expect(c.settings.shippingByBoxes).toEqual({ absorbPerBox: 3500, rounding: 500 });
+    expect((await q<{ pricing_mode: string; fuel_price: number }>(`select pricing_mode, fuel_price from shipping_config`))[0]).toEqual({ pricing_mode: 'boxes', fuel_price: 2080 });
     const zoneOf = (name: string) => c.zones.find((z) => z.id === c.localities.find((l) => l.name === name)!.zoneId)!.name;
     expect(c.localities).toHaveLength(20);
     expect([zoneOf('Ranelagh'), zoneOf('Villa España'), zoneOf('Wilde'), zoneOf('Gonnet')]).toEqual(['Hudson / Plátanos / Ranelagh', 'Berazategui', 'Quilmes / Bernal / Wilde', 'City Bell / La Plata']);

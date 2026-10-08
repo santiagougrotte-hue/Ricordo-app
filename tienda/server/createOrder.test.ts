@@ -2,7 +2,7 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vites
 import type pg from 'pg';
 import { handleCreateOrder, mapDbError, parseInput, type ServerEnv } from './createOrder';
 import type { Query } from './db';
-import { freshDb, TEST_DB } from './testdb';
+import { freshDb, legacyShipping, TEST_DB } from './testdb';
 import { deliveryDateFor } from '../src/lib/delivery';
 import { discountAmount } from '../src/lib/shipping';
 
@@ -62,6 +62,7 @@ describe.skipIf(!TEST_DB)('handleCreateOrder contra Netlify Database (Postgres r
 
   beforeAll(async () => {
     ({ q, pool } = await freshDb());
+    await legacyShipping(q);
     await q(`update store_settings set notify_email = 'duenio@ricordo.com'`);
     await q(`update products set counts_as_box = false where id = $1`, [P3]);
     for (const r of await q<{ id: number; name: string }>(`select id, name from localities`)) locs[r.name] = r.id;
@@ -222,6 +223,32 @@ describe.skipIf(!TEST_DB)('handleCreateOrder contra Netlify Database (Postgres r
     await q(`update shipping_zones set toll_round_trip = 0, avg_orders_per_route = 1 where name = 'Berazategui'`);
     await q(`update products set stock = 20 where id = $1`, [P5]);
     await q(`update shipping_config set pricing_mode = 'bands'`);
+  });
+
+  it('envío por cajas: el viaje (nafta + peaje) menos $3.500 por caja; sin dirección ubicada, estima con el envío del mínimo', async () => {
+    const ors = vi.fn(async (url: string | URL | Request, init?: RequestInit) => {
+      const u = String(url);
+      if (u.includes('/geocode/search')) return Response.json({ features: [{ geometry: { coordinates: [-58.27, -34.72] }, properties: { confidence: 0.9 } }] });
+      if (u.includes('/v2/directions')) return Response.json({ routes: [{ summary: { distance: 13000 } }] }); // 13 km de ida
+      return fakeFetch(url, init);
+    }) as unknown as typeof fetch;
+    await q(`update products set stock = 50 where id = $1`, [P5]);
+    await q(`update shipping_config set pricing_mode = 'boxes', fuel_price = 2080, absorb_per_box = 3500, rounding = 500`);
+    await q(`update shipping_zones set distance_pricing = true, toll_round_trip = 16000, shipping_cost = 6000, free_from_boxes = 6 where name = 'Quilmes / Bernal / Wilde'`);
+    const body = { ...BASE, localityId: locs['Quilmes'], address: 'Mitre 500', postalCode: '1878' };
+    const run2 = (boxes: number, ip: string, b: Record<string, unknown> = body) =>
+      handleCreateOrder({ ...b, items: [{ productId: P5, quantity: boxes }] }, { ...env, ORS_API_KEY: 'ors' }, { query: q, fetch: ors, ip });
+    // viaje: 26 km × 7 l/100 × $2080 + $16000 = $19786 → 4 cajas: 19786 − 14000 = 5786 → $6000; 5 cajas: 2286 → $2500
+    expect((await run2(4, '6.6.6.1')).body).toMatchObject({ ok: true, receipt: { shippingCost: 6000, total: 4 * 8900 + 6000 } });
+    expect((await run2(5, '6.6.6.2')).body).toMatchObject({ ok: true, receipt: { shippingCost: 2500 } });
+    expect((await run2(6, '6.6.6.3')).body).toMatchObject({ ok: true, receipt: { shippingCost: 0 } });
+    // Dirección que no se ubica: viaje estimado = 6000 + 4 × 3500 = 20000 → 5 cajas: 20000 − 17500 = $2500
+    const vague = vi.fn(async (url: string | URL | Request, init?: RequestInit) =>
+      String(url).includes('geocode') ? Response.json({ features: [] }) : fakeFetch(url, init)) as unknown as typeof fetch;
+    const r = await handleCreateOrder({ ...body, address: 'Calle sin número', items: [{ productId: P5, quantity: 5 }] }, { ...env, ORS_API_KEY: 'ors' }, { query: q, fetch: vague, ip: '6.6.6.4' });
+    expect(r.body).toMatchObject({ ok: true, receipt: { shippingCost: 2500 } });
+    await legacyShipping(q);
+    await q(`update products set stock = 20 where id = $1`, [P5]);
   });
 
   it('escalones por km (modo por defecto): 7,5 km de ida → escalón "hasta 10 km" = $2.500; más lejos que todo → último escalón', async () => {

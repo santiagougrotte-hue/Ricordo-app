@@ -1,6 +1,7 @@
 // Envío por distancia (integra la Edge Function "cotizar-envio" del dueño, adaptada a Netlify).
 // Ubica la dirección con OpenRouteService (OpenStreetMap), calcula los km de ida y vuelta desde el origen
-// y arma: envío = (nafta + peaje de la zona) / pedidos promedio por ruta, redondeado hacia arriba.
+// y arma el envío según el modo: escalones por km, (nafta + peaje) / pedidos por ruta, o por cajas
+// (viaje − cajas × lo que absorbe cada caja, redondeado hacia arriba).
 // Si algo falla (sin clave, dirección dudosa, ORS caído) devuelve null y se usa el costo fijo de la zona.
 import type { Query } from './db';
 
@@ -12,15 +13,18 @@ export interface ShippingBand { upToKm: number | null; price: number }
 export interface ShippingConfig {
   originLat: number;
   originLng: number;
-  /** 'bands' = escalones por km (tabla) · 'fuel' = nafta + peaje. */
-  pricingMode: 'bands' | 'fuel';
+  /** 'bands' = escalones por km (tabla) · 'fuel' = nafta + peaje · 'boxes' = viaje menos lo que absorbe cada caja. */
+  pricingMode: 'bands' | 'fuel' | 'boxes';
+  /** Modo por cajas: cuánto del margen de cada caja va a pagar el viaje. */
+  absorbPerBox: number;
   fuelPrice: number;
   consumption100km: number;
   rounding: number;
 }
 
 export const mapShippingConfig = (r: Row): ShippingConfig => ({
-  originLat: Number(r.origin_lat), originLng: Number(r.origin_lng), pricingMode: r.pricing_mode === 'fuel' ? 'fuel' : 'bands',
+  originLat: Number(r.origin_lat), originLng: Number(r.origin_lng),
+  pricingMode: r.pricing_mode === 'fuel' || r.pricing_mode === 'boxes' ? r.pricing_mode : 'bands', absorbPerBox: r.absorb_per_box ?? 0,
   fuelPrice: r.fuel_price, consumption100km: Number(r.consumption_100km), rounding: r.rounding,
 });
 
@@ -36,7 +40,12 @@ export function priceForKm(oneWayKm: number, bands: ShippingBand[]): number | nu
   return sorted.find((b) => b.upToKm === null || oneWayKm <= b.upToKm)?.price ?? null;
 }
 
+/** cost: el envío (escalones / nafta), o en modo por cajas el costo del VIAJE entero (el envío sale de restarle las cajas). */
 export interface DistanceResult { cost: number; km: number; lat: number; lng: number }
+
+/** Costo del viaje ida y vuelta para un solo cliente: nafta + peaje, sin redondear. */
+export const tripCost = (km: number, toll: number, cfg: Pick<ShippingConfig, 'consumption100km' | 'fuelPrice'>) =>
+  Math.round(km * (cfg.consumption100km / 100) * cfg.fuelPrice + toll);
 
 /** Costo a partir de los km ida y vuelta (misma fórmula que la Edge Function). */
 export function costFromKm(km: number, toll: number, avgOrders: number, cfg: ShippingConfig): number {
@@ -127,6 +136,8 @@ export async function distanceFor(
   if (cfg.pricingMode === 'bands') {
     cost = priceForKm(km / 2, await loadBands(deps.query)); // la tabla va en km de ida
     if (cost === null) return null; // más lejos que el último escalón: costo fijo de la zona
+  } else if (cfg.pricingMode === 'boxes') {
+    cost = tripCost(km, row.toll_round_trip, cfg); // create_order le resta lo que absorben las cajas
   } else {
     cost = costFromKm(km, row.toll_round_trip, Number(row.avg_orders_per_route), cfg);
   }

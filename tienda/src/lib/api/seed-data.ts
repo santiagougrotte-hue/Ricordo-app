@@ -195,11 +195,12 @@ export const SEED_PRODUCTS: Product[] = [
 // Igual que netlify/database/migrations/*_localidades-distancia. Costos fijos de ejemplo.
 const Z = { discountPerBox: 5, discountMax: 10, tollRoundTrip: 0, avgOrdersPerRoute: 1 };
 export const SEED_ZONES: ShippingZone[] = [
-  { id: 'zone-0', name: 'Hudson / Plátanos / Ranelagh', shippingCost: 1500, minBoxes: 3, freeFromBoxes: 4, deliveryWeekday: 5, deliveryMoment: 'a la noche', distancePricing: true, ...Z },
-  { id: 'zone-1', name: 'Berazategui', shippingCost: 2500, minBoxes: 3, freeFromBoxes: 4, deliveryWeekday: 6, deliveryMoment: 'a la mañana', distancePricing: true, ...Z },
-  { id: 'zone-2', name: 'Quilmes / Bernal / Wilde', shippingCost: 4500, minBoxes: 4, freeFromBoxes: 6, deliveryWeekday: 6, deliveryMoment: 'a la mañana', distancePricing: true, ...Z },
-  { id: 'zone-3', name: 'CABA', shippingCost: 5000, minBoxes: 5, freeFromBoxes: 6, deliveryWeekday: 6, deliveryMoment: 'a la mañana', distancePricing: false, ...Z },
-  { id: 'zone-4', name: 'City Bell / La Plata', shippingCost: 6000, minBoxes: 5, freeFromBoxes: 8, deliveryWeekday: 0, deliveryMoment: '', distancePricing: true, ...Z },
+  // Igual que la migración envio-por-cajas: Hudson y Berazategui fijo; el resto, por cajas ($ = envío con el pedido mínimo).
+  { id: 'zone-0', name: 'Hudson / Plátanos / Ranelagh', shippingCost: 2000, minBoxes: 3, freeFromBoxes: 4, deliveryWeekday: 5, deliveryMoment: 'a la noche', distancePricing: false, ...Z },
+  { id: 'zone-1', name: 'Berazategui', shippingCost: 1500, minBoxes: 3, freeFromBoxes: 4, deliveryWeekday: 6, deliveryMoment: 'a la mañana', distancePricing: false, ...Z },
+  { id: 'zone-2', name: 'Quilmes / Bernal / Wilde', shippingCost: 6000, minBoxes: 4, freeFromBoxes: 6, deliveryWeekday: 6, deliveryMoment: 'a la mañana', distancePricing: true, ...Z, tollRoundTrip: 16000 },
+  { id: 'zone-3', name: 'CABA', shippingCost: 7500, minBoxes: 5, freeFromBoxes: 8, deliveryWeekday: 6, deliveryMoment: 'a la mañana', distancePricing: true, ...Z, tollRoundTrip: 16000 },
+  { id: 'zone-4', name: 'City Bell / La Plata', shippingCost: 9000, minBoxes: 5, freeFromBoxes: 8, deliveryWeekday: 0, deliveryMoment: '', distancePricing: true, ...Z, tollRoundTrip: 16000 },
 ];
 
 const LOC: [string, string, string][] = [

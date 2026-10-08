@@ -130,8 +130,10 @@ export interface AdminApi {
 export interface ShippingConfig {
   originLat: number;
   originLng: number;
-  /** 'bands' = escalones por km · 'fuel' = nafta + peaje. */
-  pricingMode: 'bands' | 'fuel';
+  /** 'bands' = escalones por km · 'fuel' = nafta + peaje · 'boxes' = viaje menos lo que absorbe cada caja. */
+  pricingMode: 'bands' | 'fuel' | 'boxes';
+  /** Modo por cajas: cuánto del margen de cada caja va a pagar el viaje. */
+  absorbPerBox?: number;
   /** Escalones: hasta X km de ida, $precio. upToKm null = "más lejos". */
   bands?: { upToKm: number | null; price: number }[];
   fuelPrice: number;

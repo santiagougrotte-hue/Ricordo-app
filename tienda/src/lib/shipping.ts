@@ -1,5 +1,6 @@
 // Envío, mínimos y descuentos. Se cuentan CAJAS (solo productos con countsAsBox).
 // Cálculo informativo para el carrito: el definitivo lo hace create_order() en la base, con la misma regla.
+import { money } from './money';
 import type { DeliveryMethod, Locality, Product, ShippingZone, StoreSettings } from './types';
 
 /** "Otra localidad": no está en la lista → se ofrece WhatsApp o retiro. */
@@ -84,13 +85,21 @@ export interface Quote {
   canCheckout: boolean;
   /** Con envío no llega al mínimo, pero sí al de retiro: sugerir retiro. */
   suggestPickup: boolean;
+  /** Envío por cajas: cuánto quedaría el envío con una caja más (null si no aplica o ya es gratis). */
+  nextBoxShipping: number | null;
+}
+
+/** Envío por cajas: viaje − cajas × lo que absorbe cada caja, redondeado hacia arriba. Igual que create_order. */
+export function boxesShipping(trip: number, boxes: number, cfg: { absorbPerBox: number; rounding: number }): number {
+  const rest = Math.max(0, trip - cfg.absorbPerBox * boxes);
+  return Math.ceil(rest / cfg.rounding) * cfg.rounding;
 }
 
 export function quote(method: DeliveryMethod, lookup: ZoneLookup, cart: CartTotals, settings: StoreSettings, distanceCost: number | null = null): Quote {
   const { boxes, subtotal } = cart;
   const pickupOk = settings.pickupEnabled && boxes >= settings.pickupMinBoxes && boxes > 0;
   const base = {
-    method, boxes, discountPct: 0, discount: 0, discountBoxes: 0, discountMax: 0, missingForNextDiscount: null, nextDiscountPct: null, suggestPickup: false,
+    method, boxes, nextBoxShipping: null, discountPct: 0, discount: 0, discountBoxes: 0, discountMax: 0, missingForNextDiscount: null, nextDiscountPct: null, suggestPickup: false,
     freeFromBoxes: null, missingForFree: null, shippingEstimated: false,
   };
   if (method === 'pickup') {
@@ -112,7 +121,16 @@ export function quote(method: DeliveryMethod, lookup: ZoneLookup, cart: CartTota
   // Sin clave de OpenRouteService el costo fijo es el definitivo (no es "aproximado").
   const distanceOn = z.distancePricing && settings.distanceEnabled === true;
   const byDistance = distanceOn && distanceCost !== null;
-  const shippingCost = free ? 0 : byDistance ? distanceCost : z.shippingCost;
+  const perBox = z.distancePricing ? settings.shippingByBoxes : undefined;
+  // Por cajas: sin dirección ubicada, el viaje se estima con el envío del pedido mínimo de la zona.
+  const trip = perBox ? (byDistance ? distanceCost : z.shippingCost + perBox.absorbPerBox * z.minBoxes) : 0;
+  const shippingCost = free ? 0 : perBox ? boxesShipping(trip, boxes, perBox) : byDistance ? distanceCost : z.shippingCost;
+  const freeAt = perBox && perBox.absorbPerBox > 0
+    ? Math.min(z.freeFromBoxes ?? Infinity, Math.ceil(trip / perBox.absorbPerBox))
+    : z.freeFromBoxes;
+  const nextBoxShipping = !perBox || shippingCost === 0 ? null
+    : z.freeFromBoxes !== null && boxes + 1 >= z.freeFromBoxes ? 0
+    : boxesShipping(trip, boxes + 1, perBox);
   let missingForNextDiscount: number | null = null;
   let nextDiscountPct: number | null = null;
   if (z.freeFromBoxes !== null && z.discountPerBox > 0 && pct < z.discountMax) {
@@ -127,7 +145,8 @@ export function quote(method: DeliveryMethod, lookup: ZoneLookup, cart: CartTota
     shippingCost,
     shippingEstimated: !free && distanceOn && !byDistance,
     freeFromBoxes: z.freeFromBoxes,
-    missingForFree: z.freeFromBoxes === null ? null : Math.max(z.freeFromBoxes - boxes, 0),
+    missingForFree: freeAt === null || freeAt === Infinity ? null : Math.max(freeAt - boxes, 0),
+    nextBoxShipping,
     discountPct: pct,
     discount,
     discountBoxes: extra,
@@ -154,6 +173,9 @@ export function cartMessage(q: Quote, lookup: ZoneLookup): string {
   if (q.missingForMin > 0) {
     const pick = q.suggestPickup ? ` O retiralo en Berazategui: con ${cajas(q.boxes)} ya podés.` : '';
     return `Sumá ${cajas(q.missingForMin)} más para hacer tu pedido con envío a ${zone}.${pick}`;
+  }
+  if (q.nextBoxShipping !== null && q.missingForFree !== null && q.missingForFree > 1) {
+    return `Sumá 1 caja más y el envío a ${zone} baja a ${money(q.nextBoxShipping)}. Con ${cajas(q.missingForFree)} más, es gratis.`;
   }
   if (q.missingForFree !== null && q.missingForFree > 0) return `Sumá ${cajas(q.missingForFree)} más y el envío a ${zone} es gratis.`;
   if (q.freeFromBoxes === null) return `Listo para pedir. Envío a ${zone}.`;

@@ -1,9 +1,19 @@
 import { describe, expect, it } from 'vitest';
-import { byPartido, cartMessage, discountAmount, matchTypedLocality, cartTotals, discountPct, findZone as find, OTHER_LOCALITY, quote, type LocalityChoice } from './shipping';
-import { SEED_LOCALITIES, SEED_SETTINGS, SEED_ZONES } from './api/seed-data';
+import { boxesShipping, byPartido, cartMessage, discountAmount, matchTypedLocality, cartTotals, discountPct, findZone as find, OTHER_LOCALITY, quote, type LocalityChoice } from './shipping';
+import { SEED_LOCALITIES, SEED_SETTINGS, SEED_ZONES as REAL_ZONES } from './api/seed-data';
 
+// Estas pruebas se escribieron con los valores anteriores a "envío por cajas" (fijos 1500…6000, CABA fijo).
+const LEGACY: Record<string, { shippingCost: number; freeFromBoxes: number; distancePricing: boolean; tollRoundTrip: number }> = {
+  'Hudson / Plátanos / Ranelagh': { shippingCost: 1500, freeFromBoxes: 4, distancePricing: true, tollRoundTrip: 0 },
+  Berazategui: { shippingCost: 2500, freeFromBoxes: 4, distancePricing: true, tollRoundTrip: 0 },
+  'Quilmes / Bernal / Wilde': { shippingCost: 4500, freeFromBoxes: 6, distancePricing: true, tollRoundTrip: 0 },
+  CABA: { shippingCost: 5000, freeFromBoxes: 6, distancePricing: false, tollRoundTrip: 0 },
+  'City Bell / La Plata': { shippingCost: 6000, freeFromBoxes: 8, distancePricing: true, tollRoundTrip: 0 },
+};
+const SEED_ZONES = REAL_ZONES.map((z) => ({ ...z, ...LEGACY[z.name] }));
 const loc = (name: string) => SEED_LOCALITIES.find((l) => l.name === name)!.id;
 const findZone = (_z: unknown, c: LocalityChoice) => find(SEED_ZONES, SEED_LOCALITIES, c);
+const realZone = (c: LocalityChoice) => find(REAL_ZONES, SEED_LOCALITIES, c);
 
 const caja = (price = 10000, countsAsBox = true) => ({ price, countsAsBox });
 const cart = (boxes: number, extras = 0) =>
@@ -108,4 +118,36 @@ describe('localidad escrita por el cliente', () => {
     expect(matchTypedLocality('Capital Federal', SEED_LOCALITIES)?.name).toBe('CABA');
   });
   it('si no está en la lista → null (no llegamos)', () => expect(matchTypedLocality('Florencio Varela', SEED_LOCALITIES)).toBeNull());
+});
+
+describe('envío por cajas (el viaje lo paga un cliente; cada caja absorbe $3.500)', () => {
+  const S = { ...SEED_SETTINGS, distanceEnabled: true, shippingByBoxes: { absorbPerBox: 3500, rounding: 500 } };
+  const perBox = S.shippingByBoxes;
+  it('viaje − cajas × 3500, redondeado hacia arriba a $500, nunca menos de 0', () => {
+    expect([4, 5, 6].map((b) => boxesShipping(19790, b, perBox))).toEqual([6000, 2500, 0]); // Quilmes
+    expect([5, 6, 7, 8].map((b) => boxesShipping(24740, b, perBox))).toEqual([7500, 4000, 500, 0]); // CABA
+  });
+  it('Quilmes con la dirección medida: 4 cajas $6.000; 5 cajas $2.500; avisa cuánto baja con una caja más', () => {
+    const quilmes = realZone(loc('Quilmes'));
+    const q4 = quote('delivery', quilmes, cart(4), S, 19790);
+    expect(q4).toMatchObject({ shippingCost: 6000, nextBoxShipping: 2500, missingForFree: 2, total: 46000 });
+    expect(cartMessage(q4, quilmes)).toBe('Sumá 1 caja más y el envío a Quilmes / Bernal / Wilde baja a $2.500. Con 2 cajas más, es gratis.');
+    const q5 = quote('delivery', quilmes, cart(5), S, 19790);
+    expect(q5).toMatchObject({ shippingCost: 2500, missingForFree: 1 });
+    expect(cartMessage(q5, quilmes)).toBe('Sumá 1 caja más y el envío a Quilmes / Bernal / Wilde es gratis.');
+    expect(quote('delivery', quilmes, cart(6), S, 19790)).toMatchObject({ shippingCost: 0, discount: 0 });
+  });
+  it('sin dirección ubicada: el viaje se estima con el envío del pedido mínimo de la zona (aprox.)', () => {
+    const caba = realZone(loc('CABA')); // $7.500 con 5 cajas → viaje estimado 7500 + 5 × 3500 = 25000
+    expect(quote('delivery', caba, cart(5), S, null)).toMatchObject({ shippingCost: 7500, shippingEstimated: true });
+    expect(quote('delivery', caba, cart(6), S, null).shippingCost).toBe(4000);
+  });
+  it('las salsas no cuentan como caja para bajar el envío', () => {
+    expect(quote('delivery', realZone(loc('Quilmes')), cart(4, 3), S, 19790).shippingCost).toBe(6000);
+  });
+  it('Hudson y Berazategui: envío fijo hasta el envío gratis', () => {
+    expect(quote('delivery', realZone(loc('Berazategui')), cart(3), S, null)).toMatchObject({ shippingCost: 1500, nextBoxShipping: null });
+    expect(quote('delivery', realZone(loc('Plátanos')), cart(3), S, null).shippingCost).toBe(2000);
+    expect(quote('delivery', realZone(loc('Plátanos')), cart(4), S, null).shippingCost).toBe(0);
+  });
 });

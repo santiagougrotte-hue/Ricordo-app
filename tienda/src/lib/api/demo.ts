@@ -1,6 +1,6 @@
 import type { StoreApi } from './types';
 import type { OrderInput, OrderResult, ShortItem } from '../types';
-import { cartTotals, discountAmount, discountPct, extraBoxes, findZone } from '../shipping';
+import { boxesShipping, cartTotals, discountAmount, discountPct, extraBoxes, findZone } from '../shipping';
 import { normalizePostalCode } from '../postal';
 import { deliveryDateFor, deliveryLabel } from '../delivery';
 import { readDb, writeDb } from './demoDb';
@@ -37,9 +37,11 @@ export function createDemoApi(): StoreApi {
       return { distanceCost: null, km: null };
     },
     async getSettings() {
-      const { notifyEmail: _private, ...pub } = readDb().settings;
+      const db = readDb();
+      const { notifyEmail: _private, ...pub } = db.settings;
       void _private;
-      return pub;
+      const c = db.shippingConfig;
+      return c.pricingMode === 'boxes' ? { ...pub, shippingByBoxes: { absorbPerBox: c.absorbPerBox ?? 0, rounding: c.rounding } } : pub;
     },
     async createOrder(input: OrderInput): Promise<OrderResult> {
       await wait(600);
@@ -77,7 +79,9 @@ export function createDemoApi(): StoreApi {
           return { ok: false, error: { code: 'RC003', message: 'No alcanza el mínimo de cajas', minBoxes: z.minBoxes, missing: z.minBoxes - boxes, pickupMinBoxes: s.pickupEnabled ? s.pickupMinBoxes : null } };
         }
         const free = z.freeFromBoxes !== null && boxes >= z.freeFromBoxes;
-        shipping = free ? 0 : z.shippingCost;
+        const c = db.shippingConfig;
+        const perBox = c.pricingMode === 'boxes' ? { absorbPerBox: c.absorbPerBox ?? 0, rounding: c.rounding } : null;
+        shipping = free ? 0 : z.distancePricing && perBox ? boxesShipping(z.shippingCost + perBox.absorbPerBox * z.minBoxes, boxes, perBox) : z.shippingCost;
         pct = discountPct(z, boxes);
         discount = discountAmount(totals.boxSubtotal, boxes, extraBoxes(z, boxes), pct);
         zoneName = z.name;
