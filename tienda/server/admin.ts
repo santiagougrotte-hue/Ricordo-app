@@ -147,6 +147,18 @@ export async function handleAdmin(req: Request, path: string, env: AdminEnv, dep
       return bad(/unique|duplicate/i.test((e as Error).message) ? 'duplicate slug' : (e as Error).message, 409);
     }
   }
+  if (seg[0] === 'products' && UUID.test(seg[1] ?? '') && !seg[2] && method === 'DELETE') {
+    const [p] = await q<{ active: boolean; orders: number }>(
+      `select active, (select count(*)::int from order_items where product_id = $1) as orders from products where id = $1`, [seg[1]]);
+    if (!p) return bad('Producto inexistente', 404);
+    if (p.active) return bad('Primero ocultalo de la tienda (destildá "Visible en la tienda" y guardá).');
+    if (p.orders > 0) return bad('Este producto ya tiene pedidos: no se puede borrar sin perder el historial. Dejalo oculto.', 409);
+    const media = await q<{ url: string }>(`select url from product_media where product_id = $1`, [seg[1]]);
+    await q(`delete from products where id = $1`, [seg[1]]);
+    const store = await deps.media();
+    await Promise.all(media.map((m) => store.delete(m.url).catch(() => {})));
+    return json({ ok: true });
+  }
   if (seg[0] === 'products' && UUID.test(seg[1] ?? '') && seg[2] === 'stock' && method === 'POST') {
     const b = await body();
     const sets: string[] = [];

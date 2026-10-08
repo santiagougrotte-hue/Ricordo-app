@@ -95,6 +95,9 @@ export function createAdminNetlify(): AdminApi {
     async deleteMedia(_productId, mediaId) {
       await api(`media/${mediaId}`, { method: 'DELETE' });
     },
+    async deleteProduct(productId) {
+      await api(`products/${productId}`, { method: 'DELETE' });
+    },
     async setCover(_productId, mediaId) {
       await post(`media/${mediaId}/cover`);
     },

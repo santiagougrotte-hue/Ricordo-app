@@ -215,6 +215,19 @@ describe.skipIf(!TEST_DB)('API del panel contra Netlify Database (Postgres real)
     expect(r.setCookie).toMatch(/Max-Age=0/);
   });
 
+  it('eliminar producto: solo oculto y sin pedidos; borra sus fotos', async () => {
+    const P4 = '00000000-0000-4000-8000-000000000004';
+    expect((await call('DELETE', `products/${P4}`)).status).toBe(400); // visible: primero ocultarlo
+    await call('POST', `products/${P4}/stock`, { body: { active: false } });
+    await q(`insert into product_media (product_id, url, kind, alt, sort_order, is_cover) values ($1, 'x/borrar.webp', 'photo', '', 0, false)`, [P4]);
+    await media.put('x/borrar.webp', new ArrayBuffer(3), 'image/webp');
+    expect((await call('DELETE', `products/${P4}`)).status).toBe(200);
+    expect(await q(`select 1 from products where id = $1`, [P4])).toHaveLength(0);
+    expect(await q(`select 1 from product_media where product_id = $1`, [P4])).toHaveLength(0);
+    expect(await media.get('x/borrar.webp')).toBeNull();
+    expect((await call('DELETE', `products/${P4}`)).status).toBe(404);
+  });
+
   it('avisos push: clave pública, registro validado, baja y prueba sin celulares', async () => {
     const g = await call('GET', 'push');
     expect(g.status).toBe(200);
@@ -236,6 +249,9 @@ describe.skipIf(!TEST_DB)('migraciones: gusto real cargado', () => {
   it('la tienda muestra cabutia ($11.500), osobuco ($14.000), espinaca ($13.000) y jamón y queso ($11.000), con fotos y video; los ejemplos quedan ocultos', async () => {
     const { q, pool } = await freshDb(false);
     const c = await getCatalog(q);
+    // los productos de ejemplo (ocultos y sin pedidos) se borraron
+    expect(await q(`select 1 from products where not active`)).toHaveLength(0);
+    expect(await q(`select 1 from products where id::text like '00000000-0000-4000-8000-00000000000_'`)).toHaveLength(0);
     expect(c.products.map((p) => p.name)).toEqual(['Cabutia', 'Osobuco', 'Espinaca', 'Jamón y queso']);
     expect(c.products[3]).toMatchObject({ price: 11000, pastaType: 'sorrentinos', featured: true, filling: 'Jamón cocido, muzzarella y queso sardo' });
     expect(c.products[3].media.map((m) => m.url)).toEqual(['/fotos/jamon-queso-mano.webp', '/fotos/jamon-queso-ingredientes.webp']);
@@ -246,8 +262,6 @@ describe.skipIf(!TEST_DB)('migraciones: gusto real cargado', () => {
     expect(c.products[0]).toMatchObject({ price: 11500, unitsPerBox: 12, pastaType: 'sorrentinos', featured: true });
     expect(c.products[0].filling).toBe('Cabutia asada, ajo asado, muzzarella, sardo y almendras picadas');
     expect(c.products[0].media.map((m) => m.url)).toEqual(['/fotos/cabutia-mano.webp', '/fotos/cabutia-corte.webp', '/fotos/amasado-masa-nero.mp4', '/fotos/cabutia-ingredientes.webp']);
-    const [{ n }] = await q<{ n: number }>('select count(*)::int n from products where not active');
-    expect(n).toBe(5);
     expect(c.products.every((p) => p.countsAsBox)).toBe(true);
     expect(c.zones.map((z) => [z.name, z.shippingCost, z.minBoxes, z.freeFromBoxes, z.deliveryWeekday, z.deliveryMoment, z.distancePricing])).toEqual([
       ['Hudson / Plátanos / Ranelagh', 1500, 3, 4, 5, 'a la noche', true],

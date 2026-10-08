@@ -1,7 +1,7 @@
 import { Link } from 'react-router-dom';
 import { useStore } from '../state/store';
 import { money } from '../lib/money';
-import { cutoffShort, cutoffWithDate, deliveryDateFor, deliveryLabel, zoneDay } from '../lib/delivery';
+import { cutoffShort, cutoffWithDate, deliveryDateFor, deliveryLabel } from '../lib/delivery';
 import { HeroLogo } from '../components/HeroLogo';
 import { Icon } from '../components/Icon';
 import { Stamp } from '../components/Stamp';
@@ -15,11 +15,10 @@ import posterAmasado from '../assets/fotos/amasado-masa-nero-poster.webp';
 import { useDocumentTitle } from './useDocumentTitle';
 import { useReveal } from '../motion/useMotion';
 
-const cajas = (n: number) => `${n} ${n === 1 ? 'caja' : 'cajas'}`;
 
 export function Home() {
   useDocumentTitle('Ricordo · Pasta rellena sin TACC en Berazategui');
-  const { products, zones, localities, settings, status, lookup, openPostal } = useStore();
+  const { products, settings, status, lookup, openPostal } = useStore();
   const myZone = lookup.status === 'found' ? lookup.zone : null;
   const featured = products.filter((p) => p.featured).slice(0, 4);
   // Con un solo gusto destacado, la sección se arma como nota editorial alrededor de ese gusto.
@@ -154,36 +153,6 @@ export function Home() {
           <div className="zones-form" data-reveal="rise">
             <LocalityForm />
           </div>
-          <table className="zone-table" data-reveal="rise">
-            <caption className="sr">Zonas de entrega: localidades, día, mínimo de cajas y costo de envío</caption>
-            <thead>
-              <tr><th scope="col">Zona</th><th scope="col">Llega</th><th scope="col">Mínimo</th><th scope="col">Envío</th></tr>
-            </thead>
-            <tbody>
-              {zones.map((z) => (
-                <tr key={z.id}>
-                  <th scope="row">
-                    {z.name}
-                    <span className="cps">{localities.filter((l) => l.zoneId === z.id).map((l) => l.name).join(', ')}</span>
-                  </th>
-                  <td>{zoneDay(z)}</td>
-                  <td>{cajas(z.minBoxes)}</td>
-                  <td>
-                    {z.distancePricing && settings?.distanceEnabled ? 'aprox. ' : ''}{money(z.shippingCost)}
-                    {z.freeFromBoxes !== null && <span className="cps">gratis desde {cajas(z.freeFromBoxes)}</span>}
-                  </td>
-                </tr>
-              ))}
-              {settings?.pickupEnabled && (
-                <tr>
-                  <th scope="row">Retiro en Berazategui<span className="cps">sin restricción de zona</span></th>
-                  <td>A coordinar por WhatsApp</td>
-                  <td>{cajas(settings.pickupMinBoxes)}</td>
-                  <td>Sin cargo</td>
-                </tr>
-              )}
-            </tbody>
-          </table>
           {settings?.shippingBands && settings.shippingBands.length > 0 && (
             <div className="bands" data-reveal="rise">
               <p className="label">Envío según la distancia</p>

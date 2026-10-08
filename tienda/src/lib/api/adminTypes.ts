@@ -99,6 +99,8 @@ export interface AdminApi {
   updateStock(id: string, patch: { stock?: number; lowStockThreshold?: number; active?: boolean }): Promise<void>;
   uploadMedia(productId: string, file: Blob, kind: 'photo' | 'video', alt: string): Promise<void>;
   deleteMedia(productId: string, mediaId: string): Promise<void>;
+  /** Solo productos ocultos y sin pedidos. */
+  deleteProduct(productId: string): Promise<void>;
   setCover(productId: string, mediaId: string): Promise<void>;
   moveMedia(productId: string, mediaId: string, dir: -1 | 1): Promise<void>;
 

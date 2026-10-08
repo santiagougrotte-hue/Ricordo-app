@@ -109,6 +109,16 @@ export function createAdminDemo(): AdminApi {
         throw new Error('Se llenó el espacio del navegador para el modo demo.');
       }
     },
+    async deleteProduct(productId) {
+      const db = readDb();
+      const p = db.products.find((x) => x.id === productId);
+      if (!p) throw new Error('Producto inexistente');
+      if (!db.inactive.includes(productId)) throw new Error('Primero ocultalo de la tienda (destildá "Visible en la tienda" y guardá).');
+      if (db.orders.some((o) => o.items.some((i) => i.productId === productId))) throw new Error('Este producto ya tiene pedidos: no se puede borrar sin perder el historial. Dejalo oculto.');
+      db.products = db.products.filter((x) => x.id !== productId);
+      db.inactive = db.inactive.filter((x) => x !== productId);
+      writeDb(db, { type: 'catalog' });
+    },
     async deleteMedia(productId, mediaId) {
       const { db, p } = product(productId);
       const wasCover = p.media.find((m) => m.id === mediaId)?.isCover;

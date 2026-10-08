@@ -4,7 +4,7 @@ import type { Locality, Product, ShippingZone, StoreSettings } from '../types';
 import { EXAMPLE_IDS, SEED_LOCALITIES, SEED_PRODUCTS, SEED_SETTINGS, SEED_ZONES } from './seed-data';
 import type { AdminOrder, AdminSettings, ShippingConfig } from './adminTypes';
 
-const KEY = 'ricordo-demo-db-v11';
+const KEY = 'ricordo-demo-db-v12';
 const CHANNEL = 'ricordo-demo';
 
 export interface DemoDb {
@@ -21,7 +21,8 @@ export interface DemoDb {
 
 function fresh(): DemoDb {
   return {
-    products: structuredClone(SEED_PRODUCTS),
+    // Igual que la migración borrar-inactivos: los productos de ejemplo ya no están.
+    products: structuredClone(SEED_PRODUCTS.filter((p) => !EXAMPLE_IDS.includes(p.id))),
     zones: structuredClone(SEED_ZONES),
     localities: structuredClone(SEED_LOCALITIES),
     shippingConfig: { originLat: -34.765, originLng: -58.212, pricingMode: 'bands', fuelPrice: 1700, consumption100km: 7, rounding: 500,
@@ -29,7 +30,7 @@ function fresh(): DemoDb {
     settings: { ...(SEED_SETTINGS as StoreSettings), notifyEmail: '' },
     orders: [],
     nextNumber: 1001,
-    inactive: [...EXAMPLE_IDS],
+    inactive: [],
   };
 }
 

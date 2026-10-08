@@ -35,6 +35,18 @@ export function ProductEdit() {
 
   const set = <K extends keyof ProductDraft>(k: K, v: ProductDraft[K]) => setD((x) => ({ ...x, [k]: v }));
 
+  async function remove() {
+    if (!product || !confirm(`¿Eliminar "${product.name}" para siempre? Se borran también sus fotos y videos.`)) return;
+    setBusy(true);
+    try {
+      await adminApi.deleteProduct(product.id);
+      navigate('/admin/productos', { replace: true });
+    } catch (err) {
+      setMsg({ ok: false, text: err instanceof Error ? err.message : 'No se pudo eliminar.' });
+      setBusy(false);
+    }
+  }
+
   async function save(e: FormEvent) {
     e.preventDefault();
     if (d.name.trim().length < 2) return setMsg({ ok: false, text: 'Poné un nombre.' });
@@ -111,6 +123,9 @@ export function ProductEdit() {
         <p className="small muted">Todas las cajas son de 12 unidades.</p>
         {msg && <p className={msg.ok ? 'field-hint' : 'field-error'} role="status">{msg.text}</p>}
         <button type="submit" className="btn btn-ink" disabled={busy}>{busy ? 'Guardando…' : isNew ? 'Crear producto' : 'Guardar cambios'}</button>
+        {product && !product.active && (
+          <button type="button" className="link adm-danger" disabled={busy} onClick={() => void remove()}>Eliminar producto</button>
+        )}
       </form>
 
       {product && (

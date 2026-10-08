@@ -286,12 +286,8 @@ textarea.input { resize: vertical; }
 .cook-note { color: inherit; transform: rotate(-2deg); max-width: 22ch; }
 
 .zones { display: grid; gap: var(--space-10); }
-@media (min-width: 900px) { .zones { grid-template-columns: 1fr 1.3fr; align-items: start; } }
+@media (min-width: 900px) { .zones { grid-template-columns: minmax(0, 40rem); } }
 .zones-form { background: var(--color-surface); border: var(--rule-label) solid var(--color-rule); padding: var(--space-5); }
-.zone-table { width: 100%; border-collapse: collapse; }
-.zone-table th, .zone-table td { text-align: left; padding: var(--space-3) var(--space-2) var(--space-3) 0; border-bottom: 1px dashed var(--color-text-muted); vertical-align: top; }
-.zone-table thead th { font: var(--weight-medium) var(--text-label) / 1 var(--font-label); letter-spacing: var(--tracking-label); text-transform: uppercase; border-bottom: var(--rule-label) solid var(--color-rule); }
-.zone-table tbody th { font: var(--weight-regular) var(--text-body-l) / 1.2 var(--font-display); }
 .cps { display: block; font: var(--weight-regular) var(--text-caption) / 1.4 var(--font-ui); color: var(--color-text-muted); }
 
 /* ── Producto (etiqueta + foto) ───────────────────────── */
@@ -419,7 +415,6 @@ textarea.input { resize: vertical; }
 }
 
 .turnstile:empty { display: none; }
-.zone-table td:nth-child(3) { white-space: nowrap; }
 
 /* ── WhatsApp flotante: siempre a la vista para hacer preguntas ── */
 .wa-fab {
