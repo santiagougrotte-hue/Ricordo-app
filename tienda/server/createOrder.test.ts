@@ -230,28 +230,24 @@ describe.skipIf(!TEST_DB)('handleCreateOrder contra Netlify Database (Postgres r
     await q(`update shipping_config set pricing_mode = 'bands'`);
   });
 
-  it('envío por cajas: el viaje (nafta + peaje) menos $3.500 por caja; sin dirección ubicada, estima con el envío del mínimo', async () => {
-    const ors = vi.fn(async (url: string | URL | Request, init?: RequestInit) => {
-      const u = String(url);
-      if (u.includes('/geocode/search')) return Response.json({ features: [{ geometry: { coordinates: [-58.27, -34.72] }, properties: { confidence: 0.9 } }] });
-      if (u.includes('/v2/directions')) return Response.json({ routes: [{ summary: { distance: 13000 } }] }); // 13 km de ida
-      return fakeFetch(url, init);
-    }) as unknown as typeof fetch;
+  it('envío por localidad: el pedido mínimo paga la mitad del viaje (km y peaje de la localidad) y baja con cada caja hasta el gratis', async () => {
     await q(`update products set stock = 50 where id = $1`, [P5]);
-    await q(`update shipping_config set pricing_mode = 'boxes', fuel_price = 2080, absorb_per_box = 3500, rounding = 500`);
-    await q(`update shipping_zones set distance_pricing = true, toll_round_trip = 16000, shipping_cost = 6000, free_from_boxes = 6 where name = 'Quilmes / Bernal / Wilde'`);
-    const body = { ...BASE, localityId: locs['Quilmes'], address: 'Mitre 500', postalCode: '1878' };
-    const run2 = (boxes: number, ip: string, b: Record<string, unknown> = body) =>
-      handleCreateOrder({ ...b, items: [{ productId: P5, quantity: boxes }] }, { ...env, ORS_API_KEY: 'ors' }, { query: q, fetch: ors, ip });
-    // viaje: 26 km × 7 l/100 × $2080 + $16000 = $19786 → 4 cajas: 19786 − 14000 = 5786 → $6000; 5 cajas: 2286 → $2500
-    expect((await run2(4, '6.6.6.1')).body).toMatchObject({ ok: true, receipt: { shippingCost: 6000, total: 4 * 8900 + 6000 } });
-    expect((await run2(5, '6.6.6.2')).body).toMatchObject({ ok: true, receipt: { shippingCost: 2500 } });
-    expect((await run2(6, '6.6.6.3')).body).toMatchObject({ ok: true, receipt: { shippingCost: 0 } });
-    // Dirección que no se ubica: viaje estimado = 6000 + 4 × 3500 = 20000 → 5 cajas: 20000 − 17500 = $2500
-    const vague = vi.fn(async (url: string | URL | Request, init?: RequestInit) =>
-      String(url).includes('geocode') ? Response.json({ features: [] }) : fakeFetch(url, init)) as unknown as typeof fetch;
-    const r = await handleCreateOrder({ ...body, address: 'Calle sin número', items: [{ productId: P5, quantity: 5 }] }, { ...env, ORS_API_KEY: 'ors' }, { query: q, fetch: vague, ip: '6.6.6.4' });
-    expect(r.body).toMatchObject({ ok: true, receipt: { shippingCost: 2500 } });
+    await q(`update shipping_config set pricing_mode = 'boxes', fuel_price = 2080, consumption_100km = 7, client_share_pct = 50, rounding = 500`);
+    await q(`update shipping_zones set distance_pricing = true, min_fee = 1000, shipping_cost = 6000, min_boxes = 4, free_from_boxes = 6 where name = 'Quilmes / Bernal / Wilde'`);
+    await q(`update localities set km_round_trip = 40, toll_round_trip = 8000 where name = 'Quilmes'`);
+    await q(`update localities set km_round_trip = 28, toll_round_trip = 0 where name = 'Quilmes Oeste'`);
+    const run2 = (locality: string, boxes: number, ip: string) =>
+      handleCreateOrder({ ...BASE, address: '', postalCode: '', localityId: locs[locality], items: [{ productId: P5, quantity: boxes }] }, env, { query: q, fetch: fakeFetch, ip });
+    // Quilmes: 40 km × 7 l/100 × $2080 + $8000 = $13824 → mitad $6912 → $7000; 5 cajas: la mitad → $3500; 6: gratis
+    expect((await run2('Quilmes', 4, '6.6.6.1')).body).toMatchObject({ ok: true, receipt: { shippingCost: 7000, total: 4 * 8900 + 7000 } });
+    expect((await run2('Quilmes', 5, '6.6.6.2')).body).toMatchObject({ ok: true, receipt: { shippingCost: 3500 } });
+    expect((await run2('Quilmes', 6, '6.6.6.3')).body).toMatchObject({ ok: true, receipt: { shippingCost: 0 } });
+    // Quilmes Oeste: 28 km sin peaje → $4077 → mitad $2038 → $2500; 5 cajas: nunca menos que el mínimo → $1500 (2038/2=1019 → 1500)
+    expect((await run2('Quilmes Oeste', 4, '6.6.6.4')).body).toMatchObject({ ok: true, receipt: { shippingCost: 2500 } });
+    expect((await run2('Quilmes Oeste', 5, '6.6.6.5')).body).toMatchObject({ ok: true, receipt: { shippingCost: 1500 } });
+    // Localidad sin km: el envío de la zona ($6000) es el del pedido mínimo
+    await q(`update localities set km_round_trip = null where name = 'Quilmes'`);
+    expect((await run2('Quilmes', 4, '6.6.6.6')).body).toMatchObject({ ok: true, receipt: { shippingCost: 6000 } });
     await legacyShipping(q);
     await q(`update products set stock = 20 where id = $1`, [P5]);
   });

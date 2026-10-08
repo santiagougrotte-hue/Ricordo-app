@@ -13,7 +13,7 @@ function publicSettings(db: ReturnType<typeof readDb>): StoreSettings {
   void _private;
   const c = db.shippingConfig;
   return c.pricingMode === 'boxes'
-    ? { ...pub, shippingByBoxes: { absorbPerBox: c.absorbPerBox ?? 0, rounding: c.rounding, fuelPrice: c.fuelPrice, consumption100km: c.consumption100km } }
+    ? { ...pub, shippingByBoxes: { absorbPerBox: c.absorbPerBox ?? 0, rounding: c.rounding, fuelPrice: c.fuelPrice, consumption100km: c.consumption100km, clientSharePct: c.clientSharePct ?? 50 } }
     : pub;
 }
 

@@ -297,6 +297,9 @@ export async function handleAdmin(req: Request, path: string, env: AdminEnv, dep
     if (int(c.fuelPrice, 1) === null || !(cons > 0 && cons < 100) || int(c.rounding, 1) === null) return bad('Revisá nafta, consumo y redondeo.');
     const mode = c.pricingMode === 'fuel' || c.pricingMode === 'boxes' ? c.pricingMode : 'bands';
     const absorb = c.absorbPerBox === undefined ? null : int(c.absorbPerBox);
+    const share = c.clientSharePct === undefined ? null : int(c.clientSharePct);
+    if (share !== null && share > 100) return bad('El % del viaje va de 0 a 100.');
+    if (c.clientSharePct !== undefined && share === null) return bad('El % del viaje va de 0 a 100.');
     if (c.absorbPerBox !== undefined && absorb === null) return bad('Revisá cuánto absorbés por caja (pesos enteros).');
     // Escalones: km crecientes, precios enteros; el último puede ser "más lejos" (sin km).
     let bands: { upToKm: number | null; price: number }[] | null = null;
@@ -310,8 +313,8 @@ export async function handleAdmin(req: Request, path: string, env: AdminEnv, dep
     }
     const [old] = await q(`select origin_lat, origin_lng from shipping_config limit 1`);
     await q(`update shipping_config set origin_lat=$1, origin_lng=$2, fuel_price=$3, consumption_100km=$4, rounding=$5, pricing_mode=$6,
-             absorb_per_box = coalesce($7, absorb_per_box)`,
-      [lat, lng, c.fuelPrice, Math.round(cons * 10) / 10, c.rounding, mode, absorb]);
+             absorb_per_box = coalesce($7, absorb_per_box), client_share_pct = coalesce($8, client_share_pct)`,
+      [lat, lng, c.fuelPrice, Math.round(cons * 10) / 10, c.rounding, mode, absorb, share]);
     if (bands) {
       await q(`delete from shipping_bands`);
       for (const b of bands) await q(`insert into shipping_bands (up_to_km, price) values ($1, $2)`, [b.upToKm, b.price]);

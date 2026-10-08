@@ -1,17 +1,18 @@
 -- Envío por localidad: cada localidad tiene sus km (ida, aproximados) y su peaje, editables en el panel.
 -- El cliente elige la localidad en el checkout y manda la dirección por WhatsApp después de confirmar.
--- Envío = viaje (km ida y vuelta × consumo × nafta + peaje) − cajas × lo que absorbe cada caja,
--- con un piso (envío mínimo de la zona) hasta llegar al envío gratis.
+-- Envío con el pedido mínimo = la mitad del viaje (km ida y vuelta × consumo × nafta + peaje), con un piso
+-- (envío mínimo de la zona, $1.000). Cada caja extra lo baja en partes iguales hasta el envío gratis de la zona.
 alter table orders drop constraint delivery_needs_address;   -- la dirección llega por WhatsApp
 
 alter table localities
   add column km_round_trip      numeric(5,1) check (km_round_trip is null or km_round_trip >= 0),
   add column toll_round_trip int not null default 0 check (toll_round_trip >= 0);
-alter table shipping_zones add column min_fee int not null default 1500 check (min_fee >= 0);
+alter table shipping_zones add column min_fee int not null default 1000 check (min_fee >= 0);
+-- Qué parte del viaje paga el cliente con el pedido mínimo (el resto lo absorbe el margen).
+alter table shipping_config add column client_share_pct int not null default 50 check (client_share_pct between 0 and 100);
 
--- Todas las zonas calculan por localidad. Envío mínimo: $2.000 Hudson, $1.500 el resto.
+-- Todas las zonas calculan por localidad, con envío mínimo de $1.000.
 update shipping_zones set distance_pricing = true;
-update shipping_zones set min_fee = 2000 where name = 'Hudson / Plátanos / Ranelagh';
 
 update localities set name = 'Berazategui Centro' where name = 'Berazategui' and partido = 'Berazategui';
 update localities set name = 'Quilmes Centro' where name = 'Quilmes' and partido = 'Quilmes';
@@ -110,15 +111,20 @@ begin
       v_shipping := 0;
       v_pct := least(v_zone.discount_max, v_zone.discount_per_box * (v_boxes - v_zone.free_from_boxes));
     elsif v_zone.distance_pricing and v_ship.pricing_mode = 'boxes' then
-      -- Por cajas: el viaje (km y peaje de la localidad) lo paga un cliente y cada caja aporta parte del margen.
-      -- Hasta el envío gratis se cobra al menos el envío mínimo de la zona (para que convenga llegar al gratis).
+      -- Por localidad: con el pedido mínimo el cliente paga una parte del viaje (km y peaje de la localidad);
+      -- cada caja extra lo baja en partes iguales hasta el envío gratis. Nunca menos que el envío mínimo de la zona.
       if v_loc.km_round_trip is not null then
         v_trip := round(v_loc.km_round_trip * v_ship.consumption_100km / 100 * v_ship.fuel_price + v_loc.toll_round_trip)::int;
+        v_trip := greatest(v_zone.min_fee, round(v_trip * v_ship.client_share_pct / 100.0)::int);   -- envío del pedido mínimo
       else
-        v_trip := coalesce(p_distance_cost, v_zone.shipping_cost + v_ship.absorb_per_box * v_zone.min_boxes);
+        v_trip := greatest(v_zone.min_fee, v_zone.shipping_cost);                                    -- sin km: el de la zona
       end if;
-      v_shipping := greatest(v_zone.min_fee,
-        (ceil(greatest(0, v_trip - v_ship.absorb_per_box * v_boxes)::numeric / v_ship.rounding) * v_ship.rounding)::int);
+      if v_zone.free_from_boxes is not null and v_zone.free_from_boxes > v_zone.min_boxes and v_boxes > v_zone.min_boxes then
+        v_shipping := (ceil(greatest(v_zone.min_fee * (v_zone.free_from_boxes - v_zone.min_boxes), v_trip * (v_zone.free_from_boxes - v_boxes))::numeric
+                            / ((v_zone.free_from_boxes - v_zone.min_boxes) * v_ship.rounding)) * v_ship.rounding)::int;
+      else
+        v_shipping := (ceil(v_trip::numeric / v_ship.rounding) * v_ship.rounding)::int;
+      end if;
     elsif v_zone.distance_pricing and p_distance_cost is not null and p_distance_cost >= 0 then
       v_shipping := p_distance_cost;
     else

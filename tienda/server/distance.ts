@@ -17,6 +17,8 @@ export interface ShippingConfig {
   pricingMode: 'bands' | 'fuel' | 'boxes';
   /** Modo por cajas: cuánto del margen de cada caja va a pagar el viaje. */
   absorbPerBox: number;
+  /** Modo por localidad: % del viaje que paga el cliente con el pedido mínimo. */
+  clientSharePct: number;
   fuelPrice: number;
   consumption100km: number;
   rounding: number;
@@ -24,7 +26,7 @@ export interface ShippingConfig {
 
 export const mapShippingConfig = (r: Row): ShippingConfig => ({
   originLat: Number(r.origin_lat), originLng: Number(r.origin_lng),
-  pricingMode: r.pricing_mode === 'fuel' || r.pricing_mode === 'boxes' ? r.pricing_mode : 'bands', absorbPerBox: r.absorb_per_box ?? 0,
+  pricingMode: r.pricing_mode === 'fuel' || r.pricing_mode === 'boxes' ? r.pricing_mode : 'bands', absorbPerBox: r.absorb_per_box ?? 0, clientSharePct: r.client_share_pct ?? 50,
   fuelPrice: r.fuel_price, consumption100km: Number(r.consumption_100km), rounding: r.rounding,
 });
 

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { boxesShipping, byPartido, cartMessage, discountAmount, matchTypedLocality, cartTotals, discountPct, findZone as find, OTHER_LOCALITY, quote, type LocalityChoice } from './shipping';
+import { byPartido, cartMessage, stepShipping, discountAmount, matchTypedLocality, cartTotals, discountPct, findZone as find, OTHER_LOCALITY, quote, type LocalityChoice } from './shipping';
 import { SEED_LOCALITIES, SEED_SETTINGS, SEED_ZONES as REAL_ZONES } from './api/seed-data';
 
 // Estas pruebas se escribieron con los valores anteriores a "envío por cajas" (fijos 1500…6000, CABA fijo).
@@ -120,43 +120,43 @@ describe('localidad escrita por el cliente', () => {
   it('si no está en la lista → null (no llegamos)', () => expect(matchTypedLocality('Florencio Varela', SEED_LOCALITIES)).toBeNull());
 });
 
-describe('envío por localidad y por cajas (cada caja absorbe $3.500; envío mínimo hasta el gratis)', () => {
-  const S = { ...SEED_SETTINGS, shippingByBoxes: { absorbPerBox: 3500, rounding: 500, fuelPrice: 2080, consumption100km: 7 } };
-  const perBox = S.shippingByBoxes;
-  it('viaje − cajas × 3500, redondeado hacia arriba a $500, nunca menos de 0', () => {
-    expect([4, 5, 6].map((b) => boxesShipping(19790, b, perBox))).toEqual([6000, 2500, 0]);
+describe('envío por localidad: con el pedido mínimo, la mitad del viaje; baja con cada caja hasta el gratis', () => {
+  const S = { ...SEED_SETTINGS, shippingByBoxes: { absorbPerBox: 3500, rounding: 500, fuelPrice: 2080, consumption100km: 7, clientSharePct: 50 } };
+  const ship = (name: string, boxes: number) => quote('delivery', realZone(loc(name)), cart(boxes), S).shippingCost;
+  it('cada localidad paga distinto según sus km y su peaje (pedido mínimo)', () => {
+    expect(ship('Berazategui Centro', 3)).toBe(1000); // 8 km → viaje $1.165 → mitad $583 → mínimo $1.000
+    expect(ship('Plátanos', 3)).toBe(1500); // 17 km → $2.475 → $1.238
+    expect(ship('Ezpeleta', 4)).toBe(1000); // 11 km → $1.602 → $801
+    expect(ship('Quilmes Oeste', 4)).toBe(2500); // 28 km → $4.077 → $2.038
+    expect(ship('Quilmes Centro', 4)).toBe(7000); // 40 km + $8.000 → $13.824 → $6.912
+    expect(ship('Avellaneda', 4)).toBe(9500); // 75 km + $8.000 → $18.920 → $9.460
+    expect(ship('CABA', 5)).toBe(12500); // 85 km + $12.000 → $24.376 → $12.188
+    expect(ship('La Plata', 5)).toBe(14000); // 80 km + $16.000 → $27.648 → $13.824
   });
-  it('Avellaneda (75 km ida y vuelta + $8.000 de peaje = viaje $18.920): 4 cajas $5.000; 5 cajas el mínimo $1.500; 6 cajas gratis', () => {
-    const av = realZone(loc('Avellaneda'));
-    const q4 = quote('delivery', av, cart(4), S);
-    expect(q4).toMatchObject({ shippingCost: 5000, nextBoxShipping: 1500, missingForFree: 2, shippingEstimated: false });
-    expect(cartMessage(q4, av)).toBe('Sumá 1 caja más y el envío a Quilmes / Bernal / Wilde baja a $1.500. Con 2 cajas más, es gratis.');
-    const q5 = quote('delivery', av, cart(5), S);
-    expect(q5).toMatchObject({ shippingCost: 1500, missingForFree: 1 });
-    expect(cartMessage(q5, av)).toBe('Sumá 1 caja más y el envío a Quilmes / Bernal / Wilde es gratis.');
-    expect(quote('delivery', av, cart(6), S).shippingCost).toBe(0);
-    // Quilmes Centro (40 km + $8.000 = $13.824): con 4 cajas ya lo cubre el margen → envío mínimo
-    expect(quote('delivery', realZone(loc('Quilmes Centro')), cart(4), S).shippingCost).toBe(1500);
+  it('cada caja extra lo baja en partes iguales hasta el envío gratis', () => {
+    expect([4, 5, 6].map((b) => ship('Quilmes Centro', b))).toEqual([7000, 3500, 0]);
+    expect([5, 6, 7, 8].map((b) => ship('CABA', b))).toEqual([12500, 8500, 4500, 0]);
+    expect([4, 5, 6].map((b) => ship('Quilmes Oeste', b))).toEqual([2500, 1500, 0]); // nunca menos que el mínimo
+    expect([3, 4].map((b) => ship('Berazategui Centro', b))).toEqual([1000, 0]);
   });
-  it('sin peaje el viaje es corto: con el pedido mínimo se cobra el envío mínimo igual, para que convenga llegar al gratis', () => {
-    const qo = realZone(loc('Quilmes Oeste'));
-    const q4 = quote('delivery', qo, cart(4), S);
-    expect(q4.shippingCost).toBe(1500);
-    expect(cartMessage(q4, qo)).toBe('Sumá 2 cajas más y el envío a Quilmes / Bernal / Wilde es gratis.');
-    expect(quote('delivery', realZone(loc('Plátanos')), cart(3), S).shippingCost).toBe(2000); // Hudson: mínimo $2.000
-    expect(quote('delivery', realZone(loc('Berazategui Centro')), cart(3), S).shippingCost).toBe(1500);
-    expect(quote('delivery', realZone(loc('Plátanos')), cart(4), S).shippingCost).toBe(0);
+  it('el carrito avisa cuánto baja con una caja más', () => {
+    const qc = realZone(loc('Quilmes Centro'));
+    const q4 = quote('delivery', qc, cart(4), S);
+    expect(q4).toMatchObject({ shippingCost: 7000, nextBoxShipping: 3500, missingForFree: 2, shippingEstimated: false });
+    expect(cartMessage(q4, qc)).toBe('Sumá 1 caja más y el envío a Quilmes / Bernal / Wilde baja a $3.500. Con 2 cajas más, es gratis.');
+    expect(cartMessage(quote('delivery', qc, cart(5), S), qc)).toBe('Sumá 1 caja más y el envío a Quilmes / Bernal / Wilde es gratis.');
   });
-  it('CABA (85 km ida y vuelta + $12.000 de peaje = $24.376): 5 cajas $7.000, 6 $3.500, 7 el mínimo, 8 gratis', () => {
-    expect([5, 6, 7, 8].map((b) => quote('delivery', realZone(loc('CABA')), cart(b), S).shippingCost)).toEqual([7000, 3500, 1500, 0]);
-  });
-  it('localidad sin km cargados: el viaje se estima con el envío del pedido mínimo de la zona', () => {
+  it('localidad sin km cargados: usa el envío de la zona como envío del pedido mínimo', () => {
     const z = realZone(loc('CABA'));
     if (z.status !== 'found') throw new Error();
-    const sinKm = { ...z, locality: { ...z.locality, kmRoundTrip: null } };
-    expect(quote('delivery', sinKm, cart(5), S).shippingCost).toBe(7500); // 7500 + 5 × 3500 − 5 × 3500
+    expect(quote('delivery', { ...z, locality: { ...z.locality, kmRoundTrip: null } }, cart(5), S).shippingCost).toBe(7500);
   });
   it('las salsas no cuentan como caja para bajar el envío', () => {
-    expect(quote('delivery', realZone(loc('Avellaneda')), cart(4, 3), S).shippingCost).toBe(5000);
+    expect(quote('delivery', realZone(loc('Quilmes Centro')), cart(4, 3), S).shippingCost).toBe(7000);
+  });
+  it('stepShipping: cuentas enteras, sin errores de redondeo', () => {
+    expect(stepShipping(6912, 5, { minBoxes: 4, freeFromBoxes: 6 }, 1000, 500)).toBe(3500);
+    expect(stepShipping(3000, 5, { minBoxes: 4, freeFromBoxes: 6 }, 1000, 500)).toBe(1500);
+    expect(stepShipping(3000, 4, { minBoxes: 4, freeFromBoxes: null }, 1000, 500)).toBe(3000);
   });
 });

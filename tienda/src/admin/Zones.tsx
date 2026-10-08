@@ -4,7 +4,7 @@ import type { ShippingConfig } from '../lib/api/adminTypes';
 import type { Locality, ShippingZone } from '../lib/types';
 import { DAYS } from '../lib/delivery';
 import { money } from '../lib/money';
-import { boxesShipping } from '../lib/shipping';
+import { stepShipping } from '../lib/shipping';
 import { useLoad } from './useLoad';
 
 type Zone = ShippingZone & { active: boolean };
@@ -13,7 +13,7 @@ type Draft = Omit<Zone, 'id'> & { id: string | null };
 
 const NEW: Draft = {
   id: null, name: '', shippingCost: 0, minBoxes: 3, freeFromBoxes: 4, deliveryWeekday: 6, deliveryMoment: 'a la mañana',
-  discountPerBox: 5, discountMax: 10, distancePricing: true, tollRoundTrip: 0, avgOrdersPerRoute: 1, minFee: 1500, active: true,
+  discountPerBox: 5, discountMax: 10, distancePricing: true, tollRoundTrip: 0, avgOrdersPerRoute: 1, minFee: 1000, active: true,
 };
 const MOMENTS = ['a la mañana', 'a la tarde', 'a la noche', ''];
 const cap = (s: string) => s[0].toUpperCase() + s.slice(1);
@@ -272,7 +272,7 @@ function DistanceConfig() {
         <legend className="field-label">Cómo se calcula</legend>
         <label className={c.pricingMode === 'bands' ? 'on' : ''}><input type="radio" name="mode" checked={c.pricingMode === 'bands'} onChange={() => setC({ ...c, pricingMode: 'bands' })} /> Escalones por km</label>
         <label className={c.pricingMode === 'fuel' ? 'on' : ''}><input type="radio" name="mode" checked={c.pricingMode === 'fuel'} onChange={() => setC({ ...c, pricingMode: 'fuel' })} /> Nafta + peaje</label>
-        <label className={c.pricingMode === 'boxes' ? 'on' : ''}><input type="radio" name="mode" checked={c.pricingMode === 'boxes'} onChange={() => setC({ ...c, pricingMode: 'boxes' })} /> Por cajas</label>
+        <label className={c.pricingMode === 'boxes' ? 'on' : ''}><input type="radio" name="mode" checked={c.pricingMode === 'boxes'} onChange={() => setC({ ...c, pricingMode: 'boxes' })} /> Por localidad</label>
       </fieldset>
 
       {c.pricingMode === 'bands' ? (
@@ -295,11 +295,12 @@ function DistanceConfig() {
       ) : c.pricingMode === 'boxes' ? (
         <>
           <p className="small muted">
-            Si en la salida va un solo cliente, el viaje (nafta + peaje de la zona) lo paga ese pedido, pero cada caja aporta una parte de tu margen.
-            Envío = viaje − cajas × lo que absorbés por caja, redondeado hacia arriba. Con suficientes cajas, el envío es gratis.
+            Viaje = km ida y vuelta de la localidad × consumo × nafta + peaje de la localidad. Con el pedido mínimo, el cliente paga el % del viaje
+            que pongas acá (nunca menos que el envío mínimo de la zona); cada caja extra lo baja en partes iguales hasta el envío gratis.
+            Los km y el peaje de cada localidad se cargan en la tabla de Localidades.
           </p>
           <div className="adm-grid2">
-            <div className="field"><label className="field-label" htmlFor="c-ab">Absorbo por caja ($)</label><input id="c-ab" className="input" type="number" min={0} inputMode="numeric" value={c.absorbPerBox ?? 0} onChange={n('absorbPerBox')} /></div>
+            <div className="field"><label className="field-label" htmlFor="c-sh">El cliente paga del viaje (%)</label><input id="c-sh" className="input" type="number" min={0} max={100} inputMode="numeric" value={c.clientSharePct ?? 50} onChange={n('clientSharePct')} /></div>
             <div className="field"><label className="field-label" htmlFor="c-f">Nafta ($ por litro)</label><input id="c-f" className="input" type="number" min={1} inputMode="numeric" value={c.fuelPrice} onChange={n('fuelPrice')} /></div>
             <div className="field"><label className="field-label" htmlFor="c-c">Consumo (litros cada 100 km)</label><input id="c-c" className="input" type="number" min={1} step={0.1} inputMode="decimal" value={c.consumption100km} onChange={n('consumption100km')} /></div>
             <div className="field"><label className="field-label" htmlFor="c-r">Redondear de a ($)</label><input id="c-r" className="input" type="number" min={1} inputMode="numeric" value={c.rounding} onChange={n('rounding')} /></div>
@@ -323,14 +324,16 @@ function DistanceConfig() {
   );
 }
 
-/** Ejemplo en vivo del cálculo por cajas: un viaje de 30 km ida y vuelta con $16.000 de peaje. */
+/** Ejemplo en vivo: Quilmes Centro (40 km ida y vuelta, $8.000 de peaje), mínimo 4 cajas, gratis desde 6. */
 function BoxesExample({ c }: { c: ShippingConfig }) {
-  const trip = Math.round(30 * (c.consumption100km / 100) * c.fuelPrice + 16000);
-  const perBox = { absorbPerBox: c.absorbPerBox ?? 0, rounding: c.rounding || 1 };
+  const trip = Math.round(40 * (c.consumption100km / 100) * c.fuelPrice + 8000);
+  const min = Math.max(1000, Math.round((trip * (c.clientSharePct ?? 50)) / 100));
+  const z = { minBoxes: 4, freeFromBoxes: 6 };
+  const r = c.rounding || 1;
   return (
     <p className="small muted">
-      Ejemplo: viaje de 30 km ida y vuelta con $16.000 de peaje = {money(trip)}.{' '}
-      {[3, 4, 5, 6, 7, 8].map((b) => `${b} cajas → ${boxesShipping(trip, b, perBox) === 0 ? 'gratis' : money(boxesShipping(trip, b, perBox))}`).join(' · ')}.
+      Ejemplo, 40 km ida y vuelta con $8.000 de peaje: viaje {money(trip)}.{' '}
+      {[4, 5, 6].map((b) => { const v = stepShipping(min, b, z, 1000, r); return `${b} cajas → ${v === 0 ? 'gratis' : money(v)}`; }).join(' · ')}.
     </p>
   );
 }

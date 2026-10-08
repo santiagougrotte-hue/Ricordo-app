@@ -89,11 +89,18 @@ export interface Quote {
   nextBoxShipping: number | null;
 }
 
-/** Envío por cajas: viaje − cajas × lo que absorbe cada caja, redondeado hacia arriba. Igual que create_order. */
-export function boxesShipping(trip: number, boxes: number, cfg: { absorbPerBox: number; rounding: number }): number {
-  const rest = Math.max(0, trip - cfg.absorbPerBox * boxes);
-  return Math.ceil(rest / cfg.rounding) * cfg.rounding;
+/**
+ * Envío por localidad: el del pedido mínimo baja en partes iguales con cada caja hasta el envío gratis,
+ * nunca menos que el envío mínimo. Cuentas enteras para que dé igual que create_order.
+ */
+export function stepShipping(minOrder: number, boxes: number, z: Pick<ShippingZone, 'minBoxes' | 'freeFromBoxes'>, floor: number, rounding: number): number {
+  const free = z.freeFromBoxes;
+  if (free !== null && boxes >= free) return 0;
+  if (free === null || free <= z.minBoxes || boxes <= z.minBoxes) return Math.ceil(minOrder / rounding) * rounding;
+  const n = free - z.minBoxes;
+  return Math.ceil(Math.max(floor * n, minOrder * (free - boxes)) / (n * rounding)) * rounding;
 }
+
 
 export function quote(method: DeliveryMethod, lookup: ZoneLookup, cart: CartTotals, settings: StoreSettings, distanceCost: number | null = null): Quote {
   const { boxes, subtotal } = cart;
@@ -122,20 +129,19 @@ export function quote(method: DeliveryMethod, lookup: ZoneLookup, cart: CartTota
   const distanceOn = z.distancePricing && settings.distanceEnabled === true;
   const byDistance = distanceOn && distanceCost !== null;
   const perBox = z.distancePricing ? settings.shippingByBoxes : undefined;
-  // Por cajas: el viaje sale de los km y el peaje de la localidad (igual que create_order).
-  // Sin km cargados, se estima con el envío del pedido mínimo de la zona.
+  // Por localidad (igual que create_order): con el pedido mínimo el cliente paga una parte del viaje
+  // (km y peaje de la localidad); cada caja extra lo baja en partes iguales hasta el envío gratis.
   const loc = lookup.locality;
   const locTrip = perBox && loc.kmRoundTrip != null && perBox.fuelPrice
     ? Math.round(loc.kmRoundTrip * ((perBox.consumption100km ?? 7) / 100) * perBox.fuelPrice + (loc.tollRoundTrip ?? 0))
     : null;
-  const trip = perBox ? (locTrip ?? (byDistance ? distanceCost : z.shippingCost + perBox.absorbPerBox * z.minBoxes)) : 0;
-  // Hasta el envío gratis se cobra al menos el envío mínimo de la zona (así conviene llegar al gratis).
   const floor = z.minFee ?? 0;
-  const byBoxes = (b: number) => Math.max(floor, boxesShipping(trip, b, perBox!));
+  const minOrderShipping = locTrip !== null
+    ? Math.max(floor, Math.round((locTrip * (perBox!.clientSharePct ?? 50)) / 100))
+    : Math.max(floor, z.shippingCost);
+  const byBoxes = (b: number) => (perBox ? stepShipping(minOrderShipping, b, z, floor, perBox.rounding) : 0);
   const shippingCost = free ? 0 : perBox ? byBoxes(boxes) : byDistance ? distanceCost : z.shippingCost;
-  const freeAt = perBox && perBox.absorbPerBox > 0 && floor === 0
-    ? Math.min(z.freeFromBoxes ?? Infinity, Math.ceil(trip / perBox.absorbPerBox))
-    : z.freeFromBoxes;
+  const freeAt = z.freeFromBoxes;
   const nextBoxShipping = !perBox || shippingCost === 0 ? null
     : z.freeFromBoxes !== null && boxes + 1 >= z.freeFromBoxes ? 0
     : byBoxes(boxes + 1);

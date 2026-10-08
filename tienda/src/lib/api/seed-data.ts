@@ -217,10 +217,10 @@ export const SEED_PRODUCTS: Product[] = [
 ];
 
 // Igual que netlify/database/migrations/*_localidades-distancia. Costos fijos de ejemplo.
-const Z = { discountPerBox: 5, discountMax: 10, tollRoundTrip: 0, avgOrdersPerRoute: 1, minFee: 1500 };
+const Z = { discountPerBox: 5, discountMax: 10, tollRoundTrip: 0, avgOrdersPerRoute: 1, minFee: 1000 };
 export const SEED_ZONES: ShippingZone[] = [
   // Igual que las migraciones envio-por-cajas y envio-por-localidad: todas calculan por localidad, con envío mínimo.
-  { id: 'zone-0', name: 'Hudson / Plátanos / Ranelagh', shippingCost: 2000, minBoxes: 3, freeFromBoxes: 4, deliveryWeekday: 5, deliveryMoment: 'a la noche', distancePricing: true, ...Z, minFee: 2000 },
+  { id: 'zone-0', name: 'Hudson / Plátanos / Ranelagh', shippingCost: 2000, minBoxes: 3, freeFromBoxes: 4, deliveryWeekday: 5, deliveryMoment: 'a la noche', distancePricing: true, ...Z },
   { id: 'zone-1', name: 'Berazategui', shippingCost: 1500, minBoxes: 3, freeFromBoxes: 4, deliveryWeekday: 6, deliveryMoment: 'a la mañana', distancePricing: true, ...Z },
   { id: 'zone-2', name: 'Quilmes / Bernal / Wilde', shippingCost: 6000, minBoxes: 4, freeFromBoxes: 6, deliveryWeekday: 6, deliveryMoment: 'a la mañana', distancePricing: true, ...Z, tollRoundTrip: 16000 },
   { id: 'zone-3', name: 'CABA', shippingCost: 7500, minBoxes: 5, freeFromBoxes: 8, deliveryWeekday: 6, deliveryMoment: 'a la mañana', distancePricing: true, ...Z, tollRoundTrip: 16000 },
