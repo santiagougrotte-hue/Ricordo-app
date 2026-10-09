@@ -54,7 +54,7 @@ export function App() {
         {status === 'error' ? (
           <section className="wrap sec">
             <h1 className="d-xl">Se nos cortó la conexión</h1>
-            <p className="lede">No pudimos cargar las cajas. Probá de nuevo en un ratito.</p>
+            <p className="lede">No pudimos cargar los productos. Probá de nuevo en un ratito.</p>
             <button type="button" className="btn btn-yema" onClick={() => void reload()}>Reintentar</button>
           </section>
         ) : (

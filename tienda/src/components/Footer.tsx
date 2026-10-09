@@ -19,7 +19,7 @@ export function Footer() {
         <div>
           <p className="label">Hablemos</p>
           {wa ? <a className="foot-link" href={wa} target="_blank" rel="noopener noreferrer"><Icon name="charla" size={20} /> WhatsApp</a> : <p>Pronto por WhatsApp.</p>}
-          <p><Link className="foot-link" to="/cajas">Ver las cajas</Link></p>
+          <p><Link className="foot-link" to="/cajas">Ver nuestros productos</Link></p>
         </div>
       </div>
       <p className="wrap foot-small">Ricordo · Pasta artesanal sin gluten · Berazategui, Buenos Aires</p>

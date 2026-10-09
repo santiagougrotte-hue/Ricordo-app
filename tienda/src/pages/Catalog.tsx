@@ -8,7 +8,7 @@ import { useReveal } from '../motion/useMotion';
 const TYPES: PastaType[] = ['ravioles', 'sorrentinos', 'cappellacci', 'salsa'];
 
 export function Catalog() {
-  useDocumentTitle('Las cajas · Ricordo');
+  useDocumentTitle('Nuestros productos · Ricordo');
   const { products, status } = useStore();
   const [params, setParams] = useSearchParams();
   const raw = params.get('tipo');
@@ -25,8 +25,8 @@ export function Catalog() {
       <header className="sec-head" data-reveal="rise">
         <span className="sec-n" aria-hidden="true">{String(sorted.length).padStart(2, '0')}</span>
         <div>
-          <h1 id="h-cat" className="d-xl">{active ? PASTA_LABEL[active] : 'Las cajas'}</h1>
-          <p className="lede">Todas de 12 unidades, sin TACC. Se guardan en el freezer hasta 3 meses.</p>
+          <h1 id="h-cat" className="d-xl">{active ? PASTA_LABEL[active] : 'Nuestros productos'}</h1>
+          <p className="lede">Pastas sin TACC en cajas de 12 unidades. Se guardan en el freezer hasta 3 meses.</p>
         </div>
       </header>
       {present.length > 1 && <nav className="filters" aria-label="Filtrar por tipo de pasta">

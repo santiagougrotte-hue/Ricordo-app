@@ -7,7 +7,7 @@ export function NotFound() {
     <section className="wrap sec">
       <h1 className="d-xl">Esta caja no existe</h1>
       <p className="hand">capaz la sacamos del menú…</p>
-      <Link to="/cajas" className="btn btn-yema">Ver las cajas</Link>
+      <Link to="/cajas" className="btn btn-yema">Ver nuestros productos</Link>
     </section>
   );
 }

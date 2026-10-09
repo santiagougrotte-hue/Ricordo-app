@@ -62,9 +62,9 @@ export const ESPINACA: Product = {
   id: '00000000-0000-4000-8000-000000000012',
   slug: 'raviolones-espinaca',
   name: 'Espinaca',
-  pastaType: 'ravioles',
+  pastaType: 'sorrentinos',
   filling: 'Espinaca, ricotta, sardo, muzzarella y nueces picadas',
-  description: 'Raviolones de espinaca, ricotta, queso sardo, muzzarella y nueces picadas. Cada caja trae 12 raviolones.',
+  description: 'Sorrentinos de espinaca, ricotta, queso sardo, muzzarella y nueces picadas. Cada caja trae 12 sorrentinos.',
   unitsPerBox: 12,
   price: 13000,
   stock: 20,
@@ -73,8 +73,8 @@ export const ESPINACA: Product = {
   countsAsBox: true,
   sortOrder: 3,
   media: [
-    { id: 'm-esp-1', url: fotoEspinaca, kind: 'photo', alt: 'Raviolón de espinaca en la mano, sobre la bandeja con el resto de la tanda', isCover: true, sortOrder: 0 },
-    { id: 'm-esp-2', url: fotoEspinacaIng, kind: 'photo', alt: 'Lo que lleva: espinaca, ricotta, sardo, muzzarella y nueces, alrededor de un raviolón', isCover: false, sortOrder: 1 },
+    { id: 'm-esp-1', url: fotoEspinaca, kind: 'photo', alt: 'Sorrentino de espinaca en la mano, sobre la bandeja con el resto de la tanda', isCover: true, sortOrder: 0 },
+    { id: 'm-esp-2', url: fotoEspinacaIng, kind: 'photo', alt: 'Lo que lleva: espinaca, ricotta, sardo, muzzarella y nueces, alrededor de un sorrentino', isCover: false, sortOrder: 1 },
   ],
 };
 

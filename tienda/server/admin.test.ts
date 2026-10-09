@@ -258,7 +258,8 @@ describe.skipIf(!TEST_DB)('migraciones: gusto real cargado', () => {
     expect(c.products.map((p) => p.name)).toEqual(['Cabutia', 'Osobuco', 'Espinaca', 'Jamón y queso', 'Salsa de tomate']);
     expect(c.products[3]).toMatchObject({ price: 11000, pastaType: 'sorrentinos', featured: true, filling: 'Jamón cocido, muzzarella y queso sardo' });
     expect(c.products[3].media.map((m) => m.url)).toEqual(['/fotos/jamon-queso-mano.webp', '/fotos/jamon-queso-ingredientes.webp']);
-    expect(c.products[2]).toMatchObject({ price: 13000, pastaType: 'ravioles', featured: true, filling: 'Espinaca, ricotta, sardo, muzzarella y nueces picadas' });
+    expect(c.products[2]).toMatchObject({ price: 13000, pastaType: 'sorrentinos', featured: true, filling: 'Espinaca, ricotta, sardo, muzzarella y nueces picadas' });
+    expect(c.products[2].description).toBe('Sorrentinos de espinaca, ricotta, queso sardo, muzzarella y nueces picadas. Cada caja trae 12 sorrentinos.');
     expect(c.products[2].media.map((m) => m.url)).toEqual(['/fotos/espinaca-mano.webp', '/fotos/espinaca-ingredientes.webp']);
     expect(c.products[1]).toMatchObject({ price: 14000, unitsPerBox: 12, featured: true, filling: 'Osobuco braseado 4 horas al vino tinto y vermut, con zanahoria, apio y cebolla' });
     expect(c.products[1].media.map((m) => m.url)).toEqual(['/fotos/osobuco-mano.webp', '/fotos/osobuco-ingredientes.webp']);

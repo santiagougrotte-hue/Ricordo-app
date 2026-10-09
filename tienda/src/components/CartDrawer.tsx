@@ -54,7 +54,7 @@ export function CartDrawer() {
         <div className="cart-empty">
           <p className="hand">la caja está vacía…</p>
           <p className="muted">Elegí tus gustos. Cada caja trae 12 unidades.</p>
-          <Link to="/cajas" className="btn btn-yema" onClick={closeCart}>Ver las cajas</Link>
+          <Link to="/cajas" className="btn btn-yema" onClick={closeCart}>Ver nuestros productos</Link>
         </div>
       ) : (
         <>

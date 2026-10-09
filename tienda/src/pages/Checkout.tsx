@@ -59,7 +59,7 @@ export function Checkout() {
       <section className="wrap sec">
         <h1 className="d-xl">Tu pedido está vacío</h1>
         <p className="lede">Sumá alguna caja y volvé.</p>
-        <Link to="/cajas" className="btn btn-yema">Ver las cajas</Link>
+        <Link to="/cajas" className="btn btn-yema">Ver nuestros productos</Link>
       </section>
     );
   }

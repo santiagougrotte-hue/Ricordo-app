@@ -37,7 +37,7 @@ export function Home() {
           <HeroLogo />
           <p className="hero-kicker">Pasta rellena hecha a mano, sin TACC. En cajas de 12, directo a tu freezer.</p>
           <div className="stack-row">
-            <Link to="/cajas" className="btn btn-yema btn-big">Ver las cajas <Icon name="flecha" size={20} /></Link>
+            <Link to="/cajas" className="btn btn-yema btn-big">Ver nuestros productos <Icon name="flecha" size={20} /></Link>
           </div>
         </div>
         <div className="hero-tag">

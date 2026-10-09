@@ -23,7 +23,7 @@ export function Header() {
             <Logo />
           </Link>
           <nav className="head-nav" aria-label="Principal">
-            <NavLink to="/cajas">Las cajas</NavLink>
+            <NavLink to="/cajas">Nuestros productos</NavLink>
             <Link to="/#como-pedir">Cómo pedir</Link>
             <Link to="/#zonas">Zonas</Link>
           </nav>
