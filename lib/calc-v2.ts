@@ -338,6 +338,14 @@ export function diferenciaRepartoPedido(pedido: Pick<Pedido, "costo_envio" | "co
   return Math.round((pedido.costo_real_envio ?? pedido.costo_envio) - pedido.costo_envio);
 }
 
+/** Costo real de envío estimado a partir de los km cargados a mano (pedido manual, sin la web que
+ * ya lo calcula): nafta (km × consumo_100km ÷ 100 × litro_nafta) + peaje. Mismos parámetros que usa
+ * el resto de la app (`configuracion.envios`) — nunca inventa un consumo o precio de nafta propio. */
+export function costoRealEnvioCalculado(data: RicordoDataV2, kmEnvio: number, peajeEnvio: number): number {
+  const litros = (kmEnvio * data.configuracion.envios.consumo_100km) / 100;
+  return Math.round(litros * data.configuracion.envios.litro_nafta + peajeEnvio);
+}
+
 /** "Caja" es el movimiento real de efectivo/banco — no toda `movimientos_financieros` afecta
  * caja: un "Costo Fijo"/"Costo Indirecto"/"Gasto Operativo" es un registro contable para EERR,
  * no necesariamente un pago ya hecho. Solo cuentan acá los movimientos con un origen de caja real

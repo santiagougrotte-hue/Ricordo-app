@@ -33,6 +33,20 @@ export interface Categoria {
 
 /** Cabecera del pedido — antes cada línea de detalle duplicaba fecha/cliente/canal/método de
  * pago; ahora esos datos viven una sola vez por pedido. */
+/** Lista fija de zonas de reparto (nombres exactos — la Sheet de reparto agrupa por estos mismos
+ * textos, ver lib/resumen-sheets.ts). Un pedido sin zona cargada (viejo, o manual sin elegir una)
+ * se agrupa bajo "Otro" en los reportes, nunca se inventa una zona. */
+export const ZONAS_ENTREGA = [
+  "Zona 1 - Cercana",
+  "Zona 2 - Quilmes/Bernal/Wilde",
+  "Zona 3 - CABA",
+  "Zona 4 - La Plata/City Bell",
+  "Viernes - Hudson/Platanos/Ranelagh",
+  "Hurlingham",
+  "Otro",
+] as const;
+export type ZonaEntrega = (typeof ZONAS_ENTREGA)[number];
+
 export interface Pedido {
   id: string;
   fecha: string;
@@ -41,9 +55,19 @@ export interface Pedido {
   canal: Canal;
   metodo_pago?: string;
   descuento: number;
-  /** Zona de entrega — texto libre (no hay catálogo fijo de zonas todavía), usada para agrupar el
-   * reparto en el Resumen para Sheets. Opcional: un pedido viejo sin esto no se inventa ninguna. */
-  zona?: string;
+  /** Motivo de un descuento general del pedido (ej. "5% caja extra", "10% segunda compra") — texto
+   * libre tal como lo manda la web de pedidos; no hay taxonomía fija. */
+  motivo_descuento?: string;
+  /** Zona de entrega (lista fija `ZONAS_ENTREGA`) — la decide la web de pedidos por código postal,
+   * o se elige a mano en un pedido manual. Opcional: un pedido viejo sin esto no se inventa ninguna,
+   * se agrupa como "Otro" en los reportes. */
+  zona?: ZonaEntrega;
+  /** "web" = creado por `crearPedidoDesdeWeb` (tienda online); "manual" = cargado a mano en la app.
+   * Opcional: un pedido sin esto (de antes de este campo) se trata como "manual". */
+  origen?: OrigenPedido;
+  /** id del pedido en la web de pedidos (Supabase) — evita duplicar si la web lo manda dos veces.
+   * Solo pedidos con `origen: "web"` lo tienen. */
+  id_web?: string;
   /** Envío cobrado al cliente — forma parte de la venta (ventas netas), no es un costo. */
   costo_envio: number;
   /** Costo real del envío (combustible/logística) — puede ser distinto de `costo_envio`.
@@ -51,11 +75,19 @@ export interface Pedido {
    * aproximación (mismo comportamiento que antes de que este campo existiera). Al entregar el
    * pedido (Ventas → Pedidos), si esto supera `costo_envio`, se genera un gasto por la diferencia
    * en "Costo Indirecto — Reparto" (una sola vez por pedido, se actualiza si se re-edita después
-   * de entregado) — ver `gastoRepartoPedido` en Ventas.tsx. */
+   * de entregado) — ver `sincronizarEgresoEnvio` en Ventas.tsx. */
   costo_real_envio?: number;
+  /** Kilómetros del reparto — si se cargan y `costo_real_envio` está vacío, el formulario calcula
+   * el costo real solo: km × consumo_100km ÷ 100 × litro_nafta + `peaje_envio`. */
+  km_envio?: number;
+  peaje_envio?: number;
   total: number;
   /** Fecha esperada de cobro (opcional) — permite calcular vencidas y proyectar caja. */
   fecha_vencimiento?: string;
+  /** Estado de pago tal como lo reporta la web de pedidos al crear el pedido (ej. "pagado",
+   * "pendiente") — informativo, independiente del cálculo propio de cobro de la app
+   * (`estadoCobroPedido`, que mira `movimientos_financieros` reales vía Cuentas pendientes). */
+  estado_pago?: string;
   notas?: string;
   adjunto?: Adjunto;
   /** Snapshot de la dirección de entrega tomado al confirmar el pedido — el cliente puede mudarse
@@ -65,6 +97,8 @@ export interface Pedido {
   latitud_entrega?: number;
   longitud_entrega?: number;
 }
+
+export type OrigenPedido = "web" | "manual";
 
 /** Línea de un pedido. `producto_variante_id` puede ser null si la línea vieja no matcheaba
  * ningún producto vigente al migrar (queda marcada en `datos_pendientes_revision`, nunca se
