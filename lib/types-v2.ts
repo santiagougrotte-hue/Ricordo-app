@@ -6,7 +6,7 @@
 // receta desincronizadas, costos fijos/indirectos/operativos que eran la misma cosa clasificada
 // distinto, saldos "de arrastre" sueltos por toda la app).
 
-import type { Adjunto, Cliente, Proveedor, CajaInteligente } from "./types";
+import type { Adjunto, Cliente, Proveedor } from "./types";
 
 export type Canal = "Minorista" | "Mayorista";
 export type EstadoPedido = "Confirmado" | "Produccion" | "Entregado" | "Cancelado";
@@ -41,13 +41,17 @@ export interface Pedido {
   canal: Canal;
   metodo_pago?: string;
   descuento: number;
+  /** Zona de entrega — texto libre (no hay catálogo fijo de zonas todavía), usada para agrupar el
+   * reparto en el Resumen para Sheets. Opcional: un pedido viejo sin esto no se inventa ninguna. */
+  zona?: string;
   /** Envío cobrado al cliente — forma parte de la venta (ventas netas), no es un costo. */
   costo_envio: number;
   /** Costo real del envío (combustible/logística) — puede ser distinto de `costo_envio`.
    * Opcional: si no está cargado, las pantallas de rentabilidad asumen `costo_envio` como
-   * aproximación (mismo comportamiento que antes de que este campo existiera). Nunca genera un
-   * movimiento de caja ni una entrada de costos indirectos aparte — se calcula en vivo desde acá
-   * cada vez que se necesita (EERR, Margen por sabor), así que no puede duplicarse ni desincronizarse. */
+   * aproximación (mismo comportamiento que antes de que este campo existiera). Al entregar el
+   * pedido (Ventas → Pedidos), si esto supera `costo_envio`, se genera un gasto por la diferencia
+   * en "Costo Indirecto — Reparto" (una sola vez por pedido, se actualiza si se re-edita después
+   * de entregado) — ver `gastoRepartoPedido` en Ventas.tsx. */
   costo_real_envio?: number;
   total: number;
   /** Fecha esperada de cobro (opcional) — permite calcular vencidas y proyectar caja. */
@@ -92,10 +96,15 @@ export interface PedidoItem {
 /** Producto base (el "sabor"/familia) — dueño de la receta compartida. Reemplaza el uso de
  * `Producto.id === Producto.id_base` del esquema viejo como forma implícita de marcar "soy la
  * base de mi familia". */
+export type LineaProducto = "Pasta" | "Salsa" | "Pizza" | "Lasaña";
+
 export interface Producto {
   id: string;
   nombre: string;
   categoria_id?: string;
+  /** Clasificación comercial amplia, separada de `categoria_id` (que es libre/por sabor) — para
+   * agrupar el catálogo en el "Resumen para Sheets" y en reportes similares. */
+  linea?: LineaProducto;
   activo: boolean;
   foto?: Adjunto;
 }
@@ -122,15 +131,7 @@ export interface ProductoVariante {
   precio_venta: number;
   activo: boolean;
   gramos_masa_por_caja?: number;
-  gramos_relleno_por_caja?: number;
   tipo_unidad_venta?: TipoUnidadVenta;
-  /** Si esta variante usa un relleno producido aparte (Preparacion) en vez de cargarlo como
-   * insumos directos en su receta compartida — al estar seteado, `gramos_relleno_por_caja` pasa a
-   * significar "consumo de esa preparación por caja", el costeo descuenta ese relleno del stock de
-   * preparaciones (ya producido, con su propio costo) en vez de recalcularlo desde insumos crudos,
-   * y la etapa "relleno" de la receta compartida se ignora en el costeo para no duplicar el costo
-   * (los insumos de esa etapa ya se consumieron/costearon al elaborar el lote de relleno). */
-  preparacion_relleno_id?: string;
 }
 
 // --- Recetas ------------------------------------------------------------------------------------
@@ -273,16 +274,6 @@ export interface Produccion {
   notas?: string;
 }
 
-export interface PlanProduccionMes {
-  id: string;
-  mes: number;
-  anio: number;
-  producto_id: string;
-  cajas_mes: number;
-  cajas_semana: number;
-  fecha_guardado: string;
-}
-
 // --- Entregas y rutas -------------------------------------------------------------------------
 
 export type EstadoRuta = "planificada" | "en_curso" | "completada" | "cancelada";
@@ -358,19 +349,6 @@ export interface MovimientoFinanciero {
   notas?: string;
 }
 
-/** Fusiona Amortizacion + GastoInversion (este último nunca tuvo pantalla ni lógica que lo
- * leyera — ver reporte de migración). */
-export interface Activo {
-  id: string;
-  nombre: string;
-  categoria_id?: string;
-  fecha_compra: string;
-  costo: number;
-  vida_util_meses: number;
-  amortizacion_mensual: number;
-  activo: boolean;
-}
-
 // --- Configuración ---------------------------------------------------------------------------------
 
 /** Sin proveedor real configurado, no se puede geocodificar ni calcular una ruta real — solo se
@@ -442,12 +420,6 @@ export interface Configuracion {
   efectivo_en_mano: number;
   /** `id` de pedido_item confirmados en la conciliación de Caja como intencionalmente sin cobrar. */
   conciliacion_ignorados: string[];
-  caja_inteligente: CajaInteligente;
-  /** Fondo de reposición de maquinaria: plata que se decide reservar A PROPÓSITO para el día que
-   * haya que reponer una máquina — separado por completo de la amortización contable (que es un
-   * gasto económico del EERR, no una salida de caja). Reservar acá es una decisión manual, nunca
-   * automática. */
-  fondo_reposicion: FondoReposicion;
   apariencia: ConfiguracionApariencia;
 }
 
@@ -462,18 +434,6 @@ export interface ConfiguracionApariencia {
    * elegido a mano con el selector de color. */
   acento_preset: string;
   acento_hex: string;
-}
-
-export interface FondoInternoMovimiento {
-  id: string;
-  fecha: string;
-  concepto: string;
-  monto: number;
-}
-
-export interface FondoReposicion {
-  aportes: FondoInternoMovimiento[];
-  usos: FondoInternoMovimiento[];
 }
 
 // --- Pendientes de revisión / legacy -----------------------------------------------------------
@@ -499,104 +459,24 @@ export interface RevisionItem {
   nota_resolucion?: string;
 }
 
-// --- Preparaciones intermedias (rellenos, masas, salsas base) --------------------------------
-// Stock propio, independiente de insumos (materia prima) y de producto_variante (producto
-// terminado vendible) — un tercer tipo de ítem de inventario (ver `TipoItemStock`). Se produce
-// con su propia receta de insumos (PreparacionRecetaItem) y se consume después al elaborar
-// cajas de un producto que la usa (ProductoVariante.preparacion_relleno_id).
-
-export type TipoItemStock = "insumo" | "preparacion" | "producto_variante";
-
-export interface Preparacion {
-  id: string;
-  nombre: string;
-  /** Unidad de stock — "g" o "kg" normalmente, nunca se asume volumen = peso sin esta carga. */
-  unidad: string;
-  controla_stock: boolean;
-  stock_minimo?: number;
-  activo: boolean;
-}
-
-/** Ingredientes para producir `Preparacion.rendimiento_referencia` (en `Preparacion.unidad`) de
- * esta preparación — mismo criterio que `RecetaItem`, pero para una preparación en vez de un
- * producto base. Se escala proporcionalmente al planificar una cantidad distinta. */
-export interface PreparacionRecetaItem {
-  id: string;
-  preparacion_id: string;
-  insumo_id: string;
-  cantidad: number;
-  unidad?: string;
-}
-
-export interface PreparacionReceta {
-  id: string;
-  preparacion_id: string;
-  /** Rendimiento de referencia de las cantidades cargadas en PreparacionRecetaItem — nunca
-   * asumido, se carga a mano (ej. "estas cantidades rinden 5000 g de relleno"). */
-  rendimiento_referencia: number;
-}
-
-/** Un lote físico de preparación ya elaborada — unidad de trazabilidad (de dónde salió, cuándo,
- * con qué costo) y la unidad que `calcularStock`/reservas usan para descontar consumo real. */
-export interface LotePreparacion {
-  id: string;
-  preparacion_id: string;
-  fecha_elaboracion: string;
-  /** Cantidad realmente obtenida (puede diferir de la planificada por cocción/merma) — nunca se
-   * asume igual a lo planificado. */
-  cantidad_obtenida: number;
-  /** Costo total del lote (consumo real de insumos × precio al momento de elaborar), congelado —
-   * no cambia si después sube el precio de un insumo. */
-  costo_total: number;
-  ubicacion?: string;
-  vencimiento?: string;
-  orden_produccion_id?: string;
-  notas?: string;
-}
+// --- Stock reservado -------------------------------------------------------------------------
+export type TipoItemStock = "insumo" | "producto_variante";
 
 export type EstadoReserva = "activa" | "liberada" | "consumida";
 
-/** Cantidad de un ítem de stock comprometida para una orden de producción o un pedido, SIN
- * descontarla todavía del stock físico — `calcularStockDisponible` = físico − reservas activas.
- * Cancelar lo que la originó libera la reserva (nunca se borra, queda como registro); confirmarlo
- * la marca consumida (y ahí sí se genera el movimiento de stock real, una sola vez). */
+/** Cantidad de un ítem de stock comprometida para un pedido, SIN descontarla todavía del stock
+ * físico — `calcularStockDisponible` = físico − reservas activas. Cancelar lo que la originó
+ * libera la reserva (nunca se borra, queda como registro); confirmarlo la marca consumida (y ahí
+ * sí se genera el movimiento de stock real, una sola vez). */
 export interface Reserva {
   id: string;
   item_tipo: TipoItemStock;
   item_id: string;
   cantidad: number;
-  origen_tipo: "orden_produccion" | "pedido";
+  origen_tipo: "pedido";
   origen_id: string;
   estado: EstadoReserva;
   fecha: string;
-}
-
-export type EstadoOrdenProduccion = "pendiente" | "en_elaboracion" | "terminado" | "cancelado";
-
-/** Tablero de producción (Pendiente → En elaboración → Terminado) — reemplaza, para lo que se
- * planifica desde ahora, al log plano `Produccion` (que se conserva tal cual para no romper el
- * historial ya cargado). Cada orden es de una preparación (relleno) o de un producto terminado
- * (cajas), nunca ambos a la vez. */
-export interface OrdenProduccion {
-  id: string;
-  tipo: "preparacion" | "producto_terminado";
-  item_id: string;
-  cantidad_planeada: number;
-  unidad: string;
-  estado: EstadoOrdenProduccion;
-  fecha_prevista: string;
-  fecha_creacion: string;
-  pedidos_asociados?: string[];
-  notas?: string;
-  responsable?: string;
-  /** Se completan solo al confirmar (estado -> terminado). */
-  cantidad_real?: number;
-  fecha_confirmacion?: string;
-  /** Si tipo === "producto_terminado" y la receta usa relleno de una preparación: de qué lote(s)
-   * se consumió, para trazabilidad (Sección 6: "relacioná las cajas con los lotes utilizados"). */
-  lotes_relleno_consumidos?: { lote_id: string; cantidad: number }[];
-  /** Si tipo === "preparacion": el lote que esta orden generó al confirmarse. */
-  lote_generado_id?: string;
 }
 
 export interface RicordoDataV2 {
@@ -617,17 +497,10 @@ export interface RicordoDataV2 {
   compra_items: CompraItem[];
   proveedores: Proveedor[];
   produccion: Produccion[];
-  plan_produccion: PlanProduccionMes[];
-  preparaciones: Preparacion[];
-  preparacion_recetas: PreparacionReceta[];
-  preparacion_receta_items: PreparacionRecetaItem[];
-  lotes_preparacion: LotePreparacion[];
   reservas: Reserva[];
-  ordenes_produccion: OrdenProduccion[];
   rutas_entrega: RutaEntrega[];
   ruta_paradas: RutaParada[];
   movimientos_financieros: MovimientoFinanciero[];
-  activos: Activo[];
   configuracion: Configuracion;
   datos_pendientes_revision: RevisionItem[];
   /** Todo lo que no es seguro descartar pero tampoco tiene un lugar claro en el esquema nuevo
@@ -661,17 +534,10 @@ export function emptyDataV2(): RicordoDataV2 {
     compra_items: [],
     proveedores: [],
     produccion: [],
-    plan_produccion: [],
-    preparaciones: [],
-    preparacion_recetas: [],
-    preparacion_receta_items: [],
-    lotes_preparacion: [],
     reservas: [],
-    ordenes_produccion: [],
     rutas_entrega: [],
     ruta_paradas: [],
     movimientos_financieros: [],
-    activos: [],
     configuracion: {
       envios: {
         litro_nafta: 1200,
@@ -699,17 +565,6 @@ export function emptyDataV2(): RicordoDataV2 {
       saldo_inicial_caja: 0,
       efectivo_en_mano: 0,
       conciliacion_ignorados: [],
-      caja_inteligente: {
-        porcentaje_reinversion: 60,
-        porcentaje_seguridad: 40,
-        asignaciones: [],
-        distribuciones: [],
-        cargas_historicas: [],
-        usos_reinversion: [],
-        usos_seguridad: [],
-        transferencias_fondos: [],
-      },
-      fondo_reposicion: { aportes: [], usos: [] },
       apariencia: { tema: "oscuro", acento_preset: "violeta", acento_hex: "#8b5cf6" },
     },
     datos_pendientes_revision: [],

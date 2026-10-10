@@ -28,7 +28,7 @@ import {
 } from "@/components/ui";
 import { Modal } from "@/components/Modal";
 import { AnaliticaVentasTab } from "./AnaliticaVentas";
-import { fARS, fNum, inPeriod, costoVariante, costoManoDeObraVariante, margenVariante, productosConVariantes, estadoCobroPedido } from "@/lib/calc-v2";
+import { fARS, fNum, inPeriod, costoVariante, costoManoDeObraVariante, margenVariante, productosConVariantes, estadoCobroPedido, diferenciaRepartoPedido } from "@/lib/calc-v2";
 import { geocodificarDireccion } from "@/lib/mapas";
 import type { EstadoCobro } from "@/lib/calc-v2";
 import type { Canal, EstadoPedido, Pedido, PedidoItem, ProductoVariante, Reserva, RicordoDataV2 } from "@/lib/types-v2";
@@ -81,6 +81,7 @@ interface PedidoForm {
   canal: Canal;
   estado: EstadoPedido;
   metodo_pago: string;
+  zona: string;
   costo_envio: number;
   costo_real_envio: number;
   descuento: number;
@@ -95,6 +96,7 @@ function formVacio(): PedidoForm {
     canal: "Minorista",
     estado: "Confirmado",
     metodo_pago: "",
+    zona: "",
     costo_envio: 0,
     costo_real_envio: 0,
     descuento: 0,
@@ -180,6 +182,47 @@ function conMovimientosDeEntrega(
 
   return {
     inventario_movimientos: [...d.inventario_movimientos, ...nuevosMovStock],
+  };
+}
+
+const CATEGORIA_REPARTO = "Costo Indirecto — Reparto";
+
+/** Si el pedido entregado costó de envío más de lo que se cobró, genera (o actualiza, si se vuelve
+ * a guardar después con otros números) un gasto por la diferencia en "Costo Indirecto — Reparto" —
+ * idempotente por pedido_id vía `origen_tipo`/`origen_id` (nunca duplica ni deja un monto viejo
+ * dando vueltas). Si el pedido deja de estar Entregado o la diferencia vuelve a 0, el gasto
+ * generado antes se saca. */
+function conGastoRepartoPedido(
+  d: ReturnType<typeof useStoreV2>["data"],
+  pedido: Pedido
+): Pick<typeof d, "categorias" | "movimientos_financieros"> {
+  const sinReparto = d.movimientos_financieros.filter((m) => !(m.origen_tipo === "pedido_reparto" && m.origen_id === pedido.id));
+  const diferencia = diferenciaRepartoPedido(pedido);
+  if (pedido.estado !== "Entregado" || diferencia <= 0) {
+    return { categorias: d.categorias, movimientos_financieros: sinReparto };
+  }
+  let categorias = d.categorias;
+  let categoria = categorias.find((c) => c.ambito === "financiero" && c.nombre === CATEGORIA_REPARTO);
+  if (!categoria) {
+    categoria = { id: uid("CAT"), nombre: CATEGORIA_REPARTO, ambito: "financiero", activo: true };
+    categorias = [...categorias, categoria];
+  }
+  return {
+    categorias,
+    movimientos_financieros: [
+      ...sinReparto,
+      {
+        id: uid("MOVF"),
+        fecha: pedido.fecha,
+        tipo: "egreso",
+        categoria_id: categoria.id,
+        concepto: `Diferencia de envío — pedido ${pedido.id}${pedido.zona ? ` (${pedido.zona})` : ""}`,
+        monto: diferencia,
+        origen_tipo: "pedido_reparto",
+        origen_id: pedido.id,
+        estado: "confirmado",
+      },
+    ],
   };
 }
 
@@ -287,6 +330,7 @@ function PedidosTab() {
       canal: p.canal,
       estado: p.estado,
       metodo_pago: p.metodo_pago ?? "",
+      zona: p.zona ?? "",
       costo_envio: p.costo_envio,
       costo_real_envio: p.costo_real_envio ?? p.costo_envio,
       descuento: p.descuento,
@@ -412,6 +456,7 @@ function PedidosTab() {
       estado: form.estado,
       canal: form.canal,
       metodo_pago: form.metodo_pago || undefined,
+      zona: form.zona || undefined,
       descuento: form.descuento,
       costo_envio: form.costo_envio,
       costo_real_envio: form.costo_real_envio,
@@ -424,10 +469,11 @@ function PedidosTab() {
       const otrosPedidos = d.pedidos.filter((p) => p.id !== pedidoId);
       const base = { ...d, pedidos: [...otrosPedidos, nuevoPedido], pedido_items: [...otrosItems, ...nuevosItems] };
       const conReservas = { ...base, reservas: reservasActualizadasParaPedido(base, nuevoPedido, nuevosItems) };
+      const conReparto = { ...conReservas, ...conGastoRepartoPedido(conReservas, nuevoPedido) };
       if (nuevoPedido.estado === "Entregado") {
-        return { ...conReservas, ...conMovimientosDeEntrega(conReservas, nuevoPedido, nuevosItems) };
+        return { ...conReparto, ...conMovimientosDeEntrega(conReparto, nuevoPedido, nuevosItems) };
       }
-      return conReservas;
+      return conReparto;
     });
     toast(editando ? "Pedido actualizado" : "Pedido creado");
     if (editando === null) borrarBorradorPedido();
@@ -441,10 +487,11 @@ function PedidosTab() {
       const base = { ...d, pedidos };
       const items = d.pedido_items.filter((i) => i.pedido_id === pedido.id);
       const conReservas = { ...base, reservas: reservasActualizadasParaPedido(base, { ...pedido, estado }, items) };
+      const conReparto = { ...conReservas, ...conGastoRepartoPedido(conReservas, { ...pedido, estado }) };
       if (estado === "Entregado") {
-        return { ...conReservas, ...conMovimientosDeEntrega(conReservas, { ...pedido, estado }, items) };
+        return { ...conReparto, ...conMovimientosDeEntrega(conReparto, { ...pedido, estado }, items) };
       }
-      return conReservas;
+      return conReparto;
     });
     toast(`Estado → ${estado}`);
   }
@@ -456,7 +503,9 @@ function PedidosTab() {
       pedidos: d.pedidos.filter((p) => p.id !== pedido.id),
       pedido_items: d.pedido_items.filter((i) => i.pedido_id !== pedido.id),
       inventario_movimientos: d.inventario_movimientos.filter((m) => !(m.origen_tipo === "pedido" && m.origen_id === pedido.id)),
-      movimientos_financieros: d.movimientos_financieros.filter((m) => !(m.origen_tipo === "venta_pedido" && m.origen_id === pedido.id)),
+      movimientos_financieros: d.movimientos_financieros.filter(
+        (m) => !((m.origen_tipo === "venta_pedido" || m.origen_tipo === "pedido_reparto") && m.origen_id === pedido.id)
+      ),
     }));
     toast("Pedido eliminado", "info");
   }
@@ -615,6 +664,9 @@ function PedidosTab() {
           <Field label="Método de pago">
             <Input value={form.metodo_pago} onChange={(e) => setForm({ ...form, metodo_pago: e.target.value })} />
           </Field>
+          <Field label="Zona de entrega">
+            <Input value={form.zona} onChange={(e) => setForm({ ...form, zona: e.target.value })} placeholder="Ej.: Centro, Zona Sur…" />
+          </Field>
           <Field label="Envío cobrado al cliente">
             <Input
               type="number"
@@ -629,6 +681,12 @@ function PedidosTab() {
           </Field>
           <Field label="Costo real de envío (combustible/logística)">
             <Input type="number" value={form.costo_real_envio} onChange={(e) => setForm({ ...form, costo_real_envio: Number(e.target.value) })} />
+            {form.costo_real_envio > form.costo_envio && (
+              <p className="mt-1 text-[11px] text-orange">
+                Al entregar, la diferencia ({fARS(form.costo_real_envio - form.costo_envio)}) se carga sola como gasto en &ldquo;Costo
+                Indirecto — Reparto&rdquo;.
+              </p>
+            )}
           </Field>
           <Field label="Descuento $ (total del pedido)">
             <Input type="number" value={form.descuento} onChange={(e) => setForm({ ...form, descuento: Number(e.target.value) })} />
@@ -1045,7 +1103,8 @@ function EntregasTab() {
       const base = { ...d, pedidos };
       if (siguiente === "Entregado") {
         const items = d.pedido_items.filter((i) => i.pedido_id === p.id);
-        return { ...base, ...conMovimientosDeEntrega(base, { ...p, estado: siguiente }, items) };
+        const conReparto = { ...base, ...conGastoRepartoPedido(base, { ...p, estado: siguiente }) };
+        return { ...conReparto, ...conMovimientosDeEntrega(conReparto, { ...p, estado: siguiente }, items) };
       }
       return base;
     });

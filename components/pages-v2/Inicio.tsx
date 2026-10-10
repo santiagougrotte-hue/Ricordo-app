@@ -1,9 +1,11 @@
 "use client";
 
 import React, { useMemo, useState } from "react";
-import { ShoppingCart, PackagePlus, Factory, ClipboardList, Receipt } from "lucide-react";
+import { ShoppingCart, PackagePlus, Factory, ClipboardList, Receipt, Truck } from "lucide-react";
 import { useStoreV2 } from "@/lib/store-v2";
 import { useRouter } from "@/lib/nav-context";
+import { useToast } from "@/lib/toast";
+import { uid } from "@/lib/id";
 import { usePeriod, MESES } from "@/lib/period";
 import {
   PageHeader,
@@ -20,7 +22,12 @@ import {
   Alert,
   FilterTabs,
   Select,
+  Field,
+  FormGrid,
+  Input,
+  Button,
 } from "@/components/ui";
+import { Modal } from "@/components/Modal";
 import { GraficoLinea, IndicadorCrecimiento } from "@/components/charts";
 import {
   cmvPeriodo,
@@ -30,16 +37,12 @@ import {
   itemsSinCostoDeterminado,
   fARS,
   fNum,
-  fFechaCorta,
   inPeriod,
   primerDiaMes,
   ultimoDiaMes,
   mesAnterior,
   sumarDias,
-  transferenciasRecientes,
-  FONDO_INTERNO_LABELS,
 } from "@/lib/calc-v2";
-import type { TransferenciaRecienteItem } from "@/lib/calc-v2";
 import {
   pctCambio,
   calcularMetricasVentas,
@@ -49,7 +52,6 @@ import {
   calcularVentasPendientes,
 } from "@/lib/analitica-ventas";
 import { generarResumenInteligente } from "@/lib/resumen-inteligente";
-import { necesidadCajas, stockRestanteLote } from "@/lib/produccion-v2";
 import type { Conclusion } from "@/lib/resumen-inteligente";
 import type { EstadoPedido, Canal } from "@/lib/types-v2";
 
@@ -94,27 +96,51 @@ function FilaConclusion({ conclusion }: { conclusion: Conclusion }) {
   );
 }
 
-function textoTransferencia(item: TransferenciaRecienteItem): { texto: string; kind: "warning" | "success" | "info" } {
-  const origen = FONDO_INTERNO_LABELS[item.origen];
-  const destino = FONDO_INTERNO_LABELS[item.destino];
-  const fecha = fFechaCorta(item.fecha);
-  if (item.es_devolucion) {
-    return { texto: `${fecha} · Devolviste ${fARS(item.monto)} de ${origen} a ${destino} (${item.motivo})`, kind: "success" };
-  }
-  if (item.tipo === "prestamo") {
-    const falta = item.saldo_restante ?? 0;
-    const sufijo = falta > 0 ? ` · Falta devolver ${fARS(falta)} (en ${item.devolver_en})` : "";
-    return { texto: `${fecha} · Sacaste ${fARS(item.monto)} de ${origen} → ${destino} (${item.motivo})${sufijo}`, kind: falta > 0 ? "warning" : "info" };
-  }
-  return { texto: `${fecha} · Moviste ${fARS(item.monto)} de ${origen} → ${destino} (${item.motivo})`, kind: "info" };
-}
+const CATEGORIA_VIAJE_BERAZATEGUI = "Costo Indirecto — Reparto (viaje a Berazategui)";
 
 export function Inicio() {
-  const { data } = useStoreV2();
+  const { data, setData } = useStoreV2();
+  const { toast } = useToast();
   const router = useRouter();
   const { mes, anio } = usePeriod();
   const [canalFiltro, setCanalFiltro] = useState<Canal | "todos">("todos");
   const [metricaEvolucion, setMetricaEvolucion] = useState<MetricaEvolucion>("facturacion");
+  const [viajeModalOpen, setViajeModalOpen] = useState(false);
+  const [viajeForm, setViajeForm] = useState({ monto: 0, fecha: new Date().toISOString().slice(0, 10) });
+
+  function guardarViaje() {
+    if (viajeForm.monto <= 0) {
+      toast("Ingresá un monto mayor a 0", "error");
+      return;
+    }
+    setData((d) => {
+      let categorias = d.categorias;
+      let categoria = categorias.find((c) => c.ambito === "financiero" && c.nombre === CATEGORIA_VIAJE_BERAZATEGUI);
+      if (!categoria) {
+        categoria = { id: uid("CAT"), nombre: CATEGORIA_VIAJE_BERAZATEGUI, ambito: "financiero", activo: true };
+        categorias = [...categorias, categoria];
+      }
+      return {
+        ...d,
+        categorias,
+        movimientos_financieros: [
+          ...d.movimientos_financieros,
+          {
+            id: uid("MOVF"),
+            fecha: viajeForm.fecha,
+            tipo: "egreso",
+            categoria_id: categoria.id,
+            concepto: "Viaje de compra a Berazategui",
+            monto: viajeForm.monto,
+            estado: "confirmado",
+          },
+        ],
+      };
+    });
+    toast("Viaje registrado");
+    setViajeModalOpen(false);
+    setViajeForm({ monto: 0, fecha: new Date().toISOString().slice(0, 10) });
+  }
 
   const desde = primerDiaMes(mes, anio);
   const hasta = ultimoDiaMes(mes, anio);
@@ -190,41 +216,10 @@ export function Inicio() {
     [data]
   );
 
-  // Alertas de producción (Sección 9) — reglas verificables sobre datos reales, nunca una
-  // estimación inventada: faltante de relleno recalculado en vivo sobre cada orden activa, lotes
-  // con vencimiento cargado dentro de 7 días, y pedidos de mañana sin entregar.
-  const alertasRellenoFaltante = useMemo(() => {
-    const resultado: { ordenId: string; nombreVariante: string; nombrePreparacion: string; faltanteG: number }[] = [];
-    for (const orden of data.ordenes_produccion) {
-      if (orden.tipo !== "producto_terminado" || (orden.estado !== "pendiente" && orden.estado !== "en_elaboracion")) continue;
-      const variante = data.producto_variantes.find((v) => v.id === orden.item_id);
-      if (!variante) continue;
-      const necesidad = necesidadCajas(data, variante, orden.cantidad_planeada);
-      if (necesidad.relleno && necesidad.relleno.faltante_g > 0) {
-        const preparacion = data.preparaciones.find((p) => p.id === necesidad.relleno!.preparacion_id);
-        resultado.push({ ordenId: orden.id, nombreVariante: variante.nombre, nombrePreparacion: preparacion?.nombre ?? "(preparación)", faltanteG: necesidad.relleno.faltante_g });
-      }
-    }
-    return resultado;
-  }, [data]);
-
-  const lotesPorVencer = useMemo(() => {
-    const hoy = new Date().toISOString().slice(0, 10);
-    const en7Dias = sumarDias(hoy, 7);
-    return data.lotes_preparacion
-      .filter((l) => l.vencimiento && l.vencimiento <= en7Dias)
-      .map((l) => ({ lote: l, restante: stockRestanteLote(data, l.id), preparacion: data.preparaciones.find((p) => p.id === l.preparacion_id) }))
-      .filter((l) => l.restante > 0);
-  }, [data]);
-
+  // Alerta de pedidos de mañana sin entregar — regla verificable sobre datos reales.
   const pedidosMananaSinEntregar = useMemo(() => {
     const manana = sumarDias(new Date().toISOString().slice(0, 10), 1);
     return data.pedidos.filter((p) => p.fecha === manana && (p.estado === "Confirmado" || p.estado === "Produccion"));
-  }, [data]);
-
-  const transferenciasInicio = useMemo(() => {
-    const hoy = new Date().toISOString().slice(0, 10);
-    return transferenciasRecientes(data, hoy, 15);
   }, [data]);
 
   const clienteNombre = (id: string) => data.clientes.find((c) => c.id === id)?.nombre ?? "—";
@@ -240,7 +235,31 @@ export function Inicio() {
         <QuickActionButton icon={PackagePlus} label="Cargar compra" onClick={() => router.go("operaciones", "compras")} />
         <QuickActionButton icon={Factory} label="Planificar producción" onClick={() => router.go("operaciones", "produccion")} />
         <QuickActionButton icon={ClipboardList} label="Ver pedidos pendientes" onClick={() => router.go("ventas", "pedidos")} />
+        <QuickActionButton icon={Truck} label="Viaje a Berazategui" onClick={() => setViajeModalOpen(true)} />
       </div>
+
+      <Modal
+        open={viajeModalOpen}
+        onClose={() => setViajeModalOpen(false)}
+        title="Viaje de compra a Berazategui"
+        footer={
+          <>
+            <Button variant="ghost" onClick={() => setViajeModalOpen(false)}>
+              Cancelar
+            </Button>
+            <Button onClick={guardarViaje}>Guardar</Button>
+          </>
+        }
+      >
+        <FormGrid>
+          <Field label="Monto">
+            <Input type="number" value={viajeForm.monto} onChange={(e) => setViajeForm({ ...viajeForm, monto: Number(e.target.value) })} />
+          </Field>
+          <Field label="Fecha">
+            <Input type="date" value={viajeForm.fecha} onChange={(e) => setViajeForm({ ...viajeForm, fecha: e.target.value })} />
+          </Field>
+        </FormGrid>
+      </Modal>
 
       <div className="mb-4 flex flex-wrap items-center gap-3">
         <span className="text-[11px] font-semibold uppercase tracking-wide text-text3">Canal</span>
@@ -284,24 +303,6 @@ export function Inicio() {
         </Alert>
       )}
 
-      {alertasRellenoFaltante.map((a) => (
-        <button key={a.ordenId} className="mb-2.5 block w-full text-left" onClick={() => router.go("operaciones", "produccion")}>
-          <Alert kind="danger">
-            Falta {a.nombrePreparacion.toLowerCase().startsWith("relleno") ? a.nombrePreparacion : `relleno de ${a.nombrePreparacion}`} para completar la producción
-            planificada de {a.nombreVariante} — faltan {fNum(a.faltanteG, 0)} g. Tocá para ver la orden en Operaciones → Producción.
-          </Alert>
-        </button>
-      ))}
-
-      {lotesPorVencer.map(({ lote, restante, preparacion }) => (
-        <button key={lote.id} className="mb-2.5 block w-full text-left" onClick={() => router.go("inventario", "preparaciones")}>
-          <Alert kind="warning">
-            Este lote de {preparacion?.nombre ?? "preparación"} ({fNum(restante, 0)} {preparacion?.unidad ?? ""} restantes) se acerca a su
-            vencimiento ({lote.vencimiento}). Tocá para ver el lote en Inventario → Preparaciones.
-          </Alert>
-        </button>
-      ))}
-
       {pedidosMananaSinEntregar.length > 0 && (
         <button className="mb-2.5 block w-full text-left" onClick={() => router.go("ventas", "pedidos")}>
           <Alert kind="warning">
@@ -310,15 +311,6 @@ export function Inicio() {
           </Alert>
         </button>
       )}
-
-      {transferenciasInicio.map((item) => {
-        const { texto, kind } = textoTransferencia(item);
-        return (
-          <button key={item.id} className="mb-2.5 block w-full text-left" onClick={() => router.go("finanzas", "capital/transferencias")}>
-            <Alert kind={kind}>{texto}</Alert>
-          </button>
-        );
-      })}
 
       {resumen.length > 0 && (
         <Card title="Resumen inteligente" className="mb-4">

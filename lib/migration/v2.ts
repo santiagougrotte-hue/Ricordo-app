@@ -11,7 +11,7 @@
 // dos fuentes se contradicen, el dato dudoso se preserva tal cual (o de ambas formas) y se agrega
 // una entrada a `datos_pendientes_revision` explicando por qué — nunca se "corrige solo".
 
-import type { RicordoData, Pedido as PedidoV1, Amortizacion } from "../types";
+import type { RicordoData, Pedido as PedidoV1 } from "../types";
 import {
   emptyDataV2,
   type RicordoDataV2,
@@ -284,7 +284,6 @@ function migrarProductos(
         precio_venta: money(p.precio_venta),
         activo: p.activo,
         gramos_masa_por_caja: p.gramos_masa_por_caja,
-        gramos_relleno_por_caja: p.gramos_relleno_por_caja,
       });
     }
   }
@@ -629,13 +628,13 @@ function migrarInventario(data: RicordoData, agregar: ReturnType<typeof crearRep
   return movimientos;
 }
 
-// --- 8. Finanzas: movimientos_financieros + activos ------------------------------------------------
+// --- 8. Finanzas: movimientos_financieros --------------------------------------------------------
 
 function migrarFinanzas(
   data: RicordoData,
   categorias: ReturnType<typeof crearFabricaCategorias>,
   agregar: ReturnType<typeof crearReporte>["agregar"]
-): { movimientos: MovimientoFinanciero[]; activos: RicordoDataV2["activos"] } {
+): { movimientos: MovimientoFinanciero[] } {
   const movimientos: MovimientoFinanciero[] = [];
 
   for (const m of data.caja_movimientos) {
@@ -697,34 +696,7 @@ function migrarFinanzas(
     });
   }
 
-  const activos: RicordoDataV2["activos"] = [];
-  for (const a of data.amortizaciones) {
-    activos.push({
-      id: a.id,
-      nombre: a.nombre,
-      categoria_id: categorias.obtener("Amortización", "financiero"),
-      fecha_compra: a.fecha_inicio,
-      costo: money(a.precio_total),
-      vida_util_meses: a.meses_totales,
-      amortizacion_mensual: money(cuotaMensual(a)),
-      activo: true,
-    });
-  }
-  if (data.gastos_inversion.length > 0) {
-    agregar("revision_manual", {
-      seccion: "activos",
-      motivo: `${data.gastos_inversion.length} registro(s) de "gastos_inversion" migrados a Activos — este campo no tenía ninguna pantalla ni cálculo que lo leyera en la app vieja, revisar si siguen aplicando.`,
-    });
-    for (const g of data.gastos_inversion) {
-      activos.push({ id: g.id, nombre: g.descripcion, categoria_id: categorias.obtener(`Gasto de Inversión (legacy) — ${g.categoria}`, "financiero"), fecha_compra: g.fecha, costo: money(g.monto), vida_util_meses: 0, amortizacion_mensual: 0, activo: false });
-    }
-  }
-
-  return { movimientos, activos };
-}
-
-function cuotaMensual(a: Amortizacion): number {
-  return a.meses_totales > 0 ? a.precio_total / a.meses_totales : 0;
+  return { movimientos };
 }
 
 // --- Función principal ---------------------------------------------------------------------------
@@ -759,10 +731,9 @@ export function migrarAV2(data: RicordoData): { documento: RicordoDocument; repo
   const inventario_movimientos = migrarInventario(data, agregar);
   contar("inventario_movimientos", inventario_movimientos.length, 0);
 
-  const { movimientos: movimientos_financieros, activos } = migrarFinanzas(data, categorias, agregar);
+  const { movimientos: movimientos_financieros } = migrarFinanzas(data, categorias, agregar);
   const fusionadosFinanzas = data.costos_fijos.length + data.costos_indirectos.length + data.gastos_operativos.length + data.caja_movimientos.length + data.transferencias_internas.length;
   contar("movimientos_financieros", movimientos_financieros.length, fusionadosFinanzas > movimientos_financieros.length ? fusionadosFinanzas - movimientos_financieros.length : 0);
-  contar("activos", activos.length, 0);
 
   const produccion: RicordoDataV2["produccion"] = data.produccion.map((p) => {
     if (!variantesIds.has(p.id_producto)) {
@@ -771,16 +742,6 @@ export function migrarAV2(data: RicordoData): { documento: RicordoDocument; repo
     return { id: p.id, producto_variante_id: p.id_producto, cantidad: p.cantidad, fecha: p.fecha, notas: p.notas };
   });
   contar("produccion", produccion.length, 0);
-
-  const plan_produccion: RicordoDataV2["plan_produccion"] = data.plan_produccion.map((pp) => ({
-    id: pp.id,
-    mes: pp.mes,
-    anio: pp.anio,
-    producto_id: pp.id_base,
-    cajas_mes: pp.cajas_mes,
-    cajas_semana: pp.cajas_semana,
-    fecha_guardado: pp.fecha_guardado,
-  }));
 
   const legacy: Record<string, unknown> = {};
   function esVacio(v: unknown): boolean {
@@ -824,9 +785,7 @@ export function migrarAV2(data: RicordoData): { documento: RicordoDocument; repo
       compra_items,
       proveedores: data.proveedores,
       produccion,
-      plan_produccion,
       movimientos_financieros,
-      activos,
       configuracion: {
         envios: data.config_envios,
         planificacion: data.config_planificacion,
@@ -848,12 +807,6 @@ export function migrarAV2(data: RicordoData): { documento: RicordoDocument; repo
         saldo_inicial_caja: money(data.saldo_anterior_caja?.valor),
         efectivo_en_mano: money(data.efectivo_en_mano),
         conciliacion_ignorados: data.conciliacion_ignorados,
-        // `data` puede venir de un backup crudo más viejo que estos dos campos (agregados
-        // después) — se completan acá en vez de confiar en que ya estén, ver mismo criterio en
-        // store-v2.tsx (comoV2).
-        caja_inteligente: { ...data.caja_inteligente, distribuciones: data.caja_inteligente.distribuciones ?? [], cargas_historicas: data.caja_inteligente.cargas_historicas ?? [] },
-        // No existía en el esquema v1 — arranca vacío, es una decisión manual del usuario.
-        fondo_reposicion: { aportes: [], usos: [] },
         // No existía en el esquema v1 — arranca con el tema oscuro/violeta que ya se venía usando,
         // así la migración no le cambia la apariencia a nadie sin que lo pida.
         apariencia: { tema: "oscuro", acento_preset: "violeta", acento_hex: "#8b5cf6" },

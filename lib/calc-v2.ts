@@ -17,13 +17,11 @@ import type {
   PedidoItem,
   Categoria,
   EtapaReceta,
-  Activo,
   Canal,
   Compra,
   TipoUnidadVenta,
   TipoItemStock,
 } from "./types-v2";
-import type { DistribucionGanancia, FondoInterno, TransferenciaFondo } from "./types";
 import { fARS, fFechaCorta, fNum, fPct, inPeriod, inYear, isAfter } from "./calc";
 
 export { fARS, fFechaCorta, fNum, fPct, inPeriod, inYear, isAfter };
@@ -117,113 +115,15 @@ export function costoManoDeObraVariante(data: RicordoDataV2, varianteId: string)
 // compartida. Sin ese link (`ProductoVariante.preparacion_relleno_id`), nada de lo que sigue
 // cambia ningún costo existente — comportamiento 100% igual al de antes de esta sección.
 
-/** Convierte a gramos SOLO si la unidad es "g" o "kg" (cualquier capitalización/alias simple) —
- * ninguna otra unidad (litro, unidad, etc.) tiene una equivalencia de peso verificable sin un dato
- * adicional, así que devuelve null en vez de inventar una conversión. */
-export function aGramos(cantidad: number, unidad: string): number | null {
-  const u = unidad.trim().toLowerCase();
-  if (u === "g" || u === "gr" || u === "gramo" || u === "gramos") return cantidad;
-  if (u === "kg" || u === "kilo" || u === "kilos") return cantidad * 1000;
-  return null;
-}
-
-export function deGramos(gramos: number, unidadDestino: string): number | null {
-  const u = unidadDestino.trim().toLowerCase();
-  if (u === "g" || u === "gr" || u === "gramo" || u === "gramos") return gramos;
-  if (u === "kg" || u === "kilo" || u === "kilos") return gramos / 1000;
-  return null;
-}
-
-/** Cuánto queda de un lote puntual — suma de todos los movimientos de inventario que lo
- * referencian (el que lo creó, +cantidad_obtenida, más cualquier consumo/merma/ajuste posterior,
- * negativos). Nunca se lee `cantidad_obtenida` sola como "lo que queda". */
-export function stockRestanteLote(data: RicordoDataV2, loteId: string): number {
-  return data.inventario_movimientos.filter((m) => m.lote_id === loteId).reduce((acc, m) => acc + m.cantidad, 0);
-}
-
-export interface LoteConStock {
-  lote: RicordoDataV2["lotes_preparacion"][number];
-  restante: number;
-}
-
-/** Lotes de una preparación con stock > 0, ordenados por vencimiento ascendente (los que vencen
- * antes, primero) — vencimiento sin cargar queda al final, nunca se asume uno. Base para sugerir
- * "usar primero" (FEFO) sin forzarlo: el llamador decide si sigue la sugerencia. */
-export function lotesConStockOrdenados(data: RicordoDataV2, preparacionId: string): LoteConStock[] {
-  return data.lotes_preparacion
-    .filter((l) => l.preparacion_id === preparacionId)
-    .map((lote) => ({ lote, restante: stockRestanteLote(data, lote.id) }))
-    .filter((l) => l.restante > 0)
-    .sort((a, b) => {
-      if (!a.lote.vencimiento && !b.lote.vencimiento) return 0;
-      if (!a.lote.vencimiento) return 1;
-      if (!b.lote.vencimiento) return -1;
-      return a.lote.vencimiento.localeCompare(b.lote.vencimiento);
-    });
-}
-
-/** Costo por kilo "vigente" de una preparación: promedio ponderado por lo que queda de cada lote
- * con stock disponible (refleja qué cuesta ahora mismo lo que hay para usar). Si no queda stock en
- * ningún lote, usa el último lote elaborado (referencia histórica). Si nunca se elaboró ningún
- * lote, null — nunca se inventa un costo. */
-export function costoPromedioPorKgPreparacion(data: RicordoDataV2, preparacionId: string): number | null {
-  const preparacion = data.preparaciones.find((p) => p.id === preparacionId);
-  if (!preparacion) return null;
-  // `restante`/`cantidad_obtenida` están en la unidad de Preparacion (g o kg) — se convierte a kg
-  // explícitamente, nunca se asume gramos.
-  const enKg = (cantidadEnUnidadPreparacion: number) => {
-    const g = aGramos(cantidadEnUnidadPreparacion, preparacion.unidad);
-    return g === null ? null : g / 1000;
-  };
-
-  const conStock = lotesConStockOrdenados(data, preparacionId);
-  if (conStock.length > 0) {
-    let kgTotales = 0;
-    let costoTotal = 0;
-    for (const { lote, restante } of conStock) {
-      const kgRestante = enKg(restante);
-      const kgObtenidos = enKg(lote.cantidad_obtenida);
-      if (kgRestante === null || kgObtenidos === null || kgObtenidos <= 0) continue;
-      const costoPorKgLote = lote.costo_total / kgObtenidos;
-      kgTotales += kgRestante;
-      costoTotal += costoPorKgLote * kgRestante;
-    }
-    return kgTotales > 0 ? costoTotal / kgTotales : null;
-  }
-  const todos = data.lotes_preparacion.filter((l) => l.preparacion_id === preparacionId).sort((a, b) => b.fecha_elaboracion.localeCompare(a.fecha_elaboracion));
-  const ultimo = todos[0];
-  if (!ultimo || ultimo.cantidad_obtenida <= 0) return null;
-  const kgObtenidos = enKg(ultimo.cantidad_obtenida);
-  if (kgObtenidos === null || kgObtenidos <= 0) return null;
-  return ultimo.costo_total / kgObtenidos;
-}
-
-/** Costo del relleno de una variante cuando viene de una preparación vinculada — gramos por caja
- * (ya cargados en la variante) convertidos a costo vía el costo/kg vigente de la preparación.
- * null si falta cualquier dato real (link, gramos, o costo de la preparación) — nunca se inventa
- * un costo de relleno a mitad de camino. */
-export function costoRellenoPreparacionVariante(data: RicordoDataV2, variante: ProductoVariante): number | null {
-  if (!variante.preparacion_relleno_id) return null;
-  const gramosPorCaja = variante.gramos_relleno_por_caja;
-  if (!gramosPorCaja || gramosPorCaja <= 0) return null;
-  const costoPorKg = costoPromedioPorKgPreparacion(data, variante.preparacion_relleno_id);
-  if (costoPorKg === null) return null;
-  return (gramosPorCaja / 1000) * costoPorKg;
-}
-
 export function costoVariante(data: RicordoDataV2, varianteId: string): number {
   const variante = data.producto_variantes.find((v) => v.id === varianteId);
   if (!variante) return 0;
-  // Con una preparación de relleno vinculada: esa etapa se excluye de los insumos directos (ya se
-  // consumió/costeó al elaborar el lote) y se reemplaza por el costo vía preparación — nunca las
-  // dos cosas a la vez, para no duplicar el costo del relleno.
-  const costoRelleno = costoRellenoPreparacionVariante(data, variante);
-  const items = recetaEfectivaVariante(data, variante).filter((item) => costoRelleno === null || item.etapa !== "relleno");
+  const items = recetaEfectivaVariante(data, variante);
   const total = items.reduce((acc, item) => {
     const insumo = data.insumos.find((i) => i.id === item.insumo_id);
     return acc + item.cantidad * (insumo?.precio_actual ?? 0);
   }, 0);
-  return Math.round(total + (costoRelleno ?? 0)) + costoManoDeObraVariante(data, varianteId);
+  return Math.round(total) + costoManoDeObraVariante(data, varianteId);
 }
 
 /** Costo de fabricar exactamente 1 unidad individual del producto base: solo los insumos de masa
@@ -347,48 +247,8 @@ export function totalGastosOperativos(data: RicordoDataV2, mes: number, anio: nu
     .reduce((acc, m) => acc + m.monto, 0);
 }
 
-export function cuotaMensualActivo(a: Activo): number {
-  return a.amortizacion_mensual;
-}
-
-function addMonths(date: Date, months: number): Date {
-  const d = new Date(date);
-  d.setMonth(d.getMonth() + months);
-  return d;
-}
-
-export function activoActivoEnPeriodo(a: Activo, mes: number, anio: number): boolean {
-  const inicio = new Date(a.fecha_compra);
-  const inicioMes = new Date(inicio.getFullYear(), inicio.getMonth(), 1);
-  const fin = addMonths(inicio, a.vida_util_meses);
-  const targetStart = new Date(anio, mes - 1, 1);
-  return targetStart >= inicioMes && targetStart < new Date(fin.getFullYear(), fin.getMonth(), 1);
-}
-
-export function totalAmortizacionesPeriodo(data: RicordoDataV2, mes: number, anio: number): number {
-  return data.activos
-    .filter((a) => a.activo && activoActivoEnPeriodo(a, mes, anio))
-    .reduce((acc, a) => acc + cuotaMensualActivo(a), 0);
-}
-
-/** Amortización acumulada de un activo hasta una fecha de corte — nunca supera su costo, y da 0
- * si la fecha de corte es anterior a la compra. Es un gasto económico (afecta EERR), nunca una
- * salida de caja — no se toca acá, solo se usa para el valor contable del Balance General. */
-export function amortizacionAcumulada(a: Activo, hastaFecha: string): number {
-  const inicio = new Date(`${a.fecha_compra}T00:00:00`);
-  const hasta = new Date(`${hastaFecha}T00:00:00`);
-  if (hasta < inicio) return 0;
-  const mesesTranscurridos = (hasta.getFullYear() - inicio.getFullYear()) * 12 + (hasta.getMonth() - inicio.getMonth()) + 1;
-  const meses = Math.max(0, Math.min(mesesTranscurridos, a.vida_util_meses));
-  return Math.round(Math.min(meses * cuotaMensualActivo(a), a.costo));
-}
-
-export function valorContableActivo(a: Activo, hastaFecha: string): number {
-  return Math.round(a.costo - amortizacionAcumulada(a, hastaFecha)) || 0;
-}
-
 export function costosFijosTotales(data: RicordoDataV2, mes: number, anio: number): number {
-  return totalCostosFijosRecurrentes(data) + totalCostosIndirectosPorTipo(data, mes, anio, "Fijo") + totalAmortizacionesPeriodo(data, mes, anio);
+  return totalCostosFijosRecurrentes(data) + totalCostosIndirectosPorTipo(data, mes, anio, "Fijo");
 }
 
 export function totalCostoEnvio(pedidos: Pedido[]): number {
@@ -470,6 +330,14 @@ export const ORIGENES_CAJA_REAL = [
   "devolucion_prestamo",
 ];
 
+/** Cuánto costó de más (o de menos, si da negativo) el envío de un pedido respecto de lo cobrado
+ * al cliente — nunca inventa el costo real si no está cargado, usa `costo_envio` como aproximación
+ * (mismo criterio que el resto de la app). Un pedido entregado con esto > 0 genera un gasto en
+ * "Costo Indirecto — Reparto" por la diferencia (ver Ventas → Pedidos). */
+export function diferenciaRepartoPedido(pedido: Pick<Pedido, "costo_envio" | "costo_real_envio">): number {
+  return Math.round((pedido.costo_real_envio ?? pedido.costo_envio) - pedido.costo_envio);
+}
+
 /** "Caja" es el movimiento real de efectivo/banco — no toda `movimientos_financieros` afecta
  * caja: un "Costo Fijo"/"Costo Indirecto"/"Gasto Operativo" es un registro contable para EERR,
  * no necesariamente un pago ya hecho. Solo cuentan acá los movimientos con un origen de caja real
@@ -483,60 +351,6 @@ export function saldoCaja(data: RicordoDataV2): number {
       return acc; // transferencia: neutra para el total agregado (entra a una cuenta propia y sale de otra)
     }, 0);
   return (data.configuracion.saldo_inicial_caja ?? 0) + movs;
-}
-
-// --- Punto de equilibrio ---------------------------------------------------------------------------
-
-export function margenContribucionUnitario(data: RicordoDataV2, varianteId: string, precioVenta: number): number {
-  return precioVenta - costoVariante(data, varianteId);
-}
-
-/** Dos indicadores DISTINTOS, nunca se confunden entre sí:
- * - `ventasEquilibrio` (pesos): cuánto hay que facturar para cubrir los costos fijos —
- *   costos fijos / ratio de contribución (margen de contribución como % de las ventas).
- * - `unidadesEquilibrio` (unidades, redondeado hacia arriba): cuántas unidades hay que vender —
- *   costos fijos / margen de contribución promedio POR UNIDAD (en pesos/unidad, no en %). Nunca
- *   se muestran pesos como si fueran unidades — son dos fórmulas distintas a propósito. */
-export function puntoEquilibrio(
-  data: RicordoDataV2,
-  pedidosPeriodo: Pedido[],
-  mes: number,
-  anio: number
-): {
-  ventasEquilibrio: number;
-  unidadesEquilibrio: number;
-  margenPromedioPonderado: number;
-  cfTotal: number;
-  precioPromedioPonderado: number;
-  costoVariableUnitarioPromedio: number;
-  unidadesTotales: number;
-} {
-  const cfTotal = costosFijosTotales(data, mes, anio);
-  const idsPedidos = new Set(pedidosPeriodo.map((p) => p.id));
-  const itemsPeriodo = data.pedido_items.filter((i) => idsPedidos.has(i.pedido_id));
-  const unidadesPorVariante = new Map<string, number>();
-  for (const item of itemsPeriodo) {
-    if (!item.producto_variante_id) continue;
-    unidadesPorVariante.set(item.producto_variante_id, (unidadesPorVariante.get(item.producto_variante_id) ?? 0) + item.cantidad);
-  }
-  let sumaMcxQ = 0;
-  let sumaQ = 0;
-  let sumaPxQ = 0;
-  for (const [varianteId, q] of unidadesPorVariante.entries()) {
-    const variante = data.producto_variantes.find((v) => v.id === varianteId);
-    if (!variante) continue;
-    const mc = margenContribucionUnitario(data, varianteId, variante.precio_venta);
-    sumaMcxQ += mc * q;
-    sumaQ += q;
-    sumaPxQ += variante.precio_venta * q;
-  }
-  const margenPromedioPonderado = sumaQ > 0 ? sumaMcxQ / sumaQ : 0;
-  const ratioContribucion = sumaPxQ > 0 ? sumaMcxQ / sumaPxQ : 0;
-  const ventasEquilibrio = ratioContribucion > 0 ? cfTotal / ratioContribucion : 0;
-  const unidadesEquilibrio = margenPromedioPonderado > 0 ? Math.ceil(cfTotal / margenPromedioPonderado) : 0;
-  const precioPromedioPonderado = sumaQ > 0 ? sumaPxQ / sumaQ : 0;
-  const costoVariableUnitarioPromedio = precioPromedioPonderado - margenPromedioPonderado;
-  return { ventasEquilibrio, unidadesEquilibrio, margenPromedioPonderado, cfTotal, precioPromedioPonderado, costoVariableUnitarioPromedio, unidadesTotales: sumaQ };
 }
 
 // --- Categorías ------------------------------------------------------------------------------------
@@ -608,7 +422,6 @@ export interface Eerr {
   costos_indirectos_variables: EerrLinea;
   gastos_operativos: EerrLinea;
   costos_fijos: EerrLinea;
-  amortizaciones: EerrLinea;
   resultado_operativo: number;
   margen_operativo_pct: number | null;
   otros_ingresos_gastos: EerrLinea;
@@ -794,17 +607,8 @@ export function calcularEerr(data: RicordoDataV2, desde: string, hasta: string, 
     ),
   };
 
-  const amortizaciones: EerrLinea = {
-    total: Math.round(meses.reduce((acc, per) => acc + totalAmortizacionesPeriodo(data, per.mes, per.anio), 0)),
-    registros: meses.flatMap((per) =>
-      data.activos
-        .filter((a) => a.activo && activoActivoEnPeriodo(a, per.mes, per.anio))
-        .map((a) => ({ fecha: `${per.anio}-${String(per.mes).padStart(2, "0")}`, concepto: a.nombre, monto: a.amortizacion_mensual }))
-    ),
-  };
-
   const resultado_operativo =
-    resultado_despues_mano_obra - costos_indirectos_variables.total - gastos_operativos.total - costos_fijos.total - amortizaciones.total;
+    resultado_despues_mano_obra - costos_indirectos_variables.total - gastos_operativos.total - costos_fijos.total;
   const margen_operativo_pct = margenSeguro(resultado_operativo, ventas_netas);
 
   // Sin fuente de datos todavía — nunca se inventa un valor, quedan en cero hasta que exista un
@@ -834,7 +638,6 @@ export function calcularEerr(data: RicordoDataV2, desde: string, hasta: string, 
     costos_indirectos_variables,
     gastos_operativos,
     costos_fijos,
-    amortizaciones,
     resultado_operativo,
     margen_operativo_pct,
     otros_ingresos_gastos,
@@ -860,8 +663,6 @@ export interface EerrEstructurado {
   mano_de_obra_directa: EerrLinea;
   resultado_despues_mano_obra: number;
   gastos_adm_comerc: EerrLinea;
-  resultado_antes_amort_int_impuestos: number;
-  amortizaciones: EerrLinea;
   resultado_antes_intereses_impuestos: number;
   intereses: EerrLinea;
   resultado_antes_impuestos: number;
@@ -870,11 +671,11 @@ export interface EerrEstructurado {
   resultado_neto: number;
 }
 
-/** Sección 33/imagen de referencia: VENTAS / (CMV) / R.bruto / (Gastos adm,comerc.) / R.antes de
- * Amortiz,Int e impuestos / (Amortizaciones) / Resultado antes de Intereses e impuestos /
- * (Intereses) / Resultado antes de Impuestos / (IIGG) % / Resultado Neto — exactamente esas 11
- * líneas, en ese orden. "Gastos adm,comerc." consolida costos indirectos variables + costos fijos
- * + gastos operativos (que calcularEerr ya muestra por separado para quien prefiera ese detalle). */
+/** Sección 33/imagen de referencia, sin la línea de Amortizaciones (se sacó de la app): VENTAS /
+ * (CMV) / R.bruto / (Gastos adm,comerc.) / Resultado antes de Intereses e impuestos / (Intereses) /
+ * Resultado antes de Impuestos / (IIGG) % / Resultado Neto. "Gastos adm,comerc." consolida costos
+ * indirectos variables + costos fijos + gastos operativos (que calcularEerr ya muestra por
+ * separado para quien prefiera ese detalle). */
 export function calcularEerrEstructurado(data: RicordoDataV2, desde: string, hasta: string, canal?: Canal): EerrEstructurado {
   const eerr = calcularEerr(data, desde, hasta, canal);
 
@@ -882,8 +683,7 @@ export function calcularEerrEstructurado(data: RicordoDataV2, desde: string, has
     total: eerr.costos_indirectos_variables.total + eerr.gastos_operativos.total + eerr.costos_fijos.total,
     registros: [...eerr.costos_indirectos_variables.registros, ...eerr.gastos_operativos.registros, ...eerr.costos_fijos.registros],
   };
-  const resultado_antes_amort_int_impuestos = eerr.resultado_despues_mano_obra - gastos_adm_comerc.total;
-  const resultado_antes_intereses_impuestos = resultado_antes_amort_int_impuestos - eerr.amortizaciones.total;
+  const resultado_antes_intereses_impuestos = eerr.resultado_despues_mano_obra - gastos_adm_comerc.total;
 
   const movsIntereses = data.movimientos_financieros.filter(
     (m) => nombreCategoria(data, m.categoria_id).startsWith("Gastos Financieros — ") && m.fecha >= desde && m.fecha <= hasta
@@ -906,8 +706,6 @@ export function calcularEerrEstructurado(data: RicordoDataV2, desde: string, has
     mano_de_obra_directa: eerr.mano_de_obra_directa,
     resultado_despues_mano_obra: eerr.resultado_despues_mano_obra,
     gastos_adm_comerc,
-    resultado_antes_amort_int_impuestos,
-    amortizaciones: eerr.amortizaciones,
     resultado_antes_intereses_impuestos,
     intereses,
     resultado_antes_impuestos,
@@ -917,47 +715,101 @@ export function calcularEerrEstructurado(data: RicordoDataV2, desde: string, has
   };
 }
 
-export interface RentabilidadEnvioPedido {
+// --- Margen por ítem ---------------------------------------------------------------------------
+// Base reutilizada por Analítica de Ventas (lib/analitica-ventas.ts) para sus propias métricas de
+// ventas (facturación, cajas por canal/gusto, evolución mensual) — no es exclusivo de ninguna
+// pantalla de rentabilidad. El margen de contribución de acá NUNCA resta costos fijos ni
+// amortización (eso se muestra en el EERR) — es puramente ventas netas − CMV − costo real de
+// envío − comisiones − otros costos variables. "Comisiones del medio de pago" y "otros costos
+// variables" no tienen ninguna fuente de datos en el esquema todavía: quedan siempre en $0, igual
+// que Otros ingresos/gastos e Impuestos en el EERR — nunca se inventa un valor.
+
+export type CriterioEnvioPedido = "ventas" | "unidades";
+
+export interface MargenItemDetalle {
   pedido_id: string;
+  item_id: string;
   fecha: string;
-  cliente_nombre: string;
-  ingreso_envio: number;
-  costo_real_envio: number;
-  resultado: number;
+  producto_id: string | null;
+  producto_nombre: string;
+  variante_id: string | null;
+  variante_nombre: string;
+  canal: Canal;
+  presentacion: string;
+  cantidad: number;
+  ventas_brutas: number;
+  descuento: number;
+  costo_envio: number;
+  comisiones: number;
+  cmv: number;
+  ventas_netas: number;
+  margen_contribucion: number;
+  margen_pct: number | null;
+  /** Del `ProductoVariante.tipo_unidad_venta` — "caja" por default si no está cargado (ver el tipo
+   * en types-v2.ts). Usado por Analítica de Ventas para no contar salsa/complementos como cajas. */
+  tipo_unidad_venta: TipoUnidadVenta;
 }
 
-export interface RentabilidadEnvios {
-  pedidos: RentabilidadEnvioPedido[];
-  ingreso_total: number;
-  costo_real_total: number;
-  resultado_total: number;
-}
-
-/** Sección 29: separa el envío del resto de la venta — "Ingreso por envío" (lo cobrado,
- * `costo_envio`) contra "Costo real" (`costo_real_envio`, o lo cobrado como aproximación si no se
- * cargó un costo real todavía) nunca se mezclan en una sola cifra. Solo pedidos Entregado (mismo
- * criterio que el resto de las métricas realizadas) y con envío cobrado > 0. */
-export function calcularRentabilidadEnvios(data: RicordoDataV2, desde: string, hasta: string, canal?: Canal): RentabilidadEnvios {
-  const pedidos = data.pedidos.filter(
-    (p) => p.estado === "Entregado" && p.fecha >= desde && p.fecha <= hasta && (!canal || p.canal === canal) && p.costo_envio > 0
+/** El envío cobrado (ingreso) y el costo real de envío (egreso, `Pedido.costo_real_envio` o
+ * `costo_envio` como aproximación si no está cargado) son dos montos que pueden diferir — ver el
+ * comentario de `calcularEerr`. Si un pedido tiene varias líneas, cada uno de esos dos montos (por
+ * separado) se reparte entre ellas según `criterioEnvio` (proporcional a ventas netas de cada
+ * línea, o a sus unidades) — un solo criterio, documentado acá, no dos números distintos según
+ * quién mire. Los descuentos generales del pedido (no los de línea) se reparten siempre
+ * proporcional a ventas, para no descontar el mismo importe en cada producto. */
+export function calcularMargenPorItem(data: RicordoDataV2, desde: string, hasta: string, canal?: Canal, criterioEnvio: CriterioEnvioPedido = "ventas"): MargenItemDetalle[] {
+  const excluidos = idsExcluidosPorRevision(data);
+  const pedidosPeriodo = data.pedidos.filter(
+    (p) => p.estado === "Entregado" && p.fecha >= desde && p.fecha <= hasta && (!canal || p.canal === canal) && !excluidos.pedidos.has(p.id)
   );
-  const filas: RentabilidadEnvioPedido[] = pedidos
-    .map((p) => {
-      const costo_real_envio = p.costo_real_envio ?? p.costo_envio;
-      return {
-        pedido_id: p.id,
-        fecha: p.fecha,
-        cliente_nombre: data.clientes.find((c) => c.id === p.cliente_id)?.nombre ?? "(cliente eliminado)",
-        ingreso_envio: p.costo_envio,
-        costo_real_envio,
-        resultado: p.costo_envio - costo_real_envio,
-      };
-    })
-    .sort((a, b) => b.fecha.localeCompare(a.fecha));
+  const resultado: MargenItemDetalle[] = [];
 
-  const ingreso_total = Math.round(filas.reduce((acc, f) => acc + f.ingreso_envio, 0));
-  const costo_real_total = Math.round(filas.reduce((acc, f) => acc + f.costo_real_envio, 0));
-  return { pedidos: filas, ingreso_total, costo_real_total, resultado_total: ingreso_total - costo_real_total };
+  for (const pedido of pedidosPeriodo) {
+    const items = data.pedido_items.filter((i) => i.pedido_id === pedido.id && !excluidos.pedido_items.has(i.id));
+    if (items.length === 0) continue;
+    const totalBruto = items.reduce((acc, i) => acc + i.precio_unitario * i.cantidad, 0);
+    const totalUnidades = items.reduce((acc, i) => acc + i.cantidad, 0);
+
+    for (const item of items) {
+      const bruto = item.precio_unitario * item.cantidad;
+      const shareVentas = totalBruto > 0 ? bruto / totalBruto : 1 / items.length;
+      const shareUnidades = totalUnidades > 0 ? item.cantidad / totalUnidades : 1 / items.length;
+      const share = criterioEnvio === "ventas" ? shareVentas : shareUnidades;
+      const descuento = Math.round(item.descuento + pedido.descuento * shareVentas);
+      // Envío cobrado (ingreso, forma parte de ventas netas) y costo real de envío (egreso, resta
+      // en el margen de contribución) son dos números que pueden diferir — ver Pedido.costo_real_envio.
+      const envioCobrado = Math.round(pedido.costo_envio * share);
+      const costoEnvioReal = Math.round((pedido.costo_real_envio ?? pedido.costo_envio) * share);
+      const variante = item.producto_variante_id ? data.producto_variantes.find((v) => v.id === item.producto_variante_id) : undefined;
+      const producto = variante ? data.productos.find((p) => p.id === variante.producto_id) : undefined;
+      const cmv = costoPedidoItem(data, item);
+      const ventasNetas = Math.round(bruto - descuento + envioCobrado);
+      const margenContribucion = Math.round(ventasNetas - cmv - costoEnvioReal);
+
+      resultado.push({
+        pedido_id: pedido.id,
+        item_id: item.id,
+        fecha: pedido.fecha,
+        producto_id: variante?.producto_id ?? null,
+        producto_nombre: producto?.nombre ?? item.nombre_historico,
+        variante_id: item.producto_variante_id,
+        variante_nombre: variante?.nombre ?? item.nombre_historico,
+        canal: pedido.canal,
+        presentacion: variante?.presentacion || variante?.nombre || item.nombre_historico,
+        cantidad: item.cantidad,
+        ventas_brutas: Math.round(bruto),
+        descuento,
+        costo_envio: costoEnvioReal,
+        comisiones: 0,
+        cmv: Math.round(cmv),
+        ventas_netas: ventasNetas,
+        margen_contribucion: margenContribucion,
+        margen_pct: ventasNetas > 0 ? (margenContribucion / ventasNetas) * 100 : null,
+        tipo_unidad_venta: variante?.tipo_unidad_venta ?? "caja",
+      });
+    }
+  }
+  return resultado;
 }
 
 // --- Compras, CMV e Inventario (conciliación) -----------------------------------------------------
@@ -1176,266 +1028,11 @@ export function calcularComprasCmvInventario(data: RicordoDataV2, desde: string,
   };
 }
 
-// --- Margen por sabor y canal ---------------------------------------------------------------------
-// Identifica qué sabores/canales/presentaciones dejan más ganancia, no solo cuáles venden más.
-// Agrupa siempre por producto_id (relación real por id — nunca por texto del nombre). El margen de
-// contribución de acá NUNCA resta costos fijos ni amortización (eso se muestra en el EERR) — es
-// puramente ventas netas − CMV − costo real de envío − comisiones − otros costos variables.
-// "Comisiones del medio de pago" y "otros costos variables" no tienen ninguna fuente de datos en el
-// esquema todavía: quedan siempre en $0, igual que Otros ingresos/gastos e Impuestos en el EERR —
-// nunca se inventa un valor.
-
-export type CriterioEnvioPedido = "ventas" | "unidades";
-
-export interface MargenItemDetalle {
-  pedido_id: string;
-  item_id: string;
-  fecha: string;
-  producto_id: string | null;
-  producto_nombre: string;
-  variante_id: string | null;
-  variante_nombre: string;
-  canal: Canal;
-  presentacion: string;
-  cantidad: number;
-  ventas_brutas: number;
-  descuento: number;
-  costo_envio: number;
-  comisiones: number;
-  cmv: number;
-  ventas_netas: number;
-  margen_contribucion: number;
-  margen_pct: number | null;
-  /** Del `ProductoVariante.tipo_unidad_venta` — "caja" por default si no está cargado (ver el tipo
-   * en types-v2.ts). Usado por Analítica de Ventas para no contar salsa/complementos como cajas. */
-  tipo_unidad_venta: TipoUnidadVenta;
-}
-
-/** El envío cobrado (ingreso) y el costo real de envío (egreso, `Pedido.costo_real_envio` o
- * `costo_envio` como aproximación si no está cargado) son dos montos que pueden diferir — ver el
- * comentario de `calcularEerr`. Si un pedido tiene varias líneas, cada uno de esos dos montos (por
- * separado) se reparte entre ellas según `criterioEnvio` (proporcional a ventas netas de cada
- * línea, o a sus unidades) — un solo criterio, documentado acá, no dos números distintos según
- * quién mire. Los descuentos generales del pedido (no los de línea) se reparten siempre
- * proporcional a ventas, para no descontar el mismo importe en cada producto. */
-export function calcularMargenPorItem(data: RicordoDataV2, desde: string, hasta: string, canal?: Canal, criterioEnvio: CriterioEnvioPedido = "ventas"): MargenItemDetalle[] {
-  const excluidos = idsExcluidosPorRevision(data);
-  const pedidosPeriodo = data.pedidos.filter(
-    (p) => p.estado === "Entregado" && p.fecha >= desde && p.fecha <= hasta && (!canal || p.canal === canal) && !excluidos.pedidos.has(p.id)
-  );
-  const resultado: MargenItemDetalle[] = [];
-
-  for (const pedido of pedidosPeriodo) {
-    const items = data.pedido_items.filter((i) => i.pedido_id === pedido.id && !excluidos.pedido_items.has(i.id));
-    if (items.length === 0) continue;
-    const totalBruto = items.reduce((acc, i) => acc + i.precio_unitario * i.cantidad, 0);
-    const totalUnidades = items.reduce((acc, i) => acc + i.cantidad, 0);
-
-    for (const item of items) {
-      const bruto = item.precio_unitario * item.cantidad;
-      const shareVentas = totalBruto > 0 ? bruto / totalBruto : 1 / items.length;
-      const shareUnidades = totalUnidades > 0 ? item.cantidad / totalUnidades : 1 / items.length;
-      const share = criterioEnvio === "ventas" ? shareVentas : shareUnidades;
-      const descuento = Math.round(item.descuento + pedido.descuento * shareVentas);
-      // Envío cobrado (ingreso, forma parte de ventas netas) y costo real de envío (egreso, resta
-      // en el margen de contribución) son dos números que pueden diferir — ver Pedido.costo_real_envio.
-      const envioCobrado = Math.round(pedido.costo_envio * share);
-      const costoEnvioReal = Math.round((pedido.costo_real_envio ?? pedido.costo_envio) * share);
-      const variante = item.producto_variante_id ? data.producto_variantes.find((v) => v.id === item.producto_variante_id) : undefined;
-      const producto = variante ? data.productos.find((p) => p.id === variante.producto_id) : undefined;
-      const cmv = costoPedidoItem(data, item);
-      const ventasNetas = Math.round(bruto - descuento + envioCobrado);
-      const margenContribucion = Math.round(ventasNetas - cmv - costoEnvioReal);
-
-      resultado.push({
-        pedido_id: pedido.id,
-        item_id: item.id,
-        fecha: pedido.fecha,
-        producto_id: variante?.producto_id ?? null,
-        producto_nombre: producto?.nombre ?? item.nombre_historico,
-        variante_id: item.producto_variante_id,
-        variante_nombre: variante?.nombre ?? item.nombre_historico,
-        canal: pedido.canal,
-        presentacion: variante?.presentacion || variante?.nombre || item.nombre_historico,
-        cantidad: item.cantidad,
-        ventas_brutas: Math.round(bruto),
-        descuento,
-        costo_envio: costoEnvioReal,
-        comisiones: 0,
-        cmv: Math.round(cmv),
-        ventas_netas: ventasNetas,
-        margen_contribucion: margenContribucion,
-        margen_pct: ventasNetas > 0 ? (margenContribucion / ventasNetas) * 100 : null,
-        tipo_unidad_venta: variante?.tipo_unidad_venta ?? "caja",
-      });
-    }
-  }
-  return resultado;
-}
-
-export type VistaMargen = "sabor" | "canal" | "presentacion" | "pedido";
-
-export interface MargenAgrupado {
-  clave: string;
-  etiqueta: string;
-  unidades: number;
-  ventas_brutas: number;
-  descuentos: number;
-  ventas_netas: number;
-  cmv: number;
-  costo_envio: number;
-  comisiones: number;
-  margen_contribucion: number;
-  margen_pct: number | null;
-  items: MargenItemDetalle[];
-}
-
-export function agruparMargen(items: MargenItemDetalle[], vista: VistaMargen): MargenAgrupado[] {
-  const grupos = new Map<string, MargenItemDetalle[]>();
-  for (const it of items) {
-    const clave = vista === "sabor" ? (it.producto_id ?? "sin-producto") : vista === "canal" ? it.canal : vista === "presentacion" ? it.presentacion : it.pedido_id;
-    const lista = grupos.get(clave) ?? [];
-    lista.push(it);
-    grupos.set(clave, lista);
-  }
-  return [...grupos.entries()]
-    .map(([clave, its]) => {
-      const etiqueta = vista === "sabor" ? its[0].producto_nombre : vista === "pedido" ? `Pedido ${clave} — ${its[0].fecha}` : clave;
-      const ventas_netas = its.reduce((acc, i) => acc + i.ventas_netas, 0);
-      const margen_contribucion = its.reduce((acc, i) => acc + i.margen_contribucion, 0);
-      return {
-        clave,
-        etiqueta,
-        unidades: its.reduce((acc, i) => acc + i.cantidad, 0),
-        ventas_brutas: its.reduce((acc, i) => acc + i.ventas_brutas, 0),
-        descuentos: its.reduce((acc, i) => acc + i.descuento, 0),
-        ventas_netas,
-        cmv: its.reduce((acc, i) => acc + i.cmv, 0),
-        costo_envio: its.reduce((acc, i) => acc + i.costo_envio, 0),
-        comisiones: 0,
-        margen_contribucion,
-        margen_pct: ventas_netas > 0 ? (margen_contribucion / ventas_netas) * 100 : null,
-        items: its,
-      };
-    })
-    .sort((a, b) => b.margen_contribucion - a.margen_contribucion);
-}
-
-export interface ComparacionCanalSabor {
-  producto_id: string;
-  producto_nombre: string;
-  margen_minorista: number;
-  margen_mayorista: number;
-  diferencia: number;
-  margen_pct_minorista: number | null;
-  margen_pct_mayorista: number | null;
-}
-
-export function compararCanalesPorSabor(items: MargenItemDetalle[]): ComparacionCanalSabor[] {
-  const porProducto = new Map<string, MargenItemDetalle[]>();
-  for (const it of items) {
-    const key = it.producto_id ?? "sin-producto";
-    const lista = porProducto.get(key) ?? [];
-    lista.push(it);
-    porProducto.set(key, lista);
-  }
-  return [...porProducto.entries()].map(([key, its]) => {
-    const minorista = its.filter((i) => i.canal === "Minorista");
-    const mayorista = its.filter((i) => i.canal === "Mayorista");
-    const sum = (arr: MargenItemDetalle[], campo: "margen_contribucion" | "ventas_netas") => arr.reduce((acc, i) => acc + i[campo], 0);
-    const margenMinorista = sum(minorista, "margen_contribucion");
-    const margenMayorista = sum(mayorista, "margen_contribucion");
-    const ventasMinorista = sum(minorista, "ventas_netas");
-    const ventasMayorista = sum(mayorista, "ventas_netas");
-    return {
-      producto_id: key,
-      producto_nombre: its[0].producto_nombre,
-      margen_minorista: margenMinorista,
-      margen_mayorista: margenMayorista,
-      diferencia: margenMayorista - margenMinorista,
-      margen_pct_minorista: ventasMinorista > 0 ? (margenMinorista / ventasMinorista) * 100 : null,
-      margen_pct_mayorista: ventasMayorista > 0 ? (margenMayorista / ventasMayorista) * 100 : null,
-    };
-  });
-}
-
-export interface AlertaMargen {
-  severidad: "alta" | "media";
-  mensaje: string;
-}
-
-/** margenMinimoPct: umbral configurable (lo trae la pantalla) para la alerta de "margen inferior
- * al mínimo" — no hay un valor de negocio único correcto, queda a criterio de quien lo mira. */
-export function alertasMargen(data: RicordoDataV2, items: MargenItemDetalle[], margenMinimoPct: number): AlertaMargen[] {
-  const alertas: AlertaMargen[] = [];
-  const porPedido = agruparMargen(items, "pedido");
-  const porSabor = agruparMargen(items, "sabor");
-
-  for (const p of porPedido) {
-    if (p.margen_contribucion < 0) {
-      alertas.push({ severidad: "alta", mensaje: `${p.etiqueta} tiene margen de contribución negativo (${p.margen_contribucion}).` });
-    }
-    // Bajo la política de costo real de envío = mismo monto cobrado, el envío entra como ingreso y
-    // sale como costo por el mismo importe: nunca puede "eliminar" una ganancia (se cancela solo,
-    // margen $0 en el envío). Lo que sí se puede detectar es que el envío represente una porción
-    // muy grande de la venta bruta del pedido — una señal de riesgo real para cuando exista un
-    // costo de envío distinto al cobrado.
-    if (p.ventas_brutas > 0 && p.costo_envio / p.ventas_brutas > 0.3) {
-      alertas.push({
-        severidad: "media",
-        mensaje: `${p.etiqueta}: el envío (${p.costo_envio}) representa más del 30% de la venta bruta (${p.ventas_brutas}) — revisar si conviene cobrarlo aparte o ajustar el precio.`,
-      });
-    }
-  }
-  for (const s of porSabor) {
-    if (s.margen_pct != null && s.margen_pct < margenMinimoPct) {
-      alertas.push({ severidad: "media", mensaje: `"${s.etiqueta}" tiene margen de ${s.margen_pct.toFixed(1)}%, por debajo del mínimo configurado (${margenMinimoPct}%).` });
-    }
-  }
-
-  for (const i of data.insumos) {
-    if (i.activo && i.precio_actual <= 0) alertas.push({ severidad: "alta", mensaje: `El insumo "${i.nombre}" no tiene precio cargado.` });
-  }
-  for (const p of data.productos.filter((prod) => prod.activo)) {
-    if (!data.recetas.some((r) => r.producto_id === p.id)) alertas.push({ severidad: "alta", mensaje: `El producto "${p.nombre}" no tiene ninguna receta cargada.` });
-  }
-  for (const sinFactor of variantesSinFactorReceta(data)) {
-    alertas.push({
-      severidad: "media",
-      mensaje: `"${sinFactor.variante_nombre}" no tiene "unidades por paquete" cargado — su receta hereda un factor de conversión de 0, el costo de esta presentación va a dar mal.`,
-    });
-  }
-
-  // Precio mayorista igual o demasiado cercano al minorista (comparando precio POR UNIDAD, no el
-  // precio del paquete completo) — sin una justificación visible en los datos.
-  for (const producto of data.productos) {
-    const variantes = data.producto_variantes.filter((v) => v.producto_id === producto.id && v.activo);
-    const minoristas = variantes.filter((v) => v.canal === "Minorista");
-    const mayoristas = variantes.filter((v) => v.canal === "Mayorista");
-    for (const min of minoristas) {
-      const precioUnitMin = min.precio_venta / (min.unidades_por_paquete ?? 1);
-      for (const may of mayoristas) {
-        const precioUnitMay = may.precio_venta / (may.unidades_por_paquete ?? 1);
-        if (precioUnitMin > 0 && precioUnitMay >= precioUnitMin * 0.9) {
-          alertas.push({
-            severidad: "media",
-            mensaje: `En "${producto.nombre}": el precio mayorista por unidad (${precioUnitMay.toFixed(0)}) no es significativamente más barato que el minorista (${precioUnitMin.toFixed(0)}).`,
-          });
-        }
-      }
-    }
-  }
-
-  return alertas;
-}
-
 // --- Flujo de caja ---------------------------------------------------------------------------
 // Explica cómo cambió la plata disponible — nunca se confunde con el resultado económico (EERR):
 // acá solo entran movimientos con un origen de caja REAL (ver ORIGENES_CAJA_REAL) o transferencias.
 // Una venta entregada no cobrada no aparece acá (no hay caja hasta que se registra el cobro real,
-// en Cuentas pendientes); una compra confirmada no pagada tampoco. La compra de un activo entra
-// como "Inversión" (ver ActivosTab, que ahora genera ese movimiento al crear un activo nuevo) sin
-// afectar el EERR más que por su amortización mensual.
+// en Cuentas pendientes); una compra confirmada no pagada tampoco.
 
 function esMovimientoCajaReal(m: RicordoDataV2["movimientos_financieros"][number]): boolean {
   return (!!m.origen_tipo && ORIGENES_CAJA_REAL.includes(m.origen_tipo)) || m.tipo === "transferencia";
@@ -1651,134 +1248,12 @@ export function calcularFlujoCaja(data: RicordoDataV2, desde: string, hasta: str
   };
 }
 
-export function mesReferencia(mes: number, anio: number): string {
-  return `${anio}-${pad2(mes)}`;
-}
-
-/** Ganancia neta distribuible de un mes: el resultado_neto del Estado de Resultados de ese mes,
- * nunca las ventas brutas — ya viene con CMV, costos fijos/indirectos, gastos operativos,
- * amortizaciones, otros ingresos/gastos e impuestos descontados (ver calcularEerr). Es la única
- * fuente de la que puede salir plata hacia Reinversión/Margen de seguridad. */
-export function gananciaNetaDistribuible(data: RicordoDataV2, mes: number, anio: number): number {
-  return calcularEerr(data, primerDiaMes(mes, anio), ultimoDiaMes(mes, anio)).resultado_neto;
-}
-
-/** Ganancia neta ya acumulada en períodos anteriores al de referencia que todavía no tiene una
- * distribución registrada — solo cuenta meses con ganancia positiva (una pérdida no "espera" a
- * ser distribuida) y nunca antes del primer pedido entregado (no hay EERR posible antes de eso). */
-export function gananciaNetaPendienteDistribuir(data: RicordoDataV2, mesRefActual: string): number {
-  const entregados = data.pedidos.filter((p) => p.estado === "Entregado");
-  if (entregados.length === 0) return 0;
-  const primeraFecha = entregados.reduce((min, p) => (p.fecha < min ? p.fecha : min), entregados[0].fecha);
-  const inicio = { mes: Number(primeraFecha.slice(5, 7)), anio: Number(primeraFecha.slice(0, 4)) };
-  const anioLimite = Number(mesRefActual.slice(0, 4)) + 1; // salvaguarda: nunca debería hacer falta
-  const distribuidos = new Set(data.configuracion.caja_inteligente.distribuciones.map((d) => d.mes_referencia));
-
-  let pendiente = 0;
-  let cursor = inicio;
-  while (mesReferencia(cursor.mes, cursor.anio) < mesRefActual && cursor.anio <= anioLimite) {
-    const ref = mesReferencia(cursor.mes, cursor.anio);
-    if (!distribuidos.has(ref)) {
-      const ganancia = gananciaNetaDistribuible(data, cursor.mes, cursor.anio);
-      if (ganancia > 0) pendiente += ganancia;
-    }
-    cursor = cursor.mes === 12 ? { mes: 1, anio: cursor.anio + 1 } : { mes: cursor.mes + 1, anio: cursor.anio };
-  }
-  return Math.round(pendiente) || 0;
-}
-
-/** Estado de la distribución de un mes puntual: si ya se distribuyó, con qué ganancia se
- * distribuyó en ese momento, la ganancia que da HOY el EERR de ese mes, y si esos dos valores ya
- * no coinciden (el EERR del mes cambió después de distribuir — nunca se corrige solo). */
-export interface EstadoDistribucionMes {
-  ya_distribuido: boolean;
-  distribucion?: DistribucionGanancia;
-  ganancia_actual: number;
-  cambio_desde_distribucion: boolean;
-}
-
-export function estadoDistribucionMes(data: RicordoDataV2, mes: number, anio: number): EstadoDistribucionMes {
-  const ref = mesReferencia(mes, anio);
-  const distribucion = data.configuracion.caja_inteligente.distribuciones.find((d) => d.mes_referencia === ref);
-  const ganancia_actual = gananciaNetaDistribuible(data, mes, anio);
-  return {
-    ya_distribuido: !!distribucion,
-    distribucion,
-    ganancia_actual,
-    cambio_desde_distribucion: !!distribucion && distribucion.ganancia_neta !== ganancia_actual,
-  };
-}
-
-/** Saldos de Reinversión/Margen de seguridad, distinguiendo lo asignado (nunca baja) de lo
- * gastado (usos registrados) — `disponible = asignado − gastado`. Lo asignado suma: distribuciones
- * automáticas de ganancia neta + cargas históricas manuales + el legado del modelo anterior
- * (`asignaciones`, repartido por el % vigente — no tenía destino propio guardado, así que no se
- * puede reconstruir con exactitud, pero se sigue contando para no perder el saldo que ya tenía). */
-export interface FondoReinversionDetalle {
-  asignado: number;
-  gastado: number;
-  disponible: number;
-}
-
-export interface FondosReinversion {
-  reinversion: FondoReinversionDetalle;
-  seguridad: FondoReinversionDetalle;
-}
-
-export function calcularFondosReinversion(data: RicordoDataV2): FondosReinversion {
-  const ci = data.configuracion.caja_inteligente;
-
-  const totalLegacy = ci.asignaciones.reduce((acc, a) => acc + a.monto, 0);
-  const legacyReinversion = Math.round((totalLegacy * ci.porcentaje_reinversion) / 100);
-  const legacySeguridad = totalLegacy - legacyReinversion;
-
-  const asignadoReinversion =
-    legacyReinversion +
-    ci.distribuciones.reduce((acc, d) => acc + d.monto_reinversion, 0) +
-    ci.cargas_historicas.filter((c) => c.destino === "reinversion").reduce((acc, c) => acc + c.monto, 0);
-  const asignadoSeguridad =
-    legacySeguridad +
-    ci.distribuciones.reduce((acc, d) => acc + d.monto_seguridad, 0) +
-    ci.cargas_historicas.filter((c) => c.destino === "seguridad").reduce((acc, c) => acc + c.monto, 0);
-
-  const gastadoReinversion = ci.usos_reinversion.reduce((acc, u) => acc + u.monto, 0);
-  const gastadoSeguridad = ci.usos_seguridad.reduce((acc, u) => acc + u.monto, 0);
-
-  const netoReinversion = netoTransferenciasFondo(data, "reinversion");
-  const netoSeguridad = netoTransferenciasFondo(data, "seguridad");
-
-  return {
-    reinversion: {
-      asignado: Math.round(asignadoReinversion),
-      gastado: Math.round(gastadoReinversion),
-      disponible: Math.round(asignadoReinversion - gastadoReinversion + netoReinversion) || 0,
-    },
-    seguridad: {
-      asignado: Math.round(asignadoSeguridad),
-      gastado: Math.round(gastadoSeguridad),
-      disponible: Math.round(asignadoSeguridad - gastadoSeguridad + netoSeguridad) || 0,
-    },
-  };
-}
-
-/** Fondo de reposición de maquinaria: separado por completo de la amortización contable — nadie
- * "hereda" plata acá automáticamente por la cuota de amortización de un activo, es una reserva
- * 100% manual (aporte/uso), igual que Reinversión/Margen de seguridad. */
-export function calcularFondoReposicion(data: RicordoDataV2): number {
-  const f = data.configuracion.fondo_reposicion;
-  const aportes = f.aportes.reduce((acc, a) => acc + a.monto, 0);
-  const usos = f.usos.reduce((acc, u) => acc + u.monto, 0);
-  const neto = netoTransferenciasFondo(data, "reposicion");
-  return Math.round(aportes - usos + neto) || 0;
-}
-
-/** Dinero libre/disponible: lo que realmente se puede usar sin comprometer pagos ya previsibles ni
- * plata ya reservada en los fondos internos. No incluye "compromisos próximos" (gastos con
- * vencimiento futuro) — eso vive en `calcularProyeccionCaja`, para no duplicar esa lógica acá. */
+/** Dinero libre/disponible: lo que realmente se puede usar sin comprometer pagos ya previsibles.
+ * No incluye "compromisos próximos" (gastos con vencimiento futuro) — eso vive en
+ * `calcularProyeccionCaja`, para no duplicar esa lógica acá. */
 export interface DineroLibre {
   dinero_en_cuentas: number;
   cuentas_por_pagar: number;
-  fondos_reservados: number;
   dinero_libre: number;
 }
 
@@ -1787,134 +1262,8 @@ export function calcularDineroLibre(data: RicordoDataV2, hoy: string): DineroLib
   const cuentas_por_pagar = Math.round(
     data.compras.reduce((acc, c) => acc + Math.max(0, c.total - totalPagadoCompra(data, c.id)), 0)
   );
-  const fondos = calcularFondosReinversion(data);
-  const fondos_reservados = fondos.reinversion.disponible + fondos.seguridad.disponible + calcularFondoReposicion(data);
-  const dinero_libre = Math.round(dinero_en_cuentas - cuentas_por_pagar - fondos_reservados) || 0;
-  return { dinero_en_cuentas, cuentas_por_pagar, fondos_reservados, dinero_libre };
-}
-
-// --- Transferencias internas entre sectores de plata del negocio ------------------------------
-// Una transferencia interna es pura reasignación entre los 4 "sectores" de plata del negocio:
-// nunca es ingreso ni gasto, nunca toca el EERR ni el saldo total de caja (saldoCaja). El
-// disponible de cada sector reservado (seguridad/reinversión/reposición) ya incluye el neto de sus
-// transferencias (ver arriba, calcularFondosReinversion/calcularFondoReposicion); el de Caja
-// operativa es simplemente calcularDineroLibre, que ya baja/sube solo porque los fondos reservados
-// bajan/suben — no necesita su propio cálculo.
-
-export const FONDO_INTERNO_LABELS: Record<FondoInterno, string> = {
-  operativa: "Caja operativa",
-  seguridad: "Margen de seguridad",
-  reinversion: "Reinversión",
-  reposicion: "Fondo de reposición",
-};
-
-function transferenciasFondos(data: RicordoDataV2): TransferenciaFondo[] {
-  return data.configuracion.caja_inteligente.transferencias_fondos ?? [];
-}
-
-/** Neto de transferencias de un fondo: lo que entró (como destino) menos lo que salió (como
- * origen). Una devolución es una transferencia más (origen = fondo que devuelve), así que ya queda
- * contada acá sin tratamiento especial. */
-export function netoTransferenciasFondo(data: RicordoDataV2, fondo: FondoInterno): number {
-  const neto = transferenciasFondos(data).reduce((acc, t) => {
-    if (t.destino === fondo) return acc + t.monto;
-    if (t.origen === fondo) return acc - t.monto;
-    return acc;
-  }, 0);
-  return Math.round(neto) || 0;
-}
-
-export interface SaldoFondoInterno {
-  fondo: FondoInterno;
-  label: string;
-  disponible: number;
-}
-
-/** Disponible HOY de los 4 sectores. */
-export function saldosFondos(data: RicordoDataV2, hoy: string): SaldoFondoInterno[] {
-  const fondos = calcularFondosReinversion(data);
-  const reposicion = calcularFondoReposicion(data);
-  const dineroLibre = calcularDineroLibre(data, hoy).dinero_libre;
-  const disponiblePorFondo: Record<FondoInterno, number> = {
-    operativa: dineroLibre,
-    seguridad: fondos.seguridad.disponible,
-    reinversion: fondos.reinversion.disponible,
-    reposicion,
-  };
-  return (Object.keys(FONDO_INTERNO_LABELS) as FondoInterno[]).map((fondo) => ({
-    fondo,
-    label: FONDO_INTERNO_LABELS[fondo],
-    disponible: disponiblePorFondo[fondo],
-  }));
-}
-
-export type EstadoPrestamoInterno = "Pendiente" | "Parcial" | "Devuelto" | "Vencido";
-
-export interface PrestamoInterno extends TransferenciaFondo {
-  devuelto: number;
-  falta: number;
-  estado: EstadoPrestamoInterno;
-}
-
-/** Préstamos entre fondos (transferencias tipo "prestamo" que no son ellas mismas una devolución),
- * con cuánto ya se devolvió (suma de sus devoluciones vía `devolucion_de`), cuánto falta, y su
- * estado. Vencido manda sobre Parcial: una devolución parcial de un préstamo ya vencido sigue
- * mostrando Vencido, no Parcial. */
-export function prestamosInternos(data: RicordoDataV2, hoy: string): PrestamoInterno[] {
-  const todas = transferenciasFondos(data);
-  const mesActual = hoy.slice(0, 7);
-  return todas
-    .filter((t) => t.tipo === "prestamo" && !t.devolucion_de)
-    .map((t) => {
-      const devuelto = todas.filter((d) => d.devolucion_de === t.id).reduce((acc, d) => acc + d.monto, 0);
-      const falta = Math.max(0, Math.round(t.monto - devuelto));
-      let estado: EstadoPrestamoInterno;
-      if (falta <= 0) estado = "Devuelto";
-      else if (t.devolver_en && t.devolver_en < mesActual) estado = "Vencido";
-      else if (devuelto > 0) estado = "Parcial";
-      else estado = "Pendiente";
-      return { ...t, devuelto: Math.round(devuelto), falta, estado };
-    })
-    .sort((a, b) => b.fecha.localeCompare(a.fecha));
-}
-
-/** Préstamos con saldo pendiente cuyo mes de devolución ya llegó o pasó — para el aviso de
- * "hay que devolver esto este mes" (Finanzas → Resumen y la propia pantalla de transferencias). */
-export function devolucionesPendientesMes(data: RicordoDataV2, mesReferenciaActual: string, hoy: string): PrestamoInterno[] {
-  return prestamosInternos(data, hoy).filter((p) => p.falta > 0 && !!p.devolver_en && p.devolver_en <= mesReferenciaActual);
-}
-
-export interface TransferenciaRecienteItem extends TransferenciaFondo {
-  es_devolucion: boolean;
-  /** Solo para préstamos: lo que falta devolver hoy. */
-  saldo_restante?: number;
-  estado?: EstadoPrestamoInterno;
-}
-
-/** Transferencias de los últimos `dias` días + cualquier préstamo todavía sin devolver aunque sea
- * más viejo (para no perder de vista una deuda interna, vencida o no), de la más nueva a la más
- * vieja. */
-export function transferenciasRecientes(data: RicordoDataV2, hoy: string, dias = 15): TransferenciaRecienteItem[] {
-  const todas = transferenciasFondos(data);
-  const desde = sumarDias(hoy, -dias);
-  const prestamoPorId = new Map(prestamosInternos(data, hoy).map((p) => [p.id, p]));
-
-  return todas
-    .filter((t) => {
-      if (t.fecha >= desde) return true;
-      const prestamo = !t.devolucion_de && t.tipo === "prestamo" ? prestamoPorId.get(t.id) : undefined;
-      return !!prestamo && prestamo.falta > 0;
-    })
-    .map((t) => {
-      const prestamo = !t.devolucion_de && t.tipo === "prestamo" ? prestamoPorId.get(t.id) : undefined;
-      return {
-        ...t,
-        es_devolucion: !!t.devolucion_de,
-        saldo_restante: prestamo?.falta,
-        estado: prestamo?.estado,
-      };
-    })
-    .sort((a, b) => b.fecha.localeCompare(a.fecha));
+  const dinero_libre = Math.round(dinero_en_cuentas - cuentas_por_pagar) || 0;
+  return { dinero_en_cuentas, cuentas_por_pagar, dinero_libre };
 }
 
 // --- Normalización de canal (Productos) ------------------------------------------------------
@@ -2076,50 +1425,6 @@ export function calcularCuentasPorPagar(data: RicordoDataV2, hoy: string): Cuent
     .sort((a, b) => (a.fecha_vencimiento || a.fecha).localeCompare(b.fecha_vencimiento || b.fecha));
 }
 
-// --- Proyección de caja -----------------------------------------------------------------------
-// A diferencia de la proyección naive que tenía calcularFlujoCaja (extrapolar el promedio diario
-// del período), esto NO extrapola nada: suma compromisos reales ya cargados (cobros/pagos
-// pendientes con fecha esperada). Gastos/costos fijos/sueldos/impuestos/inversiones "próximos" no
-// tienen hoy una fecha de vencimiento propia en el esquema (no son un compromiso con vencimiento,
-// son un movimiento que se carga cuando ocurre) — se dejan en $0 en vez de inventar un valor,
-// mismo criterio que "Impuestos" en el EERR.
-
-export interface ProyeccionCajaPunto {
-  dias: number;
-  fecha: string;
-  cobros_pendientes: number;
-  pagos_pendientes: number;
-  caja_proyectada: number;
-}
-
-export interface ProyeccionCaja {
-  caja_actual: number;
-  puntos: ProyeccionCajaPunto[];
-  alerta_negativa: boolean;
-}
-
-export function calcularProyeccionCaja(data: RicordoDataV2, hoy: string): ProyeccionCaja {
-  const caja_actual = Math.round(saldoCajaAlFecha(data, hoy));
-  const cuentasPorCobrar = calcularCuentasPorCobrar(data, hoy);
-  const cuentasPorPagar = calcularCuentasPorPagar(data, hoy);
-
-  const puntos = [0, 7, 15, 30].map((dias) => {
-    const fechaLimite = sumarDias(hoy, dias);
-    const cobros_pendientes =
-      dias === 0
-        ? 0
-        : Math.round(cuentasPorCobrar.reduce((acc, c) => acc + (c.fecha_vencimiento && c.fecha_vencimiento <= fechaLimite ? c.saldo : 0), 0));
-    const pagos_pendientes =
-      dias === 0
-        ? 0
-        : Math.round(cuentasPorPagar.reduce((acc, c) => acc + (c.fecha_vencimiento && c.fecha_vencimiento <= fechaLimite ? c.saldo : 0), 0));
-    const caja_proyectada = Math.round(caja_actual + cobros_pendientes - pagos_pendientes) || 0;
-    return { dias, fecha: fechaLimite, cobros_pendientes, pagos_pendientes, caja_proyectada };
-  });
-
-  return { caja_actual, puntos, alerta_negativa: puntos.some((p) => p.caja_proyectada < 0) };
-}
-
 // --- Balance General / Estado de Situación Patrimonial ----------------------------------------
 // "A fecha" `hasta`: usa cuentas por cobrar/pagar ya ABIERTAS hoy pero originadas hasta esa
 // fecha (el esquema no guarda un histórico de saldos día a día, así que no se reconstruye con
@@ -2160,13 +1465,10 @@ export function calcularBalanceGeneral(data: RicordoDataV2, hasta: string, inici
   const otros_activos_corrientes = 0;
   const totalCorriente = caja_bancos + cuentas_por_cobrar + inventario + otros_activos_corrientes;
 
-  const activosVigentes = data.activos.filter((a) => a.activo && a.fecha_compra <= hasta);
-  const valor_activos_costo = Math.round(activosVigentes.reduce((acc, a) => acc + a.costo, 0));
-  const amortizacion_acumulada = Math.round(activosVigentes.reduce((acc, a) => acc + amortizacionAcumulada(a, hasta), 0));
-  const valor_neto = Math.round(valor_activos_costo - amortizacion_acumulada) || 0;
-
   const activo_corriente = { caja_bancos, cuentas_por_cobrar, inventario, otros_activos_corrientes, total: Math.round(totalCorriente) };
-  const activo_no_corriente = { valor_activos_costo, amortizacion_acumulada, valor_neto, total: valor_neto };
+  // Sin seguimiento de activos fijos/amortizaciones (se saca de la app — ver CSV exportado antes
+  // de sacarlo): el no corriente queda en 0, nunca se inventa un valor contable.
+  const activo_no_corriente = { valor_activos_costo: 0, amortizacion_acumulada: 0, valor_neto: 0, total: 0 };
   const total_activo = activo_corriente.total + activo_no_corriente.total;
 
   const proveedores_por_pagar = Math.round(
