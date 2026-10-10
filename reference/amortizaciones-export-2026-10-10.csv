@@ -1,3 +1,6 @@
 nombre,categoria,fecha_compra,costo,vida_util_meses,amortizacion_mensual,activo
+Utensilios,Amortización,2026-07-19,200000,24,8333,true
+Sobadora,Amortización,2026-07-19,1200000,60,20000,true
+Freezer,Amortización,2026-07-19,700000,60,11667,true
 Compra moldes,Gasto de Inversión (legacy),2026-07-04,8000,0,0,false
 Tripode,Gasto de Inversión (legacy),2026-07-04,75000,0,0,false

@@ -15,7 +15,6 @@ import type { RicordoData, Pedido as PedidoV1 } from "../types";
 import {
   emptyDataV2,
   type RicordoDataV2,
-  type RicordoDocument,
   type Categoria,
   type AmbitoCategoria,
   type Insumo,
@@ -24,6 +23,16 @@ import {
   type EtapaReceta,
   type MovimientoFinanciero,
 } from "../types-v2";
+
+// Documento intermedio "v2" que produce este archivo — a propósito NO es el `RicordoDocument`
+// compartido (ese tipo ahora representa el documento *actual*, v3): este es un paso interno que
+// `comoV3`/`migrarV2aV3` (lib/migration/v3.ts, lib/store-v2.tsx) siempre terminan de llevar a v3
+// antes de guardarlo o mostrarlo en pantalla.
+export interface DocumentoV2Interno {
+  schema_version: 2;
+  metadata: { migrado_en: string; desde_version: 1 };
+  data: RicordoDataV2;
+}
 import { uid } from "../id";
 
 // --- Redondeo monetario ------------------------------------------------------------------------
@@ -701,7 +710,7 @@ function migrarFinanzas(
 
 // --- Función principal ---------------------------------------------------------------------------
 
-export function migrarAV2(data: RicordoData): { documento: RicordoDocument; reporte: ReporteMigracion } {
+export function migrarAV2(data: RicordoData): { documento: DocumentoV2Interno; reporte: ReporteMigracion } {
   const { reporte, contar, agregar } = crearReporte();
   const categorias = crearFabricaCategorias();
 
@@ -763,7 +772,7 @@ export function migrarAV2(data: RicordoData): { documento: RicordoDocument; repo
     if (!esVacio(valor)) legacy[clave] = valor;
   }
 
-  const documento: RicordoDocument = {
+  const documento: DocumentoV2Interno = {
     schema_version: 2,
     metadata: { migrado_en: new Date().toISOString(), desde_version: 1 },
     data: {
@@ -819,5 +828,5 @@ export function migrarAV2(data: RicordoData): { documento: RicordoDocument; repo
   // Normaliza a través de un ciclo JSON: garantiza que exportar (stringify) e importar (parse)
   // este documento da exactamente el mismo resultado (sin claves `undefined` que desaparecerían
   // recién en el primer export real, fuera de este módulo).
-  return { documento: JSON.parse(JSON.stringify(documento)) as RicordoDocument, reporte };
+  return { documento: JSON.parse(JSON.stringify(documento)) as DocumentoV2Interno, reporte };
 }

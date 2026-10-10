@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useMemo, useRef, useState } from "react";
-import { useStoreV2 } from "@/lib/store-v2";
+import { useStoreV2, comoV3 } from "@/lib/store-v2";
 import { useAuth } from "@/lib/auth-context";
 import { useToast } from "@/lib/toast";
 import { uid } from "@/lib/id";
@@ -606,17 +606,19 @@ function MigracionTab() {
 }
 
 function BackupTab() {
-  const { data, setData } = useStoreV2();
+  const { data, setData, metadata } = useStoreV2();
   const { toast } = useToast();
   const fileRef = useRef<HTMLInputElement>(null);
 
   function exportar() {
-    const documento: RicordoDocument = { schema_version: 2, metadata: { migrado_en: new Date().toISOString(), desde_version: 1 }, data };
+    // Usa la metadata REAL del documento (cuándo se migró de verdad, no una fabricada en el
+    // momento) — exportar nunca debe aparentar una migración que no pasó ahora.
+    const documento: RicordoDocument = { schema_version: 3, metadata, data };
     const blob = new Blob([JSON.stringify(documento, null, 2)], { type: "application/json" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
-    a.download = `ricordo_backup_v2_${new Date().toISOString().slice(0, 10)}.json`;
+    a.download = `ricordo_backup_v3_${new Date().toISOString().slice(0, 10)}.json`;
     a.click();
     URL.revokeObjectURL(url);
     toast("Backup exportado");
@@ -629,12 +631,12 @@ function BackupTab() {
     reader.onload = () => {
       try {
         const parsed = JSON.parse(reader.result as string);
-        if (parsed?.schema_version === 2 && parsed.data) {
-          setData(parsed.data);
-          toast("Datos importados");
-        } else {
-          toast("El archivo no tiene el formato esquema V2 esperado", "error");
-        }
+        // Acepta backups v1 (objeto crudo, sin schema_version), v2 o v3 — todos pasan por la misma
+        // escalera de migración que usa la carga normal, así un backup viejo no rompe ni queda a
+        // mitad de camino.
+        const { data: dataV3 } = comoV3(parsed);
+        setData(dataV3);
+        toast("Datos importados");
       } catch {
         toast("Archivo inválido", "error");
       }
@@ -646,8 +648,9 @@ function BackupTab() {
   return (
     <Card title="Copia de seguridad">
       <p className="mb-3 text-[12.5px] text-text3">
-        El backup se guarda en el formato versionado nuevo ({"{"}schema_version: 2{"}"}). Nunca se borra el original: cada
-        exportación es un archivo aparte que podés guardar donde quieras.
+        El backup se guarda en el formato versionado actual ({"{"}schema_version: 3{"}"}). Nunca se borra el original: cada
+        exportación es un archivo aparte que podés guardar donde quieras. Importar un backup viejo (v1 o v2) también
+        funciona: se migra solo al formato actual.
       </p>
       <div className="flex flex-wrap gap-3">
         <Button onClick={exportar}>💾 Exportar datos</Button>

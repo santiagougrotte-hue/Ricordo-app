@@ -509,9 +509,12 @@ export interface RicordoDataV2 {
   legacy: Record<string, unknown>;
 }
 
+/** `desde_version` dice de dónde vino la migración que produjo este documento: `0` = no hubo
+ * migración, se sembró vacío/desde el seed. Solo se reescribe cuando efectivamente se migra algo —
+ * nunca en cada carga (ver `lib/store-v2.tsx`, `migrarDocumentoAV3`). */
 export interface RicordoDocument {
-  schema_version: 2;
-  metadata: { migrado_en: string; desde_version: 1 };
+  schema_version: 3;
+  metadata: { migrado_en: string; desde_version: 0 | 1 | 2 };
   data: RicordoDataV2;
 }
 
@@ -574,8 +577,8 @@ export function emptyDataV2(): RicordoDataV2 {
 
 export function emptyDocument(): RicordoDocument {
   return {
-    schema_version: 2,
-    metadata: { migrado_en: new Date().toISOString(), desde_version: 1 },
+    schema_version: 3,
+    metadata: { migrado_en: new Date().toISOString(), desde_version: 0 },
     data: emptyDataV2(),
   };
 }
