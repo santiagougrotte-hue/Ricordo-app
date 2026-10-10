@@ -75,10 +75,19 @@ test("migrarV2aV3: es idempotente (correrla dos veces da el mismo resultado)", (
   assert.deepEqual(una, dos);
 });
 
-test("migrarV2aV3: un documento sin secciones huérfanas y sin productos solo recibe la fecha de corte", () => {
+test("migrarV2aV3: un documento sin secciones huérfanas y sin productos solo recibe la fecha de corte y el saldo inicial de caja", () => {
   const base = emptyDataV2();
   const resultado = migrarV2aV3(base);
-  assert.deepEqual(resultado, { ...base, configuracion: { ...base.configuracion, fecha_corte_cmv: "2026-09-01", fecha_corte_compras: "2026-09-01" } });
+  assert.deepEqual(resultado, {
+    ...base,
+    configuracion: {
+      ...base.configuracion,
+      fecha_corte_cmv: "2026-09-01",
+      fecha_corte_compras: "2026-09-01",
+      saldo_inicial_caja: 286000,
+      fecha_saldo_inicial_caja: "2026-09-01",
+    },
+  });
 });
 
 test("migrarV2aV3: elimina Caprese y las variantes 'con salsa', dejando el resto del catálogo intacto", () => {
@@ -145,6 +154,22 @@ test("migrarV2aV3: todo producto sin línea recibe Pasta, salvo PROD-14 que reci
   assert.equal(porId.get("PROD-01"), "Pasta");
   assert.equal(porId.get("PROD-14"), "Salsa");
   assert.equal(porId.get("PROD-99"), "Pizza"); // ya tenía línea cargada, no se pisa
+});
+
+test("migrarV2aV3: borra el egreso de ajuste de saldo y carga el saldo inicial de caja real al 1/9", () => {
+  const base = emptyDataV2();
+  base.movimientos_financieros = [
+    { id: "MOVF-mtk18mvi7", fecha: "2026-09-02", tipo: "egreso", concepto: "2756572", monto: 2756572, estado: "confirmado", origen_tipo: "caja_manual" },
+    { id: "MOVF-otro", fecha: "2026-09-05", tipo: "egreso", concepto: "Otro gasto real", monto: 1000, estado: "confirmado" },
+  ];
+  const resultado = migrarV2aV3(base);
+  assert.equal(
+    resultado.movimientos_financieros.some((m) => m.id === "MOVF-mtk18mvi7"),
+    false
+  );
+  assert.equal(resultado.movimientos_financieros.some((m) => m.id === "MOVF-otro"), true);
+  assert.equal(resultado.configuracion.saldo_inicial_caja, 286000);
+  assert.equal(resultado.configuracion.fecha_saldo_inicial_caja, "2026-09-01");
 });
 
 test("migrarV2aV3: fuerza la fecha de corte real del negocio (2026-09-01) sobre cualquier valor anterior", () => {

@@ -821,6 +821,9 @@ export function migrarAV2(data: RicordoData): { documento: DocumentoV2Interno; r
         fecha_corte_cmv: data.fecha_corte_cmv,
         fecha_corte_compras: data.fecha_corte_compras,
         saldo_inicial_caja: money(data.saldo_anterior_caja?.valor),
+        // No existía en el esquema v1 — `migrarV2aV3` (Fase 2.3) lo carga con la fecha real del
+        // negocio justo después de esta migración, en el mismo paso v1→v2→v3.
+        fecha_saldo_inicial_caja: null,
         efectivo_en_mano: money(data.efectivo_en_mano),
         conciliacion_ignorados: data.conciliacion_ignorados,
         // No existía en el esquema v1 — arranca con el tema oscuro/violeta que ya se venía usando,

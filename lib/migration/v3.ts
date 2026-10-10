@@ -74,6 +74,22 @@ function conFechaDeCorte(data: RicordoDataV2): RicordoDataV2 {
   return { ...data, configuracion: { ...data.configuracion, fecha_corte_cmv: "2026-09-01", fecha_corte_compras: "2026-09-01" } };
 }
 
+/** El egreso `MOVF-mtk18mvi7` ($2.756.572, 2026-09-02, concepto literal "2756572", sin categoría)
+ * fue un intento viejo de ajustar el saldo de caja a mano, cargado como si fuera un gasto real del
+ * mes — se borra, y en su lugar se carga el saldo inicial de caja real al 1/9 que confirmó el dueño
+ * del negocio (no un valor calculado). Desde esa fecha, `saldoCaja`/`saldoCajaAlFecha` ya no suman
+ * los movimientos anteriores — quedan como historial puro. */
+const EGRESO_AJUSTE_SALDO_A_BORRAR = "MOVF-mtk18mvi7";
+const SALDO_INICIAL_CAJA_1_9_2026 = 286000;
+
+function conSaldoInicialCaja(data: RicordoDataV2): RicordoDataV2 {
+  return {
+    ...data,
+    movimientos_financieros: data.movimientos_financieros.filter((m) => m.id !== EGRESO_AJUSTE_SALDO_A_BORRAR),
+    configuracion: { ...data.configuracion, saldo_inicial_caja: SALDO_INICIAL_CAJA_1_9_2026, fecha_saldo_inicial_caja: "2026-09-01" },
+  };
+}
+
 const CAMPOS_HUERFANOS_RAIZ = [
   "plan_produccion",
   "ordenes_produccion",
@@ -132,5 +148,5 @@ export function migrarV2aV3(dataV2: RicordoDataV2): RicordoDataV2 {
   data.configuracion = configuracion;
   data.legacy = legacy;
 
-  return conFechaDeCorte(conLineaPorDefecto(limpiarCapreseYConSalsa(data as unknown as RicordoDataV2)));
+  return conSaldoInicialCaja(conFechaDeCorte(conLineaPorDefecto(limpiarCapreseYConSalsa(data as unknown as RicordoDataV2))));
 }

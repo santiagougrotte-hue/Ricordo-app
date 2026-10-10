@@ -124,6 +124,20 @@ test("saldoCaja: saldo inicial + ingresos - egresos de movimientos_financieros",
   assert.equal(saldoCaja(documento.data), 8000);
 });
 
+test("saldoCaja: con fecha_saldo_inicial_caja, los movimientos anteriores quedan como histórico y no afectan el saldo", () => {
+  const { documento } = migrarAV2(fixture());
+  const data = documento.data;
+  const conCorte = {
+    ...data,
+    configuracion: { ...data.configuracion, saldo_inicial_caja: 286000, fecha_saldo_inicial_caja: "2026-09-01" },
+    movimientos_financieros: [
+      ...data.movimientos_financieros, // todo esto es anterior al corte, no debe sumar/restar
+      { id: "MOVF-post", fecha: "2026-09-05", tipo: "egreso" as const, concepto: "Gasto posterior", monto: 1000, estado: "confirmado" as const, origen_tipo: "caja_manual" },
+    ],
+  };
+  assert.equal(saldoCaja(conCorte), 286000 - 1000);
+});
+
 test("diferenciaRepartoPedido: positiva si el costo real supera lo cobrado, nunca inventa el costo real si falta", () => {
   assert.equal(diferenciaRepartoPedido({ costo_envio: 1000, costo_real_envio: 1500 }), 500);
   assert.equal(diferenciaRepartoPedido({ costo_envio: 1000, costo_real_envio: 700 }), -300);

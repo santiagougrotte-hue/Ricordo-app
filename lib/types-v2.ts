@@ -373,6 +373,11 @@ export interface Configuracion {
   fecha_corte_cmv: string | null;
   fecha_corte_compras: string | null;
   saldo_inicial_caja: number;
+  /** Fecha desde la que `saldo_inicial_caja` es el punto de partida real del saldo de caja — los
+   * movimientos financieros anteriores a esta fecha quedan como histórico puro y no suman/restan
+   * al saldo calculado (ver `saldoCaja`/`saldoCajaAlFecha`). `null`/sin cargar = sin corte, se
+   * suma todo el historial como antes (comportamiento previo a este campo). */
+  fecha_saldo_inicial_caja: string | null;
   efectivo_en_mano: number;
   /** `id` de pedido_item confirmados en la conciliación de Caja como intencionalmente sin cobrar. */
   conciliacion_ignorados: string[];
@@ -513,6 +518,7 @@ export function emptyDataV2(): RicordoDataV2 {
       fecha_corte_cmv: null,
       fecha_corte_compras: null,
       saldo_inicial_caja: 0,
+      fecha_saldo_inicial_caja: null,
       efectivo_en_mano: 0,
       conciliacion_ignorados: [],
       apariencia: { tema: "oscuro", acento_preset: "violeta", acento_hex: "#8b5cf6" },
