@@ -75,8 +75,83 @@ test("migrarV2aV3: es idempotente (correrla dos veces da el mismo resultado)", (
   assert.deepEqual(una, dos);
 });
 
-test("migrarV2aV3: un documento que ya no tiene ninguna sección huérfana queda igual", () => {
+test("migrarV2aV3: un documento sin secciones huérfanas y sin productos solo recibe la fecha de corte", () => {
   const base = emptyDataV2();
   const resultado = migrarV2aV3(base);
-  assert.deepEqual(resultado, base);
+  assert.deepEqual(resultado, { ...base, configuracion: { ...base.configuracion, fecha_corte_cmv: "2026-09-01", fecha_corte_compras: "2026-09-01" } });
+});
+
+test("migrarV2aV3: elimina Caprese y las variantes 'con salsa', dejando el resto del catálogo intacto", () => {
+  const base = emptyDataV2();
+  base.productos = [
+    { id: "PROD-01", nombre: "Ravioles de calabaza", activo: true, linea: "Pasta" },
+    { id: "PROD-mrr2vmjb1", nombre: "Cappresse", activo: true, linea: "Pasta" },
+  ];
+  base.producto_variantes = [
+    { id: "PROD-08", producto_id: "PROD-01", canal: "Mayorista", activo: true, nombre: "Calabaza mayorista 12u", precio_venta: 9000, unidades_por_paquete: 12 },
+    { id: "PROD-12", producto_id: "PROD-01", canal: "Mayorista", activo: false, nombre: "Calabaza mayorista con salsa", precio_venta: 9000, unidades_por_paquete: 12 },
+    { id: "PROD-mrr2vmjb1", producto_id: "PROD-mrr2vmjb1", canal: "Minorista", activo: true, nombre: "Cappresse", precio_venta: 12000, unidades_por_paquete: 12 },
+    { id: "VAR-mulxognj1", producto_id: "PROD-mrr2vmjb1", canal: "Mayorista", activo: true, nombre: "Capresse mayorista", precio_venta: 9000, unidades_por_paquete: 12 },
+  ];
+  base.recetas = [
+    { id: "REC-01", producto_id: "PROD-01", nombre: "Receta de Calabaza", activa: true },
+    { id: "REC-CAPRESE", producto_id: "PROD-mrr2vmjb1", nombre: "Receta de Cappresse", activa: true },
+  ];
+  base.receta_items = [
+    { id: "RECI-01", receta_id: "REC-01", insumo_id: "ING-01", etapa: "masa", cantidad: 1 },
+    { id: "RECI-CAPRESE", receta_id: "REC-CAPRESE", insumo_id: "ING-02", etapa: "masa", cantidad: 1 },
+  ];
+  base.ajustes_receta_variante = [
+    { id: "AJR-01", variante_id: "PROD-08", insumo_id: "PKG-01", operacion: "sumar", cantidad: 1 },
+    { id: "AJR-12", variante_id: "PROD-12", insumo_id: "PKG-01", operacion: "sumar", cantidad: 1 },
+    { id: "AJR-CAPRESE", variante_id: "PROD-mrr2vmjb1", insumo_id: "PKG-01", operacion: "sumar", cantidad: 1 },
+  ];
+  base.complementos_variante = [{ id: "COMPV-12", producto_id: "PROD-14", variante_id: "PROD-12", cantidad: 1 }];
+
+  const resultado = migrarV2aV3(base);
+
+  assert.deepEqual(
+    resultado.productos.map((p) => p.id),
+    ["PROD-01"]
+  );
+  assert.deepEqual(
+    resultado.producto_variantes.map((v) => v.id),
+    ["PROD-08"]
+  );
+  assert.deepEqual(
+    resultado.recetas.map((r) => r.id),
+    ["REC-01"]
+  );
+  assert.deepEqual(
+    resultado.receta_items.map((ri) => ri.id),
+    ["RECI-01"]
+  );
+  assert.deepEqual(
+    resultado.ajustes_receta_variante.map((a) => a.id),
+    ["AJR-01"]
+  );
+  assert.deepEqual(resultado.complementos_variante, []);
+});
+
+test("migrarV2aV3: todo producto sin línea recibe Pasta, salvo PROD-14 que recibe Salsa; uno que ya tiene línea no se toca", () => {
+  const base = emptyDataV2();
+  base.productos = [
+    { id: "PROD-01", nombre: "Ravioles de calabaza", activo: true, linea: undefined as never },
+    { id: "PROD-14", nombre: "Salsa", activo: true, linea: undefined as never },
+    { id: "PROD-99", nombre: "Pizza casera", activo: true, linea: "Pizza" },
+  ];
+  const resultado = migrarV2aV3(base);
+  const porId = new Map(resultado.productos.map((p) => [p.id, p.linea]));
+  assert.equal(porId.get("PROD-01"), "Pasta");
+  assert.equal(porId.get("PROD-14"), "Salsa");
+  assert.equal(porId.get("PROD-99"), "Pizza"); // ya tenía línea cargada, no se pisa
+});
+
+test("migrarV2aV3: fuerza la fecha de corte real del negocio (2026-09-01) sobre cualquier valor anterior", () => {
+  const base = emptyDataV2();
+  base.configuracion.fecha_corte_cmv = "2026-08-01";
+  base.configuracion.fecha_corte_compras = "2026-08-01";
+  const resultado = migrarV2aV3(base);
+  assert.equal(resultado.configuracion.fecha_corte_cmv, "2026-09-01");
+  assert.equal(resultado.configuracion.fecha_corte_compras, "2026-09-01");
 });

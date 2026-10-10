@@ -103,7 +103,10 @@ export interface Producto {
   nombre: string;
   categoria_id?: string;
   /** Clasificación comercial amplia, separada de `categoria_id` (que es libre/por sabor) — para
-   * agrupar el catálogo en el "Resumen para Sheets" y en reportes similares. */
+   * agrupar el catálogo en el "Resumen para Sheets" y en reportes similares. La migración v2→v3
+   * (`migrarV2aV3`) le pone un valor a todo producto que todavía no lo tenía (`PROD-14` → Salsa, el
+   * resto → Pasta) y el formulario de producto no deja un valor en blanco — opcional acá solo para
+   * tolerar un documento viejo que todavía no pasó por esa migración. */
   linea?: LineaProducto;
   activo: boolean;
   foto?: Adjunto;

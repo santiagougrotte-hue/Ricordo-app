@@ -271,6 +271,8 @@ function migrarProductos(
       nombre: nombreBase,
       categoria_id: categorias.obtener(baseOriginal?.categoria, "producto"),
       activo: baseOriginal?.activo ?? variantesDelGrupo.some((v) => v.activo),
+      // `linea` no existía en el esquema v1 — `migrarV2aV3` (Fase 2) le pone el valor real
+      // (PROD-14 → Salsa, el resto → Pasta) justo después de esta migración.
     });
 
     for (const p of variantesDelGrupo) {

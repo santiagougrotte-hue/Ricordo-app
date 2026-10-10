@@ -87,6 +87,9 @@ interface PedidoForm {
   descuento: number;
   notas: string;
   items: ItemForm[];
+  /** Agrega un ítem de regalo de la salsa (`VARIANTE_SALSA_REGALO_ID`) a $0 — no suma al total, sí
+   * descuenta 1 de stock al entregar (mismo mecanismo que cualquier otro ítem con variante). */
+  salsaDeRegalo: boolean;
 }
 
 function formVacio(): PedidoForm {
@@ -102,8 +105,15 @@ function formVacio(): PedidoForm {
     descuento: 0,
     notas: "",
     items: [itemVacio("Minorista")],
+    salsaDeRegalo: false,
   };
 }
+
+/** Variante de Salsa usada para el ítem de regalo (Sección 2.6 del pedido de limpieza) — mismo id
+ * que el producto base "Salsa" (PROD-14), igual que el resto del catálogo con una sola
+ * presentación. Texto libre, no un id inventado: si en algún momento cambia, hay que actualizarlo
+ * acá a mano. */
+const VARIANTE_SALSA_REGALO_ID = "PROD-14";
 
 /** true si el formulario todavía no tiene nada que valga la pena recuperar — evita ofrecer un
  * "borrador" vacío apenas se abre el modal por primera vez. */
@@ -323,6 +333,7 @@ function PedidosTab() {
 
   function abrirEdicion(p: Pedido) {
     const items = data.pedido_items.filter((i) => i.pedido_id === p.id);
+    const yaTieneSalsaDeRegalo = items.some((i) => i.producto_variante_id === VARIANTE_SALSA_REGALO_ID && i.precio_unitario === 0);
     setEditando(p.id);
     setForm({
       cliente_id: p.cliente_id,
@@ -335,7 +346,10 @@ function PedidosTab() {
       costo_real_envio: p.costo_real_envio ?? p.costo_envio,
       descuento: p.descuento,
       notas: p.notas ?? "",
-      items: items.map((i) => {
+      salsaDeRegalo: yaTieneSalsaDeRegalo,
+      items: items
+        .filter((i) => !(i.producto_variante_id === VARIANTE_SALSA_REGALO_ID && i.precio_unitario === 0))
+        .map((i) => {
         const variante = i.producto_variante_id ? data.producto_variantes.find((v) => v.id === i.producto_variante_id) : undefined;
         return {
           canal: variante?.canal ?? p.canal,
@@ -448,6 +462,20 @@ function PedidosTab() {
       };
       return [item, itemSalsa];
     });
+    if (form.salsaDeRegalo) {
+      const varianteRegalo = data.producto_variantes.find((v) => v.id === VARIANTE_SALSA_REGALO_ID);
+      nuevosItems.push({
+        id: uid("PI"),
+        pedido_id: pedidoId,
+        producto_variante_id: VARIANTE_SALSA_REGALO_ID,
+        nombre_historico: varianteRegalo?.nombre ?? "Salsa (regalo)",
+        cantidad: 1,
+        precio_unitario: 0,
+        descuento: 0,
+        subtotal: 0,
+        ...costeoHistoricoVariante(VARIANTE_SALSA_REGALO_ID),
+      });
+    }
     const total = nuevosItems.reduce((acc, i) => acc + i.subtotal, 0) - form.descuento + form.costo_envio;
     const nuevoPedido: Pedido = {
       id: pedidoId,
@@ -690,6 +718,12 @@ function PedidosTab() {
           </Field>
           <Field label="Descuento $ (total del pedido)">
             <Input type="number" value={form.descuento} onChange={(e) => setForm({ ...form, descuento: Number(e.target.value) })} />
+          </Field>
+          <Field label="Salsa de regalo">
+            <label className="flex items-center gap-2 text-[13px] text-text2">
+              <input type="checkbox" checked={form.salsaDeRegalo} onChange={(e) => setForm({ ...form, salsaDeRegalo: e.target.checked })} />
+              Agregar una salsa a $0 (descuenta 1 de stock, no suma al total)
+            </label>
           </Field>
           <Field label="Notas" full>
             <Textarea rows={2} value={form.notas} onChange={(e) => setForm({ ...form, notas: e.target.value })} />
