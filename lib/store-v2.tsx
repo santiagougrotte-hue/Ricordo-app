@@ -64,9 +64,9 @@ function esDocumentoV2(valor: unknown): valor is RicordoDocument {
  * `datos_pendientes_revision`/`legacy` en vez de descartarlo. */
 function comoV2(valorCrudo: unknown): { data: RicordoDataV2; metadata: RicordoDocument["metadata"]; eraV2: boolean } {
   if (esDocumentoV2(valorCrudo)) {
-    // Documento ya v2, pero puede venir de antes de que se agregara un campo nuevo al esquema
-    // (ej. fondo_reposicion) — se completa con los defaults en vez de asumir que ya existe, así
-    // no rompe con un documento real guardado con una versión anterior del esquema v2.
+    // Documento ya v2, pero puede venir de antes de que se agregara un campo nuevo al esquema —
+    // se completa con los defaults en vez de asumir que ya existe, así no rompe con un documento
+    // real guardado con una versión anterior del esquema v2.
     const base = emptyDataV2();
     const data: RicordoDataV2 = {
       ...base,
@@ -74,8 +74,6 @@ function comoV2(valorCrudo: unknown): { data: RicordoDataV2; metadata: RicordoDo
       configuracion: {
         ...base.configuracion,
         ...valorCrudo.data.configuracion,
-        caja_inteligente: { ...base.configuracion.caja_inteligente, ...valorCrudo.data.configuracion?.caja_inteligente },
-        fondo_reposicion: { ...base.configuracion.fondo_reposicion, ...valorCrudo.data.configuracion?.fondo_reposicion },
       },
     };
     return { data, metadata: valorCrudo.metadata, eraV2: true };
@@ -100,8 +98,6 @@ function loadFromLocalStorage(): { data: RicordoDataV2; metadata: RicordoDocumen
           configuracion: {
             ...base.configuracion,
             ...parsed.data.configuracion,
-            caja_inteligente: { ...base.configuracion.caja_inteligente, ...parsed.data.configuracion?.caja_inteligente },
-            fondo_reposicion: { ...base.configuracion.fondo_reposicion, ...parsed.data.configuracion?.fondo_reposicion },
           },
         },
         metadata: parsed.metadata,

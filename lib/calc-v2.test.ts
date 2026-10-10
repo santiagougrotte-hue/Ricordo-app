@@ -15,16 +15,12 @@ import {
   ventasNetas,
   costosFijosTotales,
   totalCostosIndirectosPorTipo,
-  puntoEquilibrio,
   valorStockInsumos,
   calcularEerr,
   cobrosPeriodo,
   itemsSinCostoDeterminado,
   calcularComprasCmvInventario,
   calcularMargenPorItem,
-  agruparMargen,
-  compararCanalesPorSabor,
-  alertasMargen,
   calcularFlujoCaja,
   detectarCanalInconsistente,
   totalCobradoPedido,
@@ -36,21 +32,11 @@ import {
   estadoCuentaPorPagar,
   calcularCuentasPorCobrar,
   calcularCuentasPorPagar,
-  calcularProyeccionCaja,
   calcularDineroLibre,
-  amortizacionAcumulada,
-  valorContableActivo,
   calcularBalanceGeneral,
-  calcularFondoReposicion,
-  calcularFondosReinversion,
   recetaEfectivaVariante,
   costoUnidadProductoBase,
-  mesReferencia,
-  gananciaNetaDistribuible,
-  gananciaNetaPendienteDistribuir,
-  estadoDistribucionMes,
   idsExcluidosPorRevision,
-  calcularRentabilidadEnvios,
   calcularEerrEstructurado,
 } from "./calc-v2";
 
@@ -159,23 +145,6 @@ test("costosFijosTotales: el costo fijo recurrente aplica a cualquier mes, el in
   assert.equal(totalCostosIndirectosPorTipo(documento.data, 1, 2026, "Fijo"), 0);
 });
 
-test("puntoEquilibrio: ventas de equilibrio (pesos) y unidades de equilibrio son dos números distintos, ninguno es el otro disfrazado", () => {
-  const { documento } = migrarAV2(fixture());
-  const pedidosAgosto = documento.data.pedidos.filter((p) => p.fecha.startsWith("2026-08"));
-  const resultado = puntoEquilibrio(documento.data, pedidosAgosto, 8, 2026);
-  assert.ok(Number.isFinite(resultado.ventasEquilibrio));
-  assert.ok(resultado.ventasEquilibrio > 0);
-  assert.ok(Number.isFinite(resultado.unidadesEquilibrio));
-  assert.ok(resultado.unidadesEquilibrio > 0);
-  // Costos fijos ($100000) / margen de contribución promedio por unidad debe dar unidades chicas
-  // (de a unidades), nunca un número en el orden de los pesos de venta.
-  assert.ok(resultado.unidadesEquilibrio < 1000);
-  assert.ok(resultado.ventasEquilibrio > resultado.unidadesEquilibrio * 10);
-  // unidadesEquilibrio = costos fijos / margen de contribución por unidad, redondeado hacia arriba.
-  assert.equal(resultado.unidadesEquilibrio, Math.ceil(resultado.cfTotal / resultado.margenPromedioPonderado));
-  assert.equal(resultado.unidadesTotales, 2);
-});
-
 test("calcularEerr: ventas/CMV/costos fijos coinciden con los mismos datos que usan las funciones ya probadas", () => {
   const { documento } = migrarAV2(fixture());
   const eerr = calcularEerr(documento.data, "2026-08-01", "2026-08-31");
@@ -192,7 +161,6 @@ test("calcularEerr: ventas/CMV/costos fijos coinciden con los mismos datos que u
   assert.equal(eerr.gastos_operativos.total, 0);
   // Costo fijo recurrente ($100000) aplica una vez por el único mes del rango (agosto).
   assert.equal(eerr.costos_fijos.total, 100000);
-  assert.equal(eerr.amortizaciones.total, 0);
   assert.equal(eerr.resultado_operativo, 6700 - 100000);
   // Otros ingresos/gastos e impuestos: sin fuente de datos todavía, siempre en cero.
   assert.equal(eerr.otros_ingresos_gastos.total, 0);
@@ -272,7 +240,7 @@ test("calcularComprasCmvInventario: mermas y ajustes de conteo se valorizan al p
   assert.equal(r.dias_desde_ultimo_conteo, 11);
 });
 
-test("calcularMargenPorItem + agruparMargen: coincide con el CMV/ventas ya probados y agrupa por sabor vía id", () => {
+test("calcularMargenPorItem: coincide con el CMV/ventas ya probados", () => {
   const { documento } = migrarAV2(fixture());
   const items = calcularMargenPorItem(documento.data, "2026-08-01", "2026-08-31");
   assert.equal(items.length, 1);
@@ -280,27 +248,6 @@ test("calcularMargenPorItem + agruparMargen: coincide con el CMV/ventas ya proba
   assert.equal(items[0].cmv, 1300);
   assert.equal(items[0].margen_contribucion, 6700);
   assert.ok(items[0].margen_pct !== null && Math.abs(items[0].margen_pct - 83.75) < 0.01);
-
-  const porSabor = agruparMargen(items, "sabor");
-  assert.equal(porSabor.length, 1);
-  assert.equal(porSabor[0].etiqueta, "Calabaza");
-  assert.equal(porSabor[0].unidades, 2);
-  assert.equal(porSabor[0].margen_contribucion, 6700);
-
-  const comparacion = compararCanalesPorSabor(items);
-  assert.equal(comparacion.length, 1);
-  assert.equal(comparacion[0].margen_mayorista, 6700);
-  assert.equal(comparacion[0].margen_minorista, 0);
-  assert.equal(comparacion[0].margen_pct_minorista, null); // sin ventas minoristas, no 0% engañoso
-});
-
-test("alertasMargen: dispara la alerta de margen mínimo solo cuando el umbral la supera", () => {
-  const { documento } = migrarAV2(fixture());
-  const items = calcularMargenPorItem(documento.data, "2026-08-01", "2026-08-31");
-  const sinAlerta = alertasMargen(documento.data, items, 50); // margen real ~83.75%, no dispara
-  assert.ok(!sinAlerta.some((a) => a.mensaje.includes("Calabaza") && a.mensaje.includes("margen de")));
-  const conAlerta = alertasMargen(documento.data, items, 90); // 90% > 83.75%, sí dispara
-  assert.ok(conAlerta.some((a) => a.mensaje.includes("Calabaza") && a.mensaje.includes("margen de")));
 });
 
 test("calcularMargenPorItem: reparte el descuento del pedido proporcional a ventas, no lo duplica en cada línea", () => {
@@ -323,21 +270,6 @@ test("calcularMargenPorItem: reparte el descuento del pedido proporcional a vent
   assert.equal(i1.descuento, 10);
   assert.equal(i2.descuento, 30);
   assert.equal(i1.descuento + i2.descuento, 40); // nunca $40 + $40
-});
-
-test("alertasMargen: bajo margen $0 en envío (costo real = cobrado), en cambio detecta cuando el envío pesa demasiado sobre la venta bruta", () => {
-  const data = emptyDataV2();
-  data.productos = [{ id: "P1", nombre: "Sabor A", activo: true }];
-  data.producto_variantes = [{ id: "V1", producto_id: "P1", nombre: "A", precio_venta: 100, activo: true }];
-  data.pedidos = [{ id: "PED-1", fecha: "2026-01-01", cliente_id: "C1", estado: "Entregado", canal: "Minorista", descuento: 0, costo_envio: 60, total: 160 }];
-  data.pedido_items = [{ id: "I1", pedido_id: "PED-1", producto_variante_id: "V1", nombre_historico: "A", cantidad: 1, precio_unitario: 100, descuento: 0, subtotal: 100 }];
-  const items = calcularMargenPorItem(data, "2026-01-01", "2026-01-31");
-  // Sin receta cargada, CMV = 0: el margen de contribución da igual a la venta bruta (100) —
-  // el envío nunca lo cambia, porque entra como ingreso y sale como costo por el mismo importe.
-  assert.equal(items[0].margen_contribucion, 100);
-  const alertas = alertasMargen(data, items, 15);
-  // $60 de envío sobre $100 de venta bruta = 60% > 30% → dispara la alerta de envío desproporcionado.
-  assert.ok(alertas.some((a) => a.mensaje.includes("representa más del 30%")));
 });
 
 test("calcularFlujoCaja: el caja_movimiento_legacy del fixture entra como caja real, agrupado por método de pago", () => {
@@ -581,68 +513,14 @@ test("calcularCuentasPorCobrar/calcularCuentasPorPagar: solo pedidos Entregados 
   assert.equal(porPagar[0].compra_id, "COM-2"); // vence antes -> primero
 });
 
-test("calcularProyeccionCaja: suma cobros/pagos pendientes con fecha esperada dentro de cada horizonte, nunca extrapola", () => {
-  const data = emptyDataV2();
-  data.configuracion.saldo_inicial_caja = 500000;
-  data.pedidos = [
-    { id: "PED-1", fecha: "2026-01-01", cliente_id: "C1", estado: "Entregado", canal: "Minorista", descuento: 0, costo_envio: 0, total: 100000, fecha_vencimiento: "2026-01-05" },
-    // Sin fecha_vencimiento: no se puede ubicar en ningún horizonte, nunca se inventa una fecha.
-    { id: "PED-2", fecha: "2026-01-01", cliente_id: "C1", estado: "Entregado", canal: "Minorista", descuento: 0, costo_envio: 0, total: 40000 },
-  ];
-  data.compras = [{ id: "COM-1", fecha: "2026-01-01", proveedor_id: "P1", estado_pago: "pendiente", total: 60000, fecha_vencimiento: "2026-01-12" }];
-  const hoy = "2026-01-01";
-  const proy = calcularProyeccionCaja(data, hoy);
-  assert.equal(proy.caja_actual, 500000);
-  assert.equal(proy.puntos[0].dias, 0);
-  assert.equal(proy.puntos[0].caja_proyectada, 500000); // "hoy" nunca proyecta, es la caja real
-  const d7 = proy.puntos.find((p) => p.dias === 7)!;
-  assert.equal(d7.cobros_pendientes, 100000); // vence el 5, dentro de los 7 días
-  assert.equal(d7.pagos_pendientes, 0); // COM-1 vence el 12, todavía no
-  assert.equal(d7.caja_proyectada, 600000);
-  const d15 = proy.puntos.find((p) => p.dias === 15)!;
-  assert.equal(d15.pagos_pendientes, 60000); // ya entró en la ventana de 15 días
-  assert.equal(d15.caja_proyectada, 500000 + 100000 - 60000);
-  assert.equal(proy.alerta_negativa, false);
-});
-
-test("calcularProyeccionCaja: si la caja proyectada da negativa, prende la alerta", () => {
-  const data = emptyDataV2();
-  data.configuracion.saldo_inicial_caja = 10000;
-  data.compras = [{ id: "COM-1", fecha: "2026-01-01", proveedor_id: "P1", estado_pago: "pendiente", total: 50000, fecha_vencimiento: "2026-01-03" }];
-  const proy = calcularProyeccionCaja(data, "2026-01-01");
-  const d7 = proy.puntos.find((p) => p.dias === 7)!;
-  assert.ok(d7.caja_proyectada < 0);
-  assert.equal(proy.alerta_negativa, true);
-});
-
-test("calcularDineroLibre: descuenta cuentas por pagar y fondos internos reservados del saldo de caja", () => {
+test("calcularDineroLibre: descuenta cuentas por pagar del saldo de caja", () => {
   const data = emptyDataV2();
   data.configuracion.saldo_inicial_caja = 1000000;
   data.compras = [{ id: "COM-1", fecha: "2026-01-01", proveedor_id: "P1", estado_pago: "pendiente", total: 200000 }];
-  data.configuracion.caja_inteligente = {
-    porcentaje_reinversion: 60,
-    porcentaje_seguridad: 40,
-    asignaciones: [{ id: "CI-1", fecha: "2026-01-01", monto: 150000 }],
-    distribuciones: [],
-    cargas_historicas: [],
-    usos_reinversion: [],
-    usos_seguridad: [],
-  };
   const libre = calcularDineroLibre(data, "2026-01-15");
   assert.equal(libre.dinero_en_cuentas, 1000000);
   assert.equal(libre.cuentas_por_pagar, 200000);
-  assert.equal(libre.fondos_reservados, 150000); // 60% + 40% de 150.000 = el total aportado
-  assert.equal(libre.dinero_libre, 1000000 - 200000 - 150000);
-});
-
-test("amortizacionAcumulada/valorContableActivo: nunca supera el costo, da 0 antes de la compra", () => {
-  const activo = { id: "A1", nombre: "Sobadora", fecha_compra: "2026-01-15", costo: 120000, vida_util_meses: 12, amortizacion_mensual: 10000, activo: true };
-  assert.equal(amortizacionAcumulada(activo, "2026-01-10"), 0); // antes de comprarla
-  assert.equal(amortizacionAcumulada(activo, "2026-01-15"), 10000); // mismo mes: 1 cuota
-  assert.equal(amortizacionAcumulada(activo, "2026-04-15"), 40000); // 4 meses
-  assert.equal(amortizacionAcumulada(activo, "2030-01-01"), 120000); // nunca supera el costo
-  assert.equal(valorContableActivo(activo, "2026-04-15"), 120000 - 40000);
-  assert.equal(valorContableActivo(activo, "2030-01-01"), 0);
+  assert.equal(libre.dinero_libre, 1000000 - 200000);
 });
 
 test("calcularBalanceGeneral: ACTIVO = PASIVO + PATRIMONIO NETO con aportes/retiros/préstamos/resultado", () => {
@@ -679,89 +557,6 @@ test("calcularBalanceGeneral: separa resultado del período de los resultados ac
   const balance = calcularBalanceGeneral(data, "2026-02-28", "2026-02-01");
   assert.equal(balance.patrimonio_neto.resultado_periodo, 2000); // solo febrero
   assert.equal(balance.patrimonio_neto.resultados_acumulados, 1000); // enero, período anterior
-});
-
-test("calcularFondoReposicion: separado por completo de la amortización — aportes/usos 100% manuales", () => {
-  const data = emptyDataV2();
-  assert.equal(calcularFondoReposicion(data), 0); // sin aportes, sin amortización que lo alimente sola
-  data.configuracion.fondo_reposicion = {
-    aportes: [{ id: "FR-1", fecha: "2026-01-01", concepto: "Aporte enero", monto: 50000 }],
-    usos: [{ id: "FR-2", fecha: "2026-02-01", concepto: "Repuesto sobadora", monto: 15000 }],
-  };
-  assert.equal(calcularFondoReposicion(data), 35000);
-});
-
-test("calcularFondosReinversion/calcularDineroLibre: el fondo de reposición también resta del dinero libre", () => {
-  const data = emptyDataV2();
-  data.configuracion.saldo_inicial_caja = 500000;
-  data.configuracion.fondo_reposicion = { aportes: [{ id: "FR-1", fecha: "2026-01-01", concepto: "Aporte", monto: 100000 }], usos: [] };
-  const libre = calcularDineroLibre(data, "2026-01-15");
-  const fondos = calcularFondosReinversion(data);
-  assert.equal(fondos.reinversion.disponible, 0); // caja_inteligente sin asignaciones/distribuciones/cargas
-  assert.equal(fondos.seguridad.disponible, 0);
-  assert.equal(libre.fondos_reservados, 100000); // solo el fondo de reposición
-  assert.equal(libre.dinero_libre, 500000 - 100000);
-});
-
-test("mesReferencia/gananciaNetaDistribuible: la ganancia distribuible es el resultado_neto del EERR, nunca las ventas brutas", () => {
-  const data = emptyDataV2();
-  assert.equal(mesReferencia(8, 2026), "2026-08");
-  data.productos = [{ id: "P1", nombre: "Sabor A", activo: true }];
-  data.producto_variantes = [{ id: "V1", producto_id: "P1", nombre: "A", precio_venta: 1000, activo: true }];
-  data.pedidos = [{ id: "PED-1", fecha: "2026-08-15", cliente_id: "C1", estado: "Entregado", canal: "Minorista", descuento: 0, costo_envio: 0, total: 1000 }];
-  data.pedido_items = [{ id: "I1", pedido_id: "PED-1", producto_variante_id: "V1", nombre_historico: "A", cantidad: 1, precio_unitario: 1000, descuento: 0, subtotal: 1000 }];
-  data.categorias = [{ id: "CAT-CF", nombre: "Costo Fijo — Alquiler", ambito: "financiero", activo: true }];
-  data.movimientos_financieros = [{ id: "M1", fecha: "2026-08-01", tipo: "egreso", concepto: "Alquiler", monto: 400, categoria_id: "CAT-CF", estado: "confirmado" }];
-  // Ventas brutas = 1000, pero la ganancia distribuible descuenta el costo fijo -> 600, no 1000.
-  assert.equal(gananciaNetaDistribuible(data, 8, 2026), 600);
-});
-
-test("gananciaNetaPendienteDistribuir: suma solo meses con ganancia positiva y sin distribución todavía", () => {
-  const data = emptyDataV2();
-  data.productos = [{ id: "P1", nombre: "Sabor A", activo: true }];
-  data.producto_variantes = [{ id: "V1", producto_id: "P1", nombre: "A", precio_venta: 1000, activo: true }];
-  data.pedidos = [
-    { id: "PED-1", fecha: "2026-06-10", cliente_id: "C1", estado: "Entregado", canal: "Minorista", descuento: 0, costo_envio: 0, total: 1000 },
-    { id: "PED-2", fecha: "2026-07-10", cliente_id: "C1", estado: "Entregado", canal: "Minorista", descuento: 0, costo_envio: 0, total: 2000 },
-  ];
-  data.pedido_items = [
-    { id: "I1", pedido_id: "PED-1", producto_variante_id: "V1", nombre_historico: "A", cantidad: 1, precio_unitario: 1000, descuento: 0, subtotal: 1000 },
-    { id: "I2", pedido_id: "PED-2", producto_variante_id: "V1", nombre_historico: "A", cantidad: 2, precio_unitario: 1000, descuento: 0, subtotal: 2000 },
-  ];
-  // Junio y julio, sin costos: ganancia de 1000 y 2000 respectivamente. Agosto es el mes de referencia (excluido).
-  assert.equal(gananciaNetaPendienteDistribuir(data, "2026-08"), 3000);
-
-  data.configuracion.caja_inteligente.distribuciones = [
-    { id: "D1", mes_referencia: "2026-06", ganancia_neta: 1000, monto_reinversion: 700, monto_seguridad: 300, fecha: "2026-08-20" },
-  ];
-  // Junio ya se distribuyó -> solo queda pendiente julio.
-  assert.equal(gananciaNetaPendienteDistribuir(data, "2026-08"), 2000);
-});
-
-test("estadoDistribucionMes: detecta si ya se distribuyó y si el EERR cambió después de distribuir", () => {
-  const data = emptyDataV2();
-  data.productos = [{ id: "P1", nombre: "Sabor A", activo: true }];
-  data.producto_variantes = [{ id: "V1", producto_id: "P1", nombre: "A", precio_venta: 1000, activo: true }];
-  data.pedidos = [{ id: "PED-1", fecha: "2026-08-15", cliente_id: "C1", estado: "Entregado", canal: "Minorista", descuento: 0, costo_envio: 0, total: 1000 }];
-  data.pedido_items = [{ id: "I1", pedido_id: "PED-1", producto_variante_id: "V1", nombre_historico: "A", cantidad: 1, precio_unitario: 1000, descuento: 0, subtotal: 1000 }];
-
-  let estado = estadoDistribucionMes(data, 8, 2026);
-  assert.equal(estado.ya_distribuido, false);
-  assert.equal(estado.ganancia_actual, 1000);
-
-  data.configuracion.caja_inteligente.distribuciones = [
-    { id: "D1", mes_referencia: "2026-08", ganancia_neta: 1000, monto_reinversion: 700, monto_seguridad: 300, fecha: "2026-08-20" },
-  ];
-  estado = estadoDistribucionMes(data, 8, 2026);
-  assert.equal(estado.ya_distribuido, true);
-  assert.equal(estado.cambio_desde_distribucion, false);
-
-  // Se agrega otro pedido de agosto DESPUÉS de haber distribuido -> el EERR de agosto ya no da lo mismo.
-  data.pedidos.push({ id: "PED-2", fecha: "2026-08-20", cliente_id: "C1", estado: "Entregado", canal: "Minorista", descuento: 0, costo_envio: 0, total: 500 });
-  data.pedido_items.push({ id: "I2", pedido_id: "PED-2", producto_variante_id: "V1", nombre_historico: "A", cantidad: 1, precio_unitario: 500, descuento: 0, subtotal: 500 });
-  estado = estadoDistribucionMes(data, 8, 2026);
-  assert.equal(estado.ganancia_actual, 1500);
-  assert.equal(estado.cambio_desde_distribucion, true);
 });
 
 function fixtureRecetaPorUnidad() {
@@ -959,40 +754,7 @@ test("calcularEerr/calcularMargenPorItem: un pedido pendiente de revisión no en
   assert.equal(calcularEerr(data, "2026-01-01", "2026-01-31").ventas_netas, 1500);
 });
 
-test("calcularRentabilidadEnvios: separa ingreso cobrado del costo real, nunca los mezcla en una sola cifra", () => {
-  const data = emptyDataV2();
-  data.clientes = [{ id: "C1", nombre: "Cliente 1", canal: "Minorista" }];
-  data.pedidos = [
-    // Envío rentable: se cobró más de lo que costó de verdad.
-    { id: "PED-1", fecha: "2026-01-10", cliente_id: "C1", estado: "Entregado", canal: "Minorista", descuento: 0, costo_envio: 2000, costo_real_envio: 1200, total: 5000 },
-    // Envío a pérdida.
-    { id: "PED-2", fecha: "2026-01-12", cliente_id: "C1", estado: "Entregado", canal: "Minorista", descuento: 0, costo_envio: 1500, costo_real_envio: 2500, total: 3000 },
-    // Sin costo_real_envio cargado -> se aproxima con lo cobrado (resultado 0).
-    { id: "PED-3", fecha: "2026-01-14", cliente_id: "C1", estado: "Entregado", canal: "Minorista", descuento: 0, costo_envio: 1000, total: 2000 },
-    // Sin envío cobrado -> no entra al reporte.
-    { id: "PED-4", fecha: "2026-01-15", cliente_id: "C1", estado: "Entregado", canal: "Minorista", descuento: 0, costo_envio: 0, total: 2000 },
-    // Pedido pendiente (no Entregado) -> no entra, todavía no es una venta realizada.
-    { id: "PED-5", fecha: "2026-01-16", cliente_id: "C1", estado: "Confirmado", canal: "Minorista", descuento: 0, costo_envio: 1000, total: 2000 },
-  ];
-
-  const reporte = calcularRentabilidadEnvios(data, "2026-01-01", "2026-01-31");
-  assert.equal(reporte.pedidos.length, 3);
-  const ped1 = reporte.pedidos.find((p) => p.pedido_id === "PED-1")!;
-  assert.equal(ped1.ingreso_envio, 2000);
-  assert.equal(ped1.costo_real_envio, 1200);
-  assert.equal(ped1.resultado, 800);
-  const ped2 = reporte.pedidos.find((p) => p.pedido_id === "PED-2")!;
-  assert.equal(ped2.resultado, -1000);
-  const ped3 = reporte.pedidos.find((p) => p.pedido_id === "PED-3")!;
-  assert.equal(ped3.costo_real_envio, 1000);
-  assert.equal(ped3.resultado, 0);
-
-  assert.equal(reporte.ingreso_total, 2000 + 1500 + 1000);
-  assert.equal(reporte.costo_real_total, 1200 + 2500 + 1000);
-  assert.equal(reporte.resultado_total, 800 - 1000 + 0);
-});
-
-test("calcularEerrEstructurado: reproduce exactamente la estructura pedida (VENTAS/CMV/R.bruto/Gastos adm,comerc./Amortizaciones/Intereses/IIGG/Resultado neto)", () => {
+test("calcularEerrEstructurado: reproduce exactamente la estructura pedida (VENTAS/CMV/R.bruto/Gastos adm,comerc./Intereses/IIGG/Resultado neto)", () => {
   const data = emptyDataV2();
   data.clientes = [{ id: "C1", nombre: "Cliente 1", canal: "Minorista" }];
   data.insumos = [{ id: "INS-1", nombre: "Insumo caro", tipo: "ingrediente", unidad: "kg", precio_actual: 140000, controla_stock: false, activo: true }];
@@ -1011,21 +773,18 @@ test("calcularEerrEstructurado: reproduce exactamente la estructura pedida (VENT
     { id: "M1", fecha: "2026-01-15", tipo: "egreso", categoria_id: "CAT-GO", concepto: "Sueldos", monto: 40000, estado: "confirmado" },
     { id: "M2", fecha: "2026-01-20", tipo: "egreso", categoria_id: "CAT-INT", concepto: "Intereses préstamo", monto: 9200, estado: "confirmado" },
   ];
-  data.activos = [{ id: "A1", nombre: "Máquina", fecha_compra: "2026-01-01", costo: 1200000, vida_util_meses: 24, amortizacion_mensual: 50000, activo: true }];
 
   const r = calcularEerrEstructurado(data, "2026-01-01", "2026-01-31");
   assert.equal(r.ventas, 300000);
   assert.equal(r.cmv.total, 140000);
   assert.equal(r.resultado_bruto, 160000);
   assert.equal(r.gastos_adm_comerc.total, 40000);
-  assert.equal(r.resultado_antes_amort_int_impuestos, 120000);
-  assert.equal(r.amortizaciones.total, 50000);
-  assert.equal(r.resultado_antes_intereses_impuestos, 70000);
+  assert.equal(r.resultado_antes_intereses_impuestos, 120000);
   assert.equal(r.intereses.total, 9200);
-  assert.equal(r.resultado_antes_impuestos, 60800);
+  assert.equal(r.resultado_antes_impuestos, 110800);
   assert.equal(r.alicuota_iigg_pct, 35);
-  assert.equal(r.iigg, 21280);
-  assert.equal(r.resultado_neto, 39520);
+  assert.equal(r.iigg, 38780);
+  assert.equal(r.resultado_neto, 72020);
 });
 
 test("calcularEerrEstructurado: nunca calcula un IIGG negativo cuando el resultado antes de impuestos es negativo", () => {

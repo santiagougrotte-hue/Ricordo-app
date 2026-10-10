@@ -37,9 +37,10 @@ import {
   variantesSinFactorReceta,
   ETAPAS_POR_UNIDAD,
 } from "@/lib/calc-v2";
-import type { Canal, EtapaReceta, OperacionAjusteReceta, ProductoVariante, TipoUnidadVenta } from "@/lib/types-v2";
+import type { Canal, EtapaReceta, LineaProducto, OperacionAjusteReceta, ProductoVariante, TipoUnidadVenta } from "@/lib/types-v2";
 
 const TIPOS_UNIDAD_VENTA: TipoUnidadVenta[] = ["caja", "unidad", "pote", "bolsa", "otro"];
+const LINEAS_PRODUCTO: LineaProducto[] = ["Pasta", "Salsa", "Pizza", "Lasaña"];
 
 const ETAPAS: EtapaReceta[] = ["masa", "relleno", "salsa", "terminacion", "packaging"];
 const OPERACIONES: OperacionAjusteReceta[] = ["sumar", "reemplazar", "restar"];
@@ -60,8 +61,6 @@ function varianteVacia(): Omit<ProductoVariante, "id" | "producto_id"> {
     precio_venta: 0,
     activo: true,
     tipo_unidad_venta: "caja",
-    gramos_relleno_por_caja: undefined,
-    preparacion_relleno_id: undefined,
   };
 }
 
@@ -122,8 +121,6 @@ function FichaProducto({ productoId }: { productoId: string }) {
       precio_venta: v.precio_venta,
       activo: v.activo,
       tipo_unidad_venta: v.tipo_unidad_venta ?? "caja",
-      gramos_relleno_por_caja: v.gramos_relleno_por_caja,
-      preparacion_relleno_id: v.preparacion_relleno_id,
     });
     setVarianteModalOpen(true);
   }
@@ -276,6 +273,24 @@ function FichaProducto({ productoId }: { productoId: string }) {
             >
               <option value="si">Sí</option>
               <option value="no">No</option>
+            </Select>
+          </Field>
+          <Field label="Línea">
+            <Select
+              value={producto.linea ?? ""}
+              onChange={(e) =>
+                setData((d) => ({
+                  ...d,
+                  productos: d.productos.map((p) => (p.id === productoId ? { ...p, linea: (e.target.value || undefined) as LineaProducto | undefined } : p)),
+                }))
+              }
+            >
+              <option value="">Sin línea</option>
+              {LINEAS_PRODUCTO.map((l) => (
+                <option key={l} value={l}>
+                  {l}
+                </option>
+              ))}
             </Select>
           </Field>
         </FormGrid>
@@ -682,40 +697,11 @@ function FichaProducto({ productoId }: { productoId: string }) {
               ))}
             </Select>
           </Field>
-          <Field label="Relleno desde preparación">
-            <Select
-              value={varianteForm.preparacion_relleno_id ?? ""}
-              onChange={(e) => setVarianteForm({ ...varianteForm, preparacion_relleno_id: e.target.value || undefined })}
-            >
-              <option value="">Ninguna — usar insumos directos de la receta</option>
-              {data.preparaciones
-                .filter((p) => p.activo)
-                .map((p) => (
-                  <option key={p.id} value={p.id}>
-                    {p.nombre}
-                  </option>
-                ))}
-            </Select>
-          </Field>
-          <Field label="Gramos de relleno por caja">
-            <Input
-              type="number"
-              value={varianteForm.gramos_relleno_por_caja ?? ""}
-              onChange={(e) => setVarianteForm({ ...varianteForm, gramos_relleno_por_caja: e.target.value ? Number(e.target.value) : undefined })}
-            />
-          </Field>
         </FormGrid>
         <p className="mt-3 text-[11px] text-text3">
           Define qué cuenta esta variante como &ldquo;caja vendida&rdquo; en Analítica de Ventas — por ejemplo, un pote de
           salsa nunca debería sumarse como caja de pasta aunque se venda junto a un pedido de ravioles.
         </p>
-        {varianteForm.preparacion_relleno_id && (
-          <p className="mt-2 text-[11px] text-orange">
-            Con una preparación vinculada, la etapa &ldquo;relleno&rdquo; de la receta compartida de arriba se ignora al
-            costear esta variante (Productos → Inventario → Preparaciones gestiona ese stock y su costo aparte) — no
-            hace falta (ni conviene) cargar también los insumos de relleno en la receta base para esta presentación.
-          </p>
-        )}
       </Modal>
     </div>
   );
