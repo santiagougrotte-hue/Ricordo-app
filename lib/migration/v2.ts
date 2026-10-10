@@ -15,7 +15,6 @@ import type { RicordoData, Pedido as PedidoV1 } from "../types";
 import {
   emptyDataV2,
   type RicordoDataV2,
-  type RicordoDocument,
   type Categoria,
   type AmbitoCategoria,
   type Insumo,
@@ -24,6 +23,16 @@ import {
   type EtapaReceta,
   type MovimientoFinanciero,
 } from "../types-v2";
+
+// Documento intermedio "v2" que produce este archivo — a propósito NO es el `RicordoDocument`
+// compartido (ese tipo ahora representa el documento *actual*, v3): este es un paso interno que
+// `comoV3`/`migrarV2aV3` (lib/migration/v3.ts, lib/store-v2.tsx) siempre terminan de llevar a v3
+// antes de guardarlo o mostrarlo en pantalla.
+export interface DocumentoV2Interno {
+  schema_version: 2;
+  metadata: { migrado_en: string; desde_version: 1 };
+  data: RicordoDataV2;
+}
 import { uid } from "../id";
 
 // --- Redondeo monetario ------------------------------------------------------------------------
@@ -262,6 +271,8 @@ function migrarProductos(
       nombre: nombreBase,
       categoria_id: categorias.obtener(baseOriginal?.categoria, "producto"),
       activo: baseOriginal?.activo ?? variantesDelGrupo.some((v) => v.activo),
+      // `linea` no existía en el esquema v1 — `migrarV2aV3` (Fase 2) le pone el valor real
+      // (PROD-14 → Salsa, el resto → Pasta) justo después de esta migración.
     });
 
     for (const p of variantesDelGrupo) {
@@ -701,7 +712,7 @@ function migrarFinanzas(
 
 // --- Función principal ---------------------------------------------------------------------------
 
-export function migrarAV2(data: RicordoData): { documento: RicordoDocument; reporte: ReporteMigracion } {
+export function migrarAV2(data: RicordoData): { documento: DocumentoV2Interno; reporte: ReporteMigracion } {
   const { reporte, contar, agregar } = crearReporte();
   const categorias = crearFabricaCategorias();
 
@@ -763,7 +774,7 @@ export function migrarAV2(data: RicordoData): { documento: RicordoDocument; repo
     if (!esVacio(valor)) legacy[clave] = valor;
   }
 
-  const documento: RicordoDocument = {
+  const documento: DocumentoV2Interno = {
     schema_version: 2,
     metadata: { migrado_en: new Date().toISOString(), desde_version: 1 },
     data: {
@@ -787,13 +798,18 @@ export function migrarAV2(data: RicordoData): { documento: RicordoDocument; repo
       produccion,
       movimientos_financieros,
       configuracion: {
-        envios: data.config_envios,
-        planificacion: data.config_planificacion,
+        envios: {
+          litro_nafta: data.config_envios.litro_nafta,
+          consumo_100km: data.config_envios.consumo_100km,
+          margen_gratis: data.config_envios.margen_gratis,
+          margen_fijo: data.config_envios.margen_fijo,
+          margen_exacto: data.config_envios.margen_exacto,
+          precio_envio_fijo: data.config_envios.precio_envio_fijo,
+        },
         umbral_dias_mayorista_riesgo: data.umbral_dias_mayorista_riesgo,
         umbral_compras_consumo_amber: data.umbral_compras_consumo_amber,
         umbral_compras_consumo_red: data.umbral_compras_consumo_red,
         umbral_stock_bajo_producto: data.umbral_stock_bajo_producto,
-        tipo_cambio: data.tipo_cambio,
         // No existía en el esquema v1 — 35% es la alícuota general vigente en Argentina; se puede
         // ajustar después en Configuración sin tocar el cálculo.
         alicuota_iigg: 35,
@@ -805,6 +821,9 @@ export function migrarAV2(data: RicordoData): { documento: RicordoDocument; repo
         fecha_corte_cmv: data.fecha_corte_cmv,
         fecha_corte_compras: data.fecha_corte_compras,
         saldo_inicial_caja: money(data.saldo_anterior_caja?.valor),
+        // No existía en el esquema v1 — `migrarV2aV3` (Fase 2.3) lo carga con la fecha real del
+        // negocio justo después de esta migración, en el mismo paso v1→v2→v3.
+        fecha_saldo_inicial_caja: null,
         efectivo_en_mano: money(data.efectivo_en_mano),
         conciliacion_ignorados: data.conciliacion_ignorados,
         // No existía en el esquema v1 — arranca con el tema oscuro/violeta que ya se venía usando,
@@ -819,5 +838,5 @@ export function migrarAV2(data: RicordoData): { documento: RicordoDocument; repo
   // Normaliza a través de un ciclo JSON: garantiza que exportar (stringify) e importar (parse)
   // este documento da exactamente el mismo resultado (sin claves `undefined` que desaparecerían
   // recién en el primer export real, fuera de este módulo).
-  return { documento: JSON.parse(JSON.stringify(documento)) as RicordoDocument, reporte };
+  return { documento: JSON.parse(JSON.stringify(documento)) as DocumentoV2Interno, reporte };
 }

@@ -277,15 +277,14 @@ function FichaProducto({ productoId }: { productoId: string }) {
           </Field>
           <Field label="Línea">
             <Select
-              value={producto.linea ?? ""}
+              value={producto.linea ?? "Pasta"}
               onChange={(e) =>
                 setData((d) => ({
                   ...d,
-                  productos: d.productos.map((p) => (p.id === productoId ? { ...p, linea: (e.target.value || undefined) as LineaProducto | undefined } : p)),
+                  productos: d.productos.map((p) => (p.id === productoId ? { ...p, linea: e.target.value as LineaProducto } : p)),
                 }))
               }
             >
-              <option value="">Sin línea</option>
               {LINEAS_PRODUCTO.map((l) => (
                 <option key={l} value={l}>
                   {l}
@@ -737,7 +736,7 @@ function ProductosTab() {
       toast("El nombre es obligatorio", "error");
       return;
     }
-    const nuevo = { id: uid("PROD"), nombre: nombreNuevo.trim(), activo: true };
+    const nuevo = { id: uid("PROD"), nombre: nombreNuevo.trim(), activo: true, linea: "Pasta" as const };
     setData((d) => ({ ...d, productos: [...d.productos, nuevo] }));
     setSeleccionado(nuevo.id);
     setNombreNuevo("");

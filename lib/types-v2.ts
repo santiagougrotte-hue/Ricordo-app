@@ -33,6 +33,20 @@ export interface Categoria {
 
 /** Cabecera del pedido — antes cada línea de detalle duplicaba fecha/cliente/canal/método de
  * pago; ahora esos datos viven una sola vez por pedido. */
+/** Lista fija de zonas de reparto (nombres exactos — la Sheet de reparto agrupa por estos mismos
+ * textos, ver lib/resumen-sheets.ts). Un pedido sin zona cargada (viejo, o manual sin elegir una)
+ * se agrupa bajo "Otro" en los reportes, nunca se inventa una zona. */
+export const ZONAS_ENTREGA = [
+  "Zona 1 - Cercana",
+  "Zona 2 - Quilmes/Bernal/Wilde",
+  "Zona 3 - CABA",
+  "Zona 4 - La Plata/City Bell",
+  "Viernes - Hudson/Platanos/Ranelagh",
+  "Hurlingham",
+  "Otro",
+] as const;
+export type ZonaEntrega = (typeof ZONAS_ENTREGA)[number];
+
 export interface Pedido {
   id: string;
   fecha: string;
@@ -41,9 +55,19 @@ export interface Pedido {
   canal: Canal;
   metodo_pago?: string;
   descuento: number;
-  /** Zona de entrega — texto libre (no hay catálogo fijo de zonas todavía), usada para agrupar el
-   * reparto en el Resumen para Sheets. Opcional: un pedido viejo sin esto no se inventa ninguna. */
-  zona?: string;
+  /** Motivo de un descuento general del pedido (ej. "5% caja extra", "10% segunda compra") — texto
+   * libre tal como lo manda la web de pedidos; no hay taxonomía fija. */
+  motivo_descuento?: string;
+  /** Zona de entrega (lista fija `ZONAS_ENTREGA`) — la decide la web de pedidos por código postal,
+   * o se elige a mano en un pedido manual. Opcional: un pedido viejo sin esto no se inventa ninguna,
+   * se agrupa como "Otro" en los reportes. */
+  zona?: ZonaEntrega;
+  /** "web" = creado por `crearPedidoDesdeWeb` (tienda online); "manual" = cargado a mano en la app.
+   * Opcional: un pedido sin esto (de antes de este campo) se trata como "manual". */
+  origen?: OrigenPedido;
+  /** id del pedido en la web de pedidos (Supabase) — evita duplicar si la web lo manda dos veces.
+   * Solo pedidos con `origen: "web"` lo tienen. */
+  id_web?: string;
   /** Envío cobrado al cliente — forma parte de la venta (ventas netas), no es un costo. */
   costo_envio: number;
   /** Costo real del envío (combustible/logística) — puede ser distinto de `costo_envio`.
@@ -51,11 +75,19 @@ export interface Pedido {
    * aproximación (mismo comportamiento que antes de que este campo existiera). Al entregar el
    * pedido (Ventas → Pedidos), si esto supera `costo_envio`, se genera un gasto por la diferencia
    * en "Costo Indirecto — Reparto" (una sola vez por pedido, se actualiza si se re-edita después
-   * de entregado) — ver `gastoRepartoPedido` en Ventas.tsx. */
+   * de entregado) — ver `sincronizarEgresoEnvio` en Ventas.tsx. */
   costo_real_envio?: number;
+  /** Kilómetros del reparto — si se cargan y `costo_real_envio` está vacío, el formulario calcula
+   * el costo real solo: km × consumo_100km ÷ 100 × litro_nafta + `peaje_envio`. */
+  km_envio?: number;
+  peaje_envio?: number;
   total: number;
   /** Fecha esperada de cobro (opcional) — permite calcular vencidas y proyectar caja. */
   fecha_vencimiento?: string;
+  /** Estado de pago tal como lo reporta la web de pedidos al crear el pedido (ej. "pagado",
+   * "pendiente") — informativo, independiente del cálculo propio de cobro de la app
+   * (`estadoCobroPedido`, que mira `movimientos_financieros` reales vía Cuentas pendientes). */
+  estado_pago?: string;
   notas?: string;
   adjunto?: Adjunto;
   /** Snapshot de la dirección de entrega tomado al confirmar el pedido — el cliente puede mudarse
@@ -65,6 +97,8 @@ export interface Pedido {
   latitud_entrega?: number;
   longitud_entrega?: number;
 }
+
+export type OrigenPedido = "web" | "manual";
 
 /** Línea de un pedido. `producto_variante_id` puede ser null si la línea vieja no matcheaba
  * ningún producto vigente al migrar (queda marcada en `datos_pendientes_revision`, nunca se
@@ -103,7 +137,10 @@ export interface Producto {
   nombre: string;
   categoria_id?: string;
   /** Clasificación comercial amplia, separada de `categoria_id` (que es libre/por sabor) — para
-   * agrupar el catálogo en el "Resumen para Sheets" y en reportes similares. */
+   * agrupar el catálogo en el "Resumen para Sheets" y en reportes similares. La migración v2→v3
+   * (`migrarV2aV3`) le pone un valor a todo producto que todavía no lo tenía (`PROD-14` → Salsa, el
+   * resto → Pasta) y el formulario de producto no deja un valor en blanco — opcional acá solo para
+   * tolerar un documento viejo que todavía no pasó por esa migración. */
   linea?: LineaProducto;
   activo: boolean;
   foto?: Adjunto;
@@ -274,58 +311,6 @@ export interface Produccion {
   notas?: string;
 }
 
-// --- Entregas y rutas -------------------------------------------------------------------------
-
-export type EstadoRuta = "planificada" | "en_curso" | "completada" | "cancelada";
-
-/** Una ruta de reparto de un día — guarda el costo económico real (nafta/peajes/otros), no solo
- * un link de mapa: eso es lo que permite comparar el costo de entregar contra lo cobrado por
- * envío (Sección 29). Los campos `*_snapshot` fijan el precio de combustible y consumo del
- * vehículo vigentes al momento de crear la ruta — si después cambian en Configuración, esta ruta
- * ya planificada/completada no debe recalcularse sola. */
-export interface RutaEntrega {
-  id: string;
-  fecha: string;
-  estado: EstadoRuta;
-  direccion_origen: string;
-  lat_origen: number | null;
-  lng_origen: number | null;
-  regresa_origen: boolean;
-  distancia_total_km: number;
-  duracion_estimada_min: number;
-  precio_litro_snapshot: number;
-  consumo_100km_snapshot: number;
-  litros_estimados: number;
-  costo_nafta_estimado: number;
-  peajes: number;
-  estacionamiento: number;
-  otros_costos: number;
-  costo_total_ruta: number;
-  metodo_distribucion_costo: MetodoDistribucionCostoRuta;
-  proveedor_mapa: ProveedorMapa;
-  created_at: string;
-  updated_at: string;
-}
-
-/** Una parada de una ruta — `direccion_snapshot`/`lat`/`lng` se copian del pedido (o del cliente
- * si el pedido no tiene snapshot propio) al armar la ruta, para que un cambio posterior de
- * dirección del cliente no reescriba una parada ya planificada. */
-export interface RutaParada {
-  id: string;
-  ruta_id: string;
-  pedido_id: string;
-  orden: number;
-  direccion_snapshot: string;
-  lat: number | null;
-  lng: number | null;
-  ventana_desde?: string;
-  ventana_hasta?: string;
-  distancia_tramo_km: number;
-  duracion_tramo_min: number;
-  costo_asignado: number;
-  estado: "pendiente" | "entregado" | "no_entregado";
-}
-
 // --- Finanzas -------------------------------------------------------------------------------------
 
 /** Unifica caja_movimientos, transferencias_internas, costos_fijos, costos_indirectos y
@@ -351,18 +336,6 @@ export interface MovimientoFinanciero {
 
 // --- Configuración ---------------------------------------------------------------------------------
 
-/** Sin proveedor real configurado, no se puede geocodificar ni calcular una ruta real — solo se
- * ofrece una estimación en línea recta (haversine), marcada como tal en toda la UI. "osrm" calcula
- * ruta real por calles usando el servidor público de demostración de OSRM (Open Source Routing
- * Machine, project-osrm.org) — no requiere API key. Nunca se inventa una distancia de ruta real
- * sin un proveedor que la calcule. */
-export type ProveedorMapa = "ninguno" | "haversine" | "osrm";
-
-/** Cómo repartir el costo económico de una ruta con varias paradas entre los pedidos que la
- * componen — nunca se duplica el costo total en cada pedido. "equitativo" divide el costo total
- * en partes iguales; "por_distancia_tramo" reparte proporcional al tramo de cada parada. */
-export type MetodoDistribucionCostoRuta = "equitativo" | "por_distancia_tramo";
-
 export interface ConfiguracionEnvios {
   litro_nafta: number;
   consumo_100km: number;
@@ -370,34 +343,17 @@ export interface ConfiguracionEnvios {
   margen_fijo: number;
   margen_exacto: number;
   precio_envio_fijo: number;
-  direccion_base?: string;
-  lat_base?: number;
-  lng_base?: number;
-  vehiculo?: string;
-  fecha_actualizacion_combustible?: string;
-  regresar_a_base_default?: boolean;
-  proveedor_mapa?: ProveedorMapa;
-  metodo_distribucion_costo?: MetodoDistribucionCostoRuta;
-  peajes_default?: number;
-  otros_costos_default?: number;
 }
 
-export interface ConfiguracionPlanificacion {
-  ventana_meses_referencia: number;
-  umbral_desvio_semana_pct: number;
-}
-
-/** Agrupa todo lo que hoy vive disperso como campos sueltos de nivel superior: umbrales, tipo de
- * cambio, saldos "de arrastre" (renombrados a "saldo_inicial_*" — mismo valor, nombre que no
- * sugiere que se recalculan solos), config de envíos y planificación. */
+/** Agrupa todo lo que hoy vive disperso como campos sueltos de nivel superior: umbrales, saldos
+ * "de arrastre" (renombrados a "saldo_inicial_*" — mismo valor, nombre que no sugiere que se
+ * recalculan solos) y config de envíos. */
 export interface Configuracion {
   envios: ConfiguracionEnvios;
-  planificacion: ConfiguracionPlanificacion;
   umbral_dias_mayorista_riesgo: number;
   umbral_compras_consumo_amber: number;
   umbral_compras_consumo_red: number;
   umbral_stock_bajo_producto: number;
-  tipo_cambio: { valor: number; fuente: string };
   /** Alícuota de Impuesto a las Ganancias (%) usada por el Estado de Resultados con la estructura
    * pedida (Ventas/CMV/R.bruto/Gastos adm.comerc./Amortizaciones/Intereses/IIGG/Resultado neto) —
    * configurable porque la alícuota real puede cambiar, nunca se hardcodea el número dentro del
@@ -417,6 +373,11 @@ export interface Configuracion {
   fecha_corte_cmv: string | null;
   fecha_corte_compras: string | null;
   saldo_inicial_caja: number;
+  /** Fecha desde la que `saldo_inicial_caja` es el punto de partida real del saldo de caja — los
+   * movimientos financieros anteriores a esta fecha quedan como histórico puro y no suman/restan
+   * al saldo calculado (ver `saldoCaja`/`saldoCajaAlFecha`). `null`/sin cargar = sin corte, se
+   * suma todo el historial como antes (comportamiento previo a este campo). */
+  fecha_saldo_inicial_caja: string | null;
   efectivo_en_mano: number;
   /** `id` de pedido_item confirmados en la conciliación de Caja como intencionalmente sin cobrar. */
   conciliacion_ignorados: string[];
@@ -498,8 +459,6 @@ export interface RicordoDataV2 {
   proveedores: Proveedor[];
   produccion: Produccion[];
   reservas: Reserva[];
-  rutas_entrega: RutaEntrega[];
-  ruta_paradas: RutaParada[];
   movimientos_financieros: MovimientoFinanciero[];
   configuracion: Configuracion;
   datos_pendientes_revision: RevisionItem[];
@@ -509,9 +468,12 @@ export interface RicordoDataV2 {
   legacy: Record<string, unknown>;
 }
 
+/** `desde_version` dice de dónde vino la migración que produjo este documento: `0` = no hubo
+ * migración, se sembró vacío/desde el seed. Solo se reescribe cuando efectivamente se migra algo —
+ * nunca en cada carga (ver `lib/store-v2.tsx`, `migrarDocumentoAV3`). */
 export interface RicordoDocument {
-  schema_version: 2;
-  metadata: { migrado_en: string; desde_version: 1 };
+  schema_version: 3;
+  metadata: { migrado_en: string; desde_version: 0 | 1 | 2 };
   data: RicordoDataV2;
 }
 
@@ -535,8 +497,6 @@ export function emptyDataV2(): RicordoDataV2 {
     proveedores: [],
     produccion: [],
     reservas: [],
-    rutas_entrega: [],
-    ruta_paradas: [],
     movimientos_financieros: [],
     configuracion: {
       envios: {
@@ -546,16 +506,11 @@ export function emptyDataV2(): RicordoDataV2 {
         margen_fijo: 60,
         margen_exacto: 55,
         precio_envio_fijo: 2000,
-        regresar_a_base_default: true,
-        proveedor_mapa: "ninguno",
-        metodo_distribucion_costo: "equitativo",
       },
-      planificacion: { ventana_meses_referencia: 3, umbral_desvio_semana_pct: 15 },
       umbral_dias_mayorista_riesgo: 45,
       umbral_compras_consumo_amber: 20,
       umbral_compras_consumo_red: 40,
       umbral_stock_bajo_producto: 10,
-      tipo_cambio: { valor: 1000, fuente: "manual" },
       alicuota_iigg: 35,
       costo_mano_obra_hora: 0,
       saldo_inicial_cmv: 0,
@@ -563,6 +518,7 @@ export function emptyDataV2(): RicordoDataV2 {
       fecha_corte_cmv: null,
       fecha_corte_compras: null,
       saldo_inicial_caja: 0,
+      fecha_saldo_inicial_caja: null,
       efectivo_en_mano: 0,
       conciliacion_ignorados: [],
       apariencia: { tema: "oscuro", acento_preset: "violeta", acento_hex: "#8b5cf6" },
@@ -574,8 +530,8 @@ export function emptyDataV2(): RicordoDataV2 {
 
 export function emptyDocument(): RicordoDocument {
   return {
-    schema_version: 2,
-    metadata: { migrado_en: new Date().toISOString(), desde_version: 1 },
+    schema_version: 3,
+    metadata: { migrado_en: new Date().toISOString(), desde_version: 0 },
     data: emptyDataV2(),
   };
 }

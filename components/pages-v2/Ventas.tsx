@@ -28,10 +28,22 @@ import {
 } from "@/components/ui";
 import { Modal } from "@/components/Modal";
 import { AnaliticaVentasTab } from "./AnaliticaVentas";
-import { fARS, fNum, inPeriod, costoVariante, costoManoDeObraVariante, margenVariante, productosConVariantes, estadoCobroPedido, diferenciaRepartoPedido } from "@/lib/calc-v2";
+import {
+  fARS,
+  fNum,
+  inPeriod,
+  costoVariante,
+  costoManoDeObraVariante,
+  margenVariante,
+  productosConVariantes,
+  estadoCobroPedido,
+  diferenciaRepartoPedido,
+  costoRealEnvioCalculado,
+} from "@/lib/calc-v2";
 import { geocodificarDireccion } from "@/lib/mapas";
 import type { EstadoCobro } from "@/lib/calc-v2";
-import type { Canal, EstadoPedido, Pedido, PedidoItem, ProductoVariante, Reserva, RicordoDataV2 } from "@/lib/types-v2";
+import type { Canal, EstadoPedido, Pedido, PedidoItem, ProductoVariante, Reserva, RicordoDataV2, ZonaEntrega } from "@/lib/types-v2";
+import { ZONAS_ENTREGA } from "@/lib/types-v2";
 import type { Cliente } from "@/lib/types";
 
 const ESTADOS: EstadoPedido[] = ["Confirmado", "Produccion", "Entregado", "Cancelado"];
@@ -81,12 +93,17 @@ interface PedidoForm {
   canal: Canal;
   estado: EstadoPedido;
   metodo_pago: string;
-  zona: string;
+  zona: ZonaEntrega | "";
   costo_envio: number;
   costo_real_envio: number;
+  km_envio: number;
+  peaje_envio: number;
   descuento: number;
   notas: string;
   items: ItemForm[];
+  /** Agrega un ítem de regalo de la salsa (`VARIANTE_SALSA_REGALO_ID`) a $0 — no suma al total, sí
+   * descuenta 1 de stock al entregar (mismo mecanismo que cualquier otro ítem con variante). */
+  salsaDeRegalo: boolean;
 }
 
 function formVacio(): PedidoForm {
@@ -99,11 +116,20 @@ function formVacio(): PedidoForm {
     zona: "",
     costo_envio: 0,
     costo_real_envio: 0,
+    km_envio: 0,
+    peaje_envio: 0,
     descuento: 0,
     notas: "",
     items: [itemVacio("Minorista")],
+    salsaDeRegalo: false,
   };
 }
+
+/** Variante de Salsa usada para el ítem de regalo (Sección 2.6 del pedido de limpieza) — mismo id
+ * que el producto base "Salsa" (PROD-14), igual que el resto del catálogo con una sola
+ * presentación. Texto libre, no un id inventado: si en algún momento cambia, hay que actualizarlo
+ * acá a mano. */
+const VARIANTE_SALSA_REGALO_ID = "PROD-14";
 
 /** true si el formulario todavía no tiene nada que valga la pena recuperar — evita ofrecer un
  * "borrador" vacío apenas se abre el modal por primera vez. */
@@ -196,7 +222,7 @@ function conGastoRepartoPedido(
   d: ReturnType<typeof useStoreV2>["data"],
   pedido: Pedido
 ): Pick<typeof d, "categorias" | "movimientos_financieros"> {
-  const sinReparto = d.movimientos_financieros.filter((m) => !(m.origen_tipo === "pedido_reparto" && m.origen_id === pedido.id));
+  const sinReparto = d.movimientos_financieros.filter((m) => !(m.origen_tipo === "diferencia_envio" && m.origen_id === pedido.id));
   const diferencia = diferenciaRepartoPedido(pedido);
   if (pedido.estado !== "Entregado" || diferencia <= 0) {
     return { categorias: d.categorias, movimientos_financieros: sinReparto };
@@ -218,7 +244,7 @@ function conGastoRepartoPedido(
         categoria_id: categoria.id,
         concepto: `Diferencia de envío — pedido ${pedido.id}${pedido.zona ? ` (${pedido.zona})` : ""}`,
         monto: diferencia,
-        origen_tipo: "pedido_reparto",
+        origen_tipo: "diferencia_envio",
         origen_id: pedido.id,
         estado: "confirmado",
       },
@@ -254,6 +280,146 @@ function reservasActualizadasParaPedido(d: ReturnType<typeof useStoreV2>["data"]
       fecha: pedido.fecha,
     }));
   return [...liberadas, ...nuevas];
+}
+
+// --- Fase 3.2: contrato con la web de pedidos ------------------------------------------------------
+// Alcance de esta fase: solo dejar la app lista para recibir pedidos de la web (Supabase + Netlify),
+// sin conectarla todavía (eso es otro prompt aparte). `crearPedidoDesdeWeb` es la función que esa
+// futura integración va a llamar por cada pedido nuevo.
+
+/** Objeto que manda la web de pedidos por cada pedido nuevo — ver la tabla de contrato de datos de
+ * la Fase 3.2. `producto_variante_id` usa los mismos ids que el catálogo de la app (no un id propio
+ * de la web): si la web manda un id que no existe acá, el ítem queda con `nombre_historico` vacío
+ * en vez de inventar un producto. */
+export interface PedidoWeb {
+  id: string;
+  fecha_creacion: string;
+  cliente: { nombre: string; telefono: string; email?: string };
+  direccion: { calle: string; numero: string; localidad: string; partido?: string; codigo_postal?: string };
+  zona: ZonaEntrega;
+  items: { producto_variante_id: string; cantidad: number; precio_unitario: number }[];
+  descuento_monto?: number;
+  motivo_descuento?: string;
+  salsa_de_regalo?: boolean;
+  envio_cobrado: number;
+  envio_costo_real: number;
+  km?: number;
+  peaje?: number;
+  metodo_pago: string;
+  estado_pago: string;
+  total: number;
+}
+
+/** Crea un pedido completo (cliente, ítems, salsa de regalo, envío, reserva de stock, egreso por
+ * diferencia de envío si corresponde, e ingreso de caja SOLO si la web ya reporta el pedido como
+ * pagado — nunca inventa un cobro que la web no confirmó) a partir del contrato de la Fase 3.2.
+ * Idempotente por `id_web`: si ya existe un pedido con ese `id_web`, devuelve `data` sin cambios.
+ *
+ * El pedido entra como "Confirmado" (no "Entregado"): reserva el stock vendido sin descontarlo
+ * todavía, igual que cualquier pedido manual recién cargado — el movimiento físico de stock pasa
+ * cuando de verdad se despacha (Ventas → Pedidos, como hoy). */
+export function crearPedidoDesdeWeb(data: RicordoDataV2, pedidoWeb: PedidoWeb): RicordoDataV2 {
+  if (data.pedidos.some((p) => p.id_web === pedidoWeb.id)) return data;
+
+  let clientes = data.clientes;
+  let cliente = clientes.find((c) => c.telefono === pedidoWeb.cliente.telefono);
+  if (!cliente) {
+    cliente = {
+      id: uid("CLI"),
+      nombre: pedidoWeb.cliente.nombre,
+      canal: "Minorista",
+      telefono: pedidoWeb.cliente.telefono,
+      email: pedidoWeb.cliente.email,
+      calle: pedidoWeb.direccion.calle,
+      numero: pedidoWeb.direccion.numero,
+      localidad: pedidoWeb.direccion.localidad,
+      partido: pedidoWeb.direccion.partido,
+      codigo_postal: pedidoWeb.direccion.codigo_postal,
+    };
+    clientes = [...clientes, cliente];
+  }
+
+  const pedidoId = uid("PED");
+  const costeoHistoricoVariante = (varianteId: string) => ({
+    costo_unitario_historico: costoVariante(data, varianteId) - costoManoDeObraVariante(data, varianteId),
+    mano_obra_unitaria_historica: costoManoDeObraVariante(data, varianteId),
+  });
+
+  const items: PedidoItem[] = pedidoWeb.items.map((i) => {
+    const variante = data.producto_variantes.find((v) => v.id === i.producto_variante_id);
+    return {
+      id: uid("PI"),
+      pedido_id: pedidoId,
+      producto_variante_id: i.producto_variante_id,
+      nombre_historico: variante?.nombre ?? "",
+      cantidad: i.cantidad,
+      precio_unitario: i.precio_unitario,
+      descuento: 0,
+      subtotal: i.precio_unitario * i.cantidad,
+      ...costeoHistoricoVariante(i.producto_variante_id),
+    };
+  });
+  if (pedidoWeb.salsa_de_regalo) {
+    const varianteRegalo = data.producto_variantes.find((v) => v.id === VARIANTE_SALSA_REGALO_ID);
+    items.push({
+      id: uid("PI"),
+      pedido_id: pedidoId,
+      producto_variante_id: VARIANTE_SALSA_REGALO_ID,
+      nombre_historico: varianteRegalo?.nombre ?? "Salsa (regalo)",
+      cantidad: 1,
+      precio_unitario: 0,
+      descuento: 0,
+      subtotal: 0,
+      ...costeoHistoricoVariante(VARIANTE_SALSA_REGALO_ID),
+    });
+  }
+
+  const nuevoPedido: Pedido = {
+    id: pedidoId,
+    fecha: pedidoWeb.fecha_creacion,
+    cliente_id: cliente.id,
+    estado: "Confirmado",
+    canal: "Minorista",
+    metodo_pago: pedidoWeb.metodo_pago,
+    motivo_descuento: pedidoWeb.motivo_descuento,
+    zona: pedidoWeb.zona,
+    origen: "web",
+    id_web: pedidoWeb.id,
+    descuento: pedidoWeb.descuento_monto ?? 0,
+    costo_envio: pedidoWeb.envio_cobrado,
+    costo_real_envio: pedidoWeb.envio_costo_real,
+    km_envio: pedidoWeb.km,
+    peaje_envio: pedidoWeb.peaje,
+    total: pedidoWeb.total,
+    estado_pago: pedidoWeb.estado_pago,
+    direccion_entrega_snapshot: `${pedidoWeb.direccion.calle} ${pedidoWeb.direccion.numero}, ${pedidoWeb.direccion.localidad}`,
+  };
+
+  let out: RicordoDataV2 = { ...data, clientes, pedidos: [...data.pedidos, nuevoPedido], pedido_items: [...data.pedido_items, ...items] };
+  out = { ...out, reservas: reservasActualizadasParaPedido(out, nuevoPedido, items) };
+  out = { ...out, ...conGastoRepartoPedido(out, nuevoPedido) };
+
+  if (/pagad/i.test(pedidoWeb.estado_pago)) {
+    out = {
+      ...out,
+      movimientos_financieros: [
+        ...out.movimientos_financieros,
+        {
+          id: uid("MOVF"),
+          fecha: pedidoWeb.fecha_creacion,
+          tipo: "ingreso",
+          concepto: `Cobro pedido ${pedidoId} (web)`,
+          monto: pedidoWeb.total,
+          metodo_pago: pedidoWeb.metodo_pago,
+          origen_tipo: "venta_pedido",
+          origen_id: pedidoId,
+          estado: "confirmado",
+        },
+      ],
+    };
+  }
+
+  return out;
 }
 
 function PedidosTab() {
@@ -323,6 +489,7 @@ function PedidosTab() {
 
   function abrirEdicion(p: Pedido) {
     const items = data.pedido_items.filter((i) => i.pedido_id === p.id);
+    const yaTieneSalsaDeRegalo = items.some((i) => i.producto_variante_id === VARIANTE_SALSA_REGALO_ID && i.precio_unitario === 0);
     setEditando(p.id);
     setForm({
       cliente_id: p.cliente_id,
@@ -333,9 +500,14 @@ function PedidosTab() {
       zona: p.zona ?? "",
       costo_envio: p.costo_envio,
       costo_real_envio: p.costo_real_envio ?? p.costo_envio,
+      km_envio: p.km_envio ?? 0,
+      peaje_envio: p.peaje_envio ?? 0,
       descuento: p.descuento,
       notas: p.notas ?? "",
-      items: items.map((i) => {
+      salsaDeRegalo: yaTieneSalsaDeRegalo,
+      items: items
+        .filter((i) => !(i.producto_variante_id === VARIANTE_SALSA_REGALO_ID && i.precio_unitario === 0))
+        .map((i) => {
         const variante = i.producto_variante_id ? data.producto_variantes.find((v) => v.id === i.producto_variante_id) : undefined;
         return {
           canal: variante?.canal ?? p.canal,
@@ -448,7 +620,25 @@ function PedidosTab() {
       };
       return [item, itemSalsa];
     });
+    if (form.salsaDeRegalo) {
+      const varianteRegalo = data.producto_variantes.find((v) => v.id === VARIANTE_SALSA_REGALO_ID);
+      nuevosItems.push({
+        id: uid("PI"),
+        pedido_id: pedidoId,
+        producto_variante_id: VARIANTE_SALSA_REGALO_ID,
+        nombre_historico: varianteRegalo?.nombre ?? "Salsa (regalo)",
+        cantidad: 1,
+        precio_unitario: 0,
+        descuento: 0,
+        subtotal: 0,
+        ...costeoHistoricoVariante(VARIANTE_SALSA_REGALO_ID),
+      });
+    }
     const total = nuevosItems.reduce((acc, i) => acc + i.subtotal, 0) - form.descuento + form.costo_envio;
+    // Este formulario manual no edita origen/id_web/estado_pago/motivo_descuento (son del contrato
+    // con la web de pedidos, ver crearPedidoDesdeWeb) — al editar un pedido que ya los tenía, se
+    // preservan tal cual en vez de perderlos.
+    const original = editando ? data.pedidos.find((p) => p.id === editando) : undefined;
     const nuevoPedido: Pedido = {
       id: pedidoId,
       fecha: form.fecha,
@@ -456,11 +646,17 @@ function PedidosTab() {
       estado: form.estado,
       canal: form.canal,
       metodo_pago: form.metodo_pago || undefined,
+      motivo_descuento: original?.motivo_descuento,
       zona: form.zona || undefined,
+      origen: original?.origen ?? "manual",
+      id_web: original?.id_web,
       descuento: form.descuento,
       costo_envio: form.costo_envio,
       costo_real_envio: form.costo_real_envio,
+      km_envio: form.km_envio || undefined,
+      peaje_envio: form.peaje_envio || undefined,
       total,
+      estado_pago: original?.estado_pago,
       notas: form.notas || undefined,
     };
 
@@ -504,7 +700,7 @@ function PedidosTab() {
       pedido_items: d.pedido_items.filter((i) => i.pedido_id !== pedido.id),
       inventario_movimientos: d.inventario_movimientos.filter((m) => !(m.origen_tipo === "pedido" && m.origen_id === pedido.id)),
       movimientos_financieros: d.movimientos_financieros.filter(
-        (m) => !((m.origen_tipo === "venta_pedido" || m.origen_tipo === "pedido_reparto") && m.origen_id === pedido.id)
+        (m) => !((m.origen_tipo === "venta_pedido" || m.origen_tipo === "diferencia_envio") && m.origen_id === pedido.id)
       ),
     }));
     toast("Pedido eliminado", "info");
@@ -665,7 +861,14 @@ function PedidosTab() {
             <Input value={form.metodo_pago} onChange={(e) => setForm({ ...form, metodo_pago: e.target.value })} />
           </Field>
           <Field label="Zona de entrega">
-            <Input value={form.zona} onChange={(e) => setForm({ ...form, zona: e.target.value })} placeholder="Ej.: Centro, Zona Sur…" />
+            <Select value={form.zona} onChange={(e) => setForm({ ...form, zona: e.target.value as ZonaEntrega | "" })}>
+              <option value="">Sin elegir</option>
+              {ZONAS_ENTREGA.map((z) => (
+                <option key={z} value={z}>
+                  {z}
+                </option>
+              ))}
+            </Select>
           </Field>
           <Field label="Envío cobrado al cliente">
             <Input
@@ -676,6 +879,36 @@ function PedidosTab() {
                 // Mientras no se haya editado aparte, el costo real sigue al cobrado (caso común:
                 // no hay margen en el envío) — apenas se lo toca a mano, deja de seguirlo.
                 setForm((f) => ({ ...f, costo_envio: v, costo_real_envio: f.costo_real_envio === f.costo_envio ? v : f.costo_real_envio }));
+              }}
+            />
+          </Field>
+          <Field label="Km del reparto">
+            <Input
+              type="number"
+              value={form.km_envio}
+              onChange={(e) => {
+                const km = Number(e.target.value);
+                // Solo autocompleta si el costo real todavía está vacío (0) — si ya se cargó a
+                // mano, cargar/cambiar los km no lo pisa.
+                setForm((f) => ({
+                  ...f,
+                  km_envio: km,
+                  costo_real_envio: f.costo_real_envio === 0 ? costoRealEnvioCalculado(data, km, f.peaje_envio) : f.costo_real_envio,
+                }));
+              }}
+            />
+          </Field>
+          <Field label="Peaje">
+            <Input
+              type="number"
+              value={form.peaje_envio}
+              onChange={(e) => {
+                const peaje = Number(e.target.value);
+                setForm((f) => ({
+                  ...f,
+                  peaje_envio: peaje,
+                  costo_real_envio: f.costo_real_envio === 0 && f.km_envio > 0 ? costoRealEnvioCalculado(data, f.km_envio, peaje) : f.costo_real_envio,
+                }));
               }}
             />
           </Field>
@@ -690,6 +923,12 @@ function PedidosTab() {
           </Field>
           <Field label="Descuento $ (total del pedido)">
             <Input type="number" value={form.descuento} onChange={(e) => setForm({ ...form, descuento: Number(e.target.value) })} />
+          </Field>
+          <Field label="Salsa de regalo">
+            <label className="flex items-center gap-2 text-[13px] text-text2">
+              <input type="checkbox" checked={form.salsaDeRegalo} onChange={(e) => setForm({ ...form, salsaDeRegalo: e.target.checked })} />
+              Agregar una salsa a $0 (descuenta 1 de stock, no suma al total)
+            </label>
           </Field>
           <Field label="Notas" full>
             <Textarea rows={2} value={form.notas} onChange={(e) => setForm({ ...form, notas: e.target.value })} />

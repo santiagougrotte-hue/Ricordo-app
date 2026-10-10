@@ -21,12 +21,17 @@ import { emptyData as emptyDataV1, type RicordoData } from "./types";
 import { emptyDataV2, type RicordoDataV2, type RicordoDocument } from "./types-v2";
 import { mapBackupToRicordoData, repararConceptoPackagingEnRecetas } from "./seed";
 import { migrarAV2 } from "./migration/v2";
+import { migrarV2aV3 } from "./migration/v3";
 import backupSeed from "./data/backup-seed.json";
 import { supabase, supabaseConfigured } from "./supabase";
 import { useAuth } from "./auth-context";
 import { backoffDelayMs } from "./sync-engine";
 
-const STORAGE_KEY_V2 = "ricordo_data_v2";
+// Esquema v3 (Fase 0, octubre 2026): un documento ya migrado NUNCA se vuelve a migrar. La clave
+// vieja (`ricordo_data_v2`) se sigue leyendo si todavía es lo único que hay, pero no se vuelve a
+// escribir — queda congelada como lo que era, nunca se borra (ver `migrarV2aV3`/Fase 0 del pedido).
+const STORAGE_KEY_V3 = "ricordo_data_v3";
+const STORAGE_KEY_V2_LEGACY = "ricordo_data_v2";
 const ROW_ID = "main";
 
 type SetDataV2 = (updater: RicordoDataV2 | ((d: RicordoDataV2) => RicordoDataV2)) => void;
@@ -55,53 +60,63 @@ interface StoreV2Ctx {
 
 const Ctx = createContext<StoreV2Ctx | null>(null);
 
-function esDocumentoV2(valor: unknown): valor is RicordoDocument {
-  return !!valor && typeof valor === "object" && (valor as { schema_version?: unknown }).schema_version === 2;
+function conBaseV2(dataParcial: unknown): RicordoDataV2 {
+  const base = emptyDataV2();
+  const parcial = (dataParcial ?? {}) as Partial<RicordoDataV2>;
+  return {
+    ...base,
+    ...parcial,
+    configuracion: { ...base.configuracion, ...parcial.configuracion },
+  };
 }
 
-/** Si lo que se cargó ya es esquema V2, lo devuelve tal cual; si es el esquema viejo (o no
- * existe), lo migra. Nunca se pierde nada: `migrarAV2` preserva todo dato dudoso en
+function tieneSchemaVersion(valor: unknown, version: number): valor is { schema_version: number; metadata: unknown; data: unknown } {
+  return !!valor && typeof valor === "object" && (valor as { schema_version?: unknown }).schema_version === version;
+}
+
+/** Lleva cualquier documento (v1 crudo sin `schema_version`, v2, o ya v3) a v3. Un documento que ya
+ * es v3 se devuelve TAL CUAL — su `metadata` nunca se reescribe solo por haberlo cargado de nuevo
+ * (esa es la garantía central del diagnóstico de la Fase 0: antes, cualquier documento que no
+ * calzara con el chequeo de v2 cascadeaba al camino "migrar desde v1", lo que producía una
+ * `metadata` nueva — `desde_version: 1` y un timestamp de recién — en cada carga, sin importar que
+ * los datos no hubieran cambiado). `migrarAV2`/`migrarV2aV3` preservan todo dato dudoso en
  * `datos_pendientes_revision`/`legacy` en vez de descartarlo. */
-function comoV2(valorCrudo: unknown): { data: RicordoDataV2; metadata: RicordoDocument["metadata"]; eraV2: boolean } {
-  if (esDocumentoV2(valorCrudo)) {
-    // Documento ya v2, pero puede venir de antes de que se agregara un campo nuevo al esquema —
-    // se completa con los defaults en vez de asumir que ya existe, así no rompe con un documento
-    // real guardado con una versión anterior del esquema v2.
-    const base = emptyDataV2();
-    const data: RicordoDataV2 = {
-      ...base,
-      ...valorCrudo.data,
-      configuracion: {
-        ...base.configuracion,
-        ...valorCrudo.data.configuracion,
-      },
-    };
-    return { data, metadata: valorCrudo.metadata, eraV2: true };
+export function comoV3(valorCrudo: unknown): { data: RicordoDataV2; metadata: RicordoDocument["metadata"] } {
+  if (tieneSchemaVersion(valorCrudo, 3)) {
+    const v = valorCrudo as { metadata: RicordoDocument["metadata"]; data: unknown };
+    return { data: conBaseV2(v.data), metadata: v.metadata };
+  }
+  if (tieneSchemaVersion(valorCrudo, 2)) {
+    const v = valorCrudo as { data: unknown };
+    const dataV3 = migrarV2aV3(conBaseV2(v.data));
+    return { data: dataV3, metadata: { migrado_en: new Date().toISOString(), desde_version: 2 } };
   }
   const v1 = { ...emptyDataV1(), ...((valorCrudo as Partial<RicordoData>) ?? {}) };
   const reparado = repararConceptoPackagingEnRecetas(v1);
   const { documento } = migrarAV2(reparado);
-  return { data: documento.data, metadata: documento.metadata, eraV2: false };
+  const dataV3 = migrarV2aV3(documento.data);
+  return { data: dataV3, metadata: { migrado_en: new Date().toISOString(), desde_version: 1 } };
+}
+
+/** Instalación nueva, sin nada guardado todavía: carga el seed y lo marca con `desde_version: 0`
+ * (sembrado, no migrado) — para no confundirlo en el reporte con una migración real desde v1. */
+function sembrarV3(): { data: RicordoDataV2; metadata: RicordoDocument["metadata"] } {
+  const { data, metadata } = comoV3(mapBackupToRicordoData(backupSeed));
+  return { data, metadata: { migrado_en: metadata.migrado_en, desde_version: 0 } };
 }
 
 function loadFromLocalStorage(): { data: RicordoDataV2; metadata: RicordoDocument["metadata"] } | null {
   if (typeof window === "undefined") return null;
   try {
-    const raw = window.localStorage.getItem(STORAGE_KEY_V2);
-    if (raw) {
-      const parsed = JSON.parse(raw) as RicordoDocument;
-      const base = emptyDataV2();
-      return {
-        data: {
-          ...base,
-          ...parsed.data,
-          configuracion: {
-            ...base.configuracion,
-            ...parsed.data.configuracion,
-          },
-        },
-        metadata: parsed.metadata,
-      };
+    const rawV3 = window.localStorage.getItem(STORAGE_KEY_V3);
+    if (rawV3) {
+      const parsed = JSON.parse(rawV3) as RicordoDocument;
+      return comoV3(parsed);
+    }
+    const rawV2 = window.localStorage.getItem(STORAGE_KEY_V2_LEGACY);
+    if (rawV2) {
+      const parsed = JSON.parse(rawV2) as { schema_version: number; metadata: unknown; data: unknown };
+      return comoV3(parsed);
     }
   } catch {
     /* ignore corrupt storage */
@@ -111,7 +126,7 @@ function loadFromLocalStorage(): { data: RicordoDataV2; metadata: RicordoDocumen
 
 function saveToLocalStorage(documento: RicordoDocument) {
   try {
-    window.localStorage.setItem(STORAGE_KEY_V2, JSON.stringify(documento));
+    window.localStorage.setItem(STORAGE_KEY_V3, JSON.stringify(documento));
   } catch {
     /* storage full/unavailable */
   }
@@ -175,7 +190,7 @@ export function StoreV2Provider({ children }: { children: React.ReactNode }) {
 
   // Metadata estable del documento (fecha de migración original) — se fija una sola vez, nunca
   // se regenera en cada guardado.
-  const metadataInicial: RicordoDocument["metadata"] = { migrado_en: new Date().toISOString(), desde_version: 1 };
+  const metadataInicial: RicordoDocument["metadata"] = { migrado_en: new Date().toISOString(), desde_version: 0 };
   const metadataRef = useRef<RicordoDocument["metadata"]>(metadataInicial);
   const [metadataState, setMetadataState] = useState<RicordoDocument["metadata"]>(metadataInicial);
   function fijarMetadata(m: RicordoDocument["metadata"]) {
@@ -192,7 +207,7 @@ export function StoreV2Provider({ children }: { children: React.ReactNode }) {
 
   const intentarGuardar = useCallback(async () => {
     if (savingRef.current || conflictoRef.current) return; // ya hay un guardado en vuelo, o hay un conflicto sin resolver
-    const documento: RicordoDocument = { schema_version: 2, metadata: metadataRef.current, data: dataRef.current };
+    const documento: RicordoDocument = { schema_version: 3, metadata: metadataRef.current, data: dataRef.current };
     saveToLocalStorage(documento);
     if (!supabaseConfigured || !supabase) {
       pendingSave.current = false;
@@ -229,8 +244,8 @@ export function StoreV2Provider({ children }: { children: React.ReactNode }) {
     if (resultado.estado === "conflicto") {
       const { data: filaRemota } = await supabase.from("app_state").select("data, version").eq("id", ROW_ID).maybeSingle();
       if (filaRemota) {
-        const { data: remotoV2 } = comoV2(filaRemota.data);
-        const nuevoConflicto: ConflictoSync = { local: dataRef.current, remoto: remotoV2, version_remota: filaRemota.version };
+        const { data: remotoV3 } = comoV3(filaRemota.data);
+        const nuevoConflicto: ConflictoSync = { local: dataRef.current, remoto: remotoV3, version_remota: filaRemota.version };
         conflictoRef.current = nuevoConflicto;
         setConflicto(nuevoConflicto);
         setSyncStatus("conflict");
@@ -265,8 +280,8 @@ export function StoreV2Provider({ children }: { children: React.ReactNode }) {
         setDataState(c.remoto);
         dataRef.current = c.remoto;
         versionRef.current = c.version_remota;
-        lastPushed.current = JSON.stringify({ schema_version: 2, metadata: metadataRef.current, data: c.remoto });
-        saveToLocalStorage({ schema_version: 2, metadata: metadataRef.current, data: c.remoto });
+        lastPushed.current = JSON.stringify({ schema_version: 3, metadata: metadataRef.current, data: c.remoto });
+        saveToLocalStorage({ schema_version: 3, metadata: metadataRef.current, data: c.remoto });
         pendingSave.current = false;
         intentoRef.current = 0;
         conflictoRef.current = null;
@@ -305,7 +320,7 @@ export function StoreV2Provider({ children }: { children: React.ReactNode }) {
     const client = supabase;
     if (!supabaseConfigured || !client) {
       if (!local) {
-        const { data: seedData, metadata } = comoV2(mapBackupToRicordoData(backupSeed));
+        const { data: seedData, metadata } = sembrarV3();
         setDataState(seedData);
         fijarMetadata(metadata);
       }
@@ -327,22 +342,23 @@ export function StoreV2Provider({ children }: { children: React.ReactNode }) {
           return;
         }
         if (row?.data) {
-          const { data: dataV2, metadata } = comoV2(row.data);
-          setDataState(dataV2);
+          const { data: dataV3, metadata } = comoV3(row.data);
+          setDataState(dataV3);
           fijarMetadata(metadata);
           versionRef.current = row.version ?? 1;
-          // Si ya era V2, esto coincide exactamente con lo que el guardado automático de abajo
-          // recalcula, así que no reintenta nada. Si se acaba de migrar de V1, lastPushed queda
-          // apuntando a lo viejo a propósito: el guardado automático detecta la diferencia y
-          // empuja la migración a Supabase una sola vez (con la versión ya conocida, así que no
-          // choca con nadie).
+          // Si la fila remota ya era v3, esto coincide exactamente con lo que el guardado
+          // automático de abajo recalcula, así que no reintenta nada. Si hizo falta migrar (v1 o
+          // v2), `lastPushed` queda apuntando a lo viejo a propósito: el guardado automático
+          // detecta la diferencia y empuja la migración a Supabase una sola vez (con la versión ya
+          // conocida, así que no choca con nadie) — así es como un documento viejo sincronizado
+          // termina de limpiarse de verdad, no solo en la pantalla.
           lastPushed.current = JSON.stringify(row.data);
         } else {
           // Primera vez que se usa: sembrar la fila compartida con lo que haya localmente.
-          const { data: seedData, metadata } = local ? { data: local.data, metadata: local.metadata } : comoV2(mapBackupToRicordoData(backupSeed));
+          const { data: seedData, metadata } = local ? { data: local.data, metadata: local.metadata } : sembrarV3();
           setDataState(seedData);
           fijarMetadata(metadata);
-          const documento: RicordoDocument = { schema_version: 2, metadata, data: seedData };
+          const documento: RicordoDocument = { schema_version: 3, metadata, data: seedData };
           const { error: insertError } = await client.from("app_state").insert({ id: ROW_ID, data: documento, updated_at: new Date().toISOString(), version: 1 });
           if (insertError) {
             // Alguien más ya sembró la fila justo antes (carrera muy poco probable en una app de
@@ -375,10 +391,10 @@ export function StoreV2Provider({ children }: { children: React.ReactNode }) {
         return;
       }
       if (incomingVersion) versionRef.current = incomingVersion;
-      const { data: dataV2, metadata } = comoV2(incoming);
-      setDataState(dataV2);
+      const { data: dataV3, metadata } = comoV3(incoming);
+      setDataState(dataV3);
       fijarMetadata(metadata);
-      saveToLocalStorage({ schema_version: 2, metadata, data: dataV2 });
+      saveToLocalStorage({ schema_version: 3, metadata, data: dataV3 });
     }
 
     // Reconexión real del canal si se cae (dormir/despertar el equipo, blip de red): supabase-js

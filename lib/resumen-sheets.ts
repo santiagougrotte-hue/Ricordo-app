@@ -1,215 +1,343 @@
-// Resumen para Sheets — 4 tablas copiables (TSV) para pegar directo en una hoja de cálculo.
-// Reutiliza calcularMargenPorItem (misma fuente que Analítica de Ventas y el EERR) en vez de
-// recalcular ventas/CMV de nuevo, para no desincronizarse de esos números.
+// "Exportar a Sheets" (Fase 4) — 4 tablas copiables (TSV) con columnas y orden EXACTOS, pensadas
+// para pegarse directo en la Google Sheet de planificación/análisis (que ahora vive fuera de la
+// app). Los nombres de columna son el contrato con esa Sheet — no renombrar sin avisar.
 
-import type { RicordoDataV2, Canal } from "./types-v2";
-import { calcularMargenPorItem, calcularStock, recetaEfectivaVariante, diferenciaRepartoPedido } from "./calc-v2";
+import type { RicordoDataV2 } from "./types-v2";
+import { recetaEfectivaVariante, costoManoDeObraVariante, calcularStock } from "./calc-v2";
 
 function tsv(headers: string[], filas: (string | number)[][]): string {
-  const linea = (celdas: (string | number)[]) => celdas.map((c) => String(c)).join("\t");
+  const num = (n: number) => (Number.isInteger(n) ? String(n) : String(Math.round(n * 100) / 100));
+  const celda = (c: string | number) => (typeof c === "number" ? num(c) : c);
+  const linea = (celdas: (string | number)[]) => celdas.map(celda).join("\t");
   return [linea(headers), ...filas.map(linea)].join("\n");
 }
 
-// --- 1) Productos: cajas equivalentes por canal, ingresos, costos, precios, stock, producidas ----
-
-export interface FilaResumenProducto {
-  producto_id: string;
-  producto_nombre: string;
-  linea: string;
-  canal: Canal;
-  cajas_vendidas: number;
-  cajas_producidas: number;
-  ingresos: number;
-  costos: number;
-  precio_promedio: number;
-  stock_actual: number;
+/** `mes` en formato AAAA-MM → {mesCol: "AAAA-MM-01", desde, hasta} del mes calendario completo. */
+function rangoMes(mes: string): { mesCol: string; desde: string; hasta: string } {
+  const [anio, m] = mes.split("-").map(Number);
+  const ultimoDia = new Date(anio, m, 0).getDate();
+  return { mesCol: `${mes}-01`, desde: `${mes}-01`, hasta: `${mes}-${String(ultimoDia).padStart(2, "0")}` };
 }
 
-export function resumenProductosSheets(data: RicordoDataV2, desde: string, hasta: string): FilaResumenProducto[] {
-  const items = calcularMargenPorItem(data, desde, hasta);
-  const clave = (productoId: string, canal: Canal) => `${productoId}__${canal}`;
-  const porGrupo = new Map<string, { producto_id: string; canal: Canal; cajas: number; ingresos: number; costos: number }>();
-  for (const it of items) {
-    const productoId = it.producto_id ?? "sin-producto";
-    const k = clave(productoId, it.canal);
-    const actual = porGrupo.get(k) ?? { producto_id: productoId, canal: it.canal, cajas: 0, ingresos: 0, costos: 0 };
-    if (it.tipo_unidad_venta === "caja") actual.cajas += it.cantidad;
-    actual.ingresos += it.ventas_netas;
-    actual.costos += it.cmv;
-    porGrupo.set(k, actual);
-  }
+function refUnidades(linea: string | undefined): number {
+  return linea === "Salsa" ? 1 : 12;
+}
 
-  const produccionPorProductoEnPeriodo = new Map<string, number>();
-  for (const p of data.produccion) {
-    if (p.fecha < desde || p.fecha > hasta) continue;
-    const variante = data.producto_variantes.find((v) => v.id === p.producto_variante_id);
-    if (!variante) continue;
-    produccionPorProductoEnPeriodo.set(variante.producto_id, (produccionPorProductoEnPeriodo.get(variante.producto_id) ?? 0) + p.cantidad);
-  }
+// --- 1) RESUMEN_PRODUCTOS -------------------------------------------------------------------------
 
-  const stockPorProducto = new Map<string, number>();
-  for (const v of data.producto_variantes) {
-    stockPorProducto.set(v.producto_id, (stockPorProducto.get(v.producto_id) ?? 0) + calcularStock(data, "producto_variante", v.id));
-  }
+export interface FilaResumenProducto {
+  mes: string;
+  producto_id: string;
+  producto: string;
+  linea: string;
+  unidades_por_caja_ref: number;
+  cajas_eq_minorista: number;
+  cajas_eq_mayorista: number;
+  cajas_eq_total: number;
+  ingresos_minorista: number;
+  ingresos_mayorista: number;
+  descuentos_total: number;
+  costo_insumos_caja_ref: number;
+  costo_mo_caja_ref: number;
+  costo_total_caja_ref: number;
+  precio_minorista_caja_ref: number;
+  precio_mayorista_caja_ref: number;
+  stock_terminado_cajas_eq: number;
+  cajas_producidas_eq: number;
+}
 
-  return [...porGrupo.values()]
-    .map((g) => {
-      const producto = data.productos.find((p) => p.id === g.producto_id);
+export function resumenProductosSheets(data: RicordoDataV2, mes: string): FilaResumenProducto[] {
+  const { mesCol, desde, hasta } = rangoMes(mes);
+  const pedidosDelMes = new Map(
+    data.pedidos.filter((p) => p.fecha >= desde && p.fecha <= hasta && p.estado !== "Cancelado").map((p) => [p.id, p.canal])
+  );
+  const itemsDelMes = data.pedido_items.filter((i) => pedidosDelMes.has(i.pedido_id));
+  const variantePorId = new Map(data.producto_variantes.map((v) => [v.id, v]));
+
+  return data.productos
+    .filter((p) => p.activo)
+    .map((producto) => {
+      const ref = refUnidades(producto.linea);
+      let cajas_eq_minorista = 0;
+      let cajas_eq_mayorista = 0;
+      let ingresos_minorista = 0;
+      let ingresos_mayorista = 0;
+      let descuentos_total = 0;
+
+      for (const item of itemsDelMes) {
+        if (!item.producto_variante_id) continue;
+        const variante = variantePorId.get(item.producto_variante_id);
+        if (!variante || variante.producto_id !== producto.id) continue;
+        const canal = pedidosDelMes.get(item.pedido_id);
+        const unidades = item.cantidad * (variante.unidades_por_paquete ?? 0);
+        const cajasEq = unidades / ref;
+        if (canal === "Minorista") {
+          cajas_eq_minorista += cajasEq;
+          ingresos_minorista += item.subtotal;
+        } else if (canal === "Mayorista") {
+          cajas_eq_mayorista += cajasEq;
+          ingresos_mayorista += item.subtotal;
+        }
+        descuentos_total += item.descuento;
+      }
+
+      const variantesDelProducto = data.producto_variantes.filter((v) => v.producto_id === producto.id);
+      const varianteMinoristaRef = variantesDelProducto.find((v) => v.activo && v.canal === "Minorista" && v.unidades_por_paquete === ref);
+      const varianteMayoristaRef = variantesDelProducto.find((v) => v.activo && v.canal === "Mayorista" && v.unidades_por_paquete === ref);
+
+      let costo_insumos_caja_ref = 0;
+      if (varianteMinoristaRef) {
+        costo_insumos_caja_ref = recetaEfectivaVariante(data, varianteMinoristaRef).reduce((acc, it) => {
+          const insumo = data.insumos.find((i) => i.id === it.insumo_id);
+          return acc + it.cantidad * (insumo?.precio_actual ?? 0);
+        }, 0);
+      }
+      const costo_mo_caja_ref = varianteMinoristaRef ? costoManoDeObraVariante(data, varianteMinoristaRef.id) : 0;
+
+      const stockUnidades = variantesDelProducto.reduce((acc, v) => acc + calcularStock(data, "producto_variante", v.id) * (v.unidades_por_paquete ?? 0), 0);
+
+      const produccionDelMes = data.produccion.filter((pr) => pr.fecha >= desde && pr.fecha <= hasta);
+      const unidadesProducidas = produccionDelMes.reduce((acc, pr) => {
+        const variante = variantePorId.get(pr.producto_variante_id);
+        if (!variante || variante.producto_id !== producto.id) return acc;
+        return acc + pr.cantidad * (variante.unidades_por_paquete ?? 0);
+      }, 0);
+
       return {
-        producto_id: g.producto_id,
-        producto_nombre: producto?.nombre ?? "(producto eliminado)",
-        linea: producto?.linea ?? "",
-        canal: g.canal,
-        cajas_vendidas: g.cajas,
-        cajas_producidas: produccionPorProductoEnPeriodo.get(g.producto_id) ?? 0,
-        ingresos: Math.round(g.ingresos),
-        costos: Math.round(g.costos),
-        precio_promedio: g.cajas > 0 ? Math.round(g.ingresos / g.cajas) : 0,
-        stock_actual: stockPorProducto.get(g.producto_id) ?? 0,
+        mes: mesCol,
+        producto_id: producto.id,
+        producto: producto.nombre,
+        linea: producto.linea ?? "",
+        unidades_por_caja_ref: ref,
+        cajas_eq_minorista: Math.round(cajas_eq_minorista * 100) / 100,
+        cajas_eq_mayorista: Math.round(cajas_eq_mayorista * 100) / 100,
+        cajas_eq_total: Math.round((cajas_eq_minorista + cajas_eq_mayorista) * 100) / 100,
+        ingresos_minorista: Math.round(ingresos_minorista),
+        ingresos_mayorista: Math.round(ingresos_mayorista),
+        descuentos_total: Math.round(descuentos_total),
+        costo_insumos_caja_ref: Math.round(costo_insumos_caja_ref),
+        costo_mo_caja_ref: Math.round(costo_mo_caja_ref),
+        costo_total_caja_ref: Math.round(costo_insumos_caja_ref + costo_mo_caja_ref),
+        precio_minorista_caja_ref: varianteMinoristaRef?.precio_venta ?? 0,
+        precio_mayorista_caja_ref: varianteMayoristaRef?.precio_venta ?? 0,
+        stock_terminado_cajas_eq: Math.round((stockUnidades / ref) * 100) / 100,
+        cajas_producidas_eq: Math.round((unidadesProducidas / ref) * 100) / 100,
       };
-    })
-    .sort((a, b) => b.ingresos - a.ingresos);
+    });
 }
 
 export function productosATSV(filas: FilaResumenProducto[]): string {
   return tsv(
-    ["Producto", "Línea", "Canal", "Cajas vendidas", "Cajas producidas", "Ingresos", "Costos", "Precio promedio", "Stock actual"],
-    filas.map((f) => [f.producto_nombre, f.linea, f.canal, f.cajas_vendidas, f.cajas_producidas, f.ingresos, f.costos, f.precio_promedio, f.stock_actual])
+    [
+      "mes",
+      "producto_id",
+      "producto",
+      "linea",
+      "unidades_por_caja_ref",
+      "cajas_eq_minorista",
+      "cajas_eq_mayorista",
+      "cajas_eq_total",
+      "ingresos_minorista",
+      "ingresos_mayorista",
+      "descuentos_total",
+      "costo_insumos_caja_ref",
+      "costo_mo_caja_ref",
+      "costo_total_caja_ref",
+      "precio_minorista_caja_ref",
+      "precio_mayorista_caja_ref",
+      "stock_terminado_cajas_eq",
+      "cajas_producidas_eq",
+    ],
+    filas.map((f) => [
+      f.mes,
+      f.producto_id,
+      f.producto,
+      f.linea,
+      f.unidades_por_caja_ref,
+      f.cajas_eq_minorista,
+      f.cajas_eq_mayorista,
+      f.cajas_eq_total,
+      f.ingresos_minorista,
+      f.ingresos_mayorista,
+      f.descuentos_total,
+      f.costo_insumos_caja_ref,
+      f.costo_mo_caja_ref,
+      f.costo_total_caja_ref,
+      f.precio_minorista_caja_ref,
+      f.precio_mayorista_caja_ref,
+      f.stock_terminado_cajas_eq,
+      f.cajas_producidas_eq,
+    ])
   );
 }
 
-// --- 2) Reparto por zona --------------------------------------------------------------------------
+// --- 2) RESUMEN_GASTOS -----------------------------------------------------------------------------
+// Los egresos de las categorías de reparto ("Costo Indirecto — Reparto", "Costo Indirecto — Viajes
+// de compra") quedan afuera: van en la Tabla 4 (RESUMEN_REPARTO), contarlos acá también los
+// duplicaría.
 
-export interface FilaRepartoZona {
-  zona: string;
-  pedidos: number;
-  cobrado: number;
-  costo_real: number;
-  diferencia: number;
-}
+const CATEGORIAS_REPARTO = new Set(["Costo Indirecto — Reparto", "Costo Indirecto — Viajes de compra"]);
 
-export function resumenRepartoPorZonaSheets(data: RicordoDataV2, desde: string, hasta: string): FilaRepartoZona[] {
-  const pedidos = data.pedidos.filter((p) => p.estado === "Entregado" && p.fecha >= desde && p.fecha <= hasta && p.costo_envio > 0);
-  const porZona = new Map<string, FilaRepartoZona>();
-  for (const p of pedidos) {
-    const zona = p.zona?.trim() || "(sin zona)";
-    const actual = porZona.get(zona) ?? { zona, pedidos: 0, cobrado: 0, costo_real: 0, diferencia: 0 };
-    const diferencia = diferenciaRepartoPedido(p);
-    actual.pedidos += 1;
-    actual.cobrado += p.costo_envio;
-    actual.costo_real += p.costo_envio + diferencia;
-    actual.diferencia += diferencia;
-    porZona.set(zona, actual);
-  }
-  return [...porZona.values()]
-    .map((z) => ({ ...z, cobrado: Math.round(z.cobrado), costo_real: Math.round(z.costo_real), diferencia: Math.round(z.diferencia) }))
-    .sort((a, b) => b.cobrado - a.cobrado);
-}
-
-export function repartoZonaATSV(filas: FilaRepartoZona[]): string {
-  return tsv(
-    ["Zona", "Pedidos", "Cobrado", "Costo real", "Diferencia"],
-    filas.map((f) => [f.zona, f.pedidos, f.cobrado, f.costo_real, f.diferencia])
-  );
-}
-
-// --- 3) Gastos del mes por categoría, más envíos ---------------------------------------------------
-// Las categorías "Costo Indirecto — Reparto…" (diferencia de envío al entregar, viaje de compra a
-// Berazategui) se dejan afuera del desglose por categoría: ya están representadas en la fila de
-// envíos (reparto) de abajo — contarlas también acá las duplicaría.
-
-const PREFIJO_CATEGORIA_REPARTO = "Costo Indirecto — Reparto";
-const PREFIJOS_GASTO_RESUMEN = ["Costo Fijo — ", "Costo Indirecto — ", "Gasto Operativo — ", "Gastos Financieros — "];
-
-export interface FilaGastoCategoria {
+export interface FilaResumenGasto {
+  mes: string;
+  tipo: "compras_insumos" | "gasto_categoria";
   categoria: string;
   monto: number;
 }
 
-export interface ResumenGastos {
-  categorias: FilaGastoCategoria[];
-  envios: { cobrado: number; costo_real: number; diferencia: number };
-}
+export function resumenGastosSheets(data: RicordoDataV2, mes: string): FilaResumenGasto[] {
+  const { mesCol, desde, hasta } = rangoMes(mes);
+  const nombreCategoria = (id: string | undefined) => data.categorias.find((c) => c.id === id)?.nombre ?? "Sin categoría";
 
-export function resumenGastosSheets(data: RicordoDataV2, desde: string, hasta: string): ResumenGastos {
-  const nombreCategoria = (id: string | undefined) => data.categorias.find((c) => c.id === id)?.nombre ?? "(sin categoría)";
+  const comprasDelMes = data.compras.filter((c) => c.fecha >= desde && c.fecha <= hasta);
+  const totalCompras = Math.round(comprasDelMes.reduce((acc, c) => acc + c.total, 0));
+
   const gastos = data.movimientos_financieros.filter((m) => {
+    if (m.tipo !== "egreso" || m.estado !== "confirmado" || m.monto <= 0) return false;
     if (m.fecha < desde || m.fecha > hasta) return false;
+    if (m.origen_tipo === "compra_pago") return false;
     const nombre = nombreCategoria(m.categoria_id);
-    return PREFIJOS_GASTO_RESUMEN.some((p) => nombre.startsWith(p)) && !nombre.startsWith(PREFIJO_CATEGORIA_REPARTO);
+    return !CATEGORIAS_REPARTO.has(nombre);
   });
   const porCategoria = new Map<string, number>();
   for (const g of gastos) {
     const nombre = nombreCategoria(g.categoria_id);
     porCategoria.set(nombre, (porCategoria.get(nombre) ?? 0) + g.monto);
   }
-  const categorias = [...porCategoria.entries()]
-    .map(([categoria, monto]) => ({ categoria, monto: Math.round(monto) }))
-    .sort((a, b) => b.monto - a.monto);
 
-  const pedidos = data.pedidos.filter((p) => p.estado === "Entregado" && p.fecha >= desde && p.fecha <= hasta && p.costo_envio > 0);
-  const cobrado = Math.round(pedidos.reduce((acc, p) => acc + p.costo_envio, 0));
-  const costo_real = Math.round(pedidos.reduce((acc, p) => acc + (p.costo_real_envio ?? p.costo_envio), 0));
-
-  return { categorias, envios: { cobrado, costo_real, diferencia: costo_real - cobrado } };
+  const filas: FilaResumenGasto[] = [{ mes: mesCol, tipo: "compras_insumos", categoria: "Compras de insumos", monto: totalCompras }];
+  for (const [categoria, monto] of [...porCategoria.entries()].sort((a, b) => b[1] - a[1])) {
+    filas.push({ mes: mesCol, tipo: "gasto_categoria", categoria, monto: Math.round(monto) });
+  }
+  return filas;
 }
 
-export function gastosATSV(r: ResumenGastos): string {
-  const filas = r.categorias.map((f) => [f.categoria, f.monto]);
-  filas.push(["Envíos — cobrado", r.envios.cobrado]);
-  filas.push(["Envíos — costo real", r.envios.costo_real]);
-  filas.push(["Envíos — diferencia", r.envios.diferencia]);
-  return tsv(["Categoría", "Monto"], filas);
+export function gastosATSV(filas: FilaResumenGasto[]): string {
+  return tsv(
+    ["mes", "tipo", "categoria", "monto"],
+    filas.map((f) => [f.mes, f.tipo, f.categoria, f.monto])
+  );
 }
 
-// --- 4) Recetas (insumos de relleno) para el batch de compras ---------------------------------------
-// Cuánto insumo de la etapa "relleno" hace falta según lo realmente vendido (Entregado) en el
-// período — nunca una proyección inventada, es consumo real ya ocurrido más stock actual, para
-// decidir cuánto comprar.
+// --- 3) RECETAS_RELLENO (receta vigente, no depende del mes) ---------------------------------------
 
 export interface FilaRecetaRelleno {
+  producto_id: string;
+  producto: string;
   insumo_id: string;
-  insumo_nombre: string;
+  insumo: string;
+  cantidad_por_unidad: number;
   unidad: string;
-  cantidad_necesaria: number;
-  stock_actual: number;
-  faltante: number;
+  precio_actual: number;
 }
 
-export function resumenRecetasRellenoSheets(data: RicordoDataV2, desde: string, hasta: string): FilaRecetaRelleno[] {
-  const pedidosPeriodo = new Set(data.pedidos.filter((p) => p.estado === "Entregado" && p.fecha >= desde && p.fecha <= hasta).map((p) => p.id));
-  const itemsPeriodo = data.pedido_items.filter((i) => pedidosPeriodo.has(i.pedido_id));
-
-  const necesarioPorInsumo = new Map<string, number>();
-  for (const item of itemsPeriodo) {
-    if (!item.producto_variante_id) continue;
-    const variante = data.producto_variantes.find((v) => v.id === item.producto_variante_id);
-    if (!variante) continue;
-    const relleno = recetaEfectivaVariante(data, variante).filter((r) => r.etapa === "relleno");
-    for (const r of relleno) {
-      necesarioPorInsumo.set(r.insumo_id, (necesarioPorInsumo.get(r.insumo_id) ?? 0) + r.cantidad * item.cantidad);
+export function resumenRecetasRellenoSheets(data: RicordoDataV2): FilaRecetaRelleno[] {
+  const filas: FilaRecetaRelleno[] = [];
+  for (const producto of data.productos.filter((p) => p.activo)) {
+    const receta = data.recetas.find((r) => r.producto_id === producto.id && r.activa);
+    if (!receta) continue;
+    const itemsRelleno = data.receta_items.filter((ri) => ri.receta_id === receta.id && ri.etapa === "relleno");
+    for (const item of itemsRelleno) {
+      const insumo = data.insumos.find((i) => i.id === item.insumo_id);
+      filas.push({
+        producto_id: producto.id,
+        producto: producto.nombre,
+        insumo_id: item.insumo_id,
+        insumo: insumo?.nombre ?? "(insumo eliminado)",
+        cantidad_por_unidad: Math.round(item.cantidad * 100000) / 100000,
+        unidad: insumo?.unidad ?? "",
+        precio_actual: insumo?.precio_actual ?? 0,
+      });
     }
   }
-
-  return [...necesarioPorInsumo.entries()]
-    .map(([insumo_id, cantidad_necesaria]) => {
-      const insumo = data.insumos.find((i) => i.id === insumo_id);
-      const stock_actual = calcularStock(data, "insumo", insumo_id);
-      return {
-        insumo_id,
-        insumo_nombre: insumo?.nombre ?? "(insumo eliminado)",
-        unidad: insumo?.unidad ?? "",
-        cantidad_necesaria: Math.round(cantidad_necesaria * 100) / 100,
-        stock_actual: Math.round(stock_actual * 100) / 100,
-        faltante: Math.max(0, Math.round((cantidad_necesaria - stock_actual) * 100) / 100),
-      };
-    })
-    .sort((a, b) => b.faltante - a.faltante);
+  return filas;
 }
 
 export function recetasRellenoATSV(filas: FilaRecetaRelleno[]): string {
   return tsv(
-    ["Insumo", "Unidad", "Necesario (vendido en el período)", "Stock actual", "Faltante"],
-    filas.map((f) => [f.insumo_nombre, f.unidad, f.cantidad_necesaria, f.stock_actual, f.faltante])
+    ["producto_id", "producto", "insumo_id", "insumo", "cantidad_por_unidad", "unidad", "precio_actual"],
+    filas.map((f) => [f.producto_id, f.producto, f.insumo_id, f.insumo, f.cantidad_por_unidad, f.unidad, f.precio_actual])
+  );
+}
+
+// --- 4) RESUMEN_REPARTO ----------------------------------------------------------------------------
+// Una fila por cada zona de la lista fija (ZONAS_ENTREGA) + una fila "Compras Berazategui", aunque
+// estén en 0 — para que la Sheet siempre tenga las mismas filas mes a mes.
+
+const ZONAS_ENTREGA = [
+  "Zona 1 - Cercana",
+  "Zona 2 - Quilmes/Bernal/Wilde",
+  "Zona 3 - CABA",
+  "Zona 4 - La Plata/City Bell",
+  "Viernes - Hudson/Platanos/Ranelagh",
+  "Hurlingham",
+  "Otro",
+] as const;
+
+const CATEGORIA_VIAJES_DE_COMPRA = "Costo Indirecto — Viajes de compra";
+
+export interface FilaResumenReparto {
+  mes: string;
+  recorrido: string;
+  tipo: "Reparto" | "Compras";
+  viajes: number;
+  km: number;
+  litros: number;
+  nafta: number;
+  peajes: number;
+  costo_total: number;
+  envios_cobrados: number;
+}
+
+export function resumenRepartoSheets(data: RicordoDataV2, mes: string): FilaResumenReparto[] {
+  const { mesCol, desde, hasta } = rangoMes(mes);
+  const pedidosEntregados = data.pedidos.filter((p) => p.estado === "Entregado" && p.fecha >= desde && p.fecha <= hasta);
+  const { litro_nafta, consumo_100km } = data.configuracion.envios;
+
+  const filas: FilaResumenReparto[] = ZONAS_ENTREGA.map((zona) => {
+    const pedidosZona = pedidosEntregados.filter((p) => (zona === "Otro" ? !p.zona || p.zona === "Otro" : p.zona === zona));
+    const km = pedidosZona.reduce((acc, p) => acc + (p.km_envio ?? 0), 0);
+    const litros = (km * consumo_100km) / 100;
+    const peajes = pedidosZona.reduce((acc, p) => acc + (p.peaje_envio ?? 0), 0);
+    const costo_total = pedidosZona.reduce((acc, p) => acc + (p.costo_real_envio ?? p.costo_envio), 0);
+    const envios_cobrados = pedidosZona.reduce((acc, p) => acc + p.costo_envio, 0);
+    return {
+      mes: mesCol,
+      recorrido: zona,
+      tipo: "Reparto",
+      viajes: pedidosZona.length,
+      km: Math.round(km * 100) / 100,
+      litros: Math.round(litros * 100) / 100,
+      nafta: Math.round(litros * litro_nafta),
+      peajes: Math.round(peajes),
+      costo_total: Math.round(costo_total),
+      envios_cobrados: Math.round(envios_cobrados),
+    };
+  });
+
+  const nombreCategoria = (id: string | undefined) => data.categorias.find((c) => c.id === id)?.nombre;
+  const viajesDeCompra = data.movimientos_financieros.filter(
+    (m) => m.tipo === "egreso" && m.estado === "confirmado" && m.fecha >= desde && m.fecha <= hasta && nombreCategoria(m.categoria_id) === CATEGORIA_VIAJES_DE_COMPRA
+  );
+  filas.push({
+    mes: mesCol,
+    recorrido: "Compras Berazategui",
+    tipo: "Compras",
+    viajes: viajesDeCompra.length,
+    km: 0,
+    litros: 0,
+    nafta: 0,
+    peajes: 0,
+    costo_total: Math.round(viajesDeCompra.reduce((acc, m) => acc + m.monto, 0)),
+    envios_cobrados: 0,
+  });
+
+  return filas;
+}
+
+export function repartoATSV(filas: FilaResumenReparto[]): string {
+  return tsv(
+    ["mes", "recorrido", "tipo", "viajes", "km", "litros", "nafta", "peajes", "costo_total", "envios_cobrados"],
+    filas.map((f) => [f.mes, f.recorrido, f.tipo, f.viajes, f.km, f.litros, f.nafta, f.peajes, f.costo_total, f.envios_cobrados])
   );
 }

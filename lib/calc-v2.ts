@@ -338,13 +338,22 @@ export function diferenciaRepartoPedido(pedido: Pick<Pedido, "costo_envio" | "co
   return Math.round((pedido.costo_real_envio ?? pedido.costo_envio) - pedido.costo_envio);
 }
 
+/** Costo real de envío estimado a partir de los km cargados a mano (pedido manual, sin la web que
+ * ya lo calcula): nafta (km × consumo_100km ÷ 100 × litro_nafta) + peaje. Mismos parámetros que usa
+ * el resto de la app (`configuracion.envios`) — nunca inventa un consumo o precio de nafta propio. */
+export function costoRealEnvioCalculado(data: RicordoDataV2, kmEnvio: number, peajeEnvio: number): number {
+  const litros = (kmEnvio * data.configuracion.envios.consumo_100km) / 100;
+  return Math.round(litros * data.configuracion.envios.litro_nafta + peajeEnvio);
+}
+
 /** "Caja" es el movimiento real de efectivo/banco — no toda `movimientos_financieros` afecta
  * caja: un "Costo Fijo"/"Costo Indirecto"/"Gasto Operativo" es un registro contable para EERR,
  * no necesariamente un pago ya hecho. Solo cuentan acá los movimientos con un origen de caja real
  * (ver `ORIGENES_CAJA_REAL`) o una transferencia entre cuentas propias. */
 export function saldoCaja(data: RicordoDataV2): number {
+  const corte = data.configuracion.fecha_saldo_inicial_caja;
   const movs = data.movimientos_financieros
-    .filter((m) => (m.origen_tipo && ORIGENES_CAJA_REAL.includes(m.origen_tipo)) || m.tipo === "transferencia")
+    .filter((m) => ((m.origen_tipo && ORIGENES_CAJA_REAL.includes(m.origen_tipo)) || m.tipo === "transferencia") && (!corte || m.fecha >= corte))
     .reduce((acc, m) => {
       if (m.tipo === "ingreso") return acc + m.monto;
       if (m.tipo === "egreso") return acc - m.monto;
@@ -1081,8 +1090,9 @@ function clasificarMovimientoCaja(m: RicordoDataV2["movimientos_financieros"][nu
 /** Saldo de caja real hasta una fecha (inclusive) — mismo criterio que saldoCaja pero con corte de
  * fecha, para poder calcular saldo inicial/final de un período. */
 function saldoCajaAlFecha(data: RicordoDataV2, hastaFecha?: string): number {
+  const corte = data.configuracion.fecha_saldo_inicial_caja;
   const movs = data.movimientos_financieros
-    .filter((m) => esMovimientoCajaReal(m) && (!hastaFecha || m.fecha <= hastaFecha))
+    .filter((m) => esMovimientoCajaReal(m) && (!hastaFecha || m.fecha <= hastaFecha) && (!corte || m.fecha >= corte))
     .reduce((acc, m) => (m.tipo === "ingreso" ? acc + m.monto : m.tipo === "egreso" ? acc - m.monto : acc), 0);
   // `|| 0` normaliza un posible -0 (ej. 0 - 0 acumulado en el reduce) a 0 — mismo valor numérico,
   // pero assert.equal en modo estricto los distingue y no tiene sentido mostrarlo distinto en la UI.

@@ -96,7 +96,7 @@ function FilaConclusion({ conclusion }: { conclusion: Conclusion }) {
   );
 }
 
-const CATEGORIA_VIAJE_BERAZATEGUI = "Costo Indirecto — Reparto (viaje a Berazategui)";
+const CATEGORIA_VIAJE_DE_COMPRA = "Costo Indirecto — Viajes de compra";
 
 export function Inicio() {
   const { data, setData } = useStoreV2();
@@ -106,7 +106,7 @@ export function Inicio() {
   const [canalFiltro, setCanalFiltro] = useState<Canal | "todos">("todos");
   const [metricaEvolucion, setMetricaEvolucion] = useState<MetricaEvolucion>("facturacion");
   const [viajeModalOpen, setViajeModalOpen] = useState(false);
-  const [viajeForm, setViajeForm] = useState({ monto: 0, fecha: new Date().toISOString().slice(0, 10) });
+  const [viajeForm, setViajeForm] = useState({ monto: 0, fecha: new Date().toISOString().slice(0, 10), nota: "" });
 
   function guardarViaje() {
     if (viajeForm.monto <= 0) {
@@ -115,9 +115,9 @@ export function Inicio() {
     }
     setData((d) => {
       let categorias = d.categorias;
-      let categoria = categorias.find((c) => c.ambito === "financiero" && c.nombre === CATEGORIA_VIAJE_BERAZATEGUI);
+      let categoria = categorias.find((c) => c.ambito === "financiero" && c.nombre === CATEGORIA_VIAJE_DE_COMPRA);
       if (!categoria) {
-        categoria = { id: uid("CAT"), nombre: CATEGORIA_VIAJE_BERAZATEGUI, ambito: "financiero", activo: true };
+        categoria = { id: uid("CAT"), nombre: CATEGORIA_VIAJE_DE_COMPRA, ambito: "financiero", activo: true };
         categorias = [...categorias, categoria];
       }
       return {
@@ -130,7 +130,7 @@ export function Inicio() {
             fecha: viajeForm.fecha,
             tipo: "egreso",
             categoria_id: categoria.id,
-            concepto: "Viaje de compra a Berazategui",
+            concepto: viajeForm.nota.trim() || "Viaje de compra",
             monto: viajeForm.monto,
             estado: "confirmado",
           },
@@ -139,7 +139,7 @@ export function Inicio() {
     });
     toast("Viaje registrado");
     setViajeModalOpen(false);
-    setViajeForm({ monto: 0, fecha: new Date().toISOString().slice(0, 10) });
+    setViajeForm({ monto: 0, fecha: new Date().toISOString().slice(0, 10), nota: "" });
   }
 
   const desde = primerDiaMes(mes, anio);
@@ -235,13 +235,13 @@ export function Inicio() {
         <QuickActionButton icon={PackagePlus} label="Cargar compra" onClick={() => router.go("operaciones", "compras")} />
         <QuickActionButton icon={Factory} label="Planificar producción" onClick={() => router.go("operaciones", "produccion")} />
         <QuickActionButton icon={ClipboardList} label="Ver pedidos pendientes" onClick={() => router.go("ventas", "pedidos")} />
-        <QuickActionButton icon={Truck} label="Viaje a Berazategui" onClick={() => setViajeModalOpen(true)} />
+        <QuickActionButton icon={Truck} label="Viaje de compra" onClick={() => setViajeModalOpen(true)} />
       </div>
 
       <Modal
         open={viajeModalOpen}
         onClose={() => setViajeModalOpen(false)}
-        title="Viaje de compra a Berazategui"
+        title="Viaje de compra"
         footer={
           <>
             <Button variant="ghost" onClick={() => setViajeModalOpen(false)}>
@@ -257,6 +257,9 @@ export function Inicio() {
           </Field>
           <Field label="Fecha">
             <Input type="date" value={viajeForm.fecha} onChange={(e) => setViajeForm({ ...viajeForm, fecha: e.target.value })} />
+          </Field>
+          <Field label="Nota" full>
+            <Input value={viajeForm.nota} onChange={(e) => setViajeForm({ ...viajeForm, nota: e.target.value })} placeholder="Ej.: Compra de insumos en Berazategui" />
           </Field>
         </FormGrid>
       </Modal>
