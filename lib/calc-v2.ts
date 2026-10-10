@@ -330,6 +330,14 @@ export const ORIGENES_CAJA_REAL = [
   "devolucion_prestamo",
 ];
 
+/** Cuánto costó de más (o de menos, si da negativo) el envío de un pedido respecto de lo cobrado
+ * al cliente — nunca inventa el costo real si no está cargado, usa `costo_envio` como aproximación
+ * (mismo criterio que el resto de la app). Un pedido entregado con esto > 0 genera un gasto en
+ * "Costo Indirecto — Reparto" por la diferencia (ver Ventas → Pedidos). */
+export function diferenciaRepartoPedido(pedido: Pick<Pedido, "costo_envio" | "costo_real_envio">): number {
+  return Math.round((pedido.costo_real_envio ?? pedido.costo_envio) - pedido.costo_envio);
+}
+
 /** "Caja" es el movimiento real de efectivo/banco — no toda `movimientos_financieros` afecta
  * caja: un "Costo Fijo"/"Costo Indirecto"/"Gasto Operativo" es un registro contable para EERR,
  * no necesariamente un pago ya hecho. Solo cuentan acá los movimientos con un origen de caja real

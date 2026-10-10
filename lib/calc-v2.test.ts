@@ -11,6 +11,7 @@ import {
   manoDeObraPedidoItem,
   calcularStock,
   saldoCaja,
+  diferenciaRepartoPedido,
   cmvPeriodo,
   ventasNetas,
   costosFijosTotales,
@@ -121,6 +122,12 @@ test("valorStockInsumos: solo suma insumos con controla_stock activo, al precio 
 test("saldoCaja: saldo inicial + ingresos - egresos de movimientos_financieros", () => {
   const { documento } = migrarAV2(fixture());
   assert.equal(saldoCaja(documento.data), 8000);
+});
+
+test("diferenciaRepartoPedido: positiva si el costo real supera lo cobrado, nunca inventa el costo real si falta", () => {
+  assert.equal(diferenciaRepartoPedido({ costo_envio: 1000, costo_real_envio: 1500 }), 500);
+  assert.equal(diferenciaRepartoPedido({ costo_envio: 1000, costo_real_envio: 700 }), -300);
+  assert.equal(diferenciaRepartoPedido({ costo_envio: 1000, costo_real_envio: undefined }), 0);
 });
 
 test("cmvPeriodo + ventasNetas: contribución marginal da positiva con datos sanos", () => {

@@ -1,9 +1,11 @@
 "use client";
 
 import React, { useMemo, useState } from "react";
-import { ShoppingCart, PackagePlus, Factory, ClipboardList, Receipt } from "lucide-react";
+import { ShoppingCart, PackagePlus, Factory, ClipboardList, Receipt, Truck } from "lucide-react";
 import { useStoreV2 } from "@/lib/store-v2";
 import { useRouter } from "@/lib/nav-context";
+import { useToast } from "@/lib/toast";
+import { uid } from "@/lib/id";
 import { usePeriod, MESES } from "@/lib/period";
 import {
   PageHeader,
@@ -20,7 +22,12 @@ import {
   Alert,
   FilterTabs,
   Select,
+  Field,
+  FormGrid,
+  Input,
+  Button,
 } from "@/components/ui";
+import { Modal } from "@/components/Modal";
 import { GraficoLinea, IndicadorCrecimiento } from "@/components/charts";
 import {
   cmvPeriodo,
@@ -89,12 +96,51 @@ function FilaConclusion({ conclusion }: { conclusion: Conclusion }) {
   );
 }
 
+const CATEGORIA_VIAJE_BERAZATEGUI = "Costo Indirecto — Reparto (viaje a Berazategui)";
+
 export function Inicio() {
-  const { data } = useStoreV2();
+  const { data, setData } = useStoreV2();
+  const { toast } = useToast();
   const router = useRouter();
   const { mes, anio } = usePeriod();
   const [canalFiltro, setCanalFiltro] = useState<Canal | "todos">("todos");
   const [metricaEvolucion, setMetricaEvolucion] = useState<MetricaEvolucion>("facturacion");
+  const [viajeModalOpen, setViajeModalOpen] = useState(false);
+  const [viajeForm, setViajeForm] = useState({ monto: 0, fecha: new Date().toISOString().slice(0, 10) });
+
+  function guardarViaje() {
+    if (viajeForm.monto <= 0) {
+      toast("Ingresá un monto mayor a 0", "error");
+      return;
+    }
+    setData((d) => {
+      let categorias = d.categorias;
+      let categoria = categorias.find((c) => c.ambito === "financiero" && c.nombre === CATEGORIA_VIAJE_BERAZATEGUI);
+      if (!categoria) {
+        categoria = { id: uid("CAT"), nombre: CATEGORIA_VIAJE_BERAZATEGUI, ambito: "financiero", activo: true };
+        categorias = [...categorias, categoria];
+      }
+      return {
+        ...d,
+        categorias,
+        movimientos_financieros: [
+          ...d.movimientos_financieros,
+          {
+            id: uid("MOVF"),
+            fecha: viajeForm.fecha,
+            tipo: "egreso",
+            categoria_id: categoria.id,
+            concepto: "Viaje de compra a Berazategui",
+            monto: viajeForm.monto,
+            estado: "confirmado",
+          },
+        ],
+      };
+    });
+    toast("Viaje registrado");
+    setViajeModalOpen(false);
+    setViajeForm({ monto: 0, fecha: new Date().toISOString().slice(0, 10) });
+  }
 
   const desde = primerDiaMes(mes, anio);
   const hasta = ultimoDiaMes(mes, anio);
@@ -189,7 +235,31 @@ export function Inicio() {
         <QuickActionButton icon={PackagePlus} label="Cargar compra" onClick={() => router.go("operaciones", "compras")} />
         <QuickActionButton icon={Factory} label="Planificar producción" onClick={() => router.go("operaciones", "produccion")} />
         <QuickActionButton icon={ClipboardList} label="Ver pedidos pendientes" onClick={() => router.go("ventas", "pedidos")} />
+        <QuickActionButton icon={Truck} label="Viaje a Berazategui" onClick={() => setViajeModalOpen(true)} />
       </div>
+
+      <Modal
+        open={viajeModalOpen}
+        onClose={() => setViajeModalOpen(false)}
+        title="Viaje de compra a Berazategui"
+        footer={
+          <>
+            <Button variant="ghost" onClick={() => setViajeModalOpen(false)}>
+              Cancelar
+            </Button>
+            <Button onClick={guardarViaje}>Guardar</Button>
+          </>
+        }
+      >
+        <FormGrid>
+          <Field label="Monto">
+            <Input type="number" value={viajeForm.monto} onChange={(e) => setViajeForm({ ...viajeForm, monto: Number(e.target.value) })} />
+          </Field>
+          <Field label="Fecha">
+            <Input type="date" value={viajeForm.fecha} onChange={(e) => setViajeForm({ ...viajeForm, fecha: e.target.value })} />
+          </Field>
+        </FormGrid>
+      </Modal>
 
       <div className="mb-4 flex flex-wrap items-center gap-3">
         <span className="text-[11px] font-semibold uppercase tracking-wide text-text3">Canal</span>

@@ -41,13 +41,17 @@ export interface Pedido {
   canal: Canal;
   metodo_pago?: string;
   descuento: number;
+  /** Zona de entrega — texto libre (no hay catálogo fijo de zonas todavía), usada para agrupar el
+   * reparto en el Resumen para Sheets. Opcional: un pedido viejo sin esto no se inventa ninguna. */
+  zona?: string;
   /** Envío cobrado al cliente — forma parte de la venta (ventas netas), no es un costo. */
   costo_envio: number;
   /** Costo real del envío (combustible/logística) — puede ser distinto de `costo_envio`.
    * Opcional: si no está cargado, las pantallas de rentabilidad asumen `costo_envio` como
-   * aproximación (mismo comportamiento que antes de que este campo existiera). Nunca genera un
-   * movimiento de caja ni una entrada de costos indirectos aparte — se calcula en vivo desde acá
-   * cada vez que se necesita (EERR, Margen por sabor), así que no puede duplicarse ni desincronizarse. */
+   * aproximación (mismo comportamiento que antes de que este campo existiera). Al entregar el
+   * pedido (Ventas → Pedidos), si esto supera `costo_envio`, se genera un gasto por la diferencia
+   * en "Costo Indirecto — Reparto" (una sola vez por pedido, se actualiza si se re-edita después
+   * de entregado) — ver `gastoRepartoPedido` en Ventas.tsx. */
   costo_real_envio?: number;
   total: number;
   /** Fecha esperada de cobro (opcional) — permite calcular vencidas y proyectar caja. */

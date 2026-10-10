@@ -48,6 +48,7 @@ import {
 } from "@/lib/calc-v2";
 import type { EerrLinea, CuentaPorCobrar, CuentaPorPagar } from "@/lib/calc-v2";
 import { useRouter } from "@/lib/nav-context";
+import { ResumenSheetsButton } from "./ResumenSheets";
 
 function nombreCategoria(data: ReturnType<typeof useStoreV2>["data"], id: string | undefined) {
   return data.categorias.find((c) => c.id === id)?.nombre ?? "—";
@@ -1888,7 +1889,10 @@ function ResumenTab() {
 
   return (
     <div>
-      <p className="mb-4 text-[12.5px] text-text3">Lo esencial de {MESES[mes - 1]} {anio} — el detalle de cada número está en su propia pestaña.</p>
+      <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
+        <p className="text-[12.5px] text-text3">Lo esencial de {MESES[mes - 1]} {anio} — el detalle de cada número está en su propia pestaña.</p>
+        <ResumenSheetsButton />
+      </div>
       <StatGrid>
         <KpiCard label="Saldo en cuentas" value={fARS(saldo)} color={saldo >= 0 ? "green" : "red"} />
         <KpiCard label="Dinero libre" value={fARS(libre.dinero_libre)} color={libre.dinero_libre >= 0 ? "blue" : "red"} sub="Descontando lo que ya está comprometido" />
