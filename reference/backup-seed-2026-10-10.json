@@ -1,0 +1,7536 @@
+{
+  "ingredientes": [
+    {
+      "id": "ING-001",
+      "nombre": "Aceite",
+      "unidad": "kg",
+      "categoria": "Aceites",
+      "precio_ref": 3175,
+      "precio_vigente": null
+    },
+    {
+      "id": "ING-002",
+      "nombre": "Agua",
+      "unidad": "litro",
+      "categoria": "Líquidos",
+      "precio_ref": 0,
+      "precio_vigente": null
+    },
+    {
+      "id": "ING-003",
+      "nombre": "Ajo",
+      "unidad": "kg",
+      "categoria": "Condimentos",
+      "precio_ref": 800,
+      "precio_vigente": 6000
+    },
+    {
+      "id": "ING-004",
+      "nombre": "Almendras",
+      "unidad": "kg",
+      "categoria": "Frutos secos",
+      "precio_ref": 28800,
+      "precio_vigente": 35100,
+      "seguimiento_stock": true
+    },
+    {
+      "id": "ING-005",
+      "nombre": "Bolsa al vacío",
+      "unidad": "unidad",
+      "categoria": "Packaging",
+      "precio_ref": 320,
+      "precio_vigente": null,
+      "seguimiento_stock": true
+    },
+    {
+      "id": "ING-006",
+      "nombre": "Bolsas",
+      "unidad": "unidad",
+      "categoria": "Packaging",
+      "precio_ref": 25,
+      "precio_vigente": null
+    },
+    {
+      "id": "ING-007",
+      "nombre": "Caja",
+      "unidad": "unidad",
+      "categoria": "Packaging",
+      "precio_ref": 198.35,
+      "precio_vigente": null
+    },
+    {
+      "id": "ING-008",
+      "nombre": "Calabaza",
+      "unidad": "kg",
+      "categoria": "Verduras",
+      "precio_ref": 1666.6,
+      "precio_vigente": 1000
+    },
+    {
+      "id": "ING-009",
+      "nombre": "Cebolla",
+      "unidad": "kg",
+      "categoria": "Verduras",
+      "precio_ref": 900,
+      "precio_vigente": 900,
+      "id_proveedor": "",
+      "seguimiento_stock": false
+    },
+    {
+      "id": "ING-010",
+      "nombre": "Espinaca",
+      "unidad": "kg",
+      "categoria": "Verduras",
+      "precio_ref": 4500,
+      "precio_vigente": null
+    },
+    {
+      "id": "ING-011",
+      "nombre": "Extracto de tomate",
+      "unidad": "kg",
+      "categoria": "Salsas",
+      "precio_ref": 10555.5,
+      "precio_vigente": null
+    },
+    {
+      "id": "ING-012",
+      "nombre": "Finlandia",
+      "unidad": "kg",
+      "categoria": "Quesos",
+      "precio_ref": 11586,
+      "precio_vigente": null
+    },
+    {
+      "id": "ING-013",
+      "nombre": "Goma xántica",
+      "unidad": "kg",
+      "categoria": "Aditivos",
+      "precio_ref": 5000,
+      "precio_vigente": null
+    },
+    {
+      "id": "ING-014",
+      "nombre": "Harina de arroz",
+      "unidad": "kg",
+      "categoria": "Harinas",
+      "precio_ref": 3466,
+      "precio_vigente": 3446
+    },
+    {
+      "id": "ING-015",
+      "nombre": "Huevos",
+      "unidad": "unidad",
+      "categoria": "Proteínas",
+      "precio_ref": 150,
+      "precio_vigente": 155.55555
+    },
+    {
+      "id": "ING-016",
+      "nombre": "Humo líquido",
+      "unidad": "kg",
+      "categoria": "Condimentos",
+      "precio_ref": 40000,
+      "precio_vigente": null
+    },
+    {
+      "id": "ING-017",
+      "nombre": "Laurel",
+      "unidad": "kg",
+      "categoria": "Condimentos",
+      "precio_ref": 0,
+      "precio_vigente": null
+    },
+    {
+      "id": "ING-018",
+      "nombre": "Leche",
+      "unidad": "litro",
+      "categoria": "Lácteos",
+      "precio_ref": 2000,
+      "precio_vigente": null
+    },
+    {
+      "id": "ING-019",
+      "nombre": "Maicena",
+      "unidad": "kg",
+      "categoria": "Harinas",
+      "precio_ref": 1862,
+      "precio_vigente": 1862.32
+    },
+    {
+      "id": "ING-020",
+      "nombre": "Mandioca",
+      "unidad": "kg",
+      "categoria": "Harinas",
+      "precio_ref": 3520,
+      "precio_vigente": null
+    },
+    {
+      "id": "ING-022",
+      "nombre": "Manteca",
+      "unidad": "kg",
+      "categoria": "Lácteos",
+      "precio_ref": 4200,
+      "precio_vigente": null
+    },
+    {
+      "id": "ING-023",
+      "nombre": "Mozzarella",
+      "unidad": "kg",
+      "categoria": "Quesos",
+      "precio_ref": 10200,
+      "precio_vigente": null,
+      "seguimiento_stock": true
+    },
+    {
+      "id": "ING-024",
+      "nombre": "Nuez",
+      "unidad": "kg",
+      "categoria": "Frutos secos",
+      "precio_ref": 28000,
+      "precio_vigente": null,
+      "seguimiento_stock": true
+    },
+    {
+      "id": "ING-025",
+      "nombre": "Nuez moscada",
+      "unidad": "kg",
+      "categoria": "Condimentos",
+      "precio_ref": 97500,
+      "precio_vigente": null
+    },
+    {
+      "id": "ING-026",
+      "nombre": "Oliva",
+      "unidad": "litro",
+      "categoria": "Aceites",
+      "precio_ref": 20000,
+      "precio_vigente": null
+    },
+    {
+      "id": "ING-027",
+      "nombre": "Osobuco",
+      "unidad": "kg",
+      "categoria": "Carnes",
+      "precio_ref": 10400,
+      "precio_vigente": 9500
+    },
+    {
+      "id": "ING-028",
+      "nombre": "Pimienta",
+      "unidad": "kg",
+      "categoria": "Condimentos",
+      "precio_ref": 52360,
+      "precio_vigente": null
+    },
+    {
+      "id": "ING-029",
+      "nombre": "Premezcla",
+      "unidad": "kg",
+      "categoria": "Harinas",
+      "precio_ref": 4216,
+      "precio_vigente": 4962.2,
+      "seguimiento_stock": true
+    },
+    {
+      "id": "ING-030",
+      "nombre": "Provolone",
+      "unidad": "kg",
+      "categoria": "Quesos",
+      "precio_ref": 13840,
+      "precio_vigente": null
+    },
+    {
+      "id": "ING-031",
+      "nombre": "Puerro",
+      "unidad": "kg",
+      "categoria": "Verduras",
+      "precio_ref": 11666.6,
+      "precio_vigente": 3571.5
+    },
+    {
+      "id": "ING-032",
+      "nombre": "Queso crema",
+      "unidad": "kg",
+      "categoria": "Lácteos",
+      "precio_ref": 8224,
+      "precio_vigente": null
+    },
+    {
+      "id": "ING-033",
+      "nombre": "Reggianito",
+      "unidad": "kg",
+      "categoria": "Quesos",
+      "precio_ref": 13500,
+      "precio_vigente": null
+    },
+    {
+      "id": "ING-034",
+      "nombre": "Ricotta",
+      "unidad": "kg",
+      "categoria": "Lácteos",
+      "precio_ref": 4000,
+      "precio_vigente": null
+    },
+    {
+      "id": "ING-035",
+      "nombre": "Roastbeef",
+      "unidad": "kg",
+      "categoria": "Carnes",
+      "precio_ref": 15700,
+      "precio_vigente": 15500
+    },
+    {
+      "id": "ING-036",
+      "nombre": "Sal",
+      "unidad": "kg",
+      "categoria": "Condimentos",
+      "precio_ref": 10500,
+      "precio_vigente": null
+    },
+    {
+      "id": "ING-037",
+      "nombre": "Sardo",
+      "unidad": "kg",
+      "categoria": "Quesos",
+      "precio_ref": 13880,
+      "precio_vigente": 16635,
+      "seguimiento_stock": true
+    },
+    {
+      "id": "ING-038",
+      "nombre": "Tomate",
+      "unidad": "kg",
+      "categoria": "Verduras",
+      "precio_ref": 5000,
+      "precio_vigente": 4500
+    },
+    {
+      "id": "ING-039",
+      "nombre": "Vermut",
+      "unidad": "litro",
+      "categoria": "Bebidas",
+      "precio_ref": 6200,
+      "precio_vigente": null,
+      "seguimiento_stock": true
+    },
+    {
+      "id": "ING-040",
+      "nombre": "Vinagre y bicarbonato",
+      "unidad": "litro",
+      "categoria": "Condimentos",
+      "precio_ref": 4300,
+      "precio_vigente": null
+    },
+    {
+      "id": "ING-041",
+      "nombre": "Vino tinto",
+      "unidad": "litro",
+      "categoria": "Bebidas",
+      "precio_ref": 2000,
+      "precio_vigente": null,
+      "seguimiento_stock": true
+    },
+    {
+      "id": "ING-042",
+      "nombre": "Zanahoria",
+      "unidad": "kg",
+      "categoria": "Verduras",
+      "precio_ref": 1500,
+      "precio_vigente": null
+    },
+    {
+      "id": "ING-043",
+      "nombre": "Apio",
+      "unidad": "kg",
+      "categoria": "Verduras",
+      "precio_ref": 1666,
+      "precio_vigente": null
+    },
+    {
+      "id": "ING-044",
+      "nombre": "Albahaca",
+      "unidad": "kg",
+      "categoria": "Condimentos",
+      "precio_ref": 500,
+      "precio_vigente": null
+    },
+    {
+      "id": "ING-045",
+      "nombre": "Jamon",
+      "unidad": "kg",
+      "categoria": "Carnes",
+      "precio_ref": 6380,
+      "precio_vigente": null
+    },
+    {
+      "id": "ING-046",
+      "nombre": "Vino blanco",
+      "unidad": "litro",
+      "categoria": "Bebidas",
+      "precio_ref": 4000,
+      "precio_vigente": null
+    },
+    {
+      "id": "ING-047",
+      "nombre": "Bolsa al vacío grande",
+      "unidad": "unidad",
+      "categoria": "Packaging",
+      "precio_ref": 510,
+      "precio_vigente": null
+    },
+    {
+      "id": "ING-048",
+      "nombre": "Cúrcuma",
+      "unidad": "kg",
+      "categoria": "Condimentos",
+      "precio_ref": 20000,
+      "precio_vigente": null
+    },
+    {
+      "id": "ING-049",
+      "nombre": "Pimentón",
+      "unidad": "kg",
+      "categoria": "Condimentos",
+      "precio_ref": 20000,
+      "precio_vigente": null
+    },
+    {
+      "id": "ING-050",
+      "nombre": "Panceta",
+      "unidad": "kg",
+      "categoria": "Carnes",
+      "precio_ref": 18000,
+      "precio_vigente": 18928.95
+    },
+    {
+      "id": "ING-051",
+      "nombre": "Puerro 2",
+      "unidad": "kg",
+      "categoria": "Verduras",
+      "precio_ref": 11666,
+      "precio_vigente": null
+    },
+    {
+      "id": "ING-052",
+      "nombre": "Cacao",
+      "unidad": "kg",
+      "categoria": "Condimentos",
+      "precio_ref": 20000,
+      "precio_vigente": null
+    },
+    {
+      "id": "ING-053",
+      "nombre": "salsa",
+      "unidad": "kg",
+      "categoria": "Condimentos",
+      "precio_ref": 1025,
+      "precio_vigente": null
+    },
+    {
+      "id": "ING-054",
+      "nombre": "Psyllium",
+      "unidad": "kg",
+      "categoria": "Aditivos",
+      "precio_ref": 13080.91,
+      "precio_vigente": 39242
+    },
+    {
+      "id": "ING-021",
+      "nombre": "Mandiocaa",
+      "unidad": "kg",
+      "categoria": "Harinas",
+      "precio_ref": 0,
+      "precio_vigente": 0
+    },
+    {
+      "id": "ING-055",
+      "nombre": "Esparrago",
+      "unidad": "kg",
+      "categoria": "Verduras",
+      "precio_ref": 8000,
+      "precio_vigente": 8000
+    },
+    {
+      "id": "ING-056",
+      "nombre": "Passatta",
+      "unidad": "kg",
+      "categoria": "Harinas",
+      "precio_ref": 5000,
+      "precio_vigente": 5000
+    }
+  ],
+  "productos": [
+    {
+      "id": "PROD-01",
+      "nombre": "Ravioles de calabaza",
+      "categoria": "Pasta rellena",
+      "unidad": "paquete",
+      "rendimiento": 1,
+      "precio_venta": 11000,
+      "activo": true,
+      "gusto": "calabaza",
+      "descripcion": "",
+      "aplica_iva": false,
+      "producto_base": null
+    },
+    {
+      "id": "PROD-02",
+      "nombre": "Ravioles de ricotta",
+      "categoria": "Pasta rellena",
+      "unidad": "bandeja",
+      "rendimiento": 1,
+      "precio_venta": 11000,
+      "activo": "Si",
+      "gusto": "ricotta"
+    },
+    {
+      "id": "PROD-03",
+      "nombre": "Raviolon de espinaca",
+      "categoria": "Pasta rellena",
+      "unidad": "paquete",
+      "rendimiento": 1,
+      "precio_venta": 13000,
+      "activo": "Si",
+      "gusto": "espinaca"
+    },
+    {
+      "id": "PROD-04",
+      "nombre": "Medialuna de osobuco",
+      "categoria": "Pasta rellena",
+      "unidad": "unidad",
+      "rendimiento": 1,
+      "precio_venta": 14000,
+      "activo": "Si",
+      "gusto": "osobuco"
+    },
+    {
+      "id": "PROD-05",
+      "nombre": "Raviol de jamon y queso",
+      "categoria": "Pasta rellena",
+      "unidad": "paquete",
+      "rendimiento": 1,
+      "precio_venta": 10000,
+      "activo": "Si",
+      "gusto": "jamon_queso"
+    },
+    {
+      "id": "PROD-06",
+      "nombre": "Raviolon de puerro",
+      "categoria": "Pasta rellena",
+      "unidad": "paquete",
+      "rendimiento": 1,
+      "precio_venta": 12500,
+      "activo": true,
+      "gusto": "puerro",
+      "descripcion": "",
+      "aplica_iva": false,
+      "producto_base": null
+    },
+    {
+      "id": "PROD-07",
+      "nombre": "Jamon y queso mayorista",
+      "categoria": "Pasta rellena",
+      "unidad": "paquete",
+      "rendimiento": 1,
+      "precio_venta": 8000,
+      "activo": true,
+      "gusto": "jamon_queso",
+      "descripcion": "",
+      "aplica_iva": false,
+      "producto_base": "PROD-05"
+    },
+    {
+      "id": "PROD-08",
+      "nombre": "Calabaza mayorista",
+      "categoria": "Pasta rellena",
+      "unidad": "paquete",
+      "rendimiento": 1,
+      "precio_venta": 9000,
+      "activo": true,
+      "gusto": "calabaza",
+      "descripcion": "",
+      "aplica_iva": false,
+      "producto_base": "PROD-01"
+    },
+    {
+      "id": "PROD-09",
+      "nombre": "Espinaca mayorista",
+      "categoria": "Pasta rellena",
+      "unidad": "paquete",
+      "rendimiento": 1,
+      "precio_venta": 10500,
+      "activo": true,
+      "gusto": "espinaca",
+      "descripcion": "",
+      "aplica_iva": false,
+      "producto_base": "PROD-03"
+    },
+    {
+      "id": "PROD-10",
+      "nombre": "Osobuco mayorista",
+      "categoria": "Pasta rellena",
+      "unidad": "paquete",
+      "rendimiento": 1,
+      "precio_venta": 12000,
+      "activo": true,
+      "gusto": "osobuco",
+      "descripcion": "",
+      "aplica_iva": false,
+      "producto_base": "PROD-04"
+    },
+    {
+      "id": "PROD-11",
+      "nombre": "Jyq sellado al vacio mayo",
+      "categoria": "Pasta rellena",
+      "unidad": "paquete",
+      "rendimiento": 1,
+      "precio_venta": 11500,
+      "activo": true,
+      "gusto": "jamon_queso",
+      "descripcion": "",
+      "aplica_iva": false,
+      "producto_base": "PROD-05"
+    },
+    {
+      "id": "PROD-12",
+      "nombre": "Calabaza al vacio mayo",
+      "categoria": "Pasta rellena",
+      "unidad": "paquete",
+      "rendimiento": 1,
+      "precio_venta": 12000,
+      "activo": true,
+      "gusto": "calabaza",
+      "descripcion": "",
+      "aplica_iva": false,
+      "producto_base": "PROD-01"
+    },
+    {
+      "id": "PROD-13",
+      "nombre": "Espinaca al vacio mayo",
+      "categoria": "Pasta rellena",
+      "unidad": "paquete",
+      "rendimiento": 1,
+      "precio_venta": 12500,
+      "activo": true,
+      "gusto": "espinaca",
+      "descripcion": "",
+      "aplica_iva": false,
+      "producto_base": "PROD-03"
+    },
+    {
+      "id": "PROD-14",
+      "nombre": "Salsa",
+      "categoria": "Pasta rellena",
+      "unidad": "paquete",
+      "rendimiento": 1,
+      "precio_venta": 4500,
+      "activo": "Si",
+      "gusto": "salsa"
+    },
+    {
+      "id": "PROD-15",
+      "nombre": "Calabaza mayorista sin salsa",
+      "categoria": "Pasta rellena",
+      "unidad": "paquete",
+      "rendimiento": 1,
+      "precio_venta": 9000,
+      "activo": true,
+      "gusto": "calabaza",
+      "descripcion": "",
+      "aplica_iva": false,
+      "producto_base": "PROD-01"
+    },
+    {
+      "id": "PROD-16",
+      "nombre": "Jamon y queso mayorista sin salsa",
+      "categoria": "Pasta rellena",
+      "unidad": "paquete",
+      "rendimiento": 1,
+      "precio_venta": 8000,
+      "activo": true,
+      "gusto": "jamon_queso",
+      "descripcion": "",
+      "aplica_iva": false,
+      "producto_base": "PROD-05"
+    },
+    {
+      "id": "PROD-17",
+      "nombre": "Espinaca mayorista sin salsa",
+      "categoria": "Pasta rellena",
+      "unidad": "paquete",
+      "rendimiento": 1,
+      "precio_venta": 10500,
+      "activo": true,
+      "gusto": "espinaca",
+      "descripcion": "",
+      "aplica_iva": false,
+      "producto_base": "PROD-03"
+    },
+    {
+      "id": "PROD-019",
+      "nombre": "Sorrentino de esparrago",
+      "categoria": "Pasta rellena",
+      "unidad": "paquete",
+      "rendimiento": 1,
+      "precio_venta": 14000,
+      "activo": "Si"
+    },
+    {
+      "id": "PROD-020",
+      "nombre": "Cintas al huevo",
+      "categoria": "Pasta rellena",
+      "unidad": "paquete",
+      "rendimiento": 1,
+      "precio_venta": 4500,
+      "activo": "Si"
+    }
+  ],
+  "clientes": [
+    {
+      "id": "CLI-001",
+      "nombre": "Gustavo Ugrotte",
+      "telefono": "11-1234-5678",
+      "email": "",
+      "direccion": "Bs As",
+      "canal": "WhatsApp"
+    },
+    {
+      "id": "CLI-002",
+      "nombre": "Lucas Brizuela",
+      "telefono": "11-1234-5679",
+      "email": "",
+      "direccion": "Bs As",
+      "canal": "WhatsApp"
+    },
+    {
+      "id": "CLI-003",
+      "nombre": "Karen Venaccio",
+      "telefono": "11-1234-5680",
+      "email": "",
+      "direccion": "Bs As",
+      "canal": "WhatsApp"
+    },
+    {
+      "id": "CLI-004",
+      "nombre": "Mariana Osterc",
+      "telefono": "11-1234-5681",
+      "email": "",
+      "direccion": "Bs As",
+      "canal": "WhatsApp"
+    },
+    {
+      "id": "CLI-005",
+      "nombre": "Valentina Rolon",
+      "telefono": "11-1234-5682",
+      "email": "",
+      "direccion": "Bs As",
+      "canal": "WhatsApp"
+    },
+    {
+      "id": "CLI-006",
+      "nombre": "Root",
+      "telefono": "11-1234-5683",
+      "email": "",
+      "direccion": "Bs As",
+      "canal": "WhatsApp"
+    },
+    {
+      "id": "CLI-007",
+      "nombre": "Mariano Ali",
+      "telefono": "11-1234-5684",
+      "email": "",
+      "direccion": "Bs As",
+      "canal": "WhatsApp"
+    },
+    {
+      "id": "CLI-008",
+      "nombre": "Tatiana Lopez",
+      "telefono": "11-1234-5685",
+      "email": "",
+      "direccion": "Bs As",
+      "canal": "WhatsApp"
+    },
+    {
+      "id": "CLI-009",
+      "nombre": "Veronica Osterc",
+      "telefono": "11-1234-5686",
+      "email": "",
+      "direccion": "Bs As",
+      "canal": "WhatsApp"
+    },
+    {
+      "id": "CLI-010",
+      "nombre": "Elvira De Rosa",
+      "telefono": "11-1234-5687",
+      "email": "",
+      "direccion": "Bs As",
+      "canal": "WhatsApp"
+    },
+    {
+      "id": "CLI-011",
+      "nombre": "Mariana Ugrotte",
+      "telefono": "11-1234-5688",
+      "email": "",
+      "direccion": "Bs As",
+      "canal": "WhatsApp"
+    },
+    {
+      "id": "CLI-012",
+      "nombre": "Oriana Sorrentino",
+      "telefono": "11-1234-5689",
+      "email": "",
+      "direccion": "Bs As",
+      "canal": "WhatsApp"
+    },
+    {
+      "id": "CLI-013",
+      "nombre": "Mabel Ortega",
+      "telefono": "11-1234-5690",
+      "email": "",
+      "direccion": "Bs As",
+      "canal": "WhatsApp"
+    },
+    {
+      "id": "CLI-014",
+      "nombre": "Anabel Chiarito",
+      "telefono": "11-1234-5691",
+      "email": "",
+      "direccion": "Bs As",
+      "canal": "WhatsApp"
+    },
+    {
+      "id": "CLI-015",
+      "nombre": "Micaela Bosisio",
+      "telefono": "",
+      "email": "",
+      "direccion": "",
+      "canal": ""
+    },
+    {
+      "id": "CLI-016",
+      "nombre": "Rosaura",
+      "telefono": "",
+      "email": "",
+      "direccion": "",
+      "canal": "WhatsApp",
+      "tipo": "Mayorista",
+      "notas": "",
+      "activo": true
+    },
+    {
+      "id": "CLI-017",
+      "nombre": "Rosaura2",
+      "telefono": "",
+      "email": "",
+      "direccion": "",
+      "canal": ""
+    },
+    {
+      "id": "CLI-018",
+      "nombre": "Cappotte",
+      "telefono": "",
+      "email": "",
+      "direccion": "",
+      "canal": "WhatsApp",
+      "tipo": "Mayorista",
+      "notas": "",
+      "activo": true
+    },
+    {
+      "id": "CLI-019",
+      "nombre": "Silvina Ugrotte",
+      "telefono": "",
+      "email": "",
+      "direccion": "",
+      "canal": ""
+    },
+    {
+      "id": "CLI-020",
+      "nombre": "Agustin Maiztegui",
+      "telefono": "",
+      "email": "",
+      "direccion": "",
+      "canal": ""
+    },
+    {
+      "id": "CLI-021",
+      "nombre": "Sebastian Goldberg",
+      "telefono": "",
+      "email": "",
+      "direccion": "",
+      "canal": ""
+    },
+    {
+      "id": "CLI-022",
+      "nombre": "Rodrigo Quayat",
+      "telefono": "",
+      "email": "",
+      "direccion": "",
+      "canal": ""
+    },
+    {
+      "id": "CLI-024",
+      "nombre": "Paula F2",
+      "telefono": "",
+      "email": "",
+      "direccion": "",
+      "canal": ""
+    },
+    {
+      "id": "CLI-025",
+      "nombre": "Sofia Ugrotte",
+      "telefono": "",
+      "email": "",
+      "direccion": "",
+      "canal": ""
+    },
+    {
+      "id": "CLI-026",
+      "nombre": "Mia",
+      "telefono": "",
+      "direccion": "Berazategui oeste ",
+      "tipo": "Minorista",
+      "canal": "WhatsApp",
+      "notas": "",
+      "activo": true
+    },
+    {
+      "id": "CLI-027",
+      "nombre": "Guadaluperane",
+      "telefono": "",
+      "direccion": "",
+      "tipo": "Minorista",
+      "canal": "WhatsApp",
+      "notas": "",
+      "activo": true
+    },
+    {
+      "id": "CLI-028",
+      "nombre": "Valentina Maggioni",
+      "telefono": "",
+      "direccion": "",
+      "tipo": "Minorista",
+      "canal": "WhatsApp",
+      "notas": "",
+      "activo": true
+    },
+    {
+      "id": "CLI-029",
+      "nombre": "Fernando falanga",
+      "telefono": "",
+      "direccion": "",
+      "tipo": "Minorista",
+      "canal": "WhatsApp",
+      "notas": "",
+      "activo": true
+    },
+    {
+      "id": "CLI-030",
+      "nombre": "Camila Bertoncello",
+      "telefono": "",
+      "direccion": "",
+      "tipo": "Minorista",
+      "canal": "WhatsApp",
+      "notas": "",
+      "activo": true
+    }
+  ],
+  "proveedores": [
+    {
+      "id": "PROV-001",
+      "nombre": "Molinos XYZ",
+      "telefono": "11-1111-1111",
+      "rubro": "Harinas"
+    },
+    {
+      "id": "PROV-002",
+      "nombre": "Granja Local",
+      "telefono": "11-2222-2222",
+      "rubro": "Huevos"
+    },
+    {
+      "id": "PROV-003",
+      "nombre": "Distribuidora A",
+      "telefono": "11-3333-3333",
+      "rubro": "Condimentos"
+    },
+    {
+      "id": "PRV-001",
+      "nombre": "Mercado Frutihorticola",
+      "contacto": "",
+      "telefono": "",
+      "email": "",
+      "rubros": [],
+      "notas": ""
+    },
+    {
+      "id": "PRV-002",
+      "nombre": "Verduleria leo",
+      "contacto": "",
+      "telefono": "",
+      "email": "",
+      "rubros": [],
+      "notas": ""
+    },
+    {
+      "id": "PRV-003",
+      "nombre": "Pedidos sin gluten",
+      "contacto": "",
+      "telefono": "",
+      "email": "",
+      "rubros": [],
+      "notas": ""
+    },
+    {
+      "id": "PRV-004",
+      "nombre": "Disval",
+      "contacto": "",
+      "telefono": "",
+      "email": "",
+      "rubros": [],
+      "notas": ""
+    },
+    {
+      "id": "PRV-005",
+      "nombre": "Stanicia",
+      "contacto": "",
+      "telefono": "",
+      "email": "",
+      "rubros": [],
+      "notas": ""
+    }
+  ],
+  "packaging": [
+    {
+      "id": "PKG-001",
+      "nombre": "Bolsa zipper",
+      "unidad": "unidad",
+      "categoria": "Bolsas",
+      "precio_ref": 120,
+      "precio_vigente": null
+    },
+    {
+      "id": "PKG-002",
+      "nombre": "Film",
+      "unidad": "metro",
+      "categoria": "Film",
+      "precio_ref": 250,
+      "precio_vigente": null
+    },
+    {
+      "id": "PKG-003",
+      "nombre": "Foil",
+      "unidad": "unidad",
+      "categoria": "Foil",
+      "precio_ref": 20,
+      "precio_vigente": null
+    },
+    {
+      "id": "PKG-004",
+      "nombre": "Stickers",
+      "unidad": "unidad",
+      "categoria": "Etiquetas",
+      "precio_ref": 100,
+      "precio_vigente": 100
+    },
+    {
+      "id": "PKG-005",
+      "nombre": "Bolsa",
+      "unidad": "unidad",
+      "categoria": "Bolsas",
+      "precio_ref": 50,
+      "precio_vigente": null,
+      "precio": 50
+    },
+    {
+      "id": "PKG-006",
+      "nombre": "Bolsa al vacío",
+      "unidad": "unidad",
+      "categoria": "Bolsas",
+      "precio_ref": 510,
+      "precio_vigente": null
+    },
+    {
+      "id": "PKG-007",
+      "nombre": "Pote",
+      "unidad": "unidad",
+      "categoria": "Envases",
+      "precio_ref": 80,
+      "precio_vigente": null,
+      "precio": 258.56
+    }
+  ],
+  "costos_fijos": [
+    {
+      "id": "CF-001",
+      "concepto": "Alquiler local",
+      "categoria": "Estructura",
+      "monto": 0,
+      "activo": "Si"
+    },
+    {
+      "id": "CF-002",
+      "concepto": "Luz",
+      "categoria": "Servicios",
+      "monto": 0,
+      "activo": "Si"
+    },
+    {
+      "id": "CF-003",
+      "concepto": "Gas",
+      "categoria": "Servicios",
+      "monto": 0,
+      "activo": "Si"
+    },
+    {
+      "id": "CF-004",
+      "concepto": "Internet",
+      "categoria": "Servicios",
+      "monto": 3666.6,
+      "activo": "Si",
+      "descripcion": "Papel absorvente"
+    },
+    {
+      "id": "CF-005",
+      "concepto": "Monotributo",
+      "categoria": "Impuestos",
+      "monto": 900,
+      "activo": "Si",
+      "descripcion": "Esponja"
+    },
+    {
+      "id": "CF-006",
+      "concepto": "Amortizacion freezer",
+      "categoria": "Servicios",
+      "monto": 20000,
+      "activo": "Si",
+      "descripcion": "Amortizacion"
+    },
+    {
+      "id": "CF-007",
+      "concepto": "Amortizacion maquina pasta",
+      "categoria": "Servicios",
+      "monto": 1600,
+      "activo": "Si",
+      "descripcion": "Esponnja"
+    },
+    {
+      "id": "CF-008",
+      "concepto": "Amortización Freezer (60m)",
+      "categoria": "Otros",
+      "monto": 11667,
+      "activo": "No",
+      "descripcion": "Amortizacion"
+    },
+    {
+      "id": "CF-009",
+      "concepto": "Amortización Utensilios (36m)",
+      "categoria": "Otros",
+      "monto": 8333,
+      "activo": "No",
+      "descripcion": "Amortizacion"
+    },
+    {
+      "id": "CF-010",
+      "concepto": "Sueldo Sofi",
+      "categoria": "Personal",
+      "monto": 30000,
+      "activo": "No",
+      "descripcion": "Sueldo sofi"
+    },
+    {
+      "id": "CF-011",
+      "concepto": "Linktree",
+      "categoria": "Servicios",
+      "monto": 17000,
+      "activo": "No",
+      "descripcion": "Claude"
+    },
+    {
+      "id": "CF-012",
+      "concepto": "Claude",
+      "categoria": "Servicios",
+      "monto": 15000,
+      "activo": "No",
+      "descripcion": "Linktree"
+    },
+    {
+      "id": "CF-013",
+      "concepto": "Servicios",
+      "categoria": "Servicios",
+      "monto": 2000,
+      "activo": "No",
+      "descripcion": "Servicios"
+    },
+    {
+      "id": "CF-014",
+      "concepto": "Sueldo santi",
+      "categoria": "Personal",
+      "monto": 0,
+      "activo": "Si",
+      "descripcion": "Sueldo santi"
+    }
+  ],
+  "gustos": {
+    "calabaza": {
+      "nombre": "Calabaza",
+      "color": "#e8a44c",
+      "productos": [
+        "PROD-01",
+        "PROD-08",
+        "PROD-12",
+        "PROD-15"
+      ]
+    },
+    "ricotta": {
+      "nombre": "Ricotta",
+      "color": "#e0e0c0",
+      "productos": [
+        "PROD-02"
+      ]
+    },
+    "espinaca": {
+      "nombre": "Espinaca",
+      "color": "#4ec994",
+      "productos": [
+        "PROD-03",
+        "PROD-09",
+        "PROD-13",
+        "PROD-17"
+      ]
+    },
+    "osobuco": {
+      "nombre": "Osobuco",
+      "color": "#e05c5c",
+      "productos": [
+        "PROD-04",
+        "PROD-10"
+      ]
+    },
+    "jamon_queso": {
+      "nombre": "Jamón y Queso",
+      "color": "#e8c97a",
+      "productos": [
+        "PROD-05",
+        "PROD-07",
+        "PROD-11",
+        "PROD-16"
+      ]
+    },
+    "puerro": {
+      "nombre": "Puerro",
+      "color": "#9c6fe0",
+      "productos": [
+        "PROD-06"
+      ]
+    },
+    "salsa": {
+      "nombre": "Salsa",
+      "color": "#e05c5c",
+      "productos": [
+        "PROD-14"
+      ]
+    }
+  },
+  "stock_manual": {
+    "calabaza": 8,
+    "calabaza_fecha": "2026-06-15",
+    "ricotta": 5,
+    "ricotta_fecha": "2026-06-15",
+    "espinaca": 12,
+    "espinaca_fecha": "2026-06-15",
+    "cintas_huevo": 2,
+    "cintas_huevo_fecha": "2026-06-15",
+    "puerro": 2,
+    "puerro_fecha": "2026-06-22",
+    "jamon_queso": 5,
+    "jamon_queso_fecha": "2026-06-22",
+    "osobuco": 6,
+    "osobuco_fecha": "2026-06-22",
+    "salsa": 0,
+    "salsa_fecha": "2026-06-23"
+  },
+  "stock_rellenos": {
+    "Jamon y queso": 2,
+    "Osobuco": 4,
+    "Puerro": 0.5,
+    "Ricotta": 1,
+    "Calabaza": 2,
+    "Espinaca": 1
+  },
+  "conteo_caja": {
+    "maquinaria": {
+      "monto": 52000,
+      "fecha": "2026-06-03"
+    }
+  },
+  "saldo_anterior_caja": {},
+  "tipo_cambio": {
+    "valor": 1515,
+    "fuente": "blue",
+    "ultima_actualizacion": "7/7/2026, 12:25:14"
+  },
+  "simulador_guardados": [],
+  "promociones": [],
+  "prestamos": [],
+  "umbrales_inflacion": {},
+  "recetas": [
+    {
+      "id_receta": "REC-PROD-01",
+      "id_producto": "PROD-01",
+      "tipo": "Ingrediente",
+      "concepto": "ING-008",
+      "cantidad": 0.495,
+      "costo_fila": 824.967
+    },
+    {
+      "id_receta": "REC-PROD-01",
+      "id_producto": "PROD-01",
+      "tipo": "Ingrediente",
+      "concepto": "ING-003",
+      "cantidad": 0.06,
+      "costo_fila": 48
+    },
+    {
+      "id_receta": "REC-PROD-01",
+      "id_producto": "PROD-01",
+      "tipo": "Ingrediente",
+      "concepto": "ING-023",
+      "cantidad": 0.0158,
+      "costo_fila": 161.16000000000003
+    },
+    {
+      "id_receta": "REC-PROD-01",
+      "id_producto": "PROD-01",
+      "tipo": "Ingrediente",
+      "concepto": "ING-037",
+      "cantidad": 0.0315,
+      "costo_fila": 434.7
+    },
+    {
+      "id_receta": "REC-PROD-01",
+      "id_producto": "PROD-01",
+      "tipo": "Ingrediente",
+      "concepto": "ING-004",
+      "cantidad": 0.006,
+      "costo_fila": 210.6
+    },
+    {
+      "id_receta": "REC-PROD-01",
+      "id_producto": "PROD-01",
+      "tipo": "Ingrediente",
+      "concepto": "ING-036",
+      "cantidad": 0.00306,
+      "costo_fila": 32.129999999999995
+    },
+    {
+      "id_receta": "REC-PROD-01",
+      "id_producto": "PROD-01",
+      "tipo": "Ingrediente",
+      "concepto": "ING-028",
+      "cantidad": 0.00125,
+      "costo_fila": 65.45
+    },
+    {
+      "id_receta": "REC-PROD-01",
+      "id_producto": "PROD-01",
+      "tipo": "Ingrediente",
+      "concepto": "ING-001",
+      "cantidad": 0.004,
+      "costo_fila": 12.700000000000001
+    },
+    {
+      "id_receta": "REC-PROD-01",
+      "id_producto": "PROD-01",
+      "tipo": "Ingrediente",
+      "concepto": "ING-015",
+      "cantidad": 1,
+      "costo_fila": 155.55555
+    },
+    {
+      "id_receta": "REC-PROD-01",
+      "id_producto": "PROD-01",
+      "tipo": "Ingrediente",
+      "concepto": "ING-014",
+      "cantidad": 0.063,
+      "costo_fila": 218.358
+    },
+    {
+      "id_receta": "REC-PROD-01",
+      "id_producto": "PROD-01",
+      "tipo": "Packaging",
+      "concepto": "Bolsa zipper",
+      "cantidad": 120,
+      "costo_fila": 120
+    },
+    {
+      "id_receta": "REC-PROD-01",
+      "id_producto": "PROD-01",
+      "tipo": "Packaging",
+      "concepto": "Stickers",
+      "cantidad": 110,
+      "costo_fila": 110
+    },
+    {
+      "id_receta": "REC-PROD-01",
+      "id_producto": "PROD-01",
+      "tipo": "Packaging",
+      "concepto": "Film",
+      "cantidad": 250,
+      "costo_fila": 250
+    },
+    {
+      "id_receta": "REC-PROD-01",
+      "id_producto": "PROD-01",
+      "tipo": "Packaging",
+      "concepto": "Bolsa",
+      "cantidad": 250,
+      "costo_fila": 250
+    },
+    {
+      "id_receta": "REC-PROD-01",
+      "id_producto": "PROD-01",
+      "tipo": "Packaging",
+      "concepto": "Foil",
+      "cantidad": 20,
+      "costo_fila": 20
+    },
+    {
+      "id_receta": "REC-PROD-02",
+      "id_producto": "PROD-02",
+      "tipo": "Ingrediente",
+      "concepto": "ING-034",
+      "cantidad": 0.3,
+      "costo_fila": 1200
+    },
+    {
+      "id_receta": "REC-PROD-02",
+      "id_producto": "PROD-02",
+      "tipo": "Ingrediente",
+      "concepto": "ING-009",
+      "cantidad": 0.1375,
+      "costo_fila": 165
+    },
+    {
+      "id_receta": "REC-PROD-02",
+      "id_producto": "PROD-02",
+      "tipo": "Ingrediente",
+      "concepto": "ING-036",
+      "cantidad": 0.003,
+      "costo_fila": 31.5
+    },
+    {
+      "id_receta": "REC-PROD-02",
+      "id_producto": "PROD-02",
+      "tipo": "Ingrediente",
+      "concepto": "ING-028",
+      "cantidad": 0.0009,
+      "costo_fila": 47.123999999999995
+    },
+    {
+      "id_receta": "REC-PROD-02",
+      "id_producto": "PROD-02",
+      "tipo": "Ingrediente",
+      "concepto": "ING-023",
+      "cantidad": 0.0379,
+      "costo_fila": 386.58000000000004
+    },
+    {
+      "id_receta": "REC-PROD-02",
+      "id_producto": "PROD-02",
+      "tipo": "Ingrediente",
+      "concepto": "ING-037",
+      "cantidad": 0.0157,
+      "costo_fila": 216.65999999999997
+    },
+    {
+      "id_receta": "REC-PROD-02",
+      "id_producto": "PROD-02",
+      "tipo": "Ingrediente",
+      "concepto": "ING-019",
+      "cantidad": 0.018,
+      "costo_fila": 33.516
+    },
+    {
+      "id_receta": "REC-PROD-02",
+      "id_producto": "PROD-02",
+      "tipo": "Ingrediente",
+      "concepto": "ING-024",
+      "cantidad": 0.0126,
+      "costo_fila": 352.8
+    },
+    {
+      "id_receta": "REC-PROD-02",
+      "id_producto": "PROD-02",
+      "tipo": "Ingrediente",
+      "concepto": "ING-016",
+      "cantidad": 0.0015,
+      "costo_fila": 60
+    },
+    {
+      "id_receta": "REC-PROD-02",
+      "id_producto": "PROD-02",
+      "tipo": "Ingrediente",
+      "concepto": "ING-001",
+      "cantidad": 0.004,
+      "costo_fila": 12.700000000000001
+    },
+    {
+      "id_receta": "REC-PROD-02",
+      "id_producto": "PROD-02",
+      "tipo": "Ingrediente",
+      "concepto": "ING-015",
+      "cantidad": 1,
+      "costo_fila": 155.55555
+    },
+    {
+      "id_receta": "REC-PROD-02",
+      "id_producto": "PROD-02",
+      "tipo": "Ingrediente",
+      "concepto": "ING-014",
+      "cantidad": 0.063,
+      "costo_fila": 218.358
+    },
+    {
+      "id_receta": "REC-PROD-02",
+      "id_producto": "PROD-02",
+      "tipo": "Packaging",
+      "concepto": "Bolsa zipper",
+      "cantidad": 120,
+      "costo_fila": 120
+    },
+    {
+      "id_receta": "REC-PROD-02",
+      "id_producto": "PROD-02",
+      "tipo": "Packaging",
+      "concepto": "Stickers",
+      "cantidad": 250,
+      "costo_fila": 250
+    },
+    {
+      "id_receta": "REC-PROD-02",
+      "id_producto": "PROD-02",
+      "tipo": "Packaging",
+      "concepto": "Foil",
+      "cantidad": 20,
+      "costo_fila": 20
+    },
+    {
+      "id_receta": "REC-PROD-02",
+      "id_producto": "PROD-02",
+      "tipo": "Packaging",
+      "concepto": "Film",
+      "cantidad": 110,
+      "costo_fila": 110
+    },
+    {
+      "id_receta": "REC-PROD-03",
+      "id_producto": "PROD-03",
+      "tipo": "Ingrediente",
+      "concepto": "ING-014",
+      "cantidad": 0.063,
+      "costo_fila": 218.358
+    },
+    {
+      "id_receta": "REC-PROD-03",
+      "id_producto": "PROD-03",
+      "tipo": "Ingrediente",
+      "concepto": "ING-001",
+      "cantidad": 0.004,
+      "costo_fila": 12.700000000000001
+    },
+    {
+      "id_receta": "REC-PROD-03",
+      "id_producto": "PROD-03",
+      "tipo": "Ingrediente",
+      "concepto": "ING-002",
+      "cantidad": 0.0168,
+      "costo_fila": 0
+    },
+    {
+      "id_receta": "REC-PROD-03",
+      "id_producto": "PROD-03",
+      "tipo": "Ingrediente",
+      "concepto": "ING-015",
+      "cantidad": 1,
+      "costo_fila": 155.55555
+    },
+    {
+      "id_receta": "REC-PROD-03",
+      "id_producto": "PROD-03",
+      "tipo": "Packaging",
+      "concepto": "Bolsa zipper",
+      "cantidad": 120,
+      "costo_fila": 120
+    },
+    {
+      "id_receta": "REC-PROD-03",
+      "id_producto": "PROD-03",
+      "tipo": "Packaging",
+      "concepto": "Stickers",
+      "cantidad": 250,
+      "costo_fila": 250
+    },
+    {
+      "id_receta": "REC-PROD-03",
+      "id_producto": "PROD-03",
+      "tipo": "Packaging",
+      "concepto": "Bolsa",
+      "cantidad": 50,
+      "costo_fila": 50
+    },
+    {
+      "id_receta": "REC-PROD-03",
+      "id_producto": "PROD-03",
+      "tipo": "Packaging",
+      "concepto": "Foil",
+      "cantidad": 20,
+      "costo_fila": 20
+    },
+    {
+      "id_receta": "REC-PROD-03",
+      "id_producto": "PROD-03",
+      "tipo": "Packaging",
+      "concepto": "Film",
+      "cantidad": 20,
+      "costo_fila": 20
+    },
+    {
+      "id_receta": "REC-PROD-03",
+      "id_producto": "PROD-03",
+      "tipo": "Packaging",
+      "concepto": "Bolsa al vacío",
+      "cantidad": 102,
+      "costo_fila": 102
+    },
+    {
+      "id_receta": "REC-PROD-04",
+      "id_producto": "PROD-04",
+      "tipo": "Ingrediente",
+      "concepto": "ING-027",
+      "cantidad": 0.139,
+      "costo_fila": 1445.6000000000001
+    },
+    {
+      "id_receta": "REC-PROD-04",
+      "id_producto": "PROD-04",
+      "tipo": "Ingrediente",
+      "concepto": "ING-035",
+      "cantidad": 0.0785,
+      "costo_fila": 1232.45
+    },
+    {
+      "id_receta": "REC-PROD-04",
+      "id_producto": "PROD-04",
+      "tipo": "Ingrediente",
+      "concepto": "ING-042",
+      "cantidad": 0.0588,
+      "costo_fila": 88.2
+    },
+    {
+      "id_receta": "REC-PROD-04",
+      "id_producto": "PROD-04",
+      "tipo": "Ingrediente",
+      "concepto": "ING-043",
+      "cantidad": 0.016,
+      "costo_fila": 26.656
+    },
+    {
+      "id_receta": "REC-PROD-04",
+      "id_producto": "PROD-04",
+      "tipo": "Ingrediente",
+      "concepto": "ING-009",
+      "cantidad": 0.0958,
+      "costo_fila": 114.96
+    },
+    {
+      "id_receta": "REC-PROD-04",
+      "id_producto": "PROD-04",
+      "tipo": "Ingrediente",
+      "concepto": "ING-041",
+      "cantidad": 0.0075,
+      "costo_fila": 15
+    },
+    {
+      "id_receta": "REC-PROD-04",
+      "id_producto": "PROD-04",
+      "tipo": "Ingrediente",
+      "concepto": "ING-036",
+      "cantidad": 0.002,
+      "costo_fila": 21
+    },
+    {
+      "id_receta": "REC-PROD-04",
+      "id_producto": "PROD-04",
+      "tipo": "Ingrediente",
+      "concepto": "ING-028",
+      "cantidad": 0.0002,
+      "costo_fila": 10.472000000000001
+    },
+    {
+      "id_receta": "REC-PROD-04",
+      "id_producto": "PROD-04",
+      "tipo": "Ingrediente",
+      "concepto": "ING-001",
+      "cantidad": 0.004,
+      "costo_fila": 12.700000000000001
+    },
+    {
+      "id_receta": "REC-PROD-04",
+      "id_producto": "PROD-04",
+      "tipo": "Ingrediente",
+      "concepto": "ING-015",
+      "cantidad": 1,
+      "costo_fila": 155.55555
+    },
+    {
+      "id_receta": "REC-PROD-04",
+      "id_producto": "PROD-04",
+      "tipo": "Packaging",
+      "concepto": "Bolsa zipper",
+      "cantidad": 120,
+      "costo_fila": 120
+    },
+    {
+      "id_receta": "REC-PROD-04",
+      "id_producto": "PROD-04",
+      "tipo": "Packaging",
+      "concepto": "Film",
+      "cantidad": 250,
+      "costo_fila": 250
+    },
+    {
+      "id_receta": "REC-PROD-04",
+      "id_producto": "PROD-04",
+      "tipo": "Packaging",
+      "concepto": "Foil",
+      "cantidad": 20,
+      "costo_fila": 20
+    },
+    {
+      "id_receta": "REC-PROD-04",
+      "id_producto": "PROD-04",
+      "tipo": "Packaging",
+      "concepto": "Stickers",
+      "cantidad": 110,
+      "costo_fila": 110
+    },
+    {
+      "id_receta": "REC-PROD-05",
+      "id_producto": "PROD-05",
+      "tipo": "Ingrediente",
+      "concepto": "ING-045",
+      "cantidad": 0.09,
+      "costo_fila": 574.1999999999999
+    },
+    {
+      "id_receta": "REC-PROD-05",
+      "id_producto": "PROD-05",
+      "tipo": "Ingrediente",
+      "concepto": "ING-023",
+      "cantidad": 0.042,
+      "costo_fila": 428.40000000000003
+    },
+    {
+      "id_receta": "REC-PROD-05",
+      "id_producto": "PROD-05",
+      "tipo": "Ingrediente",
+      "concepto": "ING-037",
+      "cantidad": 0.0126,
+      "costo_fila": 173.88
+    },
+    {
+      "id_receta": "REC-PROD-05",
+      "id_producto": "PROD-05",
+      "tipo": "Ingrediente",
+      "concepto": "ING-034",
+      "cantidad": 0.114,
+      "costo_fila": 456
+    },
+    {
+      "id_receta": "REC-PROD-05",
+      "id_producto": "PROD-05",
+      "tipo": "Ingrediente",
+      "concepto": "ING-025",
+      "cantidad": 0.00019,
+      "costo_fila": 18.525000000000002
+    },
+    {
+      "id_receta": "REC-PROD-05",
+      "id_producto": "PROD-05",
+      "tipo": "Ingrediente",
+      "concepto": "ING-014",
+      "cantidad": 0.064,
+      "costo_fila": 221.824
+    },
+    {
+      "id_receta": "REC-PROD-05",
+      "id_producto": "PROD-05",
+      "tipo": "Ingrediente",
+      "concepto": "ING-001",
+      "cantidad": 0.004,
+      "costo_fila": 12.700000000000001
+    },
+    {
+      "id_receta": "REC-PROD-05",
+      "id_producto": "PROD-05",
+      "tipo": "Ingrediente",
+      "concepto": "ING-002",
+      "cantidad": 0.0486,
+      "costo_fila": 0
+    },
+    {
+      "id_receta": "REC-PROD-05",
+      "id_producto": "PROD-05",
+      "tipo": "Ingrediente",
+      "concepto": "ING-015",
+      "cantidad": 1,
+      "costo_fila": 155.55555
+    },
+    {
+      "id_receta": "REC-PROD-05",
+      "id_producto": "PROD-05",
+      "tipo": "Packaging",
+      "concepto": "Bolsa zipper",
+      "cantidad": 110,
+      "costo_fila": 110
+    },
+    {
+      "id_receta": "REC-PROD-05",
+      "id_producto": "PROD-05",
+      "tipo": "Packaging",
+      "concepto": "Film",
+      "cantidad": 120,
+      "costo_fila": 120
+    },
+    {
+      "id_receta": "REC-PROD-05",
+      "id_producto": "PROD-05",
+      "tipo": "Packaging",
+      "concepto": "Foils",
+      "cantidad": 250,
+      "costo_fila": 250
+    },
+    {
+      "id_receta": "REC-PROD-05",
+      "id_producto": "PROD-05",
+      "tipo": "Packaging",
+      "concepto": "Bolsa",
+      "cantidad": 20,
+      "costo_fila": 20
+    },
+    {
+      "id_receta": "REC-PROD-05",
+      "id_producto": "PROD-05",
+      "tipo": "Packaging",
+      "concepto": "Bolsa al vacío",
+      "cantidad": 102,
+      "costo_fila": 102
+    },
+    {
+      "id_receta": "REC-PROD-09",
+      "id_producto": "PROD-09",
+      "tipo": "Ingrediente",
+      "concepto": "ING-001",
+      "cantidad": 0.0032,
+      "costo_fila": 10.16
+    },
+    {
+      "id_receta": "REC-PROD-09",
+      "id_producto": "PROD-09",
+      "tipo": "Ingrediente",
+      "concepto": "ING-002",
+      "cantidad": 0.0168,
+      "costo_fila": 0
+    },
+    {
+      "id_receta": "REC-PROD-09",
+      "id_producto": "PROD-09",
+      "tipo": "Ingrediente",
+      "concepto": "ING-015",
+      "cantidad": 1,
+      "costo_fila": 155.55555
+    },
+    {
+      "id_receta": "REC-PROD-09",
+      "id_producto": "PROD-09",
+      "tipo": "Packaging",
+      "concepto": "Bolsa",
+      "cantidad": 50,
+      "costo_fila": 50
+    },
+    {
+      "id_receta": "REC-PROD-09",
+      "id_producto": "PROD-09",
+      "tipo": "Packaging",
+      "concepto": "Bolsa zipper",
+      "cantidad": 120,
+      "costo_fila": 120
+    },
+    {
+      "id_receta": "REC-PROD-09",
+      "id_producto": "PROD-09",
+      "tipo": "Packaging",
+      "concepto": "Stickers",
+      "cantidad": 250,
+      "costo_fila": 250
+    },
+    {
+      "id_receta": "REC-PROD-09",
+      "id_producto": "PROD-09",
+      "tipo": "Packaging",
+      "concepto": "Film",
+      "cantidad": 20,
+      "costo_fila": 20
+    },
+    {
+      "id_receta": "REC-PROD-09",
+      "id_producto": "PROD-09",
+      "tipo": "Packaging",
+      "concepto": "Bolsa al vacío",
+      "cantidad": 102,
+      "costo_fila": 102
+    },
+    {
+      "id_receta": "REC-PROD-10",
+      "id_producto": "PROD-10",
+      "tipo": "Ingrediente",
+      "concepto": "ING-027",
+      "cantidad": 0.139,
+      "costo_fila": 1445.6000000000001
+    },
+    {
+      "id_receta": "REC-PROD-10",
+      "id_producto": "PROD-10",
+      "tipo": "Ingrediente",
+      "concepto": "ING-035",
+      "cantidad": 0.0785,
+      "costo_fila": 1232.45
+    },
+    {
+      "id_receta": "REC-PROD-10",
+      "id_producto": "PROD-10",
+      "tipo": "Ingrediente",
+      "concepto": "ING-042",
+      "cantidad": 0.0588,
+      "costo_fila": 88.2
+    },
+    {
+      "id_receta": "REC-PROD-10",
+      "id_producto": "PROD-10",
+      "tipo": "Ingrediente",
+      "concepto": "ING-043",
+      "cantidad": 0.016,
+      "costo_fila": 26.656
+    },
+    {
+      "id_receta": "REC-PROD-10",
+      "id_producto": "PROD-10",
+      "tipo": "Ingrediente",
+      "concepto": "ING-009",
+      "cantidad": 0.0958,
+      "costo_fila": 114.96
+    },
+    {
+      "id_receta": "REC-PROD-10",
+      "id_producto": "PROD-10",
+      "tipo": "Ingrediente",
+      "concepto": "ING-041",
+      "cantidad": 0.0075,
+      "costo_fila": 15
+    },
+    {
+      "id_receta": "REC-PROD-10",
+      "id_producto": "PROD-10",
+      "tipo": "Ingrediente",
+      "concepto": "ING-039",
+      "cantidad": 0.00025,
+      "costo_fila": 1.55
+    },
+    {
+      "id_receta": "REC-PROD-10",
+      "id_producto": "PROD-10",
+      "tipo": "Ingrediente",
+      "concepto": "ING-036",
+      "cantidad": 0.002,
+      "costo_fila": 21
+    },
+    {
+      "id_receta": "REC-PROD-10",
+      "id_producto": "PROD-10",
+      "tipo": "Ingrediente",
+      "concepto": "ING-028",
+      "cantidad": 0.0002,
+      "costo_fila": 10.472000000000001
+    },
+    {
+      "id_receta": "REC-PROD-10",
+      "id_producto": "PROD-10",
+      "tipo": "Ingrediente",
+      "concepto": "ING-020",
+      "cantidad": 0.027,
+      "costo_fila": 95.03999999999999
+    },
+    {
+      "id_receta": "REC-PROD-10",
+      "id_producto": "PROD-10",
+      "tipo": "Ingrediente",
+      "concepto": "ING-001",
+      "cantidad": 0.002,
+      "costo_fila": 6.3500000000000005
+    },
+    {
+      "id_receta": "REC-PROD-10",
+      "id_producto": "PROD-10",
+      "tipo": "Ingrediente",
+      "concepto": "ING-002",
+      "cantidad": 0.0474,
+      "costo_fila": 0
+    },
+    {
+      "id_receta": "REC-PROD-10",
+      "id_producto": "PROD-10",
+      "tipo": "Ingrediente",
+      "concepto": "ING-015",
+      "cantidad": 1,
+      "costo_fila": 155.55555
+    },
+    {
+      "id_receta": "REC-PROD-10",
+      "id_producto": "PROD-10",
+      "tipo": "Packaging",
+      "concepto": "Bolsa zipper",
+      "cantidad": 120,
+      "costo_fila": 120
+    },
+    {
+      "id_receta": "REC-PROD-10",
+      "id_producto": "PROD-10",
+      "tipo": "Packaging",
+      "concepto": "Film",
+      "cantidad": 250,
+      "costo_fila": 250
+    },
+    {
+      "id_receta": "REC-PROD-10",
+      "id_producto": "PROD-10",
+      "tipo": "Packaging",
+      "concepto": "Bolsa",
+      "cantidad": 50,
+      "costo_fila": 50
+    },
+    {
+      "id_receta": "REC-PROD-10",
+      "id_producto": "PROD-10",
+      "tipo": "Packaging",
+      "concepto": "Foil",
+      "cantidad": 20,
+      "costo_fila": 20
+    },
+    {
+      "id_receta": "REC-PROD-10",
+      "id_producto": "PROD-10",
+      "tipo": "Packaging",
+      "concepto": "Stickers",
+      "cantidad": 110,
+      "costo_fila": 110
+    },
+    {
+      "id_receta": "REC-PROD-10",
+      "id_producto": "PROD-10",
+      "tipo": "Packaging",
+      "concepto": "Bolsa al vacío",
+      "cantidad": 102,
+      "costo_fila": 102
+    },
+    {
+      "id_receta": "REC-PROD-14",
+      "id_producto": "PROD-14",
+      "tipo": "Ingrediente",
+      "concepto": "ING-002",
+      "cantidad": 0.077,
+      "costo_fila": 0
+    },
+    {
+      "id_receta": "REC-PROD-14",
+      "id_producto": "PROD-14",
+      "tipo": "Ingrediente",
+      "concepto": "ING-003",
+      "cantidad": 0.0005,
+      "costo_fila": 0.4
+    },
+    {
+      "id_receta": "REC-PROD-14",
+      "id_producto": "PROD-14",
+      "tipo": "Ingrediente",
+      "concepto": "ING-036",
+      "cantidad": 0.0018,
+      "costo_fila": 18.9
+    },
+    {
+      "id_receta": "REC-PROD-14",
+      "id_producto": "PROD-14",
+      "tipo": "Ingrediente",
+      "concepto": "ING-028",
+      "cantidad": 0.0009,
+      "costo_fila": 47.123999999999995
+    },
+    {
+      "id_receta": "REC-PROD-14",
+      "id_producto": "PROD-14",
+      "tipo": "Ingrediente",
+      "concepto": "ING-044",
+      "cantidad": 0.0001,
+      "costo_fila": 0.05
+    },
+    {
+      "id_receta": "REC-PROD-14",
+      "id_producto": "PROD-14",
+      "tipo": "Ingrediente",
+      "concepto": "ING-026",
+      "cantidad": 0.03,
+      "costo_fila": 600
+    },
+    {
+      "id_receta": "REC-PROD-14",
+      "id_producto": "PROD-14",
+      "tipo": "Ingrediente",
+      "concepto": "ING-056",
+      "cantidad": 0.14,
+      "costo_fila": 700.0000000000001
+    },
+    {
+      "id_receta": "REC-PROD-14",
+      "id_producto": "PROD-14",
+      "tipo": "Packaging",
+      "concepto": "Pote",
+      "cantidad": 80,
+      "costo_fila": 80
+    },
+    {
+      "id_receta": "REC-PROD-11",
+      "id_producto": "PROD-11",
+      "tipo": "Ingrediente",
+      "concepto": "ING-045",
+      "cantidad": 0.033,
+      "costo_fila": 210.54000000000002
+    },
+    {
+      "id_receta": "REC-PROD-11",
+      "id_producto": "PROD-11",
+      "tipo": "Ingrediente",
+      "concepto": "ING-023",
+      "cantidad": 0.0154,
+      "costo_fila": 157.08
+    },
+    {
+      "id_receta": "REC-PROD-11",
+      "id_producto": "PROD-11",
+      "tipo": "Ingrediente",
+      "concepto": "ING-037",
+      "cantidad": 0.0046,
+      "costo_fila": 63.48
+    },
+    {
+      "id_receta": "REC-PROD-11",
+      "id_producto": "PROD-11",
+      "tipo": "Ingrediente",
+      "concepto": "ING-034",
+      "cantidad": 0.042,
+      "costo_fila": 168
+    },
+    {
+      "id_receta": "REC-PROD-11",
+      "id_producto": "PROD-11",
+      "tipo": "Ingrediente",
+      "concepto": "ING-025",
+      "cantidad": 0.00007,
+      "costo_fila": 6.824999999999999
+    },
+    {
+      "id_receta": "REC-PROD-11",
+      "id_producto": "PROD-11",
+      "tipo": "Ingrediente",
+      "concepto": "ING-003",
+      "cantidad": 0.004,
+      "costo_fila": 3.2
+    },
+    {
+      "id_receta": "REC-PROD-11",
+      "id_producto": "PROD-11",
+      "tipo": "Ingrediente",
+      "concepto": "ING-036",
+      "cantidad": 0.0025,
+      "costo_fila": 26.25
+    },
+    {
+      "id_receta": "REC-PROD-11",
+      "id_producto": "PROD-11",
+      "tipo": "Ingrediente",
+      "concepto": "ING-028",
+      "cantidad": 0.00125,
+      "costo_fila": 65.45
+    },
+    {
+      "id_receta": "REC-PROD-11",
+      "id_producto": "PROD-11",
+      "tipo": "Ingrediente",
+      "concepto": "ING-044",
+      "cantidad": 0.001,
+      "costo_fila": 0.5
+    },
+    {
+      "id_receta": "REC-PROD-11",
+      "id_producto": "PROD-11",
+      "tipo": "Ingrediente",
+      "concepto": "ING-014",
+      "cantidad": 0.063,
+      "costo_fila": 218.358
+    },
+    {
+      "id_receta": "REC-PROD-11",
+      "id_producto": "PROD-11",
+      "tipo": "Ingrediente",
+      "concepto": "ING-049",
+      "cantidad": 0.00105,
+      "costo_fila": 21
+    },
+    {
+      "id_receta": "REC-PROD-11",
+      "id_producto": "PROD-11",
+      "tipo": "Ingrediente",
+      "concepto": "ING-001",
+      "cantidad": 0.002,
+      "costo_fila": 6.3500000000000005
+    },
+    {
+      "id_receta": "REC-PROD-11",
+      "id_producto": "PROD-11",
+      "tipo": "Ingrediente",
+      "concepto": "ING-002",
+      "cantidad": 0.0243,
+      "costo_fila": 0
+    },
+    {
+      "id_receta": "REC-PROD-11",
+      "id_producto": "PROD-11",
+      "tipo": "Ingrediente",
+      "concepto": "ING-015",
+      "cantidad": 1,
+      "costo_fila": 155.55555
+    },
+    {
+      "id_receta": "REC-PROD-11",
+      "id_producto": "PROD-11",
+      "tipo": "Ingrediente",
+      "concepto": "ING-056",
+      "cantidad": 0.2,
+      "costo_fila": 1000
+    },
+    {
+      "id_receta": "REC-PROD-11",
+      "id_producto": "PROD-11",
+      "tipo": "Ingrediente",
+      "concepto": "ING-026",
+      "cantidad": 0.03,
+      "costo_fila": 600
+    },
+    {
+      "id_receta": "REC-PROD-11",
+      "id_producto": "PROD-11",
+      "tipo": "Ingrediente",
+      "concepto": "ING-003",
+      "cantidad": 0.001,
+      "costo_fila": 0.8
+    },
+    {
+      "id_receta": "REC-PROD-11",
+      "id_producto": "PROD-11",
+      "tipo": "Ingrediente",
+      "concepto": "ING-036",
+      "cantidad": 0.0018,
+      "costo_fila": 18.9
+    },
+    {
+      "id_receta": "REC-PROD-11",
+      "id_producto": "PROD-11",
+      "tipo": "Ingrediente",
+      "concepto": "ING-028",
+      "cantidad": 0.0009,
+      "costo_fila": 47.123999999999995
+    },
+    {
+      "id_receta": "REC-PROD-11",
+      "id_producto": "PROD-11",
+      "tipo": "Ingrediente",
+      "concepto": "ING-044",
+      "cantidad": 0.0001,
+      "costo_fila": 0.05
+    },
+    {
+      "id_receta": "REC-PROD-11",
+      "id_producto": "PROD-11",
+      "tipo": "Packaging",
+      "concepto": "Bolsa al vacío",
+      "cantidad": 510,
+      "costo_fila": 510
+    },
+    {
+      "id_receta": "REC-PROD-11",
+      "id_producto": "PROD-11",
+      "tipo": "Packaging",
+      "concepto": "Film",
+      "cantidad": 250,
+      "costo_fila": 250
+    },
+    {
+      "id_receta": "REC-PROD-11",
+      "id_producto": "PROD-11",
+      "tipo": "Packaging",
+      "concepto": "Foil",
+      "cantidad": 20,
+      "costo_fila": 20
+    },
+    {
+      "id_receta": "REC-PROD-11",
+      "id_producto": "PROD-11",
+      "tipo": "Packaging",
+      "concepto": "Bolsa",
+      "cantidad": 50,
+      "costo_fila": 50
+    },
+    {
+      "id_receta": "REC-PROD-11",
+      "id_producto": "PROD-11",
+      "tipo": "Packaging",
+      "concepto": "Bolsa al vacío",
+      "cantidad": 510,
+      "costo_fila": 510
+    },
+    {
+      "id_receta": "REC-PROD-13",
+      "id_producto": "PROD-13",
+      "tipo": "Ingrediente",
+      "concepto": "ING-036",
+      "cantidad": 0.0014,
+      "costo_fila": 14.7
+    },
+    {
+      "id_receta": "REC-PROD-13",
+      "id_producto": "PROD-13",
+      "tipo": "Ingrediente",
+      "concepto": "ING-028",
+      "cantidad": 0.0005,
+      "costo_fila": 26.18
+    },
+    {
+      "id_receta": "REC-PROD-13",
+      "id_producto": "PROD-13",
+      "tipo": "Ingrediente",
+      "concepto": "ING-001",
+      "cantidad": 0.004,
+      "costo_fila": 12.700000000000001
+    },
+    {
+      "id_receta": "REC-PROD-13",
+      "id_producto": "PROD-13",
+      "tipo": "Ingrediente",
+      "concepto": "ING-015",
+      "cantidad": 1,
+      "costo_fila": 155.55555
+    },
+    {
+      "id_receta": "REC-PROD-13",
+      "id_producto": "PROD-13",
+      "tipo": "Ingrediente",
+      "concepto": "ING-014",
+      "cantidad": 0.063,
+      "costo_fila": 218.358
+    },
+    {
+      "id_receta": "REC-PROD-13",
+      "id_producto": "PROD-13",
+      "tipo": "Ingrediente",
+      "concepto": "ING-026",
+      "cantidad": 0.03,
+      "costo_fila": 600
+    },
+    {
+      "id_receta": "REC-PROD-13",
+      "id_producto": "PROD-13",
+      "tipo": "Ingrediente",
+      "concepto": "ING-056",
+      "cantidad": 0.14,
+      "costo_fila": 700.0000000000001
+    },
+    {
+      "id_receta": "REC-PROD-13",
+      "id_producto": "PROD-13",
+      "tipo": "Ingrediente",
+      "concepto": "ING-003",
+      "cantidad": 0.001,
+      "costo_fila": 0.8
+    },
+    {
+      "id_receta": "REC-PROD-13",
+      "id_producto": "PROD-13",
+      "tipo": "Ingrediente",
+      "concepto": "ING-036",
+      "cantidad": 0.001,
+      "costo_fila": 10.5
+    },
+    {
+      "id_receta": "REC-PROD-13",
+      "id_producto": "PROD-13",
+      "tipo": "Ingrediente",
+      "concepto": "ING-028",
+      "cantidad": 0.0001,
+      "costo_fila": 5.236000000000001
+    },
+    {
+      "id_receta": "REC-PROD-13",
+      "id_producto": "PROD-13",
+      "tipo": "Ingrediente",
+      "concepto": "ING-044",
+      "cantidad": 0.001,
+      "costo_fila": 0.5
+    },
+    {
+      "id_receta": "REC-PROD-13",
+      "id_producto": "PROD-13",
+      "tipo": "Packaging",
+      "concepto": "Bolsa",
+      "cantidad": 50,
+      "costo_fila": 50
+    },
+    {
+      "id_receta": "REC-PROD-13",
+      "id_producto": "PROD-13",
+      "tipo": "Packaging",
+      "concepto": "Bolsa al vacío",
+      "cantidad": 510,
+      "costo_fila": 510
+    },
+    {
+      "id_receta": "REC-PROD-13",
+      "id_producto": "PROD-13",
+      "tipo": "Packaging",
+      "concepto": "Pote",
+      "cantidad": 80,
+      "costo_fila": 80
+    },
+    {
+      "id_receta": "REC-PROD-13",
+      "id_producto": "PROD-13",
+      "tipo": "Packaging",
+      "concepto": "Foil",
+      "cantidad": 20,
+      "costo_fila": 20
+    },
+    {
+      "id_receta": "REC-PROD-13",
+      "id_producto": "PROD-13",
+      "tipo": "Packaging",
+      "concepto": "Film",
+      "cantidad": 250,
+      "costo_fila": 250
+    },
+    {
+      "id_receta": "REC-PROD-15",
+      "id_producto": "PROD-15",
+      "tipo": "Ingrediente",
+      "concepto": "ING-008",
+      "cantidad": 0.33,
+      "costo_fila": 549.978
+    },
+    {
+      "id_receta": "REC-PROD-15",
+      "id_producto": "PROD-15",
+      "tipo": "Ingrediente",
+      "concepto": "ING-003",
+      "cantidad": 0.04,
+      "costo_fila": 32
+    },
+    {
+      "id_receta": "REC-PROD-15",
+      "id_producto": "PROD-15",
+      "tipo": "Ingrediente",
+      "concepto": "ING-023",
+      "cantidad": 0.01,
+      "costo_fila": 102
+    },
+    {
+      "id_receta": "REC-PROD-15",
+      "id_producto": "PROD-15",
+      "tipo": "Ingrediente",
+      "concepto": "ING-037",
+      "cantidad": 0.02,
+      "costo_fila": 276
+    },
+    {
+      "id_receta": "REC-PROD-15",
+      "id_producto": "PROD-15",
+      "tipo": "Ingrediente",
+      "concepto": "ING-004",
+      "cantidad": 0.004,
+      "costo_fila": 140.4
+    },
+    {
+      "id_receta": "REC-PROD-15",
+      "id_producto": "PROD-15",
+      "tipo": "Ingrediente",
+      "concepto": "ING-036",
+      "cantidad": 0.002,
+      "costo_fila": 21
+    },
+    {
+      "id_receta": "REC-PROD-15",
+      "id_producto": "PROD-15",
+      "tipo": "Ingrediente",
+      "concepto": "ING-028",
+      "cantidad": 0.0008,
+      "costo_fila": 41.888000000000005
+    },
+    {
+      "id_receta": "REC-PROD-15",
+      "id_producto": "PROD-15",
+      "tipo": "Ingrediente",
+      "concepto": "ING-020",
+      "cantidad": 0.054,
+      "costo_fila": 190.07999999999998
+    },
+    {
+      "id_receta": "REC-PROD-15",
+      "id_producto": "PROD-15",
+      "tipo": "Ingrediente",
+      "concepto": "ING-019",
+      "cantidad": 0.0054,
+      "costo_fila": 10.0548
+    },
+    {
+      "id_receta": "REC-PROD-15",
+      "id_producto": "PROD-15",
+      "tipo": "Ingrediente",
+      "concepto": "ING-052",
+      "cantidad": 0.0008,
+      "costo_fila": 16
+    },
+    {
+      "id_receta": "REC-PROD-15",
+      "id_producto": "PROD-15",
+      "tipo": "Ingrediente",
+      "concepto": "ING-001",
+      "cantidad": 0.002,
+      "costo_fila": 6.3500000000000005
+    },
+    {
+      "id_receta": "REC-PROD-15",
+      "id_producto": "PROD-15",
+      "tipo": "Ingrediente",
+      "concepto": "ING-015",
+      "cantidad": 1,
+      "costo_fila": 155.55555
+    },
+    {
+      "id_receta": "REC-PROD-15",
+      "id_producto": "PROD-15",
+      "tipo": "Ingrediente",
+      "concepto": "ING-054",
+      "cantidad": 0.0054,
+      "costo_fila": 70.636914
+    },
+    {
+      "id_receta": "REC-PROD-15",
+      "id_producto": "PROD-15",
+      "tipo": "Ingrediente",
+      "concepto": "ING-014",
+      "cantidad": 0.063,
+      "costo_fila": 218.358
+    },
+    {
+      "id_receta": "REC-PROD-15",
+      "id_producto": "PROD-15",
+      "tipo": "Packaging",
+      "concepto": "Bolsa",
+      "cantidad": 50,
+      "costo_fila": 50
+    },
+    {
+      "id_receta": "REC-PROD-15",
+      "id_producto": "PROD-15",
+      "tipo": "Packaging",
+      "concepto": "Bolsa al vacío",
+      "cantidad": 510,
+      "costo_fila": 510
+    },
+    {
+      "id_receta": "REC-PROD-15",
+      "id_producto": "PROD-15",
+      "tipo": "Packaging",
+      "concepto": "Film",
+      "cantidad": 250,
+      "costo_fila": 250
+    },
+    {
+      "id_receta": "REC-PROD-15",
+      "id_producto": "PROD-15",
+      "tipo": "Packaging",
+      "concepto": "Foil",
+      "cantidad": 20,
+      "costo_fila": 20
+    },
+    {
+      "id_receta": "REC-PROD-08",
+      "id_producto": "PROD-08",
+      "tipo": "Ingrediente",
+      "concepto": "ING-008",
+      "cantidad": 0.33,
+      "costo_fila": 549.978
+    },
+    {
+      "id_receta": "REC-PROD-08",
+      "id_producto": "PROD-08",
+      "tipo": "Ingrediente",
+      "concepto": "ING-003",
+      "cantidad": 0.04,
+      "costo_fila": 32
+    },
+    {
+      "id_receta": "REC-PROD-08",
+      "id_producto": "PROD-08",
+      "tipo": "Ingrediente",
+      "concepto": "ING-023",
+      "cantidad": 0.01052631579,
+      "costo_fila": 107.36842105800001
+    },
+    {
+      "id_receta": "REC-PROD-08",
+      "id_producto": "PROD-08",
+      "tipo": "Ingrediente",
+      "concepto": "ING-037",
+      "cantidad": 0.02105263158,
+      "costo_fila": 290.52631580400003
+    },
+    {
+      "id_receta": "REC-PROD-08",
+      "id_producto": "PROD-08",
+      "tipo": "Ingrediente",
+      "concepto": "ING-019",
+      "cantidad": 0.01,
+      "costo_fila": 18.62
+    },
+    {
+      "id_receta": "REC-PROD-08",
+      "id_producto": "PROD-08",
+      "tipo": "Ingrediente",
+      "concepto": "ING-004",
+      "cantidad": 0.004081632653,
+      "costo_fila": 143.2653061203
+    },
+    {
+      "id_receta": "REC-PROD-08",
+      "id_producto": "PROD-08",
+      "tipo": "Ingrediente",
+      "concepto": "ING-036",
+      "cantidad": 0.002040816327,
+      "costo_fila": 21.4285714335
+    },
+    {
+      "id_receta": "REC-PROD-08",
+      "id_producto": "PROD-08",
+      "tipo": "Ingrediente",
+      "concepto": "ING-028",
+      "cantidad": 0.0008333333333,
+      "costo_fila": 43.633333331588
+    },
+    {
+      "id_receta": "REC-PROD-08",
+      "id_producto": "PROD-08",
+      "tipo": "Ingrediente",
+      "concepto": "ING-001",
+      "cantidad": 0.002,
+      "costo_fila": 6.3500000000000005
+    },
+    {
+      "id_receta": "REC-PROD-08",
+      "id_producto": "PROD-08",
+      "tipo": "Ingrediente",
+      "concepto": "ING-002",
+      "cantidad": 0.029,
+      "costo_fila": 0
+    },
+    {
+      "id_receta": "REC-PROD-08",
+      "id_producto": "PROD-08",
+      "tipo": "Ingrediente",
+      "concepto": "ING-015",
+      "cantidad": 1,
+      "costo_fila": 155.55555
+    },
+    {
+      "id_receta": "REC-PROD-08",
+      "id_producto": "PROD-08",
+      "tipo": "Ingrediente",
+      "concepto": "ING-014",
+      "cantidad": 0.063,
+      "costo_fila": 218.358
+    },
+    {
+      "id_receta": "REC-PROD-08",
+      "id_producto": "PROD-08",
+      "tipo": "Packaging",
+      "concepto": "Bolsa zipper",
+      "cantidad": 120,
+      "costo_fila": 120
+    },
+    {
+      "id_receta": "REC-PROD-08",
+      "id_producto": "PROD-08",
+      "tipo": "Packaging",
+      "concepto": "Stickers",
+      "cantidad": 110,
+      "costo_fila": 110
+    },
+    {
+      "id_receta": "REC-PROD-08",
+      "id_producto": "PROD-08",
+      "tipo": "Packaging",
+      "concepto": "Film",
+      "cantidad": 250,
+      "costo_fila": 250
+    },
+    {
+      "id_receta": "REC-PROD-08",
+      "id_producto": "PROD-08",
+      "tipo": "Packaging",
+      "concepto": "Foil",
+      "cantidad": 20,
+      "costo_fila": 20
+    },
+    {
+      "id_receta": "REC-PROD-08",
+      "id_producto": "PROD-08",
+      "tipo": "Packaging",
+      "concepto": "Bolsa",
+      "cantidad": 50,
+      "costo_fila": 50
+    },
+    {
+      "id_receta": "REC-PROD-08",
+      "id_producto": "PROD-08",
+      "tipo": "Packaging",
+      "concepto": "Bolsa al vacío",
+      "cantidad": 102,
+      "costo_fila": 102
+    },
+    {
+      "id_receta": "REC-PROD-17",
+      "id_producto": "PROD-17",
+      "tipo": "Ingrediente",
+      "concepto": "ING-036",
+      "cantidad": 0.0014,
+      "costo_fila": 14.7
+    },
+    {
+      "id_receta": "REC-PROD-17",
+      "id_producto": "PROD-17",
+      "tipo": "Ingrediente",
+      "concepto": "ING-028",
+      "cantidad": 0.0005,
+      "costo_fila": 26.18
+    },
+    {
+      "id_receta": "REC-PROD-17",
+      "id_producto": "PROD-17",
+      "tipo": "Ingrediente",
+      "concepto": "ING-001",
+      "cantidad": 0.0036,
+      "costo_fila": 11.43
+    },
+    {
+      "id_receta": "REC-PROD-17",
+      "id_producto": "PROD-17",
+      "tipo": "Ingrediente",
+      "concepto": "ING-015",
+      "cantidad": 1,
+      "costo_fila": 155.55555
+    },
+    {
+      "id_receta": "REC-PROD-17",
+      "id_producto": "PROD-17",
+      "tipo": "Ingrediente",
+      "concepto": "ING-014",
+      "cantidad": 0.063,
+      "costo_fila": 218.358
+    },
+    {
+      "id_receta": "REC-PROD-17",
+      "id_producto": "PROD-17",
+      "tipo": "Packaging",
+      "concepto": "Bolsa",
+      "cantidad": 50,
+      "costo_fila": 50
+    },
+    {
+      "id_receta": "REC-PROD-17",
+      "id_producto": "PROD-17",
+      "tipo": "Packaging",
+      "concepto": "Bolsa al vacío",
+      "cantidad": 510,
+      "costo_fila": 510
+    },
+    {
+      "id_receta": "REC-PROD-17",
+      "id_producto": "PROD-17",
+      "tipo": "Packaging",
+      "concepto": "Film",
+      "cantidad": 20,
+      "costo_fila": 20
+    },
+    {
+      "id_receta": "REC-PROD-07",
+      "id_producto": "PROD-07",
+      "tipo": "Ingrediente",
+      "concepto": "ING-045",
+      "cantidad": 0.033,
+      "costo_fila": 210.54000000000002
+    },
+    {
+      "id_receta": "REC-PROD-07",
+      "id_producto": "PROD-07",
+      "tipo": "Ingrediente",
+      "concepto": "ING-023",
+      "cantidad": 0.0154,
+      "costo_fila": 157.08
+    },
+    {
+      "id_receta": "REC-PROD-07",
+      "id_producto": "PROD-07",
+      "tipo": "Ingrediente",
+      "concepto": "ING-037",
+      "cantidad": 0.0046,
+      "costo_fila": 63.48
+    },
+    {
+      "id_receta": "REC-PROD-07",
+      "id_producto": "PROD-07",
+      "tipo": "Ingrediente",
+      "concepto": "ING-034",
+      "cantidad": 0.042,
+      "costo_fila": 168
+    },
+    {
+      "id_receta": "REC-PROD-07",
+      "id_producto": "PROD-07",
+      "tipo": "Ingrediente",
+      "concepto": "ING-025",
+      "cantidad": 0.00007,
+      "costo_fila": 6.824999999999999
+    },
+    {
+      "id_receta": "REC-PROD-07",
+      "id_producto": "PROD-07",
+      "tipo": "Ingrediente",
+      "concepto": "ING-020",
+      "cantidad": 0.027,
+      "costo_fila": 95.03999999999999
+    },
+    {
+      "id_receta": "REC-PROD-07",
+      "id_producto": "PROD-07",
+      "tipo": "Ingrediente",
+      "concepto": "ING-049",
+      "cantidad": 0.0021,
+      "costo_fila": 42
+    },
+    {
+      "id_receta": "REC-PROD-07",
+      "id_producto": "PROD-07",
+      "tipo": "Ingrediente",
+      "concepto": "ING-001",
+      "cantidad": 0.002,
+      "costo_fila": 6.3500000000000005
+    },
+    {
+      "id_receta": "REC-PROD-07",
+      "id_producto": "PROD-07",
+      "tipo": "Ingrediente",
+      "concepto": "ING-002",
+      "cantidad": 0.0486,
+      "costo_fila": 0
+    },
+    {
+      "id_receta": "REC-PROD-07",
+      "id_producto": "PROD-07",
+      "tipo": "Ingrediente",
+      "concepto": "ING-015",
+      "cantidad": 0.5,
+      "costo_fila": 77.777775
+    },
+    {
+      "id_receta": "REC-PROD-07",
+      "id_producto": "PROD-07",
+      "tipo": "Packaging",
+      "concepto": "Bolsa zipper",
+      "cantidad": 120,
+      "costo_fila": 120
+    },
+    {
+      "id_receta": "REC-PROD-07",
+      "id_producto": "PROD-07",
+      "tipo": "Packaging",
+      "concepto": "Film",
+      "cantidad": 250,
+      "costo_fila": 250
+    },
+    {
+      "id_receta": "REC-PROD-07",
+      "id_producto": "PROD-07",
+      "tipo": "Packaging",
+      "concepto": "Foil",
+      "cantidad": 20,
+      "costo_fila": 20
+    },
+    {
+      "id_receta": "REC-PROD-07",
+      "id_producto": "PROD-07",
+      "tipo": "Packaging",
+      "concepto": "Bolsa",
+      "cantidad": 50,
+      "costo_fila": 50
+    },
+    {
+      "id_receta": "REC-PROD-07",
+      "id_producto": "PROD-07",
+      "tipo": "Packaging",
+      "concepto": "Stickers",
+      "cantidad": 110,
+      "costo_fila": 110
+    },
+    {
+      "id_receta": "REC-PROD-07",
+      "id_producto": "PROD-07",
+      "tipo": "Packaging",
+      "concepto": "Bolsa al vacío",
+      "cantidad": 510,
+      "costo_fila": 510
+    },
+    {
+      "id_receta": "REC-PROD-06",
+      "id_producto": "PROD-06",
+      "tipo": "Ingrediente",
+      "concepto": "ING-051",
+      "cantidad": 0.008,
+      "costo_fila": 93.328
+    },
+    {
+      "id_receta": "REC-PROD-06",
+      "id_producto": "PROD-06",
+      "tipo": "Ingrediente",
+      "concepto": "ING-050",
+      "cantidad": 0.043,
+      "costo_fila": 813.94485
+    },
+    {
+      "id_receta": "REC-PROD-06",
+      "id_producto": "PROD-06",
+      "tipo": "Ingrediente",
+      "concepto": "ING-009",
+      "cantidad": 0.072,
+      "costo_fila": 86.39999999999999
+    },
+    {
+      "id_receta": "REC-PROD-06",
+      "id_producto": "PROD-06",
+      "tipo": "Ingrediente",
+      "concepto": "ING-019",
+      "cantidad": 0.008,
+      "costo_fila": 14.896
+    },
+    {
+      "id_receta": "REC-PROD-06",
+      "id_producto": "PROD-06",
+      "tipo": "Ingrediente",
+      "concepto": "ING-004",
+      "cantidad": 0.00536,
+      "costo_fila": 188.136
+    },
+    {
+      "id_receta": "REC-PROD-06",
+      "id_producto": "PROD-06",
+      "tipo": "Ingrediente",
+      "concepto": "ING-036",
+      "cantidad": 0.0017,
+      "costo_fila": 17.849999999999998
+    },
+    {
+      "id_receta": "REC-PROD-06",
+      "id_producto": "PROD-06",
+      "tipo": "Ingrediente",
+      "concepto": "ING-028",
+      "cantidad": 0.0003,
+      "costo_fila": 15.707999999999998
+    },
+    {
+      "id_receta": "REC-PROD-06",
+      "id_producto": "PROD-06",
+      "tipo": "Ingrediente",
+      "concepto": "ING-016",
+      "cantidad": 0.0001,
+      "costo_fila": 4
+    },
+    {
+      "id_receta": "REC-PROD-06",
+      "id_producto": "PROD-06",
+      "tipo": "Ingrediente",
+      "concepto": "ING-049",
+      "cantidad": 0.001,
+      "costo_fila": 20
+    },
+    {
+      "id_receta": "REC-PROD-06",
+      "id_producto": "PROD-06",
+      "tipo": "Ingrediente",
+      "concepto": "ING-001",
+      "cantidad": 0.004,
+      "costo_fila": 12.700000000000001
+    },
+    {
+      "id_receta": "REC-PROD-06",
+      "id_producto": "PROD-06",
+      "tipo": "Ingrediente",
+      "concepto": "ING-015",
+      "cantidad": 1,
+      "costo_fila": 155.55555
+    },
+    {
+      "id_receta": "REC-PROD-06",
+      "id_producto": "PROD-06",
+      "tipo": "Ingrediente",
+      "concepto": "ING-014",
+      "cantidad": 0.063,
+      "costo_fila": 218.358
+    },
+    {
+      "id_receta": "REC-PROD-06",
+      "id_producto": "PROD-06",
+      "tipo": "Packaging",
+      "concepto": "Bolsa zipper",
+      "cantidad": 120,
+      "costo_fila": 120
+    },
+    {
+      "id_receta": "REC-PROD-06",
+      "id_producto": "PROD-06",
+      "tipo": "Packaging",
+      "concepto": "Stickers",
+      "cantidad": 110,
+      "costo_fila": 110
+    },
+    {
+      "id_receta": "REC-PROD-06",
+      "id_producto": "PROD-06",
+      "tipo": "Packaging",
+      "concepto": "Foil",
+      "cantidad": 20,
+      "costo_fila": 20
+    },
+    {
+      "id_receta": "REC-PROD-06",
+      "id_producto": "PROD-06",
+      "tipo": "Packaging",
+      "concepto": "Bolsa",
+      "cantidad": 50,
+      "costo_fila": 50
+    },
+    {
+      "id_receta": "REC-PROD-06",
+      "id_producto": "PROD-06",
+      "tipo": "Packaging",
+      "concepto": "Film",
+      "cantidad": 20,
+      "costo_fila": 20
+    },
+    {
+      "id_receta": "REC-PROD-06",
+      "id_producto": "PROD-06",
+      "tipo": "Packaging",
+      "concepto": "Bolsa al vacío",
+      "cantidad": 102,
+      "costo_fila": 102
+    },
+    {
+      "id_receta": "REC-PROD-020",
+      "id_producto": "PROD-020",
+      "tipo": "Ingrediente",
+      "concepto": "ING-054",
+      "cantidad": 0.001,
+      "costo_fila": 13.08091
+    },
+    {
+      "id_receta": "REC-PROD-020",
+      "id_producto": "PROD-020",
+      "tipo": "Ingrediente",
+      "concepto": "ING-020",
+      "cantidad": 0.1,
+      "costo_fila": 352
+    },
+    {
+      "id_receta": "REC-PROD-020",
+      "id_producto": "PROD-020",
+      "tipo": "Ingrediente",
+      "concepto": "ING-019",
+      "cantidad": 0.01,
+      "costo_fila": 18.62
+    },
+    {
+      "id_receta": "REC-PROD-020",
+      "id_producto": "PROD-020",
+      "tipo": "Ingrediente",
+      "concepto": "ING-014",
+      "cantidad": 0.086,
+      "costo_fila": 298.07599999999996
+    },
+    {
+      "id_receta": "REC-PROD-020",
+      "id_producto": "PROD-020",
+      "tipo": "Ingrediente",
+      "concepto": "ING-001",
+      "cantidad": 0.008,
+      "costo_fila": 25.400000000000002
+    },
+    {
+      "id_receta": "REC-PROD-020",
+      "id_producto": "PROD-020",
+      "tipo": "Ingrediente",
+      "concepto": "ING-015",
+      "cantidad": 1,
+      "costo_fila": 155.55555
+    },
+    {
+      "id_receta": "REC-PROD-020",
+      "id_producto": "PROD-020",
+      "tipo": "Ingrediente",
+      "concepto": "ING-048",
+      "cantidad": 0.01,
+      "costo_fila": 200
+    },
+    {
+      "id_receta": "REC-PROD-020",
+      "id_producto": "PROD-020",
+      "tipo": "Packaging",
+      "concepto": "Bolsa zipper",
+      "cantidad": 0,
+      "costo_fila": 0
+    },
+    {
+      "id_receta": "REC-PROD-020",
+      "id_producto": "PROD-020",
+      "tipo": "Packaging",
+      "concepto": "Stickers",
+      "cantidad": 110,
+      "costo_fila": 110
+    },
+    {
+      "id_receta": "REC-PROD-020",
+      "id_producto": "PROD-020",
+      "tipo": "Packaging",
+      "concepto": "Bolsa",
+      "cantidad": 25,
+      "costo_fila": 25
+    },
+    {
+      "id_receta": "REC-PROD-019",
+      "id_producto": "PROD-019",
+      "tipo": "Ingrediente",
+      "concepto": "ING-055",
+      "cantidad": 0.225,
+      "costo_fila": 1800
+    },
+    {
+      "id_receta": "REC-PROD-019",
+      "id_producto": "PROD-019",
+      "tipo": "Ingrediente",
+      "concepto": "ING-050",
+      "cantidad": 0.015,
+      "costo_fila": 283.93425
+    },
+    {
+      "id_receta": "REC-PROD-019",
+      "id_producto": "PROD-019",
+      "tipo": "Ingrediente",
+      "concepto": "ING-023",
+      "cantidad": 0.05,
+      "costo_fila": 510
+    },
+    {
+      "id_receta": "REC-PROD-019",
+      "id_producto": "PROD-019",
+      "tipo": "Ingrediente",
+      "concepto": "ING-036",
+      "cantidad": 0.001,
+      "costo_fila": 10.5
+    },
+    {
+      "id_receta": "REC-PROD-019",
+      "id_producto": "PROD-019",
+      "tipo": "Ingrediente",
+      "concepto": "ING-028",
+      "cantidad": 0.0005,
+      "costo_fila": 26.18
+    },
+    {
+      "id_receta": "REC-PROD-019",
+      "id_producto": "PROD-019",
+      "tipo": "Ingrediente",
+      "concepto": "ING-037",
+      "cantidad": 0.01,
+      "costo_fila": 138
+    },
+    {
+      "id_receta": "REC-PROD-019",
+      "id_producto": "PROD-019",
+      "tipo": "Ingrediente",
+      "concepto": "ING-001",
+      "cantidad": 0.001,
+      "costo_fila": 3.1750000000000003
+    },
+    {
+      "id_receta": "REC-PROD-019",
+      "id_producto": "PROD-019",
+      "tipo": "Ingrediente",
+      "concepto": "ING-003",
+      "cantidad": 0.015,
+      "costo_fila": 12
+    },
+    {
+      "id_receta": "REC-PROD-019",
+      "id_producto": "PROD-019",
+      "tipo": "Ingrediente",
+      "concepto": "ING-020",
+      "cantidad": 0.054,
+      "costo_fila": 190.07999999999998
+    },
+    {
+      "id_receta": "REC-PROD-019",
+      "id_producto": "PROD-019",
+      "tipo": "Ingrediente",
+      "concepto": "ING-019",
+      "cantidad": 0.0054,
+      "costo_fila": 10.0548
+    },
+    {
+      "id_receta": "REC-PROD-019",
+      "id_producto": "PROD-019",
+      "tipo": "Ingrediente",
+      "concepto": "ING-014",
+      "cantidad": 0.06,
+      "costo_fila": 207.95999999999998
+    },
+    {
+      "id_receta": "REC-PROD-019",
+      "id_producto": "PROD-019",
+      "tipo": "Ingrediente",
+      "concepto": "ING-054",
+      "cantidad": 0.0054,
+      "costo_fila": 70.636914
+    },
+    {
+      "id_receta": "REC-PROD-019",
+      "id_producto": "PROD-019",
+      "tipo": "Ingrediente",
+      "concepto": "ING-001",
+      "cantidad": 0.004,
+      "costo_fila": 12.700000000000001
+    },
+    {
+      "id_receta": "REC-PROD-019",
+      "id_producto": "PROD-019",
+      "tipo": "Ingrediente",
+      "concepto": "ING-015",
+      "cantidad": 1,
+      "costo_fila": 155.55555
+    },
+    {
+      "id_receta": "REC-PROD-019",
+      "id_producto": "PROD-019",
+      "tipo": "Packaging",
+      "concepto": "Bolsa zipper",
+      "cantidad": 110,
+      "costo_fila": 110
+    },
+    {
+      "id_receta": "REC-PROD-019",
+      "id_producto": "PROD-019",
+      "tipo": "Packaging",
+      "concepto": "Film",
+      "cantidad": 250,
+      "costo_fila": 250
+    },
+    {
+      "id_receta": "REC-PROD-019",
+      "id_producto": "PROD-019",
+      "tipo": "Packaging",
+      "concepto": "Foil",
+      "cantidad": 50,
+      "costo_fila": 50
+    },
+    {
+      "id_receta": "REC-PROD-019",
+      "id_producto": "PROD-019",
+      "tipo": "Packaging",
+      "concepto": "Stickers",
+      "cantidad": 110,
+      "costo_fila": 110
+    },
+    {
+      "id_receta": "REC-PROD-019",
+      "id_producto": "PROD-019",
+      "tipo": "Packaging",
+      "concepto": "Bolsa",
+      "cantidad": 50,
+      "costo_fila": 50
+    },
+    {
+      "id_receta": "REC-PROD-019",
+      "id_producto": "PROD-019",
+      "tipo": "Packaging",
+      "concepto": "Bolsa al vacío",
+      "cantidad": 51,
+      "costo_fila": 51
+    },
+    {
+      "id_receta": "REC-PROD-16",
+      "id_producto": "PROD-16",
+      "tipo": "Ingrediente",
+      "concepto": "ING-045",
+      "cantidad": 0.033,
+      "costo_fila": 210.54000000000002
+    },
+    {
+      "id_receta": "REC-PROD-16",
+      "id_producto": "PROD-16",
+      "tipo": "Ingrediente",
+      "concepto": "ING-023",
+      "cantidad": 0.0154,
+      "costo_fila": 157.08
+    },
+    {
+      "id_receta": "REC-PROD-16",
+      "id_producto": "PROD-16",
+      "tipo": "Ingrediente",
+      "concepto": "ING-037",
+      "cantidad": 0.0046,
+      "costo_fila": 63.48
+    },
+    {
+      "id_receta": "REC-PROD-16",
+      "id_producto": "PROD-16",
+      "tipo": "Ingrediente",
+      "concepto": "ING-034",
+      "cantidad": 0.042,
+      "costo_fila": 168
+    },
+    {
+      "id_receta": "REC-PROD-16",
+      "id_producto": "PROD-16",
+      "tipo": "Ingrediente",
+      "concepto": "ING-025",
+      "cantidad": 0.00007,
+      "costo_fila": 6.824999999999999
+    },
+    {
+      "id_receta": "REC-PROD-16",
+      "id_producto": "PROD-16",
+      "tipo": "Ingrediente",
+      "concepto": "ING-014",
+      "cantidad": 0.04,
+      "costo_fila": 138.64000000000001
+    },
+    {
+      "id_receta": "REC-PROD-16",
+      "id_producto": "PROD-16",
+      "tipo": "Ingrediente",
+      "concepto": "ING-001",
+      "cantidad": 0.0043,
+      "costo_fila": 13.6525
+    },
+    {
+      "id_receta": "REC-PROD-16",
+      "id_producto": "PROD-16",
+      "tipo": "Ingrediente",
+      "concepto": "ING-002",
+      "cantidad": 0.0243,
+      "costo_fila": 0
+    },
+    {
+      "id_receta": "REC-PROD-16",
+      "id_producto": "PROD-16",
+      "tipo": "Ingrediente",
+      "concepto": "ING-015",
+      "cantidad": 0.06665,
+      "costo_fila": 10.3677774075
+    },
+    {
+      "id_receta": "REC-PROD-16",
+      "id_producto": "PROD-16",
+      "tipo": "Packaging",
+      "concepto": "Bolsa al vacío",
+      "cantidad": 510,
+      "costo_fila": 510
+    },
+    {
+      "id_receta": "REC-PROD-16",
+      "id_producto": "PROD-16",
+      "tipo": "Packaging",
+      "concepto": "Film",
+      "cantidad": 250,
+      "costo_fila": 250
+    },
+    {
+      "id_receta": "REC-PROD-16",
+      "id_producto": "PROD-16",
+      "tipo": "Packaging",
+      "concepto": "Foil",
+      "cantidad": 20,
+      "costo_fila": 20
+    },
+    {
+      "id_receta": "REC-PROD-16",
+      "id_producto": "PROD-16",
+      "tipo": "Packaging",
+      "concepto": "Bolsa",
+      "cantidad": 50,
+      "costo_fila": 50
+    },
+    {
+      "id_receta": "REC-PROD-12",
+      "id_producto": "PROD-12",
+      "tipo": "Ingrediente",
+      "concepto": "ING-008",
+      "cantidad": 0.275,
+      "costo_fila": 458.315
+    },
+    {
+      "id_receta": "REC-PROD-12",
+      "id_producto": "PROD-12",
+      "tipo": "Ingrediente",
+      "concepto": "ING-003",
+      "cantidad": 0.033333,
+      "costo_fila": 26.666400000000003
+    },
+    {
+      "id_receta": "REC-PROD-12",
+      "id_producto": "PROD-12",
+      "tipo": "Ingrediente",
+      "concepto": "ING-023",
+      "cantidad": 0.008772,
+      "costo_fila": 89.4744
+    },
+    {
+      "id_receta": "REC-PROD-12",
+      "id_producto": "PROD-12",
+      "tipo": "Ingrediente",
+      "concepto": "ING-037",
+      "cantidad": 0.017544,
+      "costo_fila": 242.1072
+    },
+    {
+      "id_receta": "REC-PROD-12",
+      "id_producto": "PROD-12",
+      "tipo": "Ingrediente",
+      "concepto": "ING-019",
+      "cantidad": 0.008333,
+      "costo_fila": 15.516046000000001
+    },
+    {
+      "id_receta": "REC-PROD-12",
+      "id_producto": "PROD-12",
+      "tipo": "Ingrediente",
+      "concepto": "ING-004",
+      "cantidad": 0.003401,
+      "costo_fila": 119.3751
+    },
+    {
+      "id_receta": "REC-PROD-12",
+      "id_producto": "PROD-12",
+      "tipo": "Ingrediente",
+      "concepto": "ING-036",
+      "cantidad": 0.001701,
+      "costo_fila": 17.860500000000002
+    },
+    {
+      "id_receta": "REC-PROD-12",
+      "id_producto": "PROD-12",
+      "tipo": "Ingrediente",
+      "concepto": "ING-028",
+      "cantidad": 0.000694,
+      "costo_fila": 36.33784
+    },
+    {
+      "id_receta": "REC-PROD-12",
+      "id_producto": "PROD-12",
+      "tipo": "Ingrediente",
+      "concepto": "ING-001",
+      "cantidad": 0.004,
+      "costo_fila": 12.700000000000001
+    },
+    {
+      "id_receta": "REC-PROD-12",
+      "id_producto": "PROD-12",
+      "tipo": "Ingrediente",
+      "concepto": "ING-002",
+      "cantidad": 0.024167,
+      "costo_fila": 0
+    },
+    {
+      "id_receta": "REC-PROD-12",
+      "id_producto": "PROD-12",
+      "tipo": "Ingrediente",
+      "concepto": "ING-015",
+      "cantidad": 1,
+      "costo_fila": 155.55555
+    },
+    {
+      "id_receta": "REC-PROD-12",
+      "id_producto": "PROD-12",
+      "tipo": "Ingrediente",
+      "concepto": "ING-026",
+      "cantidad": 0.03,
+      "costo_fila": 600
+    },
+    {
+      "id_receta": "REC-PROD-12",
+      "id_producto": "PROD-12",
+      "tipo": "Ingrediente",
+      "concepto": "ING-056",
+      "cantidad": 0.14,
+      "costo_fila": 700.0000000000001
+    },
+    {
+      "id_receta": "REC-PROD-12",
+      "id_producto": "PROD-12",
+      "tipo": "Ingrediente",
+      "concepto": "ING-003",
+      "cantidad": 0.001,
+      "costo_fila": 0.8
+    },
+    {
+      "id_receta": "REC-PROD-12",
+      "id_producto": "PROD-12",
+      "tipo": "Ingrediente",
+      "concepto": "ING-036",
+      "cantidad": 0.0018,
+      "costo_fila": 18.9
+    },
+    {
+      "id_receta": "REC-PROD-12",
+      "id_producto": "PROD-12",
+      "tipo": "Ingrediente",
+      "concepto": "ING-028",
+      "cantidad": 0.0009,
+      "costo_fila": 47.123999999999995
+    },
+    {
+      "id_receta": "REC-PROD-12",
+      "id_producto": "PROD-12",
+      "tipo": "Ingrediente",
+      "concepto": "ING-044",
+      "cantidad": 0.0001,
+      "costo_fila": 0.05
+    },
+    {
+      "id_receta": "REC-PROD-12",
+      "id_producto": "PROD-12",
+      "tipo": "Ingrediente",
+      "concepto": "ING-014",
+      "cantidad": 0.06,
+      "costo_fila": 207.95999999999998
+    },
+    {
+      "id_receta": "REC-PROD-12",
+      "id_producto": "PROD-12",
+      "tipo": "Packaging",
+      "concepto": "Bolsa",
+      "cantidad": 50,
+      "costo_fila": 50
+    },
+    {
+      "id_receta": "REC-PROD-12",
+      "id_producto": "PROD-12",
+      "tipo": "Packaging",
+      "concepto": "Bolsa al vacío",
+      "cantidad": 510,
+      "costo_fila": 510
+    },
+    {
+      "id_receta": "REC-PROD-12",
+      "id_producto": "PROD-12",
+      "tipo": "Packaging",
+      "concepto": "Film",
+      "cantidad": 250,
+      "costo_fila": 250
+    },
+    {
+      "id_receta": "REC-PROD-12",
+      "id_producto": "PROD-12",
+      "tipo": "Packaging",
+      "concepto": "Foil",
+      "cantidad": 20,
+      "costo_fila": 20
+    },
+    {
+      "id_producto": "PROD-01",
+      "tipo": "Ingrediente",
+      "concepto": "ING-029",
+      "cantidad": 0.112,
+      "costo_fila": 0
+    },
+    {
+      "id_producto": "PROD-01",
+      "tipo": "Ingrediente",
+      "concepto": "ING-052",
+      "cantidad": 0.006,
+      "costo_fila": 0
+    },
+    {
+      "id_producto": "PROD-08",
+      "tipo": "Ingrediente",
+      "concepto": "ING-029",
+      "cantidad": 0.112,
+      "costo_fila": 0
+    },
+    {
+      "id_producto": "PROD-08",
+      "tipo": "Ingrediente",
+      "concepto": "ING-052",
+      "cantidad": 0.006,
+      "costo_fila": 0
+    },
+    {
+      "id_producto": "PROD-02",
+      "tipo": "Ingrediente",
+      "concepto": "ING-029",
+      "cantidad": 0.112,
+      "costo_fila": 0
+    },
+    {
+      "id_producto": "PROD-02",
+      "tipo": "Ingrediente",
+      "concepto": "ING-049",
+      "cantidad": 0.006,
+      "costo_fila": 0
+    },
+    {
+      "id_producto": "PROD-02",
+      "tipo": "Packaging",
+      "concepto": "Bolsa al vacío",
+      "cantidad": 0,
+      "costo_fila": 85
+    },
+    {
+      "id_producto": "PROD-03",
+      "tipo": "Ingrediente",
+      "concepto": "ING-029",
+      "cantidad": 0.087,
+      "costo_fila": 0
+    },
+    {
+      "id_producto": "PROD-03",
+      "tipo": "Ingrediente",
+      "concepto": "ING-048",
+      "cantidad": 0.005,
+      "costo_fila": 0
+    },
+    {
+      "id_producto": "PROD-04",
+      "tipo": "Ingrediente",
+      "concepto": "ING-029",
+      "cantidad": 0.092,
+      "costo_fila": 0
+    },
+    {
+      "id_producto": "PROD-04",
+      "tipo": "Ingrediente",
+      "concepto": "ING-049",
+      "cantidad": 0.005,
+      "costo_fila": 0
+    },
+    {
+      "id_producto": "PROD-04",
+      "tipo": "Packaging",
+      "concepto": "Bolsa al vacío",
+      "cantidad": 0,
+      "costo_fila": 85
+    },
+    {
+      "id_producto": "PROD-05",
+      "tipo": "Ingrediente",
+      "concepto": "ING-029",
+      "cantidad": 0.092,
+      "costo_fila": 0
+    },
+    {
+      "id_producto": "PROD-05",
+      "tipo": "Ingrediente",
+      "concepto": "ING-048",
+      "cantidad": 0.005,
+      "costo_fila": 0
+    },
+    {
+      "id_producto": "PROD-06",
+      "tipo": "Ingrediente",
+      "concepto": "ING-029",
+      "cantidad": 0.112,
+      "costo_fila": 0
+    },
+    {
+      "id_producto": "PROD-07",
+      "tipo": "Ingrediente",
+      "concepto": "ING-029",
+      "cantidad": 0.046,
+      "costo_fila": 0
+    },
+    {
+      "id_producto": "PROD-07",
+      "tipo": "Ingrediente",
+      "concepto": "ING-048",
+      "cantidad": 0.0025,
+      "costo_fila": 0
+    },
+    {
+      "id_producto": "PROD-09",
+      "tipo": "Ingrediente",
+      "concepto": "ING-029",
+      "cantidad": 0.087,
+      "costo_fila": 0
+    },
+    {
+      "id_producto": "PROD-09",
+      "tipo": "Ingrediente",
+      "concepto": "ING-048",
+      "cantidad": 0.005,
+      "costo_fila": 0
+    },
+    {
+      "id_producto": "PROD-10",
+      "tipo": "Ingrediente",
+      "concepto": "ING-029",
+      "cantidad": 0.092,
+      "costo_fila": 0
+    },
+    {
+      "id_producto": "PROD-10",
+      "tipo": "Ingrediente",
+      "concepto": "ING-049",
+      "cantidad": 0.005,
+      "costo_fila": 0
+    },
+    {
+      "id_producto": "PROD-11",
+      "tipo": "Ingrediente",
+      "concepto": "ING-029",
+      "cantidad": 0.0046,
+      "costo_fila": 0
+    },
+    {
+      "id_producto": "PROD-11",
+      "tipo": "Ingrediente",
+      "concepto": "ING-048",
+      "cantidad": 0.002,
+      "costo_fila": 0
+    },
+    {
+      "id_producto": "PROD-12",
+      "tipo": "Packaging",
+      "concepto": "Bolsa al vacío",
+      "cantidad": 0,
+      "costo_fila": 70
+    },
+    {
+      "id_producto": "PROD-12",
+      "tipo": "Ingrediente",
+      "concepto": "ING-029",
+      "cantidad": 0.092,
+      "costo_fila": 0
+    },
+    {
+      "id_producto": "PROD-12",
+      "tipo": "Ingrediente",
+      "concepto": "ING-052",
+      "cantidad": 0.005,
+      "costo_fila": 0
+    },
+    {
+      "id_producto": "PROD-13",
+      "tipo": "Ingrediente",
+      "concepto": "ING-029",
+      "cantidad": 0.087,
+      "costo_fila": 0
+    },
+    {
+      "id_producto": "PROD-13",
+      "tipo": "Ingrediente",
+      "concepto": "ING-048",
+      "cantidad": 0.005,
+      "costo_fila": 0
+    },
+    {
+      "id_producto": "PROD-16",
+      "tipo": "Ingrediente",
+      "concepto": "ING-029",
+      "cantidad": 0.046,
+      "costo_fila": 0
+    },
+    {
+      "id_producto": "PROD-16",
+      "tipo": "Ingrediente",
+      "concepto": "ING-048",
+      "cantidad": 0.002,
+      "costo_fila": 0
+    },
+    {
+      "id_producto": "PROD-17",
+      "tipo": "Ingrediente",
+      "concepto": "ING-029",
+      "cantidad": 0.087,
+      "costo_fila": 0
+    },
+    {
+      "id_producto": "PROD-17",
+      "tipo": "Ingrediente",
+      "concepto": "ING-048",
+      "cantidad": 0.004,
+      "costo_fila": 0
+    },
+    {
+      "id_producto": "PROD-03",
+      "tipo": "Ingrediente",
+      "concepto": "ING-010",
+      "cantidad": 0.28,
+      "costo_fila": 0
+    },
+    {
+      "id_producto": "PROD-03",
+      "tipo": "Ingrediente",
+      "concepto": "ING-034",
+      "cantidad": 0.084,
+      "costo_fila": 0
+    },
+    {
+      "id_producto": "PROD-03",
+      "tipo": "Ingrediente",
+      "concepto": "ING-024",
+      "cantidad": 0.011,
+      "costo_fila": 0
+    },
+    {
+      "id_producto": "PROD-03",
+      "tipo": "Ingrediente",
+      "concepto": "ING-016",
+      "cantidad": 0.0001,
+      "costo_fila": 0
+    },
+    {
+      "id_producto": "PROD-03",
+      "tipo": "Ingrediente",
+      "concepto": "ING-018",
+      "cantidad": 0.015,
+      "costo_fila": 0
+    },
+    {
+      "id_producto": "PROD-03",
+      "tipo": "Ingrediente",
+      "concepto": "ING-019",
+      "cantidad": 0.012,
+      "costo_fila": 0
+    },
+    {
+      "id_producto": "PROD-03",
+      "tipo": "Ingrediente",
+      "concepto": "ING-023",
+      "cantidad": 0.017,
+      "costo_fila": 0
+    },
+    {
+      "id_producto": "PROD-03",
+      "tipo": "Ingrediente",
+      "concepto": "ING-037",
+      "cantidad": 0.044,
+      "costo_fila": 0
+    },
+    {
+      "id_producto": "PROD-03",
+      "tipo": "Ingrediente",
+      "concepto": "ING-003",
+      "cantidad": 0.007,
+      "costo_fila": 0
+    },
+    {
+      "id_producto": "PROD-03",
+      "tipo": "Ingrediente",
+      "concepto": "ING-036",
+      "cantidad": 0.001,
+      "costo_fila": 0
+    },
+    {
+      "id_producto": "PROD-03",
+      "tipo": "Ingrediente",
+      "concepto": "ING-028",
+      "cantidad": 0.0006,
+      "costo_fila": 0
+    },
+    {
+      "id_producto": "PROD-09",
+      "tipo": "Ingrediente",
+      "concepto": "ING-010",
+      "cantidad": 0.28,
+      "costo_fila": 0
+    },
+    {
+      "id_producto": "PROD-09",
+      "tipo": "Ingrediente",
+      "concepto": "ING-034",
+      "cantidad": 0.084,
+      "costo_fila": 0
+    },
+    {
+      "id_producto": "PROD-09",
+      "tipo": "Ingrediente",
+      "concepto": "ING-024",
+      "cantidad": 0.011,
+      "costo_fila": 0
+    },
+    {
+      "id_producto": "PROD-09",
+      "tipo": "Ingrediente",
+      "concepto": "ING-016",
+      "cantidad": 0.0001,
+      "costo_fila": 0
+    },
+    {
+      "id_producto": "PROD-09",
+      "tipo": "Ingrediente",
+      "concepto": "ING-018",
+      "cantidad": 0.015,
+      "costo_fila": 0
+    },
+    {
+      "id_producto": "PROD-09",
+      "tipo": "Ingrediente",
+      "concepto": "ING-019",
+      "cantidad": 0.012,
+      "costo_fila": 0
+    },
+    {
+      "id_producto": "PROD-09",
+      "tipo": "Ingrediente",
+      "concepto": "ING-023",
+      "cantidad": 0.017,
+      "costo_fila": 0
+    },
+    {
+      "id_producto": "PROD-09",
+      "tipo": "Ingrediente",
+      "concepto": "ING-037",
+      "cantidad": 0.044,
+      "costo_fila": 0
+    },
+    {
+      "id_producto": "PROD-09",
+      "tipo": "Ingrediente",
+      "concepto": "ING-036",
+      "cantidad": 0.001,
+      "costo_fila": 0
+    },
+    {
+      "id_producto": "PROD-09",
+      "tipo": "Ingrediente",
+      "concepto": "ING-028",
+      "cantidad": 0.0006,
+      "costo_fila": 0
+    },
+    {
+      "id_producto": "PROD-13",
+      "tipo": "Packaging",
+      "concepto": "Bolsa al vacío",
+      "cantidad": 0,
+      "costo_fila": 60
+    },
+    {
+      "id_producto": "PROD-13",
+      "tipo": "Ingrediente",
+      "concepto": "ING-010",
+      "cantidad": 0.28,
+      "costo_fila": 0
+    },
+    {
+      "id_producto": "PROD-13",
+      "tipo": "Ingrediente",
+      "concepto": "ING-034",
+      "cantidad": 0.084,
+      "costo_fila": 0
+    },
+    {
+      "id_producto": "PROD-13",
+      "tipo": "Ingrediente",
+      "concepto": "ING-024",
+      "cantidad": 0.011,
+      "costo_fila": 0
+    },
+    {
+      "id_producto": "PROD-13",
+      "tipo": "Ingrediente",
+      "concepto": "ING-016",
+      "cantidad": 0.0001,
+      "costo_fila": 0
+    },
+    {
+      "id_producto": "PROD-13",
+      "tipo": "Ingrediente",
+      "concepto": "ING-018",
+      "cantidad": 0.015,
+      "costo_fila": 0
+    },
+    {
+      "id_producto": "PROD-13",
+      "tipo": "Ingrediente",
+      "concepto": "ING-019",
+      "cantidad": 0.012,
+      "costo_fila": 0
+    },
+    {
+      "id_producto": "PROD-13",
+      "tipo": "Ingrediente",
+      "concepto": "ING-023",
+      "cantidad": 0.017,
+      "costo_fila": 0
+    },
+    {
+      "id_producto": "PROD-13",
+      "tipo": "Ingrediente",
+      "concepto": "ING-037",
+      "cantidad": 0.044,
+      "costo_fila": 0
+    },
+    {
+      "id_producto": "PROD-13",
+      "tipo": "Ingrediente",
+      "concepto": "ING-003",
+      "cantidad": 0.007,
+      "costo_fila": 0
+    },
+    {
+      "id_producto": "PROD-17",
+      "tipo": "Ingrediente",
+      "concepto": "ING-010",
+      "cantidad": 0.28,
+      "costo_fila": 0
+    },
+    {
+      "id_producto": "PROD-17",
+      "tipo": "Ingrediente",
+      "concepto": "ING-034",
+      "cantidad": 0.084,
+      "costo_fila": 0
+    },
+    {
+      "id_producto": "PROD-17",
+      "tipo": "Ingrediente",
+      "concepto": "ING-024",
+      "cantidad": 0.011,
+      "costo_fila": 0
+    },
+    {
+      "id_producto": "PROD-17",
+      "tipo": "Ingrediente",
+      "concepto": "ING-016",
+      "cantidad": 0.0001,
+      "costo_fila": 0
+    },
+    {
+      "id_producto": "PROD-17",
+      "tipo": "Ingrediente",
+      "concepto": "ING-018",
+      "cantidad": 0.015,
+      "costo_fila": 0
+    },
+    {
+      "id_producto": "PROD-17",
+      "tipo": "Ingrediente",
+      "concepto": "ING-019",
+      "cantidad": 0.012,
+      "costo_fila": 0
+    },
+    {
+      "id_producto": "PROD-17",
+      "tipo": "Ingrediente",
+      "concepto": "ING-023",
+      "cantidad": 0.012,
+      "costo_fila": 0
+    },
+    {
+      "id_producto": "PROD-17",
+      "tipo": "Ingrediente",
+      "concepto": "ING-037",
+      "cantidad": 0.044,
+      "costo_fila": 0
+    },
+    {
+      "id_producto": "PROD-17",
+      "tipo": "Ingrediente",
+      "concepto": "ING-003",
+      "cantidad": 0.007,
+      "costo_fila": 0
+    }
+  ],
+  "pedidos": [
+    {
+      "id_pedido": "PED-002",
+      "id_detalle": "PED-002-A",
+      "fecha": "2026-05-27",
+      "id_cliente": "CLI-006",
+      "id_producto": "PROD-11",
+      "cantidad": 2,
+      "precio": 11500,
+      "descuento": 0,
+      "envio": 0,
+      "estado": "Entregado",
+      "subtotal": 23000,
+      "canal": "Mayorista"
+    },
+    {
+      "id_pedido": "PED-002",
+      "id_detalle": "PED-002-B",
+      "fecha": "2026-05-27",
+      "id_cliente": "CLI-006",
+      "id_producto": "PROD-12",
+      "cantidad": 1,
+      "precio": 12000,
+      "descuento": 0,
+      "envio": 0,
+      "estado": "Entregado",
+      "subtotal": 12000,
+      "canal": "Mayorista"
+    },
+    {
+      "id_pedido": "PED-002",
+      "id_detalle": "PED-002-C",
+      "fecha": "2026-05-27",
+      "id_cliente": "CLI-006",
+      "id_producto": "PROD-13",
+      "cantidad": 3,
+      "precio": 12500,
+      "descuento": 0,
+      "envio": 0,
+      "estado": "Entregado",
+      "subtotal": 37500,
+      "canal": "Mayorista"
+    },
+    {
+      "id_pedido": "PED-007",
+      "id_detalle": "PED-007-A",
+      "fecha": "2026-05-27",
+      "id_cliente": "CLI-005",
+      "id_producto": "",
+      "cantidad": 3,
+      "precio": 11000,
+      "descuento": 4000,
+      "envio": 3000,
+      "estado": "Entregado",
+      "subtotal": 32000,
+      "canal": "Minorista"
+    },
+    {
+      "id_pedido": "PED-008",
+      "id_detalle": "PED-008-A",
+      "fecha": "2026-05-27",
+      "id_cliente": "CLI-004",
+      "id_producto": "",
+      "cantidad": 3,
+      "precio": 11000,
+      "descuento": 1375,
+      "envio": 0,
+      "estado": "Entregado",
+      "subtotal": 31625,
+      "canal": "Minorista"
+    },
+    {
+      "id_pedido": "PED-008",
+      "id_detalle": "PED-008-B",
+      "fecha": "2026-05-27",
+      "id_cliente": "CLI-004",
+      "id_producto": "PROD-03",
+      "cantidad": 3,
+      "precio": 13000,
+      "descuento": 1625,
+      "envio": 0,
+      "estado": "Entregado",
+      "subtotal": 37375,
+      "canal": "Minorista"
+    },
+    {
+      "id_pedido": "PED-009",
+      "id_detalle": "PED-009-A",
+      "fecha": "2026-05-27",
+      "id_cliente": "CLI-003",
+      "id_producto": "",
+      "cantidad": 2,
+      "precio": 11000,
+      "descuento": 5326,
+      "envio": 0,
+      "estado": "Entregado",
+      "subtotal": 16674,
+      "canal": "Minorista"
+    },
+    {
+      "id_pedido": "PED-009",
+      "id_detalle": "PED-009-B",
+      "fecha": "2026-05-27",
+      "id_cliente": "CLI-003",
+      "id_producto": "PROD-03",
+      "cantidad": 2,
+      "precio": 13000,
+      "descuento": 6295,
+      "envio": 0,
+      "estado": "Entregado",
+      "subtotal": 19705,
+      "canal": "Minorista"
+    },
+    {
+      "id_pedido": "PED-009",
+      "id_detalle": "PED-009-C",
+      "fecha": "2026-05-27",
+      "id_cliente": "CLI-003",
+      "id_producto": "PROD-04",
+      "cantidad": 2,
+      "precio": 14000,
+      "descuento": 6779,
+      "envio": 0,
+      "estado": "Entregado",
+      "subtotal": 21221,
+      "canal": "Minorista"
+    },
+    {
+      "id_pedido": "PED-010",
+      "id_detalle": "PED-010-A",
+      "fecha": "2026-05-27",
+      "id_cliente": "CLI-002",
+      "id_producto": "PROD-04",
+      "cantidad": 2,
+      "precio": 14000,
+      "descuento": 7200,
+      "envio": 0,
+      "estado": "Entregado",
+      "subtotal": 20800,
+      "canal": "Minorista"
+    },
+    {
+      "id_pedido": "PED-011",
+      "id_detalle": "PED-011-A",
+      "fecha": "2026-05-27",
+      "id_cliente": "CLI-016",
+      "id_producto": "",
+      "cantidad": 3,
+      "precio": 11000,
+      "descuento": 0,
+      "envio": 0,
+      "estado": "Entregado",
+      "subtotal": 33000,
+      "canal": "Minorista"
+    },
+    {
+      "id_pedido": "PED-011",
+      "id_detalle": "PED-011-B",
+      "fecha": "2026-05-27",
+      "id_cliente": "CLI-016",
+      "id_producto": "PROD-14",
+      "cantidad": 1,
+      "precio": 4500,
+      "descuento": 0,
+      "envio": 0,
+      "estado": "Entregado",
+      "subtotal": 4500,
+      "canal": "Minorista"
+    },
+    {
+      "id_pedido": "PED-012",
+      "id_detalle": "PED-012-A",
+      "fecha": "2026-05-27",
+      "id_cliente": "CLI-001",
+      "id_producto": "PROD-02",
+      "cantidad": 1,
+      "precio": 11000,
+      "descuento": 965,
+      "envio": 0,
+      "estado": "Entregado",
+      "subtotal": 10035,
+      "canal": "Minorista"
+    },
+    {
+      "id_pedido": "PED-012",
+      "id_detalle": "PED-012-B",
+      "fecha": "2026-05-27",
+      "id_cliente": "CLI-001",
+      "id_producto": "PROD-03",
+      "cantidad": 1,
+      "precio": 13000,
+      "descuento": 1140,
+      "envio": 0,
+      "estado": "Entregado",
+      "subtotal": 11860,
+      "canal": "Minorista"
+    },
+    {
+      "id_pedido": "PED-012",
+      "id_detalle": "PED-012-C",
+      "fecha": "2026-05-27",
+      "id_cliente": "CLI-001",
+      "id_producto": "PROD-14",
+      "cantidad": 1,
+      "precio": 4500,
+      "descuento": 395,
+      "envio": 0,
+      "estado": "Entregado",
+      "subtotal": 4105,
+      "canal": "Minorista"
+    },
+    {
+      "id_pedido": "PED-013",
+      "id_detalle": "PED-013-A",
+      "fecha": "2026-05-27",
+      "id_cliente": "CLI-007",
+      "id_producto": "",
+      "cantidad": 1,
+      "precio": 11000,
+      "descuento": 1639,
+      "envio": 0,
+      "estado": "Entregado",
+      "subtotal": 9361,
+      "canal": "Minorista"
+    },
+    {
+      "id_pedido": "PED-013",
+      "id_detalle": "PED-013-B",
+      "fecha": "2026-05-27",
+      "id_cliente": "CLI-007",
+      "id_producto": "PROD-04",
+      "cantidad": 1,
+      "precio": 14000,
+      "descuento": 2086,
+      "envio": 0,
+      "estado": "Entregado",
+      "subtotal": 11914,
+      "canal": "Minorista"
+    },
+    {
+      "id_pedido": "PED-013",
+      "id_detalle": "PED-013-C",
+      "fecha": "2026-05-27",
+      "id_cliente": "CLI-007",
+      "id_producto": "PROD-03",
+      "cantidad": 1,
+      "precio": 13000,
+      "descuento": 1937,
+      "envio": 0,
+      "estado": "Entregado",
+      "subtotal": 11063,
+      "canal": "Minorista"
+    },
+    {
+      "id_pedido": "PED-013",
+      "id_detalle": "PED-013-D",
+      "fecha": "2026-05-27",
+      "id_cliente": "CLI-007",
+      "id_producto": "PROD-06",
+      "cantidad": 1,
+      "precio": 12500,
+      "descuento": 1863,
+      "envio": 0,
+      "estado": "Entregado",
+      "subtotal": 10637,
+      "canal": "Minorista"
+    },
+    {
+      "id_pedido": "PED-014",
+      "id_detalle": "PED-014-A",
+      "fecha": "2026-05-27",
+      "id_cliente": "CLI-001",
+      "id_producto": "",
+      "cantidad": 2,
+      "precio": 11000,
+      "descuento": 265,
+      "envio": 0,
+      "estado": "Entregado",
+      "subtotal": 21735,
+      "canal": "Minorista"
+    },
+    {
+      "id_pedido": "PED-014",
+      "id_detalle": "PED-014-B",
+      "fecha": "2026-05-27",
+      "id_cliente": "CLI-001",
+      "id_producto": "PROD-03",
+      "cantidad": 1,
+      "precio": 13000,
+      "descuento": 157,
+      "envio": 0,
+      "estado": "Entregado",
+      "subtotal": 12843,
+      "canal": "Minorista"
+    },
+    {
+      "id_pedido": "PED-014",
+      "id_detalle": "PED-014-C",
+      "fecha": "2026-05-27",
+      "id_cliente": "CLI-001",
+      "id_producto": "PROD-05",
+      "cantidad": 2,
+      "precio": 10000,
+      "descuento": 241,
+      "envio": 0,
+      "estado": "Entregado",
+      "subtotal": 19759,
+      "canal": "Minorista"
+    },
+    {
+      "id_pedido": "PED-014",
+      "id_detalle": "PED-014-D",
+      "fecha": "2026-05-27",
+      "id_cliente": "CLI-001",
+      "id_producto": "PROD-04",
+      "cantidad": 2,
+      "precio": 14000,
+      "descuento": 337,
+      "envio": 0,
+      "estado": "Entregado",
+      "subtotal": 27663,
+      "canal": "Minorista"
+    },
+    {
+      "id_pedido": "PED-015",
+      "id_detalle": "PED-015-A",
+      "fecha": "2026-05-27",
+      "id_cliente": "CLI-008",
+      "id_producto": "",
+      "cantidad": 2,
+      "precio": 11000,
+      "descuento": 0,
+      "envio": 0,
+      "estado": "Entregado",
+      "subtotal": 22000,
+      "canal": "Minorista"
+    },
+    {
+      "id_pedido": "PED-015",
+      "id_detalle": "PED-015-B",
+      "fecha": "2026-05-27",
+      "id_cliente": "CLI-008",
+      "id_producto": "PROD-03",
+      "cantidad": 2,
+      "precio": 13000,
+      "descuento": 0,
+      "envio": 0,
+      "estado": "Entregado",
+      "subtotal": 26000,
+      "canal": "Minorista"
+    },
+    {
+      "id_pedido": "PED-015",
+      "id_detalle": "PED-015-C",
+      "fecha": "2026-05-27",
+      "id_cliente": "CLI-008",
+      "id_producto": "PROD-14",
+      "cantidad": 1,
+      "precio": 4500,
+      "descuento": 0,
+      "envio": 0,
+      "estado": "Entregado",
+      "subtotal": 4500,
+      "canal": "Minorista"
+    },
+    {
+      "id_pedido": "PED-016",
+      "id_detalle": "PED-016-A",
+      "fecha": "2026-05-27",
+      "id_cliente": "CLI-009",
+      "id_producto": "PROD-02",
+      "cantidad": 2,
+      "precio": 11000,
+      "descuento": 0,
+      "envio": 0,
+      "estado": "Entregado",
+      "subtotal": 22000,
+      "canal": "Minorista"
+    },
+    {
+      "id_pedido": "PED-016",
+      "id_detalle": "PED-016-B",
+      "fecha": "2026-05-27",
+      "id_cliente": "CLI-009",
+      "id_producto": "PROD-14",
+      "cantidad": 2,
+      "precio": 4500,
+      "descuento": 0,
+      "envio": 0,
+      "estado": "Entregado",
+      "subtotal": 9000,
+      "canal": "Minorista"
+    },
+    {
+      "id_pedido": "PED-017",
+      "id_detalle": "PED-017-A",
+      "fecha": "2026-05-27",
+      "id_cliente": "CLI-010",
+      "id_producto": "PROD-04",
+      "cantidad": 2,
+      "precio": 14000,
+      "descuento": 2253,
+      "envio": 0,
+      "estado": "Entregado",
+      "subtotal": 25747,
+      "canal": "Minorista"
+    },
+    {
+      "id_pedido": "PED-017",
+      "id_detalle": "PED-017-B",
+      "fecha": "2026-05-27",
+      "id_cliente": "CLI-010",
+      "id_producto": "PROD-01",
+      "cantidad": 1,
+      "precio": 11000,
+      "descuento": 885,
+      "envio": 0,
+      "estado": "Entregado",
+      "subtotal": 10115,
+      "canal": "Minorista"
+    },
+    {
+      "id_pedido": "PED-017",
+      "id_detalle": "PED-017-C",
+      "fecha": "2026-05-27",
+      "id_cliente": "CLI-010",
+      "id_producto": "PROD-14",
+      "cantidad": 1,
+      "precio": 4500,
+      "descuento": 362,
+      "envio": 0,
+      "estado": "Entregado",
+      "subtotal": 4138,
+      "canal": "Minorista"
+    },
+    {
+      "id_pedido": "PED-018",
+      "id_detalle": "PED-018-A",
+      "fecha": "2026-05-27",
+      "id_cliente": "CLI-015",
+      "id_producto": "PROD-12",
+      "cantidad": 5,
+      "precio": 12000,
+      "descuento": 0,
+      "envio": 0,
+      "estado": "Entregado",
+      "subtotal": 60000,
+      "canal": "Mayorista"
+    },
+    {
+      "id_pedido": "PED-018",
+      "id_detalle": "PED-018-B",
+      "fecha": "2026-05-27",
+      "id_cliente": "CLI-015",
+      "id_producto": "PROD-13",
+      "cantidad": 5,
+      "precio": 12500,
+      "descuento": 0,
+      "envio": 0,
+      "estado": "Entregado",
+      "subtotal": 62500,
+      "canal": "Mayorista"
+    },
+    {
+      "id_pedido": "PED-018",
+      "id_detalle": "PED-018-C",
+      "fecha": "2026-05-27",
+      "id_cliente": "CLI-015",
+      "id_producto": "PROD-15",
+      "cantidad": 2,
+      "precio": 10000,
+      "descuento": 0,
+      "envio": 0,
+      "estado": "Entregado",
+      "subtotal": 20000,
+      "canal": "Mayorista"
+    },
+    {
+      "id_pedido": "PED-018",
+      "id_detalle": "PED-018-D",
+      "fecha": "2026-05-27",
+      "id_cliente": "CLI-015",
+      "id_producto": "PROD-17",
+      "cantidad": 2,
+      "precio": 11000,
+      "descuento": 0,
+      "envio": 0,
+      "estado": "Entregado",
+      "subtotal": 22000,
+      "canal": "Mayorista"
+    },
+    {
+      "id_pedido": "PED-019",
+      "id_detalle": "PED-019-A",
+      "fecha": "2026-05-27",
+      "id_cliente": "CLI-011",
+      "id_producto": "PROD-06",
+      "cantidad": 3,
+      "precio": 12500,
+      "descuento": 3750,
+      "envio": 0,
+      "estado": "Entregado",
+      "subtotal": 33750,
+      "canal": "Mayorista"
+    },
+    {
+      "id_pedido": "PED-020",
+      "id_detalle": "PED-020-A",
+      "fecha": "2026-05-27",
+      "id_cliente": "CLI-013",
+      "id_producto": "PROD-03",
+      "cantidad": 2,
+      "precio": 13000,
+      "descuento": 3900,
+      "envio": 0,
+      "estado": "Entregado",
+      "subtotal": 22100,
+      "canal": "Mayorista"
+    },
+    {
+      "id_pedido": "PED-020",
+      "id_detalle": "PED-020-B",
+      "fecha": "2026-05-27",
+      "id_cliente": "CLI-013",
+      "id_producto": "PROD-04",
+      "cantidad": 1,
+      "precio": 14000,
+      "descuento": 2100,
+      "envio": 0,
+      "estado": "Entregado",
+      "subtotal": 11900,
+      "canal": "Mayorista"
+    },
+    {
+      "id_pedido": "PED-022",
+      "id_detalle": "PED-022-A",
+      "fecha": "2026-05-27",
+      "id_cliente": "CLI-012",
+      "id_producto": "PROD-03",
+      "cantidad": 2,
+      "precio": 13000,
+      "descuento": 0,
+      "envio": 0,
+      "estado": "Entregado",
+      "subtotal": 26000,
+      "canal": "Minorista"
+    },
+    {
+      "id_pedido": "PED-022",
+      "id_detalle": "PED-022-B",
+      "fecha": "2026-05-27",
+      "id_cliente": "CLI-012",
+      "id_producto": "PROD-05",
+      "cantidad": 2,
+      "precio": 10000,
+      "descuento": 0,
+      "envio": 0,
+      "estado": "Entregado",
+      "subtotal": 20000,
+      "canal": "Minorista"
+    },
+    {
+      "id_pedido": "PED-028",
+      "id_detalle": "PED-028-A",
+      "fecha": "2026-05-28",
+      "id_cliente": "CLI-009",
+      "id_producto": "PROD-02",
+      "cantidad": 2,
+      "precio": 11000,
+      "descuento": 0,
+      "envio": 0,
+      "estado": "Entregado",
+      "subtotal": 22000,
+      "canal": "Minorista",
+      "metodoPago": "Efectivo"
+    },
+    {
+      "id_pedido": "PED-030",
+      "id_detalle": "PED-030-A",
+      "fecha": "2026-06-03",
+      "id_cliente": "CLI-018",
+      "id_producto": "PROD-02",
+      "cantidad": 6,
+      "precio": 8500,
+      "descuento": 0,
+      "envio": 0,
+      "estado": "Entregado",
+      "subtotal": 51000,
+      "canal": "Mayorista",
+      "metodoPago": "Mercado Pago"
+    },
+    {
+      "id_pedido": "PED-032",
+      "id_detalle": "PED-032-A",
+      "fecha": "2026-06-05",
+      "id_cliente": "CLI-019",
+      "id_producto": "PROD-019",
+      "cantidad": 2,
+      "precio": 14000,
+      "descuento": 0,
+      "envio": 0,
+      "estado": "Entregado",
+      "subtotal": 28000,
+      "canal": "Minorista",
+      "metodoPago": "Mercado Pago"
+    },
+    {
+      "id_pedido": "PED-033",
+      "id_detalle": "PED-033-A",
+      "fecha": "2026-06-05",
+      "id_cliente": "CLI-004",
+      "id_producto": "PROD-019",
+      "cantidad": 2,
+      "precio": 14000,
+      "descuento": 0,
+      "envio": 0,
+      "estado": "Entregado",
+      "subtotal": 28000,
+      "canal": "Minorista",
+      "metodoPago": "Mercado Pago"
+    },
+    {
+      "id_pedido": "PED-036",
+      "id_detalle": "PED-036-A",
+      "fecha": "2026-06-15",
+      "id_cliente": "CLI-021",
+      "id_producto": "PROD-04",
+      "cantidad": 2,
+      "precio": 14000,
+      "descuento": 4226,
+      "envio": 0,
+      "estado": "Entregado",
+      "subtotal": 23774,
+      "canal": "Minorista",
+      "medio_pago": "Mercado Pago",
+      "metodoPago": "Mercado Pago"
+    },
+    {
+      "id_pedido": "PED-036",
+      "id_detalle": "PED-036-B",
+      "fecha": "2026-06-15",
+      "id_cliente": "CLI-021",
+      "id_producto": "PROD-06",
+      "cantidad": 2,
+      "precio": 12500,
+      "descuento": 3774,
+      "envio": 0,
+      "estado": "Entregado",
+      "subtotal": 21226,
+      "canal": "Minorista",
+      "medio_pago": "Mercado Pago",
+      "metodoPago": "Mercado Pago"
+    },
+    {
+      "id_pedido": "PED-040",
+      "id_detalle": "PED-040-A",
+      "fecha": "2026-06-15",
+      "id_cliente": "CLI-008",
+      "id_producto": "PROD-14",
+      "cantidad": 2,
+      "precio": 4500,
+      "descuento": 2250,
+      "envio": 0,
+      "estado": "Entregado",
+      "subtotal": 6750,
+      "canal": "Minorista",
+      "medio_pago": "Mercado Pago",
+      "metodoPago": "Mercado Pago"
+    },
+    {
+      "id_pedido": "PED-040",
+      "id_detalle": "PED-040-B",
+      "fecha": "2026-06-15",
+      "id_cliente": "CLI-008",
+      "id_producto": "PROD-020",
+      "cantidad": 2,
+      "precio": 4500,
+      "descuento": 2250,
+      "envio": 0,
+      "estado": "Entregado",
+      "subtotal": 6750,
+      "canal": "Minorista",
+      "medio_pago": "Mercado Pago",
+      "metodoPago": "Mercado Pago"
+    },
+    {
+      "id_pedido": "PED-044",
+      "id_detalle": "PED-044-A",
+      "fecha": "2026-06-15",
+      "id_cliente": "CLI-024",
+      "id_producto": "PROD-019",
+      "cantidad": 4,
+      "precio": 14000,
+      "descuento": 0,
+      "envio": 0,
+      "estado": "Entregado",
+      "subtotal": 56000,
+      "canal": "Minorista",
+      "medio_pago": "Mercado Pago",
+      "metodoPago": "Mercado Pago"
+    },
+    {
+      "id_pedido": "PED-046",
+      "id_detalle": "PED-046-A",
+      "fecha": "2026-06-15",
+      "id_cliente": "CLI-011",
+      "id_producto": "PROD-019",
+      "cantidad": 3,
+      "precio": 14000,
+      "descuento": 0,
+      "envio": 0,
+      "estado": "Entregado",
+      "subtotal": 42000,
+      "canal": "Minorista",
+      "medio_pago": "Mercado Pago",
+      "metodoPago": "Mercado Pago"
+    },
+    {
+      "id_pedido": "PED-051",
+      "id_detalle": "PED-051-A",
+      "fecha": "2026-06-23",
+      "id_cliente": "CLI-025",
+      "id_producto": "PROD-01",
+      "cantidad": 1,
+      "precio": 11000,
+      "descuento": 0,
+      "envio": 0,
+      "estado": "Entregado",
+      "subtotal": 11000,
+      "canal": "Minorista",
+      "medio_pago": "Mercado Pago",
+      "metodoPago": "Mercado Pago"
+    },
+    {
+      "id_pedido": "PED-051",
+      "id_detalle": "PED-051-B",
+      "fecha": "2026-06-23",
+      "id_cliente": "CLI-025",
+      "id_producto": "PROD-06",
+      "cantidad": 2,
+      "precio": 12500,
+      "descuento": 0,
+      "envio": 0,
+      "estado": "Entregado",
+      "subtotal": 25000,
+      "canal": "Minorista",
+      "medio_pago": "Mercado Pago",
+      "metodoPago": "Mercado Pago"
+    },
+    {
+      "id_pedido": "PED-051",
+      "id_detalle": "PED-051-C",
+      "fecha": "2026-06-23",
+      "id_cliente": "CLI-025",
+      "id_producto": "PROD-04",
+      "cantidad": 1,
+      "precio": 14000,
+      "descuento": 0,
+      "envio": 0,
+      "estado": "Entregado",
+      "subtotal": 14000,
+      "canal": "Minorista",
+      "medio_pago": "Mercado Pago",
+      "metodoPago": "Mercado Pago"
+    },
+    {
+      "id_pedido": "PED-052",
+      "id_detalle": "PED-052-A",
+      "fecha": "2026-06-23",
+      "id_cliente": "CLI-003",
+      "id_producto": "PROD-019",
+      "cantidad": 2,
+      "precio": 14000,
+      "descuento": 2133,
+      "envio": 0,
+      "estado": "Entregado",
+      "subtotal": 25867,
+      "canal": "Minorista",
+      "medio_pago": "Mercado Pago",
+      "metodoPago": "Mercado Pago"
+    },
+    {
+      "id_pedido": "PED-052",
+      "id_detalle": "PED-052-B",
+      "fecha": "2026-06-23",
+      "id_cliente": "CLI-003",
+      "id_producto": "PROD-05",
+      "cantidad": 2,
+      "precio": 10000,
+      "descuento": 1524,
+      "envio": 0,
+      "estado": "Entregado",
+      "subtotal": 18476,
+      "canal": "Minorista",
+      "medio_pago": "Mercado Pago",
+      "metodoPago": "Mercado Pago"
+    },
+    {
+      "id_pedido": "PED-052",
+      "id_detalle": "PED-052-C",
+      "fecha": "2026-06-23",
+      "id_cliente": "CLI-003",
+      "id_producto": "PROD-14",
+      "cantidad": 1,
+      "precio": 4500,
+      "descuento": 343,
+      "envio": 0,
+      "estado": "Entregado",
+      "subtotal": 4157,
+      "canal": "Minorista",
+      "medio_pago": "Mercado Pago",
+      "metodoPago": "Mercado Pago"
+    },
+    {
+      "id_pedido": "PED-057",
+      "id_detalle": "PED-057-A",
+      "id_cliente": "CLI-001",
+      "id_producto": "PROD-03",
+      "gusto": "",
+      "cantidad": 1,
+      "precio_unitario": 0,
+      "precio_total": 0,
+      "descuento_monto": 0,
+      "precio_neto": 0,
+      "fecha": "2026-06-29",
+      "estado": "Entregado",
+      "metodoPago": "Efectivo",
+      "canal": "WhatsApp",
+      "observaciones": "",
+      "km_envio": 0
+    },
+    {
+      "id_pedido": "PED-057",
+      "id_detalle": "PED-057-B",
+      "id_cliente": "CLI-001",
+      "id_producto": "PROD-05",
+      "gusto": "",
+      "cantidad": 1,
+      "precio_unitario": 0,
+      "precio_total": 0,
+      "descuento_monto": 0,
+      "precio_neto": 0,
+      "fecha": "2026-06-29",
+      "estado": "Entregado",
+      "metodoPago": "Efectivo",
+      "canal": "WhatsApp",
+      "observaciones": "",
+      "km_envio": 0
+    },
+    {
+      "id_pedido": "PED-057",
+      "id_detalle": "PED-057-C",
+      "id_cliente": "CLI-001",
+      "id_producto": "PROD-04",
+      "gusto": "",
+      "cantidad": 1,
+      "precio_unitario": 0,
+      "precio_total": 0,
+      "descuento_monto": 0,
+      "precio_neto": 0,
+      "fecha": "2026-06-29",
+      "estado": "Entregado",
+      "metodoPago": "Efectivo",
+      "canal": "WhatsApp",
+      "observaciones": "",
+      "km_envio": 0
+    },
+    {
+      "id_pedido": "PED-057",
+      "id_detalle": "PED-057-D",
+      "id_cliente": "CLI-001",
+      "id_producto": "PROD-020",
+      "gusto": "",
+      "cantidad": 1,
+      "precio_unitario": 0,
+      "precio_total": 0,
+      "descuento_monto": 0,
+      "precio_neto": 0,
+      "fecha": "2026-06-29",
+      "estado": "Entregado",
+      "metodoPago": "Efectivo",
+      "canal": "WhatsApp",
+      "observaciones": "",
+      "km_envio": 0
+    },
+    {
+      "id_pedido": "PED-060",
+      "id_detalle": "PED-060-A",
+      "id_cliente": "CLI-009",
+      "id_producto": "PROD-02",
+      "gusto": "",
+      "cantidad": 2,
+      "precio_unitario": 11000,
+      "precio_total": 22000,
+      "descuento_monto": 0,
+      "precio_neto": 22000,
+      "fecha": "2026-06-30",
+      "estado": "Entregado",
+      "metodoPago": "Mercado Pago",
+      "canal": "WhatsApp",
+      "observaciones": "",
+      "km_envio": 0
+    },
+    {
+      "id_pedido": "PED-061",
+      "id_detalle": "PED-061-A",
+      "id_cliente": "CLI-001",
+      "id_producto": "PROD-019",
+      "gusto": "",
+      "cantidad": 2,
+      "precio_unitario": 14000,
+      "precio_total": 28000,
+      "descuento_monto": 0,
+      "precio_neto": 28000,
+      "fecha": "2026-06-30",
+      "estado": "Entregado",
+      "metodoPago": "Mercado Pago",
+      "canal": "WhatsApp",
+      "observaciones": "",
+      "km_envio": 0
+    },
+    {
+      "id_pedido": "PED-045",
+      "id_detalle": "PED-045-A",
+      "id_cliente": "CLI-022",
+      "id_producto": "PROD-019",
+      "gusto": "",
+      "cantidad": 3,
+      "precio_unitario": 14000,
+      "precio_total": 42000,
+      "descuento_monto": 14000,
+      "precio_neto": 38053.69127516779,
+      "fecha": "2026-06-15",
+      "estado": "Entregado",
+      "metodoPago": "Mercado Pago",
+      "canal": "WhatsApp",
+      "observaciones": "",
+      "km_envio": 0
+    },
+    {
+      "id_pedido": "PED-045",
+      "id_detalle": "PED-045-B",
+      "id_cliente": "CLI-022",
+      "id_producto": "PROD-05",
+      "gusto": "",
+      "cantidad": 2,
+      "precio_unitario": 10000,
+      "precio_total": 20000,
+      "descuento_monto": 14000,
+      "precio_neto": 18120.805369127516,
+      "fecha": "2026-06-15",
+      "estado": "Entregado",
+      "metodoPago": "Mercado Pago",
+      "canal": "WhatsApp",
+      "observaciones": "",
+      "km_envio": 0
+    },
+    {
+      "id_pedido": "PED-045",
+      "id_detalle": "PED-045-C",
+      "id_cliente": "CLI-022",
+      "id_producto": "PROD-01",
+      "gusto": "",
+      "cantidad": 3,
+      "precio_unitario": 11000,
+      "precio_total": 33000,
+      "descuento_monto": 14000,
+      "precio_neto": 29899.328859060402,
+      "fecha": "2026-06-15",
+      "estado": "Entregado",
+      "metodoPago": "Mercado Pago",
+      "canal": "WhatsApp",
+      "observaciones": "",
+      "km_envio": 0
+    },
+    {
+      "id_pedido": "PED-045",
+      "id_detalle": "PED-045-D",
+      "id_cliente": "CLI-022",
+      "id_producto": "PROD-06",
+      "gusto": "",
+      "cantidad": 2,
+      "precio_unitario": 12500,
+      "precio_total": 25000,
+      "descuento_monto": 14000,
+      "precio_neto": 22651.006711409394,
+      "fecha": "2026-06-15",
+      "estado": "Entregado",
+      "metodoPago": "Mercado Pago",
+      "canal": "WhatsApp",
+      "observaciones": "",
+      "km_envio": 0
+    },
+    {
+      "id_pedido": "PED-045",
+      "id_detalle": "PED-045-E",
+      "id_cliente": "CLI-022",
+      "id_producto": "PROD-01",
+      "gusto": "",
+      "cantidad": 1,
+      "precio_unitario": 11000,
+      "precio_total": 11000,
+      "descuento_monto": 14000,
+      "precio_neto": 9966.442953020134,
+      "fecha": "2026-06-15",
+      "estado": "Entregado",
+      "metodoPago": "Mercado Pago",
+      "canal": "WhatsApp",
+      "observaciones": "",
+      "km_envio": 0
+    },
+    {
+      "id_pedido": "PED-045",
+      "id_detalle": "PED-045-F",
+      "id_cliente": "CLI-022",
+      "id_producto": "PROD-14",
+      "gusto": "",
+      "cantidad": 4,
+      "precio_unitario": 4500,
+      "precio_total": 18000,
+      "descuento_monto": 14000,
+      "precio_neto": 16308.724832214764,
+      "fecha": "2026-06-15",
+      "estado": "Entregado",
+      "metodoPago": "Mercado Pago",
+      "canal": "WhatsApp",
+      "observaciones": "",
+      "km_envio": 0
+    },
+    {
+      "id_pedido": "PED-055",
+      "id_detalle": "PED-055-A",
+      "id_cliente": "CLI-010",
+      "id_producto": "PROD-03",
+      "gusto": "",
+      "cantidad": 3,
+      "precio_unitario": 13000,
+      "precio_total": 39000,
+      "descuento_monto": 13000,
+      "precio_neto": 26000,
+      "fecha": "2026-06-24",
+      "estado": "Entregado",
+      "metodoPago": "Efectivo",
+      "canal": "WhatsApp",
+      "observaciones": "",
+      "km_envio": 0
+    },
+    {
+      "id_pedido": "PED-031",
+      "id_detalle": "PED-031-A",
+      "id_cliente": "CLI-004",
+      "id_producto": "PROD-06",
+      "gusto": "",
+      "cantidad": 2,
+      "precio_unitario": 12500,
+      "precio_total": 25000,
+      "descuento_monto": 13000,
+      "precio_neto": 21428.571428571428,
+      "fecha": "2026-06-01",
+      "estado": "Entregado",
+      "metodoPago": "Mercado Pago",
+      "canal": "WhatsApp",
+      "observaciones": "",
+      "km_envio": 0
+    },
+    {
+      "id_pedido": "PED-031",
+      "id_detalle": "PED-031-B",
+      "id_cliente": "CLI-004",
+      "id_producto": "PROD-05",
+      "gusto": "",
+      "cantidad": 2,
+      "precio_unitario": 10000,
+      "precio_total": 20000,
+      "descuento_monto": 13000,
+      "precio_neto": 17142.857142857145,
+      "fecha": "2026-06-01",
+      "estado": "Entregado",
+      "metodoPago": "Mercado Pago",
+      "canal": "WhatsApp",
+      "observaciones": "",
+      "km_envio": 0
+    },
+    {
+      "id_pedido": "PED-031",
+      "id_detalle": "PED-031-C",
+      "id_cliente": "CLI-004",
+      "id_producto": "PROD-14",
+      "gusto": "",
+      "cantidad": 4,
+      "precio_unitario": 4500,
+      "precio_total": 18000,
+      "descuento_monto": 13000,
+      "precio_neto": 15428.57142857143,
+      "fecha": "2026-06-01",
+      "estado": "Entregado",
+      "metodoPago": "Mercado Pago",
+      "canal": "WhatsApp",
+      "observaciones": "",
+      "km_envio": 0
+    },
+    {
+      "id_pedido": "PED-031",
+      "id_detalle": "PED-031-D",
+      "id_cliente": "CLI-004",
+      "id_producto": "PROD-019",
+      "gusto": "",
+      "cantidad": 2,
+      "precio_unitario": 14000,
+      "precio_total": 28000,
+      "descuento_monto": 13000,
+      "precio_neto": 24000,
+      "fecha": "2026-06-01",
+      "estado": "Entregado",
+      "metodoPago": "Mercado Pago",
+      "canal": "WhatsApp",
+      "observaciones": "",
+      "km_envio": 0
+    },
+    {
+      "id_pedido": "PED-056",
+      "id_detalle": "PED-056-A",
+      "id_cliente": "CLI-005",
+      "id_producto": "PROD-03",
+      "gusto": "",
+      "cantidad": 3,
+      "precio_unitario": 13000,
+      "precio_total": 39000,
+      "descuento_monto": 13000,
+      "precio_neto": 26000,
+      "fecha": "2026-06-28",
+      "estado": "Entregado",
+      "metodoPago": "Mercado Pago",
+      "canal": "WhatsApp",
+      "observaciones": "",
+      "km_envio": 0
+    },
+    {
+      "id_pedido": "PED-064",
+      "id_detalle": "PED-064-A",
+      "id_cliente": "CLI-027",
+      "id_producto": "PROD-019",
+      "gusto": "",
+      "cantidad": 1,
+      "precio_unitario": 14000,
+      "precio_total": 14000,
+      "descuento_monto": 0,
+      "precio_neto": 14000,
+      "fecha": "2026-06-29",
+      "estado": "Entregado",
+      "metodoPago": "Efectivo",
+      "canal": "WhatsApp",
+      "observaciones": "",
+      "km_envio": 0
+    },
+    {
+      "id_pedido": "PED-065",
+      "id_detalle": "PED-065-A",
+      "id_cliente": "CLI-012",
+      "id_producto": "PROD-01",
+      "gusto": "",
+      "cantidad": 4,
+      "precio_unitario": 11000,
+      "precio_total": 44000,
+      "descuento_monto": 7000,
+      "precio_neto": 37000,
+      "fecha": "2026-06-29",
+      "estado": "Entregado",
+      "metodoPago": "Efectivo",
+      "canal": "WhatsApp",
+      "observaciones": "",
+      "km_envio": 0
+    },
+    {
+      "id_pedido": "PED-062",
+      "id_detalle": "PED-062-A",
+      "id_cliente": "CLI-009",
+      "id_producto": "PROD-01",
+      "gusto": "",
+      "cantidad": 2,
+      "precio_unitario": 11000,
+      "precio_total": 22000,
+      "descuento_monto": 0,
+      "precio_neto": 22000,
+      "fecha": "2026-06-29",
+      "estado": "Entregado",
+      "metodoPago": "Mercado Pago",
+      "canal": "WhatsApp",
+      "observaciones": "",
+      "km_envio": 0
+    },
+    {
+      "id_pedido": "PED-062",
+      "id_detalle": "PED-062-B",
+      "id_cliente": "CLI-009",
+      "id_producto": "PROD-14",
+      "gusto": "",
+      "cantidad": 1,
+      "precio_unitario": 4500,
+      "precio_total": 4500,
+      "descuento_monto": 0,
+      "precio_neto": 4500,
+      "fecha": "2026-06-29",
+      "estado": "Entregado",
+      "metodoPago": "Mercado Pago",
+      "canal": "WhatsApp",
+      "observaciones": "",
+      "km_envio": 0
+    },
+    {
+      "id_pedido": "PED-063",
+      "id_detalle": "PED-063-A",
+      "id_cliente": "CLI-020",
+      "id_producto": "PROD-04",
+      "gusto": "",
+      "cantidad": 3,
+      "precio_unitario": 14000,
+      "precio_total": 42000,
+      "descuento_monto": 6500,
+      "precio_neto": 36129.032258064515,
+      "fecha": "2026-06-29",
+      "estado": "Entregado",
+      "metodoPago": "Efectivo",
+      "canal": "WhatsApp",
+      "observaciones": "",
+      "km_envio": 0
+    },
+    {
+      "id_pedido": "PED-063",
+      "id_detalle": "PED-063-B",
+      "id_cliente": "CLI-020",
+      "id_producto": "PROD-14",
+      "gusto": "",
+      "cantidad": 1,
+      "precio_unitario": 4500,
+      "precio_total": 4500,
+      "descuento_monto": 6500,
+      "precio_neto": 3870.967741935484,
+      "fecha": "2026-06-29",
+      "estado": "Entregado",
+      "metodoPago": "Efectivo",
+      "canal": "WhatsApp",
+      "observaciones": "",
+      "km_envio": 0
+    },
+    {
+      "id_pedido": "PED-058",
+      "id_detalle": "PED-058-A",
+      "id_cliente": "CLI-004",
+      "id_producto": "PROD-05",
+      "gusto": "",
+      "cantidad": 3,
+      "precio_unitario": 10000,
+      "precio_total": 30000,
+      "descuento_monto": 10000,
+      "precio_neto": 23023.25581395349,
+      "fecha": "2026-06-30",
+      "estado": "Entregado",
+      "metodoPago": "Mercado Pago",
+      "canal": "WhatsApp",
+      "observaciones": "",
+      "km_envio": 0
+    },
+    {
+      "id_pedido": "PED-058",
+      "id_detalle": "PED-058-B",
+      "id_cliente": "CLI-004",
+      "id_producto": "PROD-03",
+      "gusto": "",
+      "cantidad": 1,
+      "precio_unitario": 13000,
+      "precio_total": 13000,
+      "descuento_monto": 10000,
+      "precio_neto": 9976.744186046511,
+      "fecha": "2026-06-30",
+      "estado": "Entregado",
+      "metodoPago": "Mercado Pago",
+      "canal": "WhatsApp",
+      "observaciones": "",
+      "km_envio": 0
+    },
+    {
+      "id_pedido": "PED-068",
+      "id_detalle": "PED-068-A",
+      "id_cliente": "CLI-028",
+      "id_producto": "PROD-04",
+      "gusto": "",
+      "cantidad": 1,
+      "precio_unitario": 14000,
+      "precio_total": 14000,
+      "descuento_monto": 0,
+      "precio_neto": 14000,
+      "fecha": "2026-06-30",
+      "estado": "Entregado",
+      "metodoPago": "Efectivo",
+      "canal": "WhatsApp",
+      "observaciones": "",
+      "km_envio": 0
+    },
+    {
+      "id_pedido": "PED-068",
+      "id_detalle": "PED-068-B",
+      "id_cliente": "CLI-028",
+      "id_producto": "PROD-02",
+      "gusto": "",
+      "cantidad": 1,
+      "precio_unitario": 11000,
+      "precio_total": 11000,
+      "descuento_monto": 0,
+      "precio_neto": 11000,
+      "fecha": "2026-06-30",
+      "estado": "Entregado",
+      "metodoPago": "Efectivo",
+      "canal": "WhatsApp",
+      "observaciones": "",
+      "km_envio": 0
+    },
+    {
+      "id_pedido": "PED-067",
+      "id_detalle": "PED-067-A",
+      "id_cliente": "CLI-008",
+      "id_producto": "PROD-03",
+      "gusto": "",
+      "cantidad": 4,
+      "precio_unitario": 13000,
+      "precio_total": 52000,
+      "descuento_monto": 1000,
+      "precio_neto": 51147.54098360656,
+      "fecha": "2026-06-30",
+      "estado": "Entregado",
+      "metodoPago": "Mercado Pago",
+      "canal": "WhatsApp",
+      "observaciones": "",
+      "km_envio": 0
+    },
+    {
+      "id_pedido": "PED-067",
+      "id_detalle": "PED-067-B",
+      "id_cliente": "CLI-008",
+      "id_producto": "PROD-14",
+      "gusto": "",
+      "cantidad": 2,
+      "precio_unitario": 4500,
+      "precio_total": 9000,
+      "descuento_monto": 1000,
+      "precio_neto": 8852.459016393443,
+      "fecha": "2026-06-30",
+      "estado": "Entregado",
+      "metodoPago": "Mercado Pago",
+      "canal": "WhatsApp",
+      "observaciones": "",
+      "km_envio": 0
+    },
+    {
+      "id_pedido": "PED-021",
+      "id_detalle": "PED-021-A",
+      "id_cliente": "CLI-014",
+      "id_producto": "PROD-04",
+      "gusto": "",
+      "cantidad": 2,
+      "precio_unitario": 0,
+      "precio_total": 0,
+      "descuento_monto": 0,
+      "precio_neto": 0,
+      "fecha": "2026-05-27",
+      "estado": "Entregado",
+      "metodoPago": "Efectivo",
+      "canal": "WhatsApp",
+      "observaciones": "",
+      "km_envio": 0
+    },
+    {
+      "id_pedido": "PED-021",
+      "id_detalle": "PED-021-B",
+      "id_cliente": "CLI-014",
+      "id_producto": "PROD-01",
+      "gusto": "",
+      "cantidad": 2,
+      "precio_unitario": 0,
+      "precio_total": 0,
+      "descuento_monto": 0,
+      "precio_neto": 0,
+      "fecha": "2026-05-27",
+      "estado": "Entregado",
+      "metodoPago": "Efectivo",
+      "canal": "WhatsApp",
+      "observaciones": "",
+      "km_envio": 0
+    },
+    {
+      "id_pedido": "PED-021",
+      "id_detalle": "PED-021-C",
+      "id_cliente": "CLI-014",
+      "id_producto": "PROD-02",
+      "gusto": "",
+      "cantidad": 2,
+      "precio_unitario": 0,
+      "precio_total": 0,
+      "descuento_monto": 0,
+      "precio_neto": 0,
+      "fecha": "2026-05-27",
+      "estado": "Entregado",
+      "metodoPago": "Efectivo",
+      "canal": "WhatsApp",
+      "observaciones": "",
+      "km_envio": 0
+    },
+    {
+      "id_pedido": "PED-021",
+      "id_detalle": "PED-021-D",
+      "id_cliente": "CLI-014",
+      "id_producto": "PROD-14",
+      "gusto": "",
+      "cantidad": 2,
+      "precio_unitario": 0,
+      "precio_total": 0,
+      "descuento_monto": 0,
+      "precio_neto": 0,
+      "fecha": "2026-05-27",
+      "estado": "Entregado",
+      "metodoPago": "Efectivo",
+      "canal": "WhatsApp",
+      "observaciones": "",
+      "km_envio": 0
+    },
+    {
+      "id_pedido": "PED-069",
+      "id_detalle": "PED-069-A",
+      "id_cliente": "CLI-029",
+      "id_producto": "PROD-01",
+      "gusto": "",
+      "cantidad": 1,
+      "precio_unitario": 11000,
+      "precio_total": 11000,
+      "descuento_monto": 7000,
+      "precio_neto": 9649.122807017544,
+      "fecha": "2026-07-05",
+      "estado": "Entregado",
+      "metodoPago": "Efectivo",
+      "canal": "WhatsApp",
+      "observaciones": "",
+      "km_envio": 0
+    },
+    {
+      "id_pedido": "PED-069",
+      "id_detalle": "PED-069-B",
+      "id_cliente": "CLI-029",
+      "id_producto": "PROD-02",
+      "gusto": "",
+      "cantidad": 2,
+      "precio_unitario": 11000,
+      "precio_total": 22000,
+      "descuento_monto": 7000,
+      "precio_neto": 19298.245614035088,
+      "fecha": "2026-07-05",
+      "estado": "Entregado",
+      "metodoPago": "Efectivo",
+      "canal": "WhatsApp",
+      "observaciones": "",
+      "km_envio": 0
+    },
+    {
+      "id_pedido": "PED-069",
+      "id_detalle": "PED-069-C",
+      "id_cliente": "CLI-029",
+      "id_producto": "PROD-05",
+      "gusto": "",
+      "cantidad": 1,
+      "precio_unitario": 10000,
+      "precio_total": 10000,
+      "descuento_monto": 7000,
+      "precio_neto": 8771.929824561405,
+      "fecha": "2026-07-05",
+      "estado": "Entregado",
+      "metodoPago": "Efectivo",
+      "canal": "WhatsApp",
+      "observaciones": "",
+      "km_envio": 0
+    },
+    {
+      "id_pedido": "PED-069",
+      "id_detalle": "PED-069-D",
+      "id_cliente": "CLI-029",
+      "id_producto": "PROD-04",
+      "gusto": "",
+      "cantidad": 1,
+      "precio_unitario": 14000,
+      "precio_total": 14000,
+      "descuento_monto": 7000,
+      "precio_neto": 12280.701754385966,
+      "fecha": "2026-07-05",
+      "estado": "Entregado",
+      "metodoPago": "Efectivo",
+      "canal": "WhatsApp",
+      "observaciones": "",
+      "km_envio": 0
+    },
+    {
+      "id_pedido": "PED-066",
+      "id_detalle": "PED-066-A",
+      "id_cliente": "CLI-012",
+      "id_producto": "PROD-01",
+      "gusto": "",
+      "cantidad": 3,
+      "precio_unitario": 11000,
+      "precio_total": 33000,
+      "descuento_monto": 5000,
+      "precio_neto": 28000,
+      "fecha": "2026-06-29",
+      "estado": "Entregado",
+      "metodoPago": "Efectivo",
+      "canal": "WhatsApp",
+      "observaciones": "",
+      "km_envio": 0
+    },
+    {
+      "id_pedido": "PED-059",
+      "id_detalle": "PED-059-A",
+      "id_cliente": "CLI-026",
+      "id_producto": "PROD-05",
+      "gusto": "",
+      "cantidad": 3,
+      "precio_unitario": 10000,
+      "precio_total": 30000,
+      "descuento_monto": 11100,
+      "precio_neto": 23134.0206185567,
+      "fecha": "2026-06-30",
+      "estado": "Entregado",
+      "metodoPago": "Efectivo",
+      "canal": "WhatsApp",
+      "observaciones": "",
+      "km_envio": 0
+    },
+    {
+      "id_pedido": "PED-059",
+      "id_detalle": "PED-059-B",
+      "id_cliente": "CLI-026",
+      "id_producto": "PROD-04",
+      "gusto": "",
+      "cantidad": 1,
+      "precio_unitario": 14000,
+      "precio_total": 14000,
+      "descuento_monto": 11100,
+      "precio_neto": 10795.876288659794,
+      "fecha": "2026-06-30",
+      "estado": "Entregado",
+      "metodoPago": "Efectivo",
+      "canal": "WhatsApp",
+      "observaciones": "",
+      "km_envio": 0
+    },
+    {
+      "id_pedido": "PED-059",
+      "id_detalle": "PED-059-C",
+      "id_cliente": "CLI-026",
+      "id_producto": "PROD-14",
+      "gusto": "",
+      "cantidad": 1,
+      "precio_unitario": 4500,
+      "precio_total": 4500,
+      "descuento_monto": 11100,
+      "precio_neto": 3470.1030927835054,
+      "fecha": "2026-06-30",
+      "estado": "Entregado",
+      "metodoPago": "Efectivo",
+      "canal": "WhatsApp",
+      "observaciones": "",
+      "km_envio": 0
+    },
+    {
+      "id_pedido": "PED-070",
+      "id_detalle": "PED-070-A",
+      "id_cliente": "CLI-030",
+      "id_producto": "PROD-04",
+      "nombre_producto": "Medialuna de osobuco",
+      "gusto": "",
+      "cantidad": 1,
+      "precio_unitario": 14000,
+      "precio_total": 14000,
+      "descuento_monto": 0,
+      "precio_neto": 14000,
+      "fecha": "2026-07-05",
+      "estado": "Entregado",
+      "metodoPago": "Mercado Pago",
+      "canal": "WhatsApp",
+      "observaciones": "",
+      "km_envio": 0
+    },
+    {
+      "id_pedido": "PED-070",
+      "id_detalle": "PED-070-B",
+      "id_cliente": "CLI-030",
+      "id_producto": "PROD-05",
+      "nombre_producto": "Raviol de jamon y queso",
+      "gusto": "",
+      "cantidad": 1,
+      "precio_unitario": 10000,
+      "precio_total": 10000,
+      "descuento_monto": 0,
+      "precio_neto": 10000,
+      "fecha": "2026-07-05",
+      "estado": "Entregado",
+      "metodoPago": "Mercado Pago",
+      "canal": "WhatsApp",
+      "observaciones": "",
+      "km_envio": 0
+    },
+    {
+      "id_pedido": "PED-071",
+      "id_detalle": "PED-071-A",
+      "id_cliente": "CLI-004",
+      "id_producto": "PROD-03",
+      "nombre_producto": "Raviolon de espinaca",
+      "gusto": "",
+      "cantidad": 3,
+      "precio_unitario": 13000,
+      "precio_total": 39000,
+      "descuento_monto": 13000,
+      "precio_neto": 30406.77966101695,
+      "fecha": "2026-07-07",
+      "estado": "Entregado",
+      "metodoPago": "Mercado Pago",
+      "canal": "WhatsApp",
+      "observaciones": "",
+      "km_envio": 0
+    },
+    {
+      "id_pedido": "PED-071",
+      "id_detalle": "PED-071-B",
+      "id_cliente": "CLI-004",
+      "id_producto": "PROD-05",
+      "nombre_producto": "Raviol de jamon y queso",
+      "gusto": "",
+      "cantidad": 2,
+      "precio_unitario": 10000,
+      "precio_total": 20000,
+      "descuento_monto": 13000,
+      "precio_neto": 15593.22033898305,
+      "fecha": "2026-07-07",
+      "estado": "Entregado",
+      "metodoPago": "Mercado Pago",
+      "canal": "WhatsApp",
+      "observaciones": "",
+      "km_envio": 0
+    },
+    {
+      "id_pedido": "PED-072",
+      "id_detalle": "PED-072-A",
+      "id_cliente": "CLI-009",
+      "id_producto": "PROD-02",
+      "nombre_producto": "Ravioles de ricotta",
+      "gusto": "",
+      "cantidad": 2,
+      "precio_unitario": 11000,
+      "precio_total": 22000,
+      "descuento_monto": 0,
+      "precio_neto": 22000,
+      "fecha": "2026-07-10",
+      "estado": "Entregado",
+      "metodoPago": "Efectivo",
+      "canal": "WhatsApp",
+      "observaciones": "",
+      "km_envio": 0
+    },
+    {
+      "id_pedido": "PED-073",
+      "id_detalle": "PED-073-A",
+      "id_cliente": "CLI-018",
+      "id_producto": "PROD-02",
+      "nombre_producto": "Ravioles de ricotta",
+      "gusto": "",
+      "cantidad": 11,
+      "precio_unitario": 8000,
+      "precio_total": 88000,
+      "descuento_monto": 0,
+      "precio_neto": 88000,
+      "fecha": "2026-07-13",
+      "estado": "Entregado",
+      "metodoPago": "Efectivo",
+      "canal": "Mayorista",
+      "observaciones": "",
+      "km_envio": 0
+    },
+    {
+      "id_pedido": "PED-074",
+      "id_detalle": "PED-074-A",
+      "id_cliente": "CLI-004",
+      "id_producto": "PROD-03",
+      "nombre_producto": "Raviolon de espinaca",
+      "gusto": "",
+      "cantidad": 3,
+      "precio_unitario": 13000,
+      "precio_total": 39000,
+      "descuento_monto": 0,
+      "precio_neto": 39000,
+      "fecha": "2026-07-15",
+      "estado": "Produccion",
+      "metodoPago": "Mercado Pago",
+      "canal": "WhatsApp",
+      "observaciones": "",
+      "km_envio": 0
+    },
+    {
+      "id_pedido": "PED-074",
+      "id_detalle": "PED-074-B",
+      "id_cliente": "CLI-004",
+      "id_producto": "PROD-05",
+      "nombre_producto": "Raviol de jamon y queso",
+      "gusto": "",
+      "cantidad": 3,
+      "precio_unitario": 10000,
+      "precio_total": 30000,
+      "descuento_monto": 0,
+      "precio_neto": 30000,
+      "fecha": "2026-07-15",
+      "estado": "Produccion",
+      "metodoPago": "Mercado Pago",
+      "canal": "WhatsApp",
+      "observaciones": "",
+      "km_envio": 0
+    }
+  ],
+  "produccion": [
+    {
+      "id": "PROD-LOG-1779915187271",
+      "fecha": "2026-05-11",
+      "id_producto": "PROD-04",
+      "cantidad": 5,
+      "observacion": ""
+    },
+    {
+      "id": "PROD-LOG-1779915201969",
+      "fecha": "2026-05-11",
+      "id_producto": "PROD-05",
+      "cantidad": 14,
+      "observacion": ""
+    },
+    {
+      "id": "PROD-LOG-1779915219307",
+      "fecha": "2026-05-15",
+      "id_producto": "PROD-03",
+      "cantidad": 5,
+      "observacion": ""
+    },
+    {
+      "id": "PROD-LOG-1779915229799",
+      "fecha": "2026-05-15",
+      "id_producto": "PROD-01",
+      "cantidad": 16,
+      "observacion": ""
+    },
+    {
+      "id": "PROD-LOG-1779915260072",
+      "fecha": "2026-05-18",
+      "id_producto": "PROD-04",
+      "cantidad": 6,
+      "observacion": ""
+    },
+    {
+      "id": "PROD-LOG-1779915271957",
+      "fecha": "2026-05-18",
+      "id_producto": "PROD-06",
+      "cantidad": 5,
+      "observacion": ""
+    },
+    {
+      "id": "PROD-LOG-1779915292253",
+      "fecha": "2026-05-22",
+      "id_producto": "PROD-01",
+      "cantidad": 7,
+      "observacion": ""
+    },
+    {
+      "id": "PROD-LOG-1779915305181",
+      "fecha": "2026-05-22",
+      "id_producto": "PROD-04",
+      "cantidad": 5,
+      "observacion": ""
+    },
+    {
+      "id": "PROD-LOG-1779915359365",
+      "fecha": "2026-05-25",
+      "id_producto": "PROD-01",
+      "cantidad": 7,
+      "observacion": ""
+    },
+    {
+      "id": "PROD-LOG-1779915369654",
+      "fecha": "2026-05-25",
+      "id_producto": "PROD-04",
+      "cantidad": 5,
+      "observacion": ""
+    },
+    {
+      "id": "PROD-LOG-1780154322465",
+      "fecha": "2026-05-30",
+      "id_producto": "PROD-01",
+      "cantidad": 7,
+      "observacion": ""
+    },
+    {
+      "id": "PROD-LOG-1780154331360",
+      "fecha": "2026-05-30",
+      "id_producto": "PROD-03",
+      "cantidad": 10,
+      "observacion": ""
+    },
+    {
+      "id": "PROD-LOG-1780349421116",
+      "fecha": "2026-06-01",
+      "id_producto": "PROD-01",
+      "cantidad": 5,
+      "observacion": ""
+    },
+    {
+      "id": "PROD-LOG-1780349435742",
+      "fecha": "2026-06-01",
+      "id_producto": "PROD-02",
+      "cantidad": 7,
+      "observacion": ""
+    },
+    {
+      "id": "PROD-LOG-1780954008652",
+      "fecha": "2026-06-08",
+      "id_producto": "PROD-06",
+      "cantidad": 5,
+      "observacion": ""
+    },
+    {
+      "id": "PROD-LOG-1781613500822",
+      "fecha": "2026-06-15",
+      "id_producto": "PROD-04",
+      "cantidad": 6,
+      "observacion": ""
+    },
+    {
+      "id": "PROD-LOG-1781613525213",
+      "fecha": "2026-06-15",
+      "id_producto": "PROD-04",
+      "cantidad": 8,
+      "observacion": ""
+    },
+    {
+      "id": "PROD-LOG-1781613541834",
+      "fecha": "2026-06-15",
+      "id_producto": "PROD-019",
+      "cantidad": 11,
+      "observacion": ""
+    },
+    {
+      "id": "PROD-LOG-1781613644738",
+      "fecha": "2026-06-15",
+      "id_producto": "PROD-01",
+      "cantidad": 7,
+      "observacion": ""
+    },
+    {
+      "id": "LOT-001",
+      "fecha": "2026-06-26",
+      "id_producto": "PROD-019",
+      "gusto": "",
+      "cantidad": 10,
+      "observaciones": ""
+    },
+    {
+      "id": "LOT-002",
+      "fecha": "2026-07-07",
+      "id_producto": "PROD-03",
+      "gusto": "",
+      "cantidad": 7,
+      "observaciones": ""
+    },
+    {
+      "id": "LOT-003",
+      "fecha": "2026-07-07",
+      "id_producto": "PROD-05",
+      "gusto": "",
+      "cantidad": 5,
+      "observaciones": ""
+    },
+    {
+      "id": "LOT-004",
+      "fecha": "2026-07-08",
+      "id_producto": "PROD-04",
+      "gusto": "",
+      "cantidad": 7,
+      "observaciones": ""
+    },
+    {
+      "id": "LOT-005",
+      "fecha": "2026-07-08",
+      "id_producto": "PROD-02",
+      "gusto": "",
+      "cantidad": 4,
+      "observaciones": ""
+    },
+    {
+      "id": "LOT-006",
+      "fecha": "2026-07-10",
+      "id_producto": "PROD-01",
+      "gusto": "",
+      "cantidad": 8,
+      "observaciones": ""
+    },
+    {
+      "id": "LOT-007",
+      "fecha": "2026-07-10",
+      "id_producto": "PROD-02",
+      "gusto": "",
+      "cantidad": 2,
+      "observaciones": ""
+    },
+    {
+      "id": "LOT-008",
+      "fecha": "2026-07-13",
+      "id_producto": "PROD-05",
+      "gusto": "",
+      "cantidad": 12,
+      "observaciones": ""
+    },
+    {
+      "id": "LOT-009",
+      "fecha": "2026-07-13",
+      "id_producto": "PROD-01",
+      "gusto": "",
+      "cantidad": 2,
+      "observaciones": ""
+    },
+    {
+      "id": "LOT-010",
+      "fecha": "2026-07-13",
+      "id_producto": "PROD-03",
+      "gusto": "",
+      "cantidad": 9,
+      "observaciones": ""
+    }
+  ],
+  "compras": [
+    {
+      "id": "COM-001",
+      "fecha": "2026-05-27",
+      "tipo": "Ingrediente",
+      "id_item": "ING-031",
+      "item_nombre": "Puerro",
+      "proveedor": "",
+      "cantidad": 1.4,
+      "precio": 3571.5,
+      "subtotal": 5000.099999999999,
+      "alerta_inflacion": true,
+      "var_pct": "-69.4",
+      "precio_anterior": 11666.6
+    },
+    {
+      "id": "COM-002",
+      "fecha": "2026-05-27",
+      "tipo": "Ingrediente",
+      "id_item": "ING-009",
+      "item_nombre": "Cebolla",
+      "proveedor": "",
+      "cantidad": 1,
+      "precio": 1200,
+      "subtotal": 1200,
+      "alerta_inflacion": false,
+      "var_pct": "0.0",
+      "precio_anterior": 1200
+    },
+    {
+      "id": "COM-003",
+      "fecha": "2026-05-27",
+      "tipo": "Ingrediente",
+      "id_item": "ING-003",
+      "item_nombre": "Ajo",
+      "proveedor": "",
+      "cantidad": 1,
+      "precio": 800,
+      "subtotal": 800,
+      "alerta_inflacion": false,
+      "var_pct": "0.0",
+      "precio_anterior": 800
+    },
+    {
+      "id": "COM-004",
+      "fecha": "2026-05-27",
+      "tipo": "Ingrediente",
+      "id_item": "ING-050",
+      "item_nombre": "Panceta",
+      "proveedor": "",
+      "cantidad": 1.135,
+      "precio": 18928.95,
+      "subtotal": 21484.35825,
+      "alerta_inflacion": true,
+      "var_pct": "-11.9",
+      "precio_anterior": 21484.36
+    },
+    {
+      "id": "COM-006",
+      "fecha": "2026-05-27",
+      "tipo": "Ingrediente",
+      "id_item": "ING-004",
+      "item_nombre": "Almendras",
+      "proveedor": "",
+      "cantidad": 1,
+      "precio": 35100,
+      "subtotal": 35100,
+      "alerta_inflacion": false,
+      "var_pct": "0.0",
+      "precio_anterior": 35100
+    },
+    {
+      "id": "COM-007",
+      "fecha": "2026-05-27",
+      "tipo": "Ingrediente",
+      "id_item": "ING-015",
+      "item_nombre": "Huevos",
+      "proveedor": "",
+      "cantidad": 180,
+      "precio": 155.55555,
+      "subtotal": 27999.999000000003,
+      "alerta_inflacion": false,
+      "var_pct": "3.7",
+      "precio_anterior": 150
+    },
+    {
+      "id": "COM-008",
+      "fecha": "2026-05-27",
+      "tipo": "Ingrediente",
+      "id_item": "ING-037",
+      "item_nombre": "Sardo",
+      "proveedor": "",
+      "cantidad": 0.4,
+      "precio": 13800,
+      "subtotal": 5520,
+      "alerta_inflacion": false,
+      "var_pct": "-0.6",
+      "precio_anterior": 13880
+    },
+    {
+      "id": "COM-009",
+      "fecha": "2026-06-01",
+      "tipo": "Ingrediente",
+      "id_item": "ING-029",
+      "item_nombre": "Premezcla",
+      "proveedor": "",
+      "cantidad": 10,
+      "precio": 4637.5,
+      "subtotal": 46375,
+      "alerta_inflacion": true,
+      "var_pct": "12.4",
+      "precio_anterior": 4126
+    },
+    {
+      "id": "COM-010",
+      "fecha": "2026-06-15",
+      "tipo": "Packaging",
+      "id_item": "PKG-004",
+      "item_nombre": "Stickers",
+      "proveedor": "",
+      "cantidad": 230,
+      "precio": 100,
+      "subtotal": 23000,
+      "alerta_inflacion": false,
+      "var_pct": "-9.1",
+      "precio_anterior": 110
+    },
+    {
+      "id": "COM-014",
+      "fecha": "2026-06-29",
+      "id_proveedor": "PRV-003",
+      "descripcion": "Compra semanal",
+      "total": 54970,
+      "metodo_pago": "Transferencia",
+      "notas": "",
+      "lineas": [
+        {
+          "id_ingrediente": "ING-019",
+          "cantidad": 0.5,
+          "precio_unitario": 1862.32
+        },
+        {
+          "id_ingrediente": "ING-054",
+          "cantidad": 0.6,
+          "precio_unitario": 39242
+        },
+        {
+          "id_ingrediente": "ING-014",
+          "cantidad": 1,
+          "precio_unitario": 3446
+        }
+      ]
+    },
+    {
+      "id": "COM-015",
+      "fecha": "2026-06-30",
+      "id_proveedor": "",
+      "descripcion": "",
+      "total": 28856,
+      "metodo_pago": "Efectivo",
+      "notas": "",
+      "lineas": [],
+      "lineasPkg": [
+        {
+          "id_packaging": "PKG-005",
+          "cantidad": 60,
+          "precio_unitario": 50
+        },
+        {
+          "id_packaging": "PKG-007",
+          "cantidad": 100,
+          "precio_unitario": 258.56
+        }
+      ]
+    },
+    {
+      "id": "COM-016",
+      "fecha": "2026-07-07",
+      "id_proveedor": "",
+      "descripcion": "",
+      "total": 28500,
+      "metodo_pago": "Efectivo",
+      "notas": "",
+      "lineas": [
+        {
+          "id_ingrediente": "ING-027",
+          "cantidad": 3,
+          "precio_unitario": 9500
+        }
+      ],
+      "lineasPkg": []
+    },
+    {
+      "id": "COM-017",
+      "fecha": "2026-07-07",
+      "id_proveedor": "",
+      "descripcion": "",
+      "total": 26350,
+      "metodo_pago": "Efectivo",
+      "notas": "",
+      "lineas": [
+        {
+          "id_ingrediente": "ING-035",
+          "cantidad": 1.7,
+          "precio_unitario": 15500
+        }
+      ],
+      "lineasPkg": []
+    },
+    {
+      "id": "COM-018",
+      "fecha": "2026-07-07",
+      "id_proveedor": "",
+      "descripcion": "",
+      "total": 17000,
+      "metodo_pago": "Transferencia",
+      "notas": "",
+      "lineas": [],
+      "lineasPkg": []
+    },
+    {
+      "id": "COM-019",
+      "fecha": "2026-07-13",
+      "id_proveedor": "",
+      "descripcion": "",
+      "total": 49905,
+      "metodo_pago": "Transferencia",
+      "notas": "",
+      "lineas": [
+        {
+          "id_ingrediente": "ING-037",
+          "cantidad": 3,
+          "precio_unitario": 16635
+        }
+      ],
+      "lineasPkg": []
+    },
+    {
+      "id": "COM-020",
+      "fecha": "2026-07-13",
+      "id_proveedor": "",
+      "descripcion": "",
+      "total": 74433,
+      "metodo_pago": "Efectivo",
+      "notas": "",
+      "lineas": [
+        {
+          "id_ingrediente": "ING-029",
+          "cantidad": 15,
+          "precio_unitario": 4962.2
+        }
+      ],
+      "lineasPkg": []
+    },
+    {
+      "id": "COM-021",
+      "fecha": "2026-07-14",
+      "id_proveedor": "",
+      "descripcion": "",
+      "total": 4500,
+      "metodo_pago": "Efectivo",
+      "notas": "",
+      "lineas": [
+        {
+          "id_ingrediente": "ING-038",
+          "cantidad": 1,
+          "precio_unitario": 4500
+        }
+      ],
+      "lineasPkg": []
+    },
+    {
+      "id": "COM-022",
+      "fecha": "2026-07-14",
+      "id_proveedor": "",
+      "descripcion": "",
+      "total": 34000,
+      "metodo_pago": "Efectivo",
+      "notas": "",
+      "lineas": [
+        {
+          "id_ingrediente": "ING-008",
+          "cantidad": 28,
+          "precio_unitario": 1000
+        },
+        {
+          "id_ingrediente": "ING-003",
+          "cantidad": 1,
+          "precio_unitario": 6000
+        }
+      ],
+      "lineasPkg": []
+    }
+  ],
+  "gastos": [
+    {
+      "id": "GAS-001",
+      "fecha": "2026-06-03",
+      "tipo": "Maquinaria",
+      "concepto": "",
+      "monto": 90000
+    }
+  ],
+  "historial_precios": [
+    {
+      "fecha": "2026-05-27",
+      "insumo": "Almendras",
+      "tipo": "Ingrediente",
+      "precio_anterior": 28800,
+      "precio_nuevo": 35100,
+      "var_pct": 21.9,
+      "origen": "Compra"
+    },
+    {
+      "fecha": "2026-05-27",
+      "insumo": "Panceta",
+      "tipo": "Ingrediente",
+      "precio_anterior": 18000,
+      "precio_nuevo": 21484.36,
+      "var_pct": 19.4,
+      "origen": "Compra"
+    },
+    {
+      "fecha": "2026-05-27",
+      "insumo": "Cebolla",
+      "tipo": "Ingrediente",
+      "precio_anterior": 900,
+      "precio_nuevo": 1200,
+      "var_pct": 33.3,
+      "origen": "Compra"
+    },
+    {
+      "fecha": "2026-05-27",
+      "insumo": "Puerro",
+      "tipo": "Ingrediente",
+      "precio_anterior": 11666.6,
+      "precio_nuevo": 3571.5,
+      "var_pct": -69.4,
+      "origen": "Compra"
+    },
+    {
+      "fecha": "2026-05-27",
+      "insumo": "Panceta",
+      "tipo": "Ingrediente",
+      "precio_anterior": 21484.36,
+      "precio_nuevo": 18928.95,
+      "var_pct": -11.9,
+      "origen": "Compra"
+    },
+    {
+      "fecha": "2026-05-27",
+      "insumo": "Huevos",
+      "tipo": "Ingrediente",
+      "precio_anterior": 150,
+      "precio_nuevo": 155.55555,
+      "var_pct": 3.7,
+      "origen": "Compra"
+    },
+    {
+      "fecha": "2026-05-27",
+      "insumo": "Sardo",
+      "tipo": "Ingrediente",
+      "precio_anterior": 13880,
+      "precio_nuevo": 13800,
+      "var_pct": -0.6,
+      "origen": "Compra"
+    },
+    {
+      "fecha": "2026-05-30",
+      "insumo": "Premezcla",
+      "tipo": "Ingrediente",
+      "precio_anterior": 4216,
+      "precio_nuevo": 4126,
+      "var_pct": -2.1,
+      "origen": "Compra"
+    },
+    {
+      "fecha": "2026-06-01",
+      "insumo": "Premezcla",
+      "tipo": "Ingrediente",
+      "precio_anterior": 4126,
+      "precio_nuevo": 4637.5,
+      "var_pct": 12.4,
+      "origen": "Compra"
+    },
+    {
+      "fecha": "2026-06-05",
+      "insumo": "Esparrago",
+      "tipo": "Ingrediente",
+      "precio_anterior": 16,
+      "precio_nuevo": 16000,
+      "var_pct": 99900,
+      "origen": "Edición manual"
+    },
+    {
+      "fecha": "2026-06-15",
+      "insumo": "Stickers",
+      "tipo": "Packaging",
+      "precio_anterior": 110,
+      "precio_nuevo": 100,
+      "var_pct": -9.1,
+      "origen": "Compra"
+    },
+    {
+      "fecha": "2026-06-23",
+      "insumo": "Harina de arroz",
+      "tipo": "Ingrediente",
+      "precio_anterior": 3144,
+      "precio_nuevo": 3466,
+      "var_pct": 10.2,
+      "origen": "Edición manual"
+    },
+    {
+      "fecha": "2026-06-23",
+      "insumo": "Mandiocaa",
+      "tipo": "Ingrediente",
+      "precio_anterior": 3520,
+      "precio_nuevo": 0,
+      "var_pct": -100,
+      "origen": "Edición manual"
+    },
+    {
+      "fecha": "2026-06-23",
+      "insumo": "Maicena",
+      "tipo": "Ingrediente",
+      "precio_anterior": 6000,
+      "precio_nuevo": 1862,
+      "var_pct": -69,
+      "origen": "Edición manual"
+    },
+    {
+      "id_insumo": "ING-009",
+      "fecha": "2026-07-07",
+      "precio_anterior": 1200,
+      "precio_nuevo": 900
+    }
+  ],
+  "costos_indirectos": [
+    {
+      "id": "IND-001",
+      "fecha": "2026-05-27",
+      "sub": "Servicios",
+      "desc": "",
+      "monto": 2000
+    },
+    {
+      "id": "IND-002",
+      "fecha": "2026-05-27",
+      "sub": "Mano de obra",
+      "desc": "",
+      "monto": 214000
+    },
+    {
+      "id": "IND-003",
+      "fecha": "2026-05-01",
+      "mes": 5,
+      "anio": 2026,
+      "sub": "Nafta",
+      "desc": "Nafta",
+      "monto": 11600
+    },
+    {
+      "id": "IND-004",
+      "descripcion": "Nafta",
+      "monto": 17920,
+      "mes": 6,
+      "anio": 2026,
+      "categoria": "Servicios"
+    }
+  ],
+  "caja_movimientos": [
+    {
+      "id": "CAJ-1780175155742",
+      "fecha": "2026-05-30",
+      "tipo": "egreso",
+      "categoria": "Compra MP",
+      "descripcion": "Compra Premezcla (10 kg)",
+      "monto": 41260,
+      "ref": "compra-1780175155742",
+      "sector": "mp"
+    },
+    {
+      "id": "CAJ-1780537866274",
+      "fecha": "2026-06-01",
+      "tipo": "egreso",
+      "categoria": "Compra MP",
+      "descripcion": "Compra Premezcla (10 kg)",
+      "monto": 46375,
+      "ref": "compra-1780537866274",
+      "sector": "mp"
+    },
+    {
+      "id": "CAJ-1780879946419-8eu2x",
+      "fecha": "2026-06-03",
+      "tipo": "ingreso",
+      "categoria": "Venta",
+      "descripcion": "Pedido PED-030 — Ravioles de ricotta",
+      "monto": 51000,
+      "ref": "PED-030-A",
+      "sector": "ventas",
+      "metodo": "Mercado Pago"
+    },
+    {
+      "id": "CAJ-1780953851409-npzx7",
+      "fecha": "2026-06-05",
+      "tipo": "ingreso",
+      "categoria": "Venta",
+      "descripcion": "Pedido PED-033 — Sorrentino de esparrago",
+      "monto": 28000,
+      "ref": "PED-033-A",
+      "sector": "ventas",
+      "medio_cobro": "Efectivo",
+      "metodo": "Mercado Pago"
+    },
+    {
+      "id": "CAJ-1780953852349-b41k5",
+      "fecha": "2026-06-05",
+      "tipo": "ingreso",
+      "categoria": "Venta",
+      "descripcion": "Pedido PED-032 — Sorrentino de esparrago",
+      "monto": 28000,
+      "ref": "PED-032-A",
+      "sector": "ventas",
+      "medio_cobro": "Efectivo",
+      "metodo": "Mercado Pago"
+    },
+    {
+      "id": "CAJ-1781570446178-b46fj",
+      "fecha": "2026-06-15",
+      "tipo": "ingreso",
+      "categoria": "Venta",
+      "descripcion": "Pedido PED-036 — Medialuna de osobuco",
+      "monto": 23774,
+      "ref": "PED-036-A",
+      "sector": "ventas",
+      "metodo": "Mercado Pago"
+    },
+    {
+      "id": "CAJ-1781570446178-q8m0g",
+      "fecha": "2026-06-15",
+      "tipo": "ingreso",
+      "categoria": "Venta",
+      "descripcion": "Pedido PED-036 — Raviolon de puerro",
+      "monto": 21226,
+      "ref": "PED-036-B",
+      "sector": "ventas",
+      "metodo": "Mercado Pago"
+    },
+    {
+      "id": "CAJ-1781570570050-txar0",
+      "fecha": "2026-06-15",
+      "tipo": "ingreso",
+      "categoria": "Venta",
+      "descripcion": "Pedido PED-037 — Raviolon de puerro",
+      "monto": 22204,
+      "ref": "PED-037-A",
+      "sector": "ventas"
+    },
+    {
+      "id": "CAJ-1781570570050-t8j7p",
+      "fecha": "2026-06-15",
+      "tipo": "ingreso",
+      "categoria": "Venta",
+      "descripcion": "Pedido PED-037 — Raviol de jamon y queso",
+      "monto": 17763,
+      "ref": "PED-037-B",
+      "sector": "ventas"
+    },
+    {
+      "id": "CAJ-1781570570050-43z0d",
+      "fecha": "2026-06-15",
+      "tipo": "ingreso",
+      "categoria": "Venta",
+      "descripcion": "Pedido PED-037 — Ravioles de calabaza",
+      "monto": 29309,
+      "ref": "PED-037-C",
+      "sector": "ventas"
+    },
+    {
+      "id": "CAJ-1781570570050-kczrh",
+      "fecha": "2026-06-15",
+      "tipo": "ingreso",
+      "categoria": "Venta",
+      "descripcion": "Pedido PED-037 — Espárrago",
+      "monto": 37303,
+      "ref": "PED-037-D",
+      "sector": "ventas"
+    },
+    {
+      "id": "CAJ-1781570570050-mafnz",
+      "fecha": "2026-06-15",
+      "tipo": "ingreso",
+      "categoria": "Venta",
+      "descripcion": "Pedido PED-037 — Medialuna de osobuco",
+      "monto": 12434,
+      "ref": "PED-037-E",
+      "sector": "ventas"
+    },
+    {
+      "id": "CAJ-1781570570050-6vp0a",
+      "fecha": "2026-06-15",
+      "tipo": "ingreso",
+      "categoria": "Venta",
+      "descripcion": "Pedido PED-037 — Salsa",
+      "monto": 15987,
+      "ref": "PED-037-F",
+      "sector": "ventas"
+    },
+    {
+      "id": "CAJ-1781570757908-g1nbc",
+      "fecha": "2026-06-15",
+      "tipo": "ingreso",
+      "categoria": "Venta",
+      "descripcion": "Pedido PED-038 — Espárrago",
+      "monto": 56000,
+      "ref": "PED-038-A",
+      "sector": "ventas"
+    },
+    {
+      "id": "CAJ-1781570761596-m6zvn",
+      "fecha": "2026-06-15",
+      "tipo": "ingreso",
+      "categoria": "Venta",
+      "descripcion": "Pedido PED-034 — Espárrago",
+      "monto": 42000,
+      "ref": "PED-034-A",
+      "sector": "ventas"
+    },
+    {
+      "id": "CAJ-1781574422958-x96f2",
+      "fecha": "2026-06-15",
+      "tipo": "ingreso",
+      "categoria": "Venta",
+      "descripcion": "Pedido PED-046 — Sorrentino de esparrago",
+      "monto": 42000,
+      "ref": "PED-046-A",
+      "sector": "ventas",
+      "metodo": "Mercado Pago"
+    },
+    {
+      "id": "CAJ-1781574594820",
+      "fecha": "2026-06-15",
+      "tipo": "egreso",
+      "categoria": "Compra MP",
+      "descripcion": "Compra Stickers (230 unidad)",
+      "monto": 23000,
+      "ref": "compra-1781574594820",
+      "sector": "mp"
+    },
+    {
+      "id": "CAJ-1782137291997-rmqgz",
+      "fecha": "2026-06-15",
+      "tipo": "ingreso",
+      "categoria": "Venta",
+      "descripcion": "Pedido PED-042 — Sorrentino de esparrago",
+      "monto": 28000,
+      "ref": "PED-042-A",
+      "sector": "ventas"
+    },
+    {
+      "id": "CAJ-1782137297718-6md16",
+      "fecha": "2026-06-15",
+      "tipo": "ingreso",
+      "categoria": "Venta",
+      "descripcion": "Pedido PED-044 — Sorrentino de esparrago",
+      "monto": 56000,
+      "ref": "PED-044-A",
+      "sector": "ventas",
+      "metodo": "Mercado Pago"
+    },
+    {
+      "id": "CAJ-1782684081435",
+      "fecha": "2026-06-28",
+      "tipo": "egreso",
+      "concepto": "Compra: Almidon de maiz",
+      "monto": 1862,
+      "ref": "COM-011"
+    },
+    {
+      "id": "CAJ-1782684105718",
+      "fecha": "2026-06-28",
+      "tipo": "egreso",
+      "concepto": "Compra: Harina de Arroz",
+      "monto": 13864,
+      "ref": "COM-012"
+    },
+    {
+      "id": "CAJ-1782684127824",
+      "fecha": "2026-06-28",
+      "tipo": "egreso",
+      "concepto": "Compra: Psyllium Husk",
+      "monto": 39242,
+      "ref": "COM-013"
+    },
+    {
+      "id": "CAJ-1782759151141",
+      "fecha": "2026-06-29",
+      "tipo": "egreso",
+      "concepto": "Compra: Compra semanal",
+      "monto": 54970,
+      "ref": "COM-014",
+      "metodo": "Transferencia"
+    },
+    {
+      "id": "CAJ-1782783340238",
+      "fecha": "2026-06-30",
+      "tipo": "egreso",
+      "concepto": "Compra: COM-015",
+      "monto": 28856,
+      "ref": "COM-015",
+      "metodo": "Efectivo"
+    },
+    {
+      "id": "CAJ-1782932242154",
+      "fecha": "2026-06-29",
+      "tipo": "ingreso",
+      "metodo": "Efectivo",
+      "concepto": "Pedido PED-057 - Raviolon de espinaca",
+      "monto": 0,
+      "ref": "PED-057-A"
+    },
+    {
+      "id": "CAJ-1782932242154",
+      "fecha": "2026-06-29",
+      "tipo": "ingreso",
+      "metodo": "Efectivo",
+      "concepto": "Pedido PED-057 - Raviol de jamon y queso",
+      "monto": 0,
+      "ref": "PED-057-B"
+    },
+    {
+      "id": "CAJ-1782932242154",
+      "fecha": "2026-06-29",
+      "tipo": "ingreso",
+      "metodo": "Efectivo",
+      "concepto": "Pedido PED-057 - Medialuna de osobuco",
+      "monto": 0,
+      "ref": "PED-057-C"
+    },
+    {
+      "id": "CAJ-1782932242154",
+      "fecha": "2026-06-29",
+      "tipo": "ingreso",
+      "metodo": "Efectivo",
+      "concepto": "Pedido PED-057 - Cintas al huevo",
+      "monto": 0,
+      "ref": "PED-057-D"
+    },
+    {
+      "id": "CAJ-1782932841472",
+      "fecha": "2026-06-30",
+      "tipo": "ingreso",
+      "metodo": "Mercado Pago",
+      "concepto": "Pedido PED-060 - Ravioles de ricotta",
+      "monto": 22000,
+      "ref": "PED-060-A"
+    },
+    {
+      "id": "CAJ-1782932960152",
+      "fecha": "2026-06-30",
+      "tipo": "ingreso",
+      "metodo": "Mercado Pago",
+      "concepto": "Pedido PED-061 - Sorrentino de esparrago",
+      "monto": 28000,
+      "ref": "PED-061-A"
+    },
+    {
+      "id": "CAJ-1782933185379",
+      "fecha": "2026-06-15",
+      "tipo": "ingreso",
+      "metodo": "Mercado Pago",
+      "concepto": "Pedido PED-045 - Sorrentino de esparrago (desc. -$14.000)",
+      "monto": 38053.69127516779,
+      "ref": "PED-045-A"
+    },
+    {
+      "id": "CAJ-1782933185379",
+      "fecha": "2026-06-15",
+      "tipo": "ingreso",
+      "metodo": "Mercado Pago",
+      "concepto": "Pedido PED-045 - Raviol de jamon y queso (desc. -$14.000)",
+      "monto": 18120.805369127516,
+      "ref": "PED-045-B"
+    },
+    {
+      "id": "CAJ-1782933185379",
+      "fecha": "2026-06-15",
+      "tipo": "ingreso",
+      "metodo": "Mercado Pago",
+      "concepto": "Pedido PED-045 - Ravioles de calabaza (desc. -$14.000)",
+      "monto": 29899.328859060402,
+      "ref": "PED-045-C"
+    },
+    {
+      "id": "CAJ-1782933185379",
+      "fecha": "2026-06-15",
+      "tipo": "ingreso",
+      "metodo": "Mercado Pago",
+      "concepto": "Pedido PED-045 - Raviolon de puerro (desc. -$14.000)",
+      "monto": 22651.006711409394,
+      "ref": "PED-045-D"
+    },
+    {
+      "id": "CAJ-1782933185379",
+      "fecha": "2026-06-15",
+      "tipo": "ingreso",
+      "metodo": "Mercado Pago",
+      "concepto": "Pedido PED-045 - Ravioles de calabaza (desc. -$14.000)",
+      "monto": 9966.442953020134,
+      "ref": "PED-045-E"
+    },
+    {
+      "id": "CAJ-1782933185379",
+      "fecha": "2026-06-15",
+      "tipo": "ingreso",
+      "metodo": "Mercado Pago",
+      "concepto": "Pedido PED-045 - Salsa (desc. -$14.000)",
+      "monto": 16308.724832214764,
+      "ref": "PED-045-F"
+    },
+    {
+      "id": "CAJ-1782933434680",
+      "fecha": "2026-06-01",
+      "tipo": "ingreso",
+      "metodo": "Mercado Pago",
+      "concepto": "Pedido PED-031 - Raviolon de puerro (desc. -$13.000)",
+      "monto": 21428.571428571428,
+      "ref": "PED-031-A"
+    },
+    {
+      "id": "CAJ-1782933434680",
+      "fecha": "2026-06-01",
+      "tipo": "ingreso",
+      "metodo": "Mercado Pago",
+      "concepto": "Pedido PED-031 - Raviol de jamon y queso (desc. -$13.000)",
+      "monto": 17142.857142857145,
+      "ref": "PED-031-B"
+    },
+    {
+      "id": "CAJ-1782933434680",
+      "fecha": "2026-06-01",
+      "tipo": "ingreso",
+      "metodo": "Mercado Pago",
+      "concepto": "Pedido PED-031 - Salsa (desc. -$13.000)",
+      "monto": 15428.57142857143,
+      "ref": "PED-031-C"
+    },
+    {
+      "id": "CAJ-1782933434680",
+      "fecha": "2026-06-01",
+      "tipo": "ingreso",
+      "metodo": "Mercado Pago",
+      "concepto": "Pedido PED-031 - Sorrentino de esparrago (desc. -$13.000)",
+      "monto": 24000,
+      "ref": "PED-031-D"
+    },
+    {
+      "id": "CAJ-1782933521628",
+      "fecha": "2026-06-28",
+      "tipo": "ingreso",
+      "metodo": "Mercado Pago",
+      "concepto": "Pedido PED-056 - Raviolon de espinaca (desc. -$13.000)",
+      "monto": 26000,
+      "ref": "PED-056-A"
+    },
+    {
+      "id": "CAJ-1782933849099",
+      "fecha": "2026-06-29",
+      "tipo": "ingreso",
+      "metodo": "Efectivo",
+      "concepto": "Pedido PED-064 - Sorrentino de esparrago",
+      "monto": 14000,
+      "ref": "PED-064-A"
+    },
+    {
+      "id": "CAJ-1782933854419",
+      "fecha": "2026-06-29",
+      "tipo": "ingreso",
+      "metodo": "Efectivo",
+      "concepto": "Pedido PED-065 - Ravioles de calabaza (desc. -$7.000)",
+      "monto": 37000,
+      "ref": "PED-065-A"
+    },
+    {
+      "id": "CAJ-1782934022181",
+      "fecha": "2026-06-29",
+      "tipo": "ingreso",
+      "metodo": "Efectivo",
+      "concepto": "Pedido PED-063 - Medialuna de osobuco (desc. -$6.500)",
+      "monto": 36129.032258064515,
+      "ref": "PED-063-A"
+    },
+    {
+      "id": "CAJ-1782934022181",
+      "fecha": "2026-06-29",
+      "tipo": "ingreso",
+      "metodo": "Efectivo",
+      "concepto": "Pedido PED-063 - Salsa (desc. -$6.500)",
+      "monto": 3870.967741935484,
+      "ref": "PED-063-B"
+    },
+    {
+      "id": "CAJ-1782955027353",
+      "fecha": "2026-06-30",
+      "tipo": "ingreso",
+      "metodo": "Mercado Pago",
+      "concepto": "Pedido PED-058 - Raviol de jamon y queso (desc. -$10.000)",
+      "monto": 23023.25581395349,
+      "ref": "PED-058-A"
+    },
+    {
+      "id": "CAJ-1782955027353",
+      "fecha": "2026-06-30",
+      "tipo": "ingreso",
+      "metodo": "Mercado Pago",
+      "concepto": "Pedido PED-058 - Raviolon de espinaca (desc. -$10.000)",
+      "monto": 9976.744186046511,
+      "ref": "PED-058-B"
+    },
+    {
+      "id": "CAJ-1783174387795",
+      "fecha": "2026-06-30",
+      "tipo": "ingreso",
+      "metodo": "Efectivo",
+      "concepto": "Pedido PED-068 - Medialuna de osobuco",
+      "monto": 14000,
+      "ref": "PED-068-A"
+    },
+    {
+      "id": "CAJ-1783174387795",
+      "fecha": "2026-06-30",
+      "tipo": "ingreso",
+      "metodo": "Efectivo",
+      "concepto": "Pedido PED-068 - Ravioles de ricotta",
+      "monto": 11000,
+      "ref": "PED-068-B"
+    },
+    {
+      "id": "CAJ-1783174396332",
+      "fecha": "2026-06-30",
+      "tipo": "ingreso",
+      "metodo": "Mercado Pago",
+      "concepto": "Pedido PED-067 - Raviolon de espinaca (desc. -$1.000)",
+      "monto": 51147.54098360656,
+      "ref": "PED-067-A"
+    },
+    {
+      "id": "CAJ-1783174396332",
+      "fecha": "2026-06-30",
+      "tipo": "ingreso",
+      "metodo": "Mercado Pago",
+      "concepto": "Pedido PED-067 - Salsa (desc. -$1.000)",
+      "monto": 8852.459016393443,
+      "ref": "PED-067-B"
+    },
+    {
+      "id": "CAJ-1783175254370",
+      "fecha": "2026-07-07",
+      "tipo": "egreso",
+      "concepto": "Compra: COM-016",
+      "monto": 28500,
+      "ref": "COM-016",
+      "metodo": "Efectivo"
+    },
+    {
+      "id": "CAJ-1783175541333",
+      "fecha": "2026-05-27",
+      "tipo": "ingreso",
+      "metodo": "Efectivo",
+      "concepto": "Pedido PED-021 - Medialuna de osobuco",
+      "monto": 0,
+      "ref": "PED-021-A"
+    },
+    {
+      "id": "CAJ-1783175541333",
+      "fecha": "2026-05-27",
+      "tipo": "ingreso",
+      "metodo": "Efectivo",
+      "concepto": "Pedido PED-021 - Ravioles de calabaza",
+      "monto": 0,
+      "ref": "PED-021-B"
+    },
+    {
+      "id": "CAJ-1783175541333",
+      "fecha": "2026-05-27",
+      "tipo": "ingreso",
+      "metodo": "Efectivo",
+      "concepto": "Pedido PED-021 - Ravioles de ricotta",
+      "monto": 0,
+      "ref": "PED-021-C"
+    },
+    {
+      "id": "CAJ-1783175541333",
+      "fecha": "2026-05-27",
+      "tipo": "ingreso",
+      "metodo": "Efectivo",
+      "concepto": "Pedido PED-021 - Salsa",
+      "monto": 0,
+      "ref": "PED-021-D"
+    },
+    {
+      "id": "CAJ-1783265375286",
+      "fecha": "2026-07-05",
+      "tipo": "ingreso",
+      "metodo": "Efectivo",
+      "concepto": "Pedido PED-069 - Ravioles de calabaza",
+      "monto": 9649.122807017544,
+      "ref": "PED-069-A"
+    },
+    {
+      "id": "CAJ-1783265375286",
+      "fecha": "2026-07-05",
+      "tipo": "ingreso",
+      "metodo": "Efectivo",
+      "concepto": "Pedido PED-069 - Ravioles de ricotta",
+      "monto": 19298.245614035088,
+      "ref": "PED-069-B"
+    },
+    {
+      "id": "CAJ-1783265375286",
+      "fecha": "2026-07-05",
+      "tipo": "ingreso",
+      "metodo": "Efectivo",
+      "concepto": "Pedido PED-069 - Raviol de jamon y queso",
+      "monto": 8771.929824561405,
+      "ref": "PED-069-C"
+    },
+    {
+      "id": "CAJ-1783265375286",
+      "fecha": "2026-07-05",
+      "tipo": "ingreso",
+      "metodo": "Efectivo",
+      "concepto": "Pedido PED-069 - Medialuna de osobuco",
+      "monto": 12280.701754385966,
+      "ref": "PED-069-D"
+    },
+    {
+      "id": "CAJ-1783265699507",
+      "fecha": "2026-06-29",
+      "tipo": "ingreso",
+      "metodo": "Efectivo",
+      "concepto": "Pedido PED-066 - Ravioles de calabaza",
+      "monto": 28000,
+      "ref": "PED-066-A"
+    },
+    {
+      "id": "CAJ-1783265726848",
+      "fecha": "2026-06-30",
+      "tipo": "ingreso",
+      "metodo": "Efectivo",
+      "concepto": "Pedido PED-059 - Raviol de jamon y queso (desc. -$11.100)",
+      "monto": 23134.0206185567,
+      "ref": "PED-059-A"
+    },
+    {
+      "id": "CAJ-1783265726848",
+      "fecha": "2026-06-30",
+      "tipo": "ingreso",
+      "metodo": "Efectivo",
+      "concepto": "Pedido PED-059 - Medialuna de osobuco (desc. -$11.100)",
+      "monto": 10795.876288659794,
+      "ref": "PED-059-B"
+    },
+    {
+      "id": "CAJ-1783265726848",
+      "fecha": "2026-06-30",
+      "tipo": "ingreso",
+      "metodo": "Efectivo",
+      "concepto": "Pedido PED-059 - Salsa (desc. -$11.100)",
+      "monto": 3470.1030927835054,
+      "ref": "PED-059-C"
+    },
+    {
+      "id": "CAJ-1783265788233",
+      "fecha": "2026-06-24",
+      "tipo": "ingreso",
+      "metodo": "Efectivo",
+      "concepto": "Pedido PED-055 - Raviolon de espinaca",
+      "monto": 26000,
+      "ref": "PED-055-A"
+    },
+    {
+      "id": "CAJ-1783265794929",
+      "fecha": "2026-06-29",
+      "tipo": "ingreso",
+      "metodo": "Mercado Pago",
+      "concepto": "Pedido PED-062 - Ravioles de calabaza",
+      "monto": 22000,
+      "ref": "PED-062-A"
+    },
+    {
+      "id": "CAJ-1783265794930",
+      "fecha": "2026-06-29",
+      "tipo": "ingreso",
+      "metodo": "Mercado Pago",
+      "concepto": "Pedido PED-062 - Salsa",
+      "monto": 4500,
+      "ref": "PED-062-B"
+    },
+    {
+      "id": "CAJ-1783298274502",
+      "fecha": "2026-07-05",
+      "tipo": "ingreso",
+      "metodo": "Mercado Pago",
+      "concepto": "Pedido PED-070 - Medialuna de osobuco",
+      "monto": 14000,
+      "ref": "PED-070-A"
+    },
+    {
+      "id": "CAJ-1783298274502",
+      "fecha": "2026-07-05",
+      "tipo": "ingreso",
+      "metodo": "Mercado Pago",
+      "concepto": "Pedido PED-070 - Raviol de jamon y queso",
+      "monto": 10000,
+      "ref": "PED-070-B"
+    },
+    {
+      "id": "CAJ-1783364098592",
+      "fecha": "2026-07-06",
+      "tipo": "egreso",
+      "concepto": "Compra: COM-017",
+      "monto": 30000,
+      "ref": "COM-017",
+      "metodo": "Efectivo"
+    },
+    {
+      "id": "CAJ-1783437965589",
+      "fecha": "2026-07-07",
+      "tipo": "egreso",
+      "concepto": "Compra: COM-016",
+      "monto": 28500,
+      "ref": "COM-016",
+      "metodo": "Efectivo"
+    },
+    {
+      "id": "CAJ-1783437996649",
+      "fecha": "2026-07-07",
+      "tipo": "egreso",
+      "concepto": "Compra: COM-017",
+      "monto": 26350,
+      "ref": "COM-017",
+      "metodo": "Efectivo"
+    },
+    {
+      "id": "CAJ-1783458053761",
+      "fecha": "2026-07-07",
+      "tipo": "egreso",
+      "concepto": "Compra: COM-018",
+      "monto": 17000,
+      "ref": "COM-018",
+      "metodo": "Transferencia"
+    },
+    {
+      "id": "CAJ-1783712007007",
+      "fecha": "2026-07-10",
+      "tipo": "ingreso",
+      "metodo": "Efectivo",
+      "concepto": "Pedido PED-072 - Ravioles de ricotta",
+      "monto": 22000,
+      "ref": "PED-072-A"
+    },
+    {
+      "id": "CAJ-1783712026814",
+      "fecha": "2026-07-07",
+      "tipo": "ingreso",
+      "metodo": "Mercado Pago",
+      "concepto": "Pedido PED-071 - Raviolon de espinaca",
+      "monto": 30406.77966101695,
+      "ref": "PED-071-A"
+    },
+    {
+      "id": "CAJ-1783712026814",
+      "fecha": "2026-07-07",
+      "tipo": "ingreso",
+      "metodo": "Mercado Pago",
+      "concepto": "Pedido PED-071 - Raviol de jamon y queso",
+      "monto": 15593.22033898305,
+      "ref": "PED-071-B"
+    },
+    {
+      "id": "CAJ-1783976725927",
+      "fecha": "2026-07-13",
+      "tipo": "egreso",
+      "concepto": "Compra: COM-019",
+      "monto": 49905,
+      "ref": "COM-019",
+      "metodo": "Transferencia"
+    },
+    {
+      "id": "CAJ-1783976772754",
+      "fecha": "2026-07-13",
+      "tipo": "egreso",
+      "concepto": "Compra: COM-020",
+      "monto": 74433,
+      "ref": "COM-020",
+      "metodo": "Efectivo"
+    },
+    {
+      "id": "CAJ-1783980900815",
+      "fecha": "2026-07-13",
+      "tipo": "ingreso",
+      "metodo": "Efectivo",
+      "concepto": "Pedido PED-073 - Ravioles de ricotta",
+      "monto": 88000,
+      "ref": "PED-073-A"
+    },
+    {
+      "id": "CAJ-1784072469808",
+      "fecha": "2026-07-14",
+      "tipo": "egreso",
+      "concepto": "Compra: COM-021",
+      "monto": 4500,
+      "ref": "COM-021",
+      "metodo": "Efectivo"
+    },
+    {
+      "id": "CAJ-1784072546075",
+      "fecha": "2026-07-14",
+      "tipo": "egreso",
+      "concepto": "Compra: COM-022",
+      "monto": 34000,
+      "ref": "COM-022",
+      "metodo": "Efectivo"
+    }
+  ],
+  "caja_inteligente": {
+    "porcentaje_reinversion": 70,
+    "porcentaje_seguridad": 30,
+    "asignaciones": [],
+    "usos_reinversion": [],
+    "usos_seguridad": [],
+    "ajustes_manuales": [
+      {
+        "id": "AJM-1783175404061",
+        "fecha": "2026-07-04",
+        "fondo": "reinversion",
+        "monto_reinversion": 43303,
+        "monto_seguridad": 0,
+        "monto": 43303,
+        "descripcion": "Carga manual"
+      }
+    ]
+  },
+  "gastos_operativos": [
+    {
+      "id": "GOP-1782263295729",
+      "fecha": "2026-06-24",
+      "descripcion": "luz",
+      "categoria": "Alquiler",
+      "metodo": "Efectivo",
+      "monto": 10000
+    }
+  ],
+  "gastos_inversion": [
+    {
+      "id": "GIN-1783175299303",
+      "fecha": "2026-07-04",
+      "descripcion": "Compra moldes",
+      "proveedor": "",
+      "monto": 8000
+    },
+    {
+      "id": "GIN-1783175352430",
+      "fecha": "2026-07-04",
+      "descripcion": "Tripode",
+      "proveedor": "",
+      "monto": 75000
+    }
+  ],
+  "transferencias_internas": [],
+  "conteos_stock": [
+    {
+      "id": "CTK-1782683960939",
+      "fecha": "2026-06-28",
+      "id_producto": "PROD-01",
+      "cantidad": 7,
+      "nota": "conteo domingo 28/6"
+    },
+    {
+      "id": "CTK-1782683960939",
+      "fecha": "2026-06-28",
+      "id_producto": "PROD-02",
+      "cantidad": 5,
+      "nota": "conteo domingo 28/6"
+    },
+    {
+      "id": "CTK-1782683960939",
+      "fecha": "2026-06-28",
+      "id_producto": "PROD-03",
+      "cantidad": 6,
+      "nota": "conteo domingo 28/6"
+    },
+    {
+      "id": "CTK-1782683960939",
+      "fecha": "2026-06-28",
+      "id_producto": "PROD-04",
+      "cantidad": 7,
+      "nota": "conteo domingo 28/6"
+    },
+    {
+      "id": "CTK-1782683960939",
+      "fecha": "2026-06-28",
+      "id_producto": "PROD-05",
+      "cantidad": 5,
+      "nota": "conteo domingo 28/6"
+    },
+    {
+      "id": "CTK-1782683960939",
+      "fecha": "2026-06-28",
+      "id_producto": "PROD-06",
+      "cantidad": 0,
+      "nota": "conteo domingo 28/6"
+    },
+    {
+      "id": "CTK-1782683960939",
+      "fecha": "2026-06-28",
+      "id_producto": "PROD-019",
+      "cantidad": 0,
+      "nota": "conteo domingo 28/6"
+    },
+    {
+      "id": "CTK-1782683960939",
+      "fecha": "2026-06-28",
+      "id_producto": "PROD-020",
+      "cantidad": 1,
+      "nota": "conteo domingo 28/6"
+    },
+    {
+      "id": "CTK-1782857535941",
+      "fecha": "2026-06-30",
+      "id_producto": "PROD-14",
+      "cantidad": 4,
+      "nota": ""
+    },
+    {
+      "id": "CTK-1782930963716",
+      "fecha": "2026-07-01",
+      "id_producto": "PROD-01",
+      "cantidad": 5,
+      "nota": ""
+    },
+    {
+      "id": "CTK-1782930963716",
+      "fecha": "2026-07-01",
+      "id_producto": "PROD-02",
+      "cantidad": 5,
+      "nota": ""
+    },
+    {
+      "id": "CTK-1782930963716",
+      "fecha": "2026-07-01",
+      "id_producto": "PROD-03",
+      "cantidad": 0,
+      "nota": ""
+    },
+    {
+      "id": "CTK-1782930963716",
+      "fecha": "2026-07-01",
+      "id_producto": "PROD-04",
+      "cantidad": 5,
+      "nota": ""
+    },
+    {
+      "id": "CTK-1782930963716",
+      "fecha": "2026-07-01",
+      "id_producto": "PROD-05",
+      "cantidad": -2,
+      "nota": ""
+    },
+    {
+      "id": "CTK-1782930963716",
+      "fecha": "2026-07-01",
+      "id_producto": "PROD-06",
+      "cantidad": 0,
+      "nota": ""
+    },
+    {
+      "id": "CTK-1782930963716",
+      "fecha": "2026-07-01",
+      "id_producto": "PROD-14",
+      "cantidad": 0,
+      "nota": ""
+    },
+    {
+      "id": "CTK-1782930963716",
+      "fecha": "2026-07-01",
+      "id_producto": "PROD-019",
+      "cantidad": 0,
+      "nota": ""
+    },
+    {
+      "id": "CTK-1782930963716",
+      "fecha": "2026-07-01",
+      "id_producto": "PROD-020",
+      "cantidad": 0,
+      "nota": ""
+    },
+    {
+      "id": "CTK-1782994194896",
+      "fecha": "2026-07-02",
+      "id_producto": "PROD-03",
+      "cantidad": 0,
+      "nota": ""
+    },
+    {
+      "id": "CTK-1782994194896",
+      "fecha": "2026-07-02",
+      "id_producto": "PROD-05",
+      "cantidad": 0,
+      "nota": ""
+    },
+    {
+      "id": "CTK-1782994194896",
+      "fecha": "2026-07-02",
+      "id_producto": "PROD-14",
+      "cantidad": 0,
+      "nota": ""
+    },
+    {
+      "id": "CTK-1783265541937",
+      "fecha": "2026-07-05",
+      "id_producto": "PROD-01",
+      "cantidad": 1,
+      "nota": ""
+    },
+    {
+      "id": "CTK-1784072708406",
+      "fecha": "2026-07-14",
+      "id_producto": "PROD-03",
+      "cantidad": 10,
+      "nota": ""
+    },
+    {
+      "id": "CTK-1784072736298",
+      "fecha": "2026-07-14",
+      "id_producto": "PROD-14",
+      "cantidad": 12,
+      "nota": ""
+    }
+  ],
+  "config_envios": {
+    "litro_nafta": 1200,
+    "consumo_100km": 7,
+    "margen_gratis": 65,
+    "margen_fijo": 60,
+    "precio_envio_fijo": 2000,
+    "margen_exacto": 55
+  },
+  "conteos_ingredientes": [
+    {
+      "id": "CI-1783447661040",
+      "id_ingrediente": "ING-024",
+      "fecha": "2026-07-07",
+      "cantidad": 562,
+      "observaciones": ""
+    },
+    {
+      "id": "CI-1783447695857",
+      "id_ingrediente": "ING-004",
+      "fecha": "2026-07-07",
+      "cantidad": 936,
+      "observaciones": ""
+    },
+    {
+      "id": "CI-1783447714648",
+      "id_ingrediente": "ING-005",
+      "fecha": "2026-07-07",
+      "cantidad": 105,
+      "observaciones": ""
+    },
+    {
+      "id": "CI-1783447770936",
+      "id_ingrediente": "ING-039",
+      "fecha": "2026-07-07",
+      "cantidad": 0.9,
+      "observaciones": ""
+    },
+    {
+      "id": "CI-1783447780394",
+      "id_ingrediente": "ING-041",
+      "fecha": "2026-07-07",
+      "cantidad": 0.58,
+      "observaciones": ""
+    },
+    {
+      "id": "CI-1783448058890",
+      "id_ingrediente": "ING-029",
+      "fecha": "2026-07-07",
+      "cantidad": 1,
+      "observaciones": ""
+    },
+    {
+      "id": "CI-1783976541853",
+      "id_ingrediente": "ING-029",
+      "fecha": "2026-07-13",
+      "cantidad": 12,
+      "observaciones": ""
+    },
+    {
+      "id": "CI-1783976588884",
+      "id_ingrediente": "ING-037",
+      "fecha": "2026-07-13",
+      "cantidad": 3,
+      "observaciones": ""
+    }
+  ],
+  "efectivo_en_mano": 0,
+  "saldo_cmv_anterior": 207900,
+  "saldo_compras_anterior": 0,
+  "fecha_corte_cmv": "2026-07-07",
+  "fecha_corte_compras": "2026-07-07"
+}
