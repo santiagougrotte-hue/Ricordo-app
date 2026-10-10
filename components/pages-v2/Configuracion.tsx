@@ -26,8 +26,7 @@ import {
 import { Modal } from "@/components/Modal";
 import { fNum, fARS } from "@/lib/calc-v2";
 import { PRESETS_ACENTO, hexValido, luminanciaRelativa } from "@/lib/tema";
-import { geocodificarDireccion } from "@/lib/mapas";
-import type { AmbitoCategoria, EstadoRevisionItem, RevisionItem, RicordoDocument, ProveedorMapa, MetodoDistribucionCostoRuta, Tema } from "@/lib/types-v2";
+import type { AmbitoCategoria, EstadoRevisionItem, RevisionItem, RicordoDocument, Tema } from "@/lib/types-v2";
 
 const GUIA_SECCION: Record<string, string> = {
   pedidos: "Ventas → Pedidos",
@@ -58,52 +57,13 @@ const ESTADO_BADGE: Record<EstadoRevisionItem, { texto: string; color: "orange" 
 
 function GeneralTab() {
   const { data, setData } = useStoreV2();
-  const { toast } = useToast();
-  const [tc, setTc] = useState(data.configuracion.tipo_cambio);
-  const [geocodificando, setGeocodificando] = useState(false);
-
-  function guardarTipoCambio() {
-    setData((d) => ({ ...d, configuracion: { ...d.configuracion, tipo_cambio: tc } }));
-    toast("Tipo de cambio actualizado");
-  }
 
   function setUmbral<K extends keyof typeof data.configuracion>(key: K, value: (typeof data.configuracion)[K]) {
     setData((d) => ({ ...d, configuracion: { ...d.configuracion, [key]: value } }));
   }
 
-  async function geocodificarBase() {
-    const direccion = data.configuracion.envios.direccion_base;
-    if (!direccion || direccion.trim().length < 3) {
-      toast("Cargá primero la dirección base", "error");
-      return;
-    }
-    setGeocodificando(true);
-    const coords = await geocodificarDireccion(direccion);
-    setGeocodificando(false);
-    if (!coords) {
-      toast("No se encontraron coordenadas para esa dirección — se puede cargar lat/lng a mano", "error");
-      return;
-    }
-    setUmbral("envios", { ...data.configuracion.envios, lat_base: coords.lat, lng_base: coords.lng });
-    toast("Coordenadas encontradas");
-  }
-
   return (
     <div className="flex flex-col gap-4">
-      <Card title="Tipo de cambio">
-        <div className="grid grid-cols-1 gap-3.5 sm:grid-cols-2">
-          <Field label="Valor ARS/USD">
-            <Input type="number" value={tc.valor} onChange={(e) => setTc({ ...tc, valor: Number(e.target.value) })} />
-          </Field>
-          <Field label="Fuente">
-            <Input value={tc.fuente} onChange={(e) => setTc({ ...tc, fuente: e.target.value })} placeholder="oficial, blue, MEP…" />
-          </Field>
-        </div>
-        <div className="mt-4 flex justify-end">
-          <Button onClick={guardarTipoCambio}>Guardar</Button>
-        </div>
-      </Card>
-
       <Card title="Impuestos">
         <p className="mb-3 text-[12.5px] text-text3">
           Alícuota usada por Finanzas → Resultados → Estado de Resultados (formato clásico) para calcular el IIGG
@@ -234,86 +194,6 @@ function GeneralTab() {
               value={data.configuracion.envios.precio_envio_fijo}
               onChange={(e) => setUmbral("envios", { ...data.configuracion.envios, precio_envio_fijo: Number(e.target.value) })}
             />
-          </Field>
-        </FormGrid>
-      </Card>
-
-      <Card title="Entregas y rutas">
-        <p className="mb-3 text-[12.5px] text-text3">
-          Base de operaciones y proveedor de mapas usados por Operaciones → Entregas para calcular
-          distancia, tiempo y costo de las rutas de reparto.
-        </p>
-        <FormGrid>
-          <Field label="Dirección base" full>
-            <div className="flex gap-2">
-              <Input
-                value={data.configuracion.envios.direccion_base ?? ""}
-                onChange={(e) => setUmbral("envios", { ...data.configuracion.envios, direccion_base: e.target.value })}
-              />
-              <Button variant="ghost" onClick={geocodificarBase} disabled={geocodificando}>
-                {geocodificando ? "Buscando…" : "Buscar coordenadas"}
-              </Button>
-            </div>
-            <p className="mt-1 text-[11px] text-text3">
-              Usa Nominatim (OpenStreetMap), sin API key — completa latitud/longitud automáticamente si encuentra la
-              dirección. También se pueden cargar a mano.
-            </p>
-          </Field>
-          <Field label="Latitud base">
-            <Input
-              type="number"
-              value={data.configuracion.envios.lat_base ?? ""}
-              onChange={(e) => setUmbral("envios", { ...data.configuracion.envios, lat_base: e.target.value ? Number(e.target.value) : undefined })}
-            />
-          </Field>
-          <Field label="Longitud base">
-            <Input
-              type="number"
-              value={data.configuracion.envios.lng_base ?? ""}
-              onChange={(e) => setUmbral("envios", { ...data.configuracion.envios, lng_base: e.target.value ? Number(e.target.value) : undefined })}
-            />
-          </Field>
-          <Field label="Vehículo">
-            <Input
-              value={data.configuracion.envios.vehiculo ?? ""}
-              onChange={(e) => setUmbral("envios", { ...data.configuracion.envios, vehiculo: e.target.value })}
-              placeholder="Ej: Moto, Fiorino…"
-            />
-          </Field>
-          <Field label="Fecha actualización precio combustible">
-            <Input
-              type="date"
-              value={data.configuracion.envios.fecha_actualizacion_combustible ?? ""}
-              onChange={(e) => setUmbral("envios", { ...data.configuracion.envios, fecha_actualizacion_combustible: e.target.value })}
-            />
-          </Field>
-          <Field label="Regresar a base por defecto">
-            <Select
-              value={data.configuracion.envios.regresar_a_base_default === false ? "no" : "si"}
-              onChange={(e) => setUmbral("envios", { ...data.configuracion.envios, regresar_a_base_default: e.target.value === "si" })}
-            >
-              <option value="si">Sí</option>
-              <option value="no">No</option>
-            </Select>
-          </Field>
-          <Field label="Proveedor de mapas">
-            <Select
-              value={data.configuracion.envios.proveedor_mapa ?? "ninguno"}
-              onChange={(e) => setUmbral("envios", { ...data.configuracion.envios, proveedor_mapa: e.target.value as ProveedorMapa })}
-            >
-              <option value="ninguno">Ninguno (sin cálculo de distancia)</option>
-              <option value="haversine">Estimación en línea recta</option>
-              <option value="osrm">OSRM — ruta real por calles (gratis, sin API key)</option>
-            </Select>
-          </Field>
-          <Field label="Método de distribución del costo">
-            <Select
-              value={data.configuracion.envios.metodo_distribucion_costo ?? "equitativo"}
-              onChange={(e) => setUmbral("envios", { ...data.configuracion.envios, metodo_distribucion_costo: e.target.value as MetodoDistribucionCostoRuta })}
-            >
-              <option value="equitativo">Equitativo (partes iguales)</option>
-              <option value="por_distancia_tramo">Proporcional al tramo</option>
-            </Select>
           </Field>
         </FormGrid>
       </Card>

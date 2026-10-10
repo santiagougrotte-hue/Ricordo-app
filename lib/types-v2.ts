@@ -274,58 +274,6 @@ export interface Produccion {
   notas?: string;
 }
 
-// --- Entregas y rutas -------------------------------------------------------------------------
-
-export type EstadoRuta = "planificada" | "en_curso" | "completada" | "cancelada";
-
-/** Una ruta de reparto de un día — guarda el costo económico real (nafta/peajes/otros), no solo
- * un link de mapa: eso es lo que permite comparar el costo de entregar contra lo cobrado por
- * envío (Sección 29). Los campos `*_snapshot` fijan el precio de combustible y consumo del
- * vehículo vigentes al momento de crear la ruta — si después cambian en Configuración, esta ruta
- * ya planificada/completada no debe recalcularse sola. */
-export interface RutaEntrega {
-  id: string;
-  fecha: string;
-  estado: EstadoRuta;
-  direccion_origen: string;
-  lat_origen: number | null;
-  lng_origen: number | null;
-  regresa_origen: boolean;
-  distancia_total_km: number;
-  duracion_estimada_min: number;
-  precio_litro_snapshot: number;
-  consumo_100km_snapshot: number;
-  litros_estimados: number;
-  costo_nafta_estimado: number;
-  peajes: number;
-  estacionamiento: number;
-  otros_costos: number;
-  costo_total_ruta: number;
-  metodo_distribucion_costo: MetodoDistribucionCostoRuta;
-  proveedor_mapa: ProveedorMapa;
-  created_at: string;
-  updated_at: string;
-}
-
-/** Una parada de una ruta — `direccion_snapshot`/`lat`/`lng` se copian del pedido (o del cliente
- * si el pedido no tiene snapshot propio) al armar la ruta, para que un cambio posterior de
- * dirección del cliente no reescriba una parada ya planificada. */
-export interface RutaParada {
-  id: string;
-  ruta_id: string;
-  pedido_id: string;
-  orden: number;
-  direccion_snapshot: string;
-  lat: number | null;
-  lng: number | null;
-  ventana_desde?: string;
-  ventana_hasta?: string;
-  distancia_tramo_km: number;
-  duracion_tramo_min: number;
-  costo_asignado: number;
-  estado: "pendiente" | "entregado" | "no_entregado";
-}
-
 // --- Finanzas -------------------------------------------------------------------------------------
 
 /** Unifica caja_movimientos, transferencias_internas, costos_fijos, costos_indirectos y
@@ -351,18 +299,6 @@ export interface MovimientoFinanciero {
 
 // --- Configuración ---------------------------------------------------------------------------------
 
-/** Sin proveedor real configurado, no se puede geocodificar ni calcular una ruta real — solo se
- * ofrece una estimación en línea recta (haversine), marcada como tal en toda la UI. "osrm" calcula
- * ruta real por calles usando el servidor público de demostración de OSRM (Open Source Routing
- * Machine, project-osrm.org) — no requiere API key. Nunca se inventa una distancia de ruta real
- * sin un proveedor que la calcule. */
-export type ProveedorMapa = "ninguno" | "haversine" | "osrm";
-
-/** Cómo repartir el costo económico de una ruta con varias paradas entre los pedidos que la
- * componen — nunca se duplica el costo total en cada pedido. "equitativo" divide el costo total
- * en partes iguales; "por_distancia_tramo" reparte proporcional al tramo de cada parada. */
-export type MetodoDistribucionCostoRuta = "equitativo" | "por_distancia_tramo";
-
 export interface ConfiguracionEnvios {
   litro_nafta: number;
   consumo_100km: number;
@@ -370,34 +306,17 @@ export interface ConfiguracionEnvios {
   margen_fijo: number;
   margen_exacto: number;
   precio_envio_fijo: number;
-  direccion_base?: string;
-  lat_base?: number;
-  lng_base?: number;
-  vehiculo?: string;
-  fecha_actualizacion_combustible?: string;
-  regresar_a_base_default?: boolean;
-  proveedor_mapa?: ProveedorMapa;
-  metodo_distribucion_costo?: MetodoDistribucionCostoRuta;
-  peajes_default?: number;
-  otros_costos_default?: number;
 }
 
-export interface ConfiguracionPlanificacion {
-  ventana_meses_referencia: number;
-  umbral_desvio_semana_pct: number;
-}
-
-/** Agrupa todo lo que hoy vive disperso como campos sueltos de nivel superior: umbrales, tipo de
- * cambio, saldos "de arrastre" (renombrados a "saldo_inicial_*" — mismo valor, nombre que no
- * sugiere que se recalculan solos), config de envíos y planificación. */
+/** Agrupa todo lo que hoy vive disperso como campos sueltos de nivel superior: umbrales, saldos
+ * "de arrastre" (renombrados a "saldo_inicial_*" — mismo valor, nombre que no sugiere que se
+ * recalculan solos) y config de envíos. */
 export interface Configuracion {
   envios: ConfiguracionEnvios;
-  planificacion: ConfiguracionPlanificacion;
   umbral_dias_mayorista_riesgo: number;
   umbral_compras_consumo_amber: number;
   umbral_compras_consumo_red: number;
   umbral_stock_bajo_producto: number;
-  tipo_cambio: { valor: number; fuente: string };
   /** Alícuota de Impuesto a las Ganancias (%) usada por el Estado de Resultados con la estructura
    * pedida (Ventas/CMV/R.bruto/Gastos adm.comerc./Amortizaciones/Intereses/IIGG/Resultado neto) —
    * configurable porque la alícuota real puede cambiar, nunca se hardcodea el número dentro del
@@ -498,8 +417,6 @@ export interface RicordoDataV2 {
   proveedores: Proveedor[];
   produccion: Produccion[];
   reservas: Reserva[];
-  rutas_entrega: RutaEntrega[];
-  ruta_paradas: RutaParada[];
   movimientos_financieros: MovimientoFinanciero[];
   configuracion: Configuracion;
   datos_pendientes_revision: RevisionItem[];
@@ -538,8 +455,6 @@ export function emptyDataV2(): RicordoDataV2 {
     proveedores: [],
     produccion: [],
     reservas: [],
-    rutas_entrega: [],
-    ruta_paradas: [],
     movimientos_financieros: [],
     configuracion: {
       envios: {
@@ -549,16 +464,11 @@ export function emptyDataV2(): RicordoDataV2 {
         margen_fijo: 60,
         margen_exacto: 55,
         precio_envio_fijo: 2000,
-        regresar_a_base_default: true,
-        proveedor_mapa: "ninguno",
-        metodo_distribucion_costo: "equitativo",
       },
-      planificacion: { ventana_meses_referencia: 3, umbral_desvio_semana_pct: 15 },
       umbral_dias_mayorista_riesgo: 45,
       umbral_compras_consumo_amber: 20,
       umbral_compras_consumo_red: 40,
       umbral_stock_bajo_producto: 10,
-      tipo_cambio: { valor: 1000, fuente: "manual" },
       alicuota_iigg: 35,
       costo_mano_obra_hora: 0,
       saldo_inicial_cmv: 0,

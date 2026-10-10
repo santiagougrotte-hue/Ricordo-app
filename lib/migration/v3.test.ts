@@ -37,6 +37,34 @@ test("migrarV2aV3: saca caja_inteligente y fondo_reposicion de configuracion, pr
   assert.deepEqual(resultado.legacy.fondo_reposicion_v2, configuracion.fondo_reposicion);
 });
 
+test("migrarV2aV3: saca rutas_entrega/ruta_paradas, planificacion, tipo_cambio y los campos de envíos específicos de rutas", () => {
+  const base = emptyDataV2() as unknown as Record<string, unknown>;
+  base.rutas_entrega = [{ id: "RUTA-1", estado: "cancelada" }];
+  base.ruta_paradas = [{ id: "PARADA-1", ruta_id: "RUTA-1" }];
+  const configuracion = base.configuracion as Record<string, unknown>;
+  configuracion.planificacion = { ventana_meses_referencia: 3, umbral_desvio_semana_pct: 15 };
+  configuracion.tipo_cambio = { valor: 1200, fuente: "blue" };
+  const envios = configuracion.envios as Record<string, unknown>;
+  envios.direccion_base = "Sarmiento 728";
+  envios.proveedor_mapa = "osrm";
+
+  const resultado = migrarV2aV3(base as never) as unknown as { configuracion: Record<string, unknown>; legacy: Record<string, unknown> } & Record<
+    string,
+    unknown
+  >;
+
+  assert.equal("rutas_entrega" in resultado, false);
+  assert.equal("ruta_paradas" in resultado, false);
+  assert.equal("planificacion" in resultado.configuracion, false);
+  assert.equal("tipo_cambio" in resultado.configuracion, false);
+  assert.equal("direccion_base" in (resultado.configuracion.envios as object), false);
+  assert.equal("proveedor_mapa" in (resultado.configuracion.envios as object), false);
+  assert.deepEqual(resultado.legacy.rutas_entrega_v2, base.rutas_entrega);
+  assert.deepEqual(resultado.legacy.ruta_paradas_v2, base.ruta_paradas);
+  assert.deepEqual(resultado.legacy.planificacion_v2, configuracion.planificacion);
+  assert.deepEqual(resultado.legacy.tipo_cambio_v2, configuracion.tipo_cambio);
+});
+
 test("migrarV2aV3: es idempotente (correrla dos veces da el mismo resultado)", () => {
   const base = emptyDataV2() as unknown as Record<string, unknown>;
   base.plan_produccion = { a: 1 };

@@ -796,13 +796,18 @@ export function migrarAV2(data: RicordoData): { documento: DocumentoV2Interno; r
       produccion,
       movimientos_financieros,
       configuracion: {
-        envios: data.config_envios,
-        planificacion: data.config_planificacion,
+        envios: {
+          litro_nafta: data.config_envios.litro_nafta,
+          consumo_100km: data.config_envios.consumo_100km,
+          margen_gratis: data.config_envios.margen_gratis,
+          margen_fijo: data.config_envios.margen_fijo,
+          margen_exacto: data.config_envios.margen_exacto,
+          precio_envio_fijo: data.config_envios.precio_envio_fijo,
+        },
         umbral_dias_mayorista_riesgo: data.umbral_dias_mayorista_riesgo,
         umbral_compras_consumo_amber: data.umbral_compras_consumo_amber,
         umbral_compras_consumo_red: data.umbral_compras_consumo_red,
         umbral_stock_bajo_producto: data.umbral_stock_bajo_producto,
-        tipo_cambio: data.tipo_cambio,
         // No existía en el esquema v1 — 35% es la alícuota general vigente en Argentina; se puede
         // ajustar después en Configuración sin tocar el cálculo.
         alicuota_iigg: 35,
