@@ -1269,8 +1269,15 @@ export interface DineroLibre {
 
 export function calcularDineroLibre(data: RicordoDataV2, hoy: string): DineroLibre {
   const dinero_en_cuentas = Math.round(saldoCajaAlFecha(data, hoy));
+  // Las compras de antes del corte de caja (`fecha_saldo_inicial_caja`) nunca tuvieron un pago
+  // vinculado por id — el sistema viejo registraba el pago como un movimiento de caja suelto, no
+  // ligado a la compra — así que acá siempre aparecían como 100% sin pagar aunque en la realidad
+  // ya estuvieran saldadas. Desde el corte en adelante el vínculo sí es confiable.
+  const corte = data.configuracion.fecha_saldo_inicial_caja;
   const cuentas_por_pagar = Math.round(
-    data.compras.reduce((acc, c) => acc + Math.max(0, c.total - totalPagadoCompra(data, c.id)), 0)
+    data.compras
+      .filter((c) => !corte || c.fecha >= corte)
+      .reduce((acc, c) => acc + Math.max(0, c.total - totalPagadoCompra(data, c.id)), 0)
   );
   const dinero_libre = Math.round(dinero_en_cuentas - cuentas_por_pagar) || 0;
   return { dinero_en_cuentas, cuentas_por_pagar, dinero_libre };
@@ -1386,8 +1393,12 @@ export interface CuentaPorCobrar {
 }
 
 export function calcularCuentasPorCobrar(data: RicordoDataV2, hoy: string): CuentaPorCobrar[] {
+  // Los pedidos de antes del corte de caja nunca tuvieron un cobro vinculado por id (el sistema
+  // viejo registraba el ingreso como un movimiento de caja suelto) — mostrarlos acá como
+  // "pendientes de cobro" sería inventar una deuda que probablemente ya se cobró en su momento.
+  const corte = data.configuracion.fecha_saldo_inicial_caja;
   return data.pedidos
-    .filter((p) => p.estado === "Entregado")
+    .filter((p) => p.estado === "Entregado" && (!corte || p.fecha >= corte))
     .map((p) => {
       const cobrado = totalCobradoPedido(data, p.id);
       return {
@@ -1417,7 +1428,11 @@ export interface CuentaPorPagar {
 }
 
 export function calcularCuentasPorPagar(data: RicordoDataV2, hoy: string): CuentaPorPagar[] {
+  // Mismo criterio que calcularCuentasPorCobrar: las compras de antes del corte de caja nunca
+  // tuvieron un pago vinculado por id, no inventamos que siguen pendientes.
+  const corte = data.configuracion.fecha_saldo_inicial_caja;
   return data.compras
+    .filter((c) => !corte || c.fecha >= corte)
     .map((c) => {
       const pagado = totalPagadoCompra(data, c.id);
       return {
