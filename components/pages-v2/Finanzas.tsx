@@ -31,6 +31,7 @@ import {
   fARS,
   fNum,
   saldoCaja,
+  saldoCajaAlFecha,
   ORIGENES_CAJA_REAL,
   calcularEerr,
   calcularComprasCmvInventario,
@@ -1877,15 +1878,17 @@ function CuentasPorPagarTab() {
 function ResumenTab() {
   const { data } = useStoreV2();
   const { mes, anio } = usePeriod();
-  const hoy = hoyIso();
 
   const desde = primerDiaMes(mes, anio);
   const hasta = ultimoDiaMes(mes, anio);
   const eerr = useMemo(() => calcularEerr(data, desde, hasta), [data, desde, hasta]);
-  const saldo = saldoCaja(data);
-  const libre = useMemo(() => calcularDineroLibre(data, hoy), [data, hoy]);
-  const porCobrar = useMemo(() => calcularCuentasPorCobrar(data, hoy).reduce((acc, c) => acc + c.saldo, 0), [data, hoy]);
-  const porPagar = useMemo(() => calcularCuentasPorPagar(data, hoy).reduce((acc, c) => acc + c.saldo, 0), [data, hoy]);
+  // "Lo esencial de {mes} {año}": todo el grupo se calcula AL FINAL del período elegido, no al día
+  // de hoy — si no, cambiar el selector de mes no cambiaría nada acá y mostraría el estado actual
+  // disfrazado de un mes viejo.
+  const saldo = useMemo(() => saldoCajaAlFecha(data, hasta), [data, hasta]);
+  const libre = useMemo(() => calcularDineroLibre(data, hasta), [data, hasta]);
+  const porCobrar = useMemo(() => calcularCuentasPorCobrar(data, hasta).reduce((acc, c) => acc + c.saldo, 0), [data, hasta]);
+  const porPagar = useMemo(() => calcularCuentasPorPagar(data, hasta).reduce((acc, c) => acc + c.saldo, 0), [data, hasta]);
 
   return (
     <div>

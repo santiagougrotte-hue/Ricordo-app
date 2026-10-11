@@ -1089,7 +1089,7 @@ function clasificarMovimientoCaja(m: RicordoDataV2["movimientos_financieros"][nu
 
 /** Saldo de caja real hasta una fecha (inclusive) — mismo criterio que saldoCaja pero con corte de
  * fecha, para poder calcular saldo inicial/final de un período. */
-function saldoCajaAlFecha(data: RicordoDataV2, hastaFecha?: string): number {
+export function saldoCajaAlFecha(data: RicordoDataV2, hastaFecha?: string): number {
   const corte = data.configuracion.fecha_saldo_inicial_caja;
   const movs = data.movimientos_financieros
     .filter((m) => esMovimientoCajaReal(m) && (!hastaFecha || m.fecha <= hastaFecha) && (!corte || m.fecha >= corte))
@@ -1276,7 +1276,7 @@ export function calcularDineroLibre(data: RicordoDataV2, hoy: string): DineroLib
   const corte = data.configuracion.fecha_saldo_inicial_caja;
   const cuentas_por_pagar = Math.round(
     data.compras
-      .filter((c) => !corte || c.fecha >= corte)
+      .filter((c) => c.fecha <= hoy && (!corte || c.fecha >= corte))
       .reduce((acc, c) => acc + Math.max(0, c.total - totalPagadoCompra(data, c.id)), 0)
   );
   const dinero_libre = Math.round(dinero_en_cuentas - cuentas_por_pagar) || 0;
@@ -1398,7 +1398,7 @@ export function calcularCuentasPorCobrar(data: RicordoDataV2, hoy: string): Cuen
   // "pendientes de cobro" sería inventar una deuda que probablemente ya se cobró en su momento.
   const corte = data.configuracion.fecha_saldo_inicial_caja;
   return data.pedidos
-    .filter((p) => p.estado === "Entregado" && (!corte || p.fecha >= corte))
+    .filter((p) => p.estado === "Entregado" && p.fecha <= hoy && (!corte || p.fecha >= corte))
     .map((p) => {
       const cobrado = totalCobradoPedido(data, p.id);
       return {
@@ -1432,7 +1432,7 @@ export function calcularCuentasPorPagar(data: RicordoDataV2, hoy: string): Cuent
   // tuvieron un pago vinculado por id, no inventamos que siguen pendientes.
   const corte = data.configuracion.fecha_saldo_inicial_caja;
   return data.compras
-    .filter((c) => !corte || c.fecha >= corte)
+    .filter((c) => c.fecha <= hoy && (!corte || c.fecha >= corte))
     .map((c) => {
       const pagado = totalPagadoCompra(data, c.id);
       return {
