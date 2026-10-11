@@ -421,7 +421,14 @@ export interface RevisionItem {
 }
 
 // --- Stock reservado -------------------------------------------------------------------------
-export type TipoItemStock = "insumo" | "producto_variante";
+/** "producto": el stock de un producto terminado es UN SOLO pool por sabor/producto base
+ * (`item_id` = `Producto.id`), compartido entre todas sus variantes/canales/tamaños de caja —
+ * nunca se trackea por separado "Calabaza mayorista 12u" vs. "Calabaza minorista 10u". La
+ * cantidad siempre está en unidades sueltas (no "cajas de tal presentación"): cada movimiento que
+ * la toca convierte cajas × unidades_por_paquete de la variante involucrada antes de guardarlo
+ * (ver conStockPorProducto en lib/migration/v3.ts para el dato histórico, y Operaciones.tsx/
+ * Ventas.tsx para los movimientos nuevos). */
+export type TipoItemStock = "insumo" | "producto";
 
 export type EstadoReserva = "activa" | "liberada" | "consumida";
 

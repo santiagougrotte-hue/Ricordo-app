@@ -585,8 +585,26 @@ function migrarCompras(
 // El stock se reconstruye 100% a partir de este libro (ver `lib/calc.ts` en la etapa 5): un
 // movimiento tipo "conteo" resetea el saldo conocido a esa fecha, todo lo demás sirve o resta.
 
-function migrarInventario(data: RicordoData, agregar: ReturnType<typeof crearReporte>["agregar"]): RicordoDataV2["inventario_movimientos"] {
+/** El esquema nuevo trackea el stock de productos terminados en un solo pool por sabor/producto
+ * base (`TipoItemStock` = "producto", cantidad en unidades sueltas), no por variante/presentación
+ * — ver el comentario en `types-v2.ts`. Los movimientos que trae el esquema viejo están en "cajas
+ * de tal presentación" (una variante concreta), así que hay que convertir cada uno con el factor
+ * de ESA variante antes de guardarlo. Sin la variante en el catálogo migrado no hay forma de saber
+ * ni a qué producto ni con qué factor convertir, así que el movimiento se descarta (nunca se
+ * inventa un producto_id al azar) y queda reportado para revisión humana. */
+function migrarInventario(
+  data: RicordoData,
+  variantes: ProductoVariante[],
+  agregar: ReturnType<typeof crearReporte>["agregar"]
+): RicordoDataV2["inventario_movimientos"] {
   const movimientos: RicordoDataV2["inventario_movimientos"] = [];
+  const variantePorId = new Map(variantes.map((v) => [v.id, v]));
+
+  function aUnidadesDeProducto(varianteId: string): { producto_id: string; unidades: number } {
+    const variante = variantePorId.get(varianteId);
+    if (!variante) return { producto_id: "", unidades: 0 };
+    return { producto_id: variante.producto_id, unidades: variante.unidades_por_paquete ?? 1 };
+  }
 
   for (const c of data.compras) {
     for (const l of c.lineas) {
@@ -598,7 +616,19 @@ function migrarInventario(data: RicordoData, agregar: ReturnType<typeof crearRep
   }
 
   for (const prod of data.produccion) {
-    movimientos.push({ id: uid("MOV"), fecha: prod.fecha, tipo: "produccion", origen_tipo: "produccion", origen_id: prod.id, item_tipo: "producto_variante", item_id: prod.id_producto, cantidad: prod.cantidad });
+    const conv = aUnidadesDeProducto(prod.id_producto);
+    if (conv.producto_id) {
+      movimientos.push({
+        id: uid("MOV"),
+        fecha: prod.fecha,
+        tipo: "produccion",
+        origen_tipo: "produccion",
+        origen_id: prod.id,
+        item_tipo: "producto",
+        item_id: conv.producto_id,
+        cantidad: prod.cantidad * conv.unidades,
+      });
+    }
     const consumo = data.recetas.filter((r) => r.id_producto === prod.id_producto && r.tipo === "Ingrediente");
     for (const rl of consumo) {
       movimientos.push({
@@ -616,19 +646,45 @@ function migrarInventario(data: RicordoData, agregar: ReturnType<typeof crearRep
 
   for (const p of data.pedidos) {
     if (p.estado !== "Entregado") continue;
-    movimientos.push({ id: uid("MOV"), fecha: p.fecha, tipo: "venta", origen_tipo: "pedido", origen_id: p.id_detalle, item_tipo: "producto_variante", item_id: p.id_producto, cantidad: -p.cantidad });
+    const conv = aUnidadesDeProducto(p.id_producto);
+    if (conv.producto_id) {
+      movimientos.push({
+        id: uid("MOV"),
+        fecha: p.fecha,
+        tipo: "venta",
+        origen_tipo: "pedido",
+        origen_id: p.id_detalle,
+        item_tipo: "producto",
+        item_id: conv.producto_id,
+        cantidad: -(p.cantidad * conv.unidades),
+      });
+    }
   }
 
   for (const c of data.conteos_ingredientes) {
     movimientos.push({ id: uid("MOV"), fecha: c.fecha, tipo: "conteo", origen_tipo: "conteo_manual", origen_id: c.id, item_tipo: "insumo", item_id: c.id_ingrediente, cantidad: c.cantidad, notas: c.notas });
   }
   for (const c of data.conteos_stock) {
-    movimientos.push({ id: uid("MOV"), fecha: c.fecha, tipo: "conteo", origen_tipo: "conteo_manual", origen_id: c.id, item_tipo: "producto_variante", item_id: c.id_producto, cantidad: c.cantidad });
+    const conv = aUnidadesDeProducto(c.id_producto);
+    if (conv.producto_id) {
+      movimientos.push({ id: uid("MOV"), fecha: c.fecha, tipo: "conteo", origen_tipo: "conteo_manual", origen_id: c.id, item_tipo: "producto", item_id: conv.producto_id, cantidad: c.cantidad * conv.unidades });
+    }
   }
 
   const fechaMigracion = new Date().toISOString().slice(0, 10);
   for (const [idProducto, cantidad] of Object.entries(data.stock_manual)) {
-    movimientos.push({ id: uid("MOV"), fecha: fechaMigracion, tipo: "ajuste", origen_tipo: "stock_manual_legacy", item_tipo: "producto_variante", item_id: idProducto, cantidad, notas: "Migrado de stock_manual — el dato viejo no tenía fecha propia, se usó la fecha de migración." });
+    const conv = aUnidadesDeProducto(idProducto);
+    if (!conv.producto_id) continue;
+    movimientos.push({
+      id: uid("MOV"),
+      fecha: fechaMigracion,
+      tipo: "ajuste",
+      origen_tipo: "stock_manual_legacy",
+      item_tipo: "producto",
+      item_id: conv.producto_id,
+      cantidad: cantidad * conv.unidades,
+      notas: "Migrado de stock_manual — el dato viejo no tenía fecha propia, se usó la fecha de migración.",
+    });
     agregar("revision_manual", {
       seccion: "inventario_movimientos",
       entidad_id: idProducto,
@@ -739,7 +795,7 @@ export function migrarAV2(data: RicordoData): { documento: DocumentoV2Interno; r
   contar("compras", compras.length, 0);
   contar("compra_items", compra_items.length, 0);
 
-  const inventario_movimientos = migrarInventario(data, agregar);
+  const inventario_movimientos = migrarInventario(data, variantes, agregar);
   contar("inventario_movimientos", inventario_movimientos.length, 0);
 
   const { movimientos: movimientos_financieros } = migrarFinanzas(data, categorias, agregar);

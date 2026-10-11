@@ -191,20 +191,29 @@ function conMovimientosDeEntrega(
   items: PedidoItem[]
 ): Pick<typeof d, "inventario_movimientos"> {
   const yaTieneMovStock = d.inventario_movimientos.some((m) => m.origen_tipo === "pedido" && m.origen_id === pedido.id);
+  // El stock de productos terminados es un solo pool por sabor (ver TipoItemStock en
+  // types-v2.ts): cualquier canal/presentación que se venda descuenta el mismo pool, convertido
+  // a unidades sueltas vía unidades_por_paquete de la variante realmente vendida.
   const nuevosMovStock = yaTieneMovStock
     ? []
     : items
-        .filter((i) => i.producto_variante_id)
-        .map((i) => ({
-          id: uid("MOV"),
-          fecha: pedido.fecha,
-          tipo: "venta" as const,
-          origen_tipo: "pedido",
-          origen_id: pedido.id,
-          item_tipo: "producto_variante" as const,
-          item_id: i.producto_variante_id!,
-          cantidad: -i.cantidad,
-        }));
+        .flatMap((i) => {
+          if (!i.producto_variante_id) return [];
+          const variante = d.producto_variantes.find((v) => v.id === i.producto_variante_id);
+          if (!variante) return [];
+          return [
+            {
+              id: uid("MOV"),
+              fecha: pedido.fecha,
+              tipo: "venta" as const,
+              origen_tipo: "pedido",
+              origen_id: pedido.id,
+              item_tipo: "producto" as const,
+              item_id: variante.producto_id,
+              cantidad: -(i.cantidad * (variante.unidades_por_paquete ?? 1)),
+            },
+          ];
+        });
 
   return {
     inventario_movimientos: [...d.inventario_movimientos, ...nuevosMovStock],
@@ -267,18 +276,23 @@ function reservasActualizadasParaPedido(d: ReturnType<typeof useStoreV2>["data"]
     return d.reservas.map((r) => (activasPrevias.has(r.id) ? { ...r, estado: "liberada" } : r));
   }
   const liberadas = d.reservas.map((r) => (activasPrevias.has(r.id) ? { ...r, estado: "liberada" as const } : r));
-  const nuevas: Reserva[] = items
-    .filter((i) => i.producto_variante_id)
-    .map((i) => ({
-      id: uid("RSV"),
-      item_tipo: "producto_variante" as const,
-      item_id: i.producto_variante_id!,
-      cantidad: i.cantidad,
-      origen_tipo: "pedido" as const,
-      origen_id: pedido.id,
-      estado: "activa" as const,
-      fecha: pedido.fecha,
-    }));
+  const nuevas: Reserva[] = items.flatMap((i) => {
+    if (!i.producto_variante_id) return [];
+    const variante = d.producto_variantes.find((v) => v.id === i.producto_variante_id);
+    if (!variante) return [];
+    return [
+      {
+        id: uid("RSV"),
+        item_tipo: "producto" as const,
+        item_id: variante.producto_id,
+        cantidad: i.cantidad * (variante.unidades_por_paquete ?? 1),
+        origen_tipo: "pedido" as const,
+        origen_id: pedido.id,
+        estado: "activa" as const,
+        fecha: pedido.fecha,
+      },
+    ];
+  });
   return [...liberadas, ...nuevas];
 }
 

@@ -19,7 +19,11 @@ function rangoMes(mes: string): { mesCol: string; desde: string; hasta: string }
   return { mesCol: `${mes}-01`, desde: `${mes}-01`, hasta: `${mes}-${String(ultimoDia).padStart(2, "0")}` };
 }
 
-function refUnidades(linea: string | undefined): number {
+/** Cuántas unidades sueltas representa "una caja" de referencia para cada línea de catálogo —
+ * usado para mostrar el stock compartido por producto (ver TipoItemStock) en términos legibles de
+ * "cajas", ya que se guarda siempre en unidades sueltas. Exportada para reusar el mismo criterio
+ * en Inventario → Productos terminados. */
+export function refUnidades(linea: string | undefined): number {
   return linea === "Salsa" ? 1 : 12;
 }
 
@@ -94,7 +98,7 @@ export function resumenProductosSheets(data: RicordoDataV2, mes: string): FilaRe
       }
       const costo_mo_caja_ref = varianteMinoristaRef ? costoManoDeObraVariante(data, varianteMinoristaRef.id) : 0;
 
-      const stockUnidades = variantesDelProducto.reduce((acc, v) => acc + calcularStock(data, "producto_variante", v.id) * (v.unidades_por_paquete ?? 0), 0);
+      const stockUnidades = calcularStock(data, "producto", producto.id);
 
       const produccionDelMes = data.produccion.filter((pr) => pr.fecha >= desde && pr.fecha <= hasta);
       const unidadesProducidas = produccionDelMes.reduce((acc, pr) => {

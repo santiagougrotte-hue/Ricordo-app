@@ -143,6 +143,26 @@ export function costoUnidadProductoBase(data: RicordoDataV2, productoId: string)
   return Math.round(total);
 }
 
+/** Variante "representativa" de un producto para valorizar su stock compartido (ver
+ * `TipoItemStock`): cualquiera de sus presentaciones activas sirve como referencia de costo por
+ * unidad — se prioriza una con `unidades_por_paquete` cargado (sin eso no se puede convertir caja
+ * → unidad). No importa cuál se use mientras el negocio tenga un costo por unidad uniforme entre
+ * presentaciones del mismo sabor (packaging propio de cada una queda afuera de esta estimación,
+ * igual que ya pasa en `resumenProductosSheets`). */
+function varianteReferenciaProducto(data: RicordoDataV2, productoId: string): ProductoVariante | undefined {
+  const delProducto = data.producto_variantes.filter((v) => v.producto_id === productoId);
+  return delProducto.find((v) => v.activo && v.unidades_por_paquete) ?? delProducto.find((v) => v.unidades_por_paquete) ?? delProducto[0];
+}
+
+/** Costo estimado de 1 unidad suelta del pool de stock compartido de un producto — ver
+ * `TipoItemStock`/`valorStockProductos`. Sin ninguna variante con `unidades_por_paquete` cargado
+ * no hay forma de convertir, así que da 0 (nunca se inventa un factor). */
+export function costoUnidadProducto(data: RicordoDataV2, productoId: string): number {
+  const ref = varianteReferenciaProducto(data, productoId);
+  if (!ref || !ref.unidades_por_paquete) return 0;
+  return costoVariante(data, ref.id) / ref.unidades_por_paquete;
+}
+
 export function margenVariante(data: RicordoDataV2, variante: ProductoVariante): number {
   return variante.precio_venta > 0 ? ((variante.precio_venta - costoVariante(data, variante.id)) / variante.precio_venta) * 100 : 0;
 }
@@ -214,11 +234,12 @@ export function valorStockInsumos(data: RicordoDataV2, hastaFecha?: string): num
 }
 
 /** Valorización ESTIMADA del inventario de productos terminados: usa el costo de receta vigente
- * (costoVariante, precios actuales), no un costo histórico congelado al momento de producir —
- * el esquema no guarda ese dato por movimiento. Ver `calcularComprasCmvInventario`, que expone
- * esta limitación explícitamente en vez de esconderla. */
+ * (costoUnidadProducto, precios actuales), no un costo histórico congelado al momento de producir
+ * — el esquema no guarda ese dato por movimiento. Ver `calcularComprasCmvInventario`, que expone
+ * esta limitación explícitamente en vez de esconderla. Stock compartido por producto (ver
+ * `TipoItemStock`), no por variante. */
 export function valorStockProductos(data: RicordoDataV2, hastaFecha?: string): number {
-  return data.producto_variantes.reduce((acc, v) => acc + calcularStock(data, "producto_variante", v.id, hastaFecha) * costoVariante(data, v.id), 0);
+  return data.productos.reduce((acc, p) => acc + calcularStock(data, "producto", p.id, hastaFecha) * costoUnidadProducto(data, p.id), 0);
 }
 
 // --- Finanzas -----------------------------------------------------------------------------------
@@ -867,12 +888,12 @@ function valorMovimiento(data: RicordoDataV2, m: RicordoDataV2["inventario_movim
     const insumo = data.insumos.find((i) => i.id === m.item_id);
     return Math.abs(m.cantidad) * (insumo?.precio_actual ?? 0);
   }
-  return Math.abs(m.cantidad) * costoVariante(data, m.item_id);
+  return Math.abs(m.cantidad) * costoUnidadProducto(data, m.item_id);
 }
 
 function nombreItemMovimiento(data: RicordoDataV2, m: RicordoDataV2["inventario_movimientos"][number]): string {
   if (m.item_tipo === "insumo") return data.insumos.find((i) => i.id === m.item_id)?.nombre ?? "(insumo eliminado)";
-  return data.producto_variantes.find((v) => v.id === m.item_id)?.nombre ?? "(producto eliminado)";
+  return data.productos.find((p) => p.id === m.item_id)?.nombre ?? "(producto eliminado)";
 }
 
 export function calcularComprasCmvInventario(data: RicordoDataV2, desde: string, hasta: string): ComprasCmvInventario {
@@ -921,13 +942,13 @@ export function calcularComprasCmvInventario(data: RicordoDataV2, desde: string,
     total: Math.round(
       movsConteo.reduce((acc, m) => {
         const diff = diferenciaConteo(data, m);
-        const precio = m.item_tipo === "insumo" ? (data.insumos.find((i) => i.id === m.item_id)?.precio_actual ?? 0) : costoVariante(data, m.item_id);
+        const precio = m.item_tipo === "insumo" ? (data.insumos.find((i) => i.id === m.item_id)?.precio_actual ?? 0) : costoUnidadProducto(data, m.item_id);
         return acc + diff * precio;
       }, 0)
     ),
     registros: movsConteo.map((m) => {
       const diff = diferenciaConteo(data, m);
-      const precio = m.item_tipo === "insumo" ? (data.insumos.find((i) => i.id === m.item_id)?.precio_actual ?? 0) : costoVariante(data, m.item_id);
+      const precio = m.item_tipo === "insumo" ? (data.insumos.find((i) => i.id === m.item_id)?.precio_actual ?? 0) : costoUnidadProducto(data, m.item_id);
       return {
         fecha: m.fecha,
         concepto: `Conteo — ${nombreItemMovimiento(data, m)} (contado ${m.cantidad}, diferencia ${diff >= 0 ? "+" : ""}${diff.toFixed(2)})`,
@@ -982,8 +1003,8 @@ export function calcularComprasCmvInventario(data: RicordoDataV2, desde: string,
   for (const i of data.insumos.filter((ins) => ins.controla_stock)) {
     if (calcularStock(data, "insumo", i.id, hasta) < 0) alertas.push({ severidad: "alta", mensaje: `Stock negativo en el insumo "${i.nombre}".` });
   }
-  for (const v of data.producto_variantes) {
-    if (calcularStock(data, "producto_variante", v.id, hasta) < 0) alertas.push({ severidad: "alta", mensaje: `Stock negativo en "${v.nombre}".` });
+  for (const p of data.productos) {
+    if (calcularStock(data, "producto", p.id, hasta) < 0) alertas.push({ severidad: "alta", mensaje: `Stock negativo en "${p.nombre}".` });
   }
   for (const ci of itemsComprasPeriodo) {
     const insumo = data.insumos.find((i) => i.id === ci.insumo_id);

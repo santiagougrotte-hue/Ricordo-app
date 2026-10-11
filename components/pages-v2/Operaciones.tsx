@@ -431,12 +431,17 @@ function ProduccionTab() {
     if (!variante) return;
     const produccionId = uid("PRD");
     const consumo = recetaEfectivaVariante(data, variante);
+    // El stock de productos terminados es un solo pool por sabor (variante.producto_id), en
+    // unidades sueltas — producir "cantidad" cajas de ESTA presentación suma cantidad × sus
+    // unidades_por_paquete al pool compartido, sin importar en qué presentación se termine
+    // vendiendo después (ver TipoItemStock en types-v2.ts).
+    const unidadesProducidas = form.cantidad * (variante.unidades_por_paquete ?? 1);
     setData((d) => ({
       ...d,
       produccion: [...d.produccion, { id: produccionId, producto_variante_id: form.producto_variante_id, cantidad: form.cantidad, fecha: form.fecha, notas: form.notas || undefined }],
       inventario_movimientos: [
         ...d.inventario_movimientos,
-        { id: uid("MOV"), fecha: form.fecha, tipo: "produccion" as const, origen_tipo: "produccion", origen_id: produccionId, item_tipo: "producto_variante" as const, item_id: form.producto_variante_id, cantidad: form.cantidad },
+        { id: uid("MOV"), fecha: form.fecha, tipo: "produccion" as const, origen_tipo: "produccion", origen_id: produccionId, item_tipo: "producto" as const, item_id: variante.producto_id, cantidad: unidadesProducidas },
         ...consumo.map((c) => ({
           id: uid("MOV"),
           fecha: form.fecha,

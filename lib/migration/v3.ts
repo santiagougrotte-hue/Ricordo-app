@@ -134,6 +134,44 @@ export function conCobrosSeptiembreConfirmados(data: RicordoDataV2): RicordoData
   return { ...data, movimientos_financieros: [...data.movimientos_financieros, ...nuevos] };
 }
 
+/** El stock de productos terminados pasa de trackearse por variante/presentación (cajas de tal
+ * tamaño) a un solo pool por sabor/producto base, en unidades sueltas (ver `TipoItemStock` en
+ * types-v2.ts) — así una venta Mayorista de 8u y una Minorista de 12u del mismo sabor descuentan
+ * el mismo stock. Convierte cada `InventarioMovimiento`/`Reserva` que todavía esté guardado con el
+ * `item_tipo` viejo ("producto_variante", cantidad en cajas de esa variante) a `item_id` =
+ * producto base + cantidad en unidades (× `unidades_por_paquete` de la variante que lo originó).
+ * Si la variante ya no existe en el catálogo (ej. una "con salsa" eliminada en la limpieza de
+ * Fase 2), no hay forma de saber a qué producto ni con qué factor convertir — se deja el registro
+ * tal cual, como historial puro que ya no participa de ningún cálculo de stock (nunca se inventa
+ * un producto_id al azar). Idempotente: una vez convertido ya no queda ningún `item_tipo` viejo
+ * para tocar, así que una segunda pasada devuelve la misma referencia. */
+export function conStockPorProducto(data: RicordoDataV2): RicordoDataV2 {
+  const variantePorId = new Map(data.producto_variantes.map((v) => [v.id, v]));
+
+  function factorConversion(itemTipo: string, itemId: string): { producto_id: string; unidades_por_paquete: number } | null {
+    if (itemTipo !== "producto_variante") return null;
+    const variante = variantePorId.get(itemId);
+    if (!variante) return null;
+    return { producto_id: variante.producto_id, unidades_por_paquete: variante.unidades_por_paquete ?? 1 };
+  }
+
+  const inventario_movimientos = data.inventario_movimientos.map((m) => {
+    const conv = factorConversion(m.item_tipo, m.item_id);
+    if (!conv) return m;
+    return { ...m, item_tipo: "producto" as const, item_id: conv.producto_id, cantidad: m.cantidad * conv.unidades_por_paquete };
+  });
+  const reservas = data.reservas.map((r) => {
+    const conv = factorConversion(r.item_tipo, r.item_id);
+    if (!conv) return r;
+    return { ...r, item_tipo: "producto" as const, item_id: conv.producto_id, cantidad: r.cantidad * conv.unidades_por_paquete };
+  });
+
+  if (inventario_movimientos.every((m, i) => m === data.inventario_movimientos[i]) && reservas.every((r, i) => r === data.reservas[i])) {
+    return data;
+  }
+  return { ...data, inventario_movimientos, reservas };
+}
+
 const CAMPOS_HUERFANOS_RAIZ = [
   "plan_produccion",
   "ordenes_produccion",
@@ -192,7 +230,9 @@ export function migrarV2aV3(dataV2: RicordoDataV2): RicordoDataV2 {
   data.configuracion = configuracion;
   data.legacy = legacy;
 
-  return conCobrosSeptiembreConfirmados(
-    conSaldoInicialCaja(conFechaDeCorte(conLineaPorDefecto(limpiarCapreseYConSalsa(data as unknown as RicordoDataV2))))
+  return conStockPorProducto(
+    conCobrosSeptiembreConfirmados(
+      conSaldoInicialCaja(conFechaDeCorte(conLineaPorDefecto(limpiarCapreseYConSalsa(data as unknown as RicordoDataV2))))
+    )
   );
 }
