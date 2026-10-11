@@ -224,6 +224,11 @@ export function gastosATSV(filas: FilaResumenGasto[]): string {
 }
 
 // --- 3) RECETAS_RELLENO (receta vigente, no depende del mes) ---------------------------------------
+// El relleno se arma en una tanda grande una vez por mes (a diferencia de masa/packaging, de ritmo
+// diario/semanal) — por eso esos insumos quedan afuera de la alerta automática de stock
+// (`insumosSoloRelleno`/`calcularAlertasStock` en lib/calc-v2.ts e ia-stock.ts) y se planifican acá
+// a mano: `stock_actual` da el punto de partida para calcular cuánto falta comprar/preparar según
+// la próxima tanda planeada (cantidad_por_unidad × unidades a producir − stock_actual).
 
 export interface FilaRecetaRelleno {
   producto_id: string;
@@ -233,6 +238,7 @@ export interface FilaRecetaRelleno {
   cantidad_por_unidad: number;
   unidad: string;
   precio_actual: number;
+  stock_actual: number;
 }
 
 export function resumenRecetasRellenoSheets(data: RicordoDataV2): FilaRecetaRelleno[] {
@@ -251,6 +257,7 @@ export function resumenRecetasRellenoSheets(data: RicordoDataV2): FilaRecetaRell
         cantidad_por_unidad: Math.round(item.cantidad * 100000) / 100000,
         unidad: insumo?.unidad ?? "",
         precio_actual: insumo?.precio_actual ?? 0,
+        stock_actual: insumo ? calcularStock(data, "insumo", insumo.id) : 0,
       });
     }
   }
@@ -259,8 +266,8 @@ export function resumenRecetasRellenoSheets(data: RicordoDataV2): FilaRecetaRell
 
 export function recetasRellenoATSV(filas: FilaRecetaRelleno[]): string {
   return tsv(
-    ["producto_id", "producto", "insumo_id", "insumo", "cantidad_por_unidad", "unidad", "precio_actual"],
-    filas.map((f) => [f.producto_id, f.producto, f.insumo_id, f.insumo, f.cantidad_por_unidad, f.unidad, f.precio_actual])
+    ["producto_id", "producto", "insumo_id", "insumo", "cantidad_por_unidad", "unidad", "precio_actual", "stock_actual"],
+    filas.map((f) => [f.producto_id, f.producto, f.insumo_id, f.insumo, f.cantidad_por_unidad, f.unidad, f.precio_actual, f.stock_actual])
   );
 }
 

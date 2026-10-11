@@ -167,6 +167,32 @@ export function margenVariante(data: RicordoDataV2, variante: ProductoVariante):
   return variante.precio_venta > 0 ? ((variante.precio_venta - costoVariante(data, variante.id)) / variante.precio_venta) * 100 : 0;
 }
 
+/** Insumos que SOLO aparecen en la etapa "relleno" de alguna receta activa (nunca en masa,
+ * packaging, salsa ni terminación) — el relleno se arma en una tanda grande una vez por mes, muy
+ * distinto al ritmo diario/semanal de masa y packaging, así que un promedio de consumo de los
+ * últimos 30 días (`calcularAlertasStock`) no tiene sentido para ellos: una compra mensual grande
+ * seguida de 29 días en cero da un promedio bajo y "días de cobertura" que no reflejan el ciclo
+ * real. Se excluyen de esa alerta automática — se planifican a mano desde "Exportar a Sheets" →
+ * RECETAS_RELLENO, que ya lista cuánto de cada insumo entra por unidad. Mismo criterio simplificado
+ * que esa tabla: mira `receta_items` de la receta base, no ajustes/complementos por variante. */
+export function insumosSoloRelleno(data: RicordoDataV2): Set<string> {
+  const recetasActivasIds = new Set(
+    data.productos.filter((p) => p.activo).flatMap((p) => data.recetas.filter((r) => r.producto_id === p.id && r.activa).map((r) => r.id))
+  );
+  const etapasPorInsumo = new Map<string, Set<EtapaReceta>>();
+  for (const item of data.receta_items) {
+    if (!recetasActivasIds.has(item.receta_id)) continue;
+    const etapas = etapasPorInsumo.get(item.insumo_id) ?? new Set<EtapaReceta>();
+    etapas.add(item.etapa);
+    etapasPorInsumo.set(item.insumo_id, etapas);
+  }
+  const resultado = new Set<string>();
+  for (const [insumoId, etapas] of etapasPorInsumo) {
+    if (etapas.size === 1 && etapas.has("relleno")) resultado.add(insumoId);
+  }
+  return resultado;
+}
+
 export interface VarianteSinFactor {
   variante_id: string;
   variante_nombre: string;

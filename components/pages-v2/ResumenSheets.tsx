@@ -159,7 +159,7 @@ const HEADERS_PRODUCTOS = [
   "cajas_producidas_eq",
 ];
 const HEADERS_GASTOS = ["mes", "tipo", "categoria", "monto"];
-const HEADERS_RECETAS = ["producto_id", "producto", "insumo_id", "insumo", "cantidad_por_unidad", "unidad", "precio_actual"];
+const HEADERS_RECETAS = ["producto_id", "producto", "insumo_id", "insumo", "cantidad_por_unidad", "unidad", "precio_actual", "stock_actual"];
 const HEADERS_REPARTO = ["mes", "recorrido", "tipo", "viajes", "km", "litros", "nafta", "peajes", "costo_total", "envios_cobrados"];
 
 export function ResumenSheetsButton() {
@@ -198,7 +198,7 @@ export function ResumenSheetsButton() {
   );
   const filasGastos = useMemo(() => gastos.map((f) => [f.mes, f.tipo, f.categoria, f.monto]), [gastos]);
   const filasRecetas = useMemo(
-    () => recetas.map((f) => [f.producto_id, f.producto, f.insumo_id, f.insumo, f.cantidad_por_unidad, f.unidad, f.precio_actual]),
+    () => recetas.map((f) => [f.producto_id, f.producto, f.insumo_id, f.insumo, f.cantidad_por_unidad, f.unidad, f.precio_actual, f.stock_actual]),
     [recetas]
   );
   const filasReparto = useMemo(
@@ -233,7 +233,7 @@ export function ResumenSheetsButton() {
         />
         <TablaResumen
           titulo="RECETAS_RELLENO"
-          ayuda="Receta vigente de cada producto activo — no depende del mes elegido. Es lo que necesita el batch de compras."
+          ayuda="Receta vigente de cada producto activo — no depende del mes elegido. Incluye el stock actual de cada insumo de relleno (se arma en tanda mensual, no está en Inventario → Alertas de stock) para planificar la próxima compra/tanda."
           headers={HEADERS_RECETAS}
           filas={filasRecetas}
           archivo="recetas_relleno.csv"

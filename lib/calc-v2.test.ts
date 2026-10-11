@@ -39,6 +39,7 @@ import {
   costoUnidadProductoBase,
   costoUnidadProducto,
   valorStockProductos,
+  insumosSoloRelleno,
   idsExcluidosPorRevision,
   calcularEerrEstructurado,
 } from "./calc-v2";
@@ -144,6 +145,30 @@ test("calcularStock/valorStockProductos: el stock de un producto es UN SOLO pool
   // receta compartida, sin mano de obra ni packaging en este fixture.
   assert.equal(costoUnidadProducto(data, "P1"), 100);
   assert.equal(valorStockProductos(data), 6800);
+});
+
+test("insumosSoloRelleno: solo marca insumos que NUNCA aparecen fuera de la etapa relleno, en recetas de productos/recetas activos", () => {
+  const data = emptyDataV2();
+  data.productos = [
+    { id: "P1", nombre: "Calabaza", activo: true },
+    { id: "P2", nombre: "Espinaca", activo: true },
+    { id: "P3", nombre: "Inactivo", activo: false },
+  ];
+  data.recetas = [
+    { id: "REC-1", producto_id: "P1", nombre: "R1", activa: true },
+    { id: "REC-2", producto_id: "P2", nombre: "R2", activa: true },
+    { id: "REC-3", producto_id: "P3", nombre: "R3", activa: true },
+  ];
+  data.receta_items = [
+    { id: "RI-1", receta_id: "REC-1", insumo_id: "ING-RICOTA", etapa: "relleno", cantidad: 1 }, // solo relleno
+    { id: "RI-2", receta_id: "REC-1", insumo_id: "ING-HARINA", etapa: "masa", cantidad: 1 },
+    { id: "RI-3", receta_id: "REC-2", insumo_id: "ING-HARINA", etapa: "relleno", cantidad: 1 }, // también en relleno de OTRO producto, pero ya está en masa
+    { id: "RI-4", receta_id: "REC-3", insumo_id: "ING-SOLO-INACTIVO", etapa: "relleno", cantidad: 1 }, // receta de producto inactivo: no cuenta
+  ];
+  const solo = insumosSoloRelleno(data);
+  assert.equal(solo.has("ING-RICOTA"), true);
+  assert.equal(solo.has("ING-HARINA"), false); // aparece en masa en algún lado, no es "solo relleno"
+  assert.equal(solo.has("ING-SOLO-INACTIVO"), false); // su única receta es de un producto inactivo
 });
 
 test("calcularStock/valorStockProductos: sin ninguna variante con unidades_por_paquete no se puede valorizar (da 0, nunca inventa un factor)", () => {

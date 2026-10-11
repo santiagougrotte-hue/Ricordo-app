@@ -73,3 +73,26 @@ test("calcularAlertasStock: sin consumo registrado, dias_cobertura es null y el 
   assert.equal(sinUso.dias_cobertura, null);
   assert.match(sinUso.mensaje, /no se puede estimar cobertura/);
 });
+
+test("calcularAlertasStock: un insumo de relleno (tanda mensual, INS-MOZZA en el fixture) sin nada accionable no aparece en la lista", () => {
+  const data = fixture();
+  // Mucho consumo reciente de golpe (como sería una tanda mensual real) — si se promediara como
+  // los demás insumos, esto daría "días de cobertura" muy bajos y una alerta "importante" ruidosa.
+  data.inventario_movimientos = [
+    { id: "M1", fecha: "2026-08-01", tipo: "compra", item_tipo: "insumo", item_id: "INS-MOZZA", cantidad: 100 },
+    { id: "M2", fecha: "2026-08-02", tipo: "consumo", item_tipo: "insumo", item_id: "INS-MOZZA", cantidad: -95 },
+  ];
+  const alertas = calcularAlertasStock(data, "2026-08-31");
+  assert.equal(alertas.some((a) => a.insumo_id === "INS-MOZZA"), false);
+});
+
+test("calcularAlertasStock: un insumo de relleno SÍ aparece si está por debajo del mínimo cargado, aunque no haya consumo reciente", () => {
+  const data = fixture();
+  data.inventario_movimientos = [{ id: "M1", fecha: "2026-08-01", tipo: "compra", item_tipo: "insumo", item_id: "INS-MOZZA", cantidad: 1 }]; // mínimo cargado es 2
+  const alertas = calcularAlertasStock(data, "2026-08-31");
+  const mozza = alertas.find((a) => a.insumo_id === "INS-MOZZA");
+  assert.ok(mozza);
+  assert.equal(mozza!.severidad, "importante");
+  assert.equal(mozza!.dias_cobertura, null); // nunca se calcula consumo diario para relleno
+  assert.match(mozza!.mensaje, /RECETAS_RELLENO/);
+});

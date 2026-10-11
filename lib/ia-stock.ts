@@ -4,7 +4,7 @@
 // recetas) — nunca inventa un número ni modifica stock por sí sola, solo calcula y alerta.
 
 import type { RicordoDataV2 } from "./types-v2";
-import { calcularStock, recetaEfectivaVariante, sumarDias } from "./calc-v2";
+import { calcularStock, recetaEfectivaVariante, sumarDias, insumosSoloRelleno } from "./calc-v2";
 
 /** Consumo diario promedio de un insumo en la ventana [hasta - diasLookback, hasta] — solo cuenta
  * salidas reales de stock (consumo de producción, venta directa, merma), nunca compras ni
@@ -66,24 +66,36 @@ export interface AlertaStockInsumo {
 /** Sección 20: una fila por insumo con stock controlado — la severidad prioriza primero el
  * faltante ya comprometido por pedidos pendientes (es plata ya vendida que no se puede cumplir),
  * después los días de cobertura contra el consumo real. Nunca compra ni ajusta stock: solo
- * calcula y sugiere una cantidad, la decisión de comprar queda del lado humano. */
+ * calcula y sugiere una cantidad, la decisión de comprar queda del lado humano.
+ *
+ * Los insumos que solo se usan en la etapa "relleno" (ver `insumosSoloRelleno`) se preparan en una
+ * tanda mensual, no al ritmo diario/semanal de masa y packaging — un consumo promedio de los
+ * últimos `diasLookback` días no refleja ese ciclo, así que para ellos NUNCA se calculan días de
+ * cobertura/variación de consumo ni se arma un mensaje de rutina (se planifican a mano desde
+ * "Exportar a Sheets" → RECETAS_RELLENO). Lo único que sigue valiendo igual para ellos, porque no
+ * depende de ningún supuesto de ritmo, es lo ya comprometido de verdad: si falta para un pedido ya
+ * confirmado/en producción, o si están por debajo del mínimo cargado a mano, esa fila SÍ aparece
+ * (nunca se esconde un faltante real) — si no hay nada accionable, no aparecen en esta lista. */
 export function calcularAlertasStock(data: RicordoDataV2, hoy: string, diasLookback = 30): AlertaStockInsumo[] {
   const necesidadPendientes = necesidadPorPedidosPendientes(data);
+  const soloRelleno = insumosSoloRelleno(data);
 
   const filas: AlertaStockInsumo[] = data.insumos
     .filter((i) => i.controla_stock && i.activo)
     .map((insumo) => {
+      const esRelleno = soloRelleno.has(insumo.id);
       const stock_actual = calcularStock(data, "insumo", insumo.id, hoy);
-      const consumo_diario_promedio = calcularConsumoDiarioPromedio(data, insumo.id, hoy, diasLookback);
-      const consumoAnterior = calcularConsumoDiarioPromedio(data, insumo.id, sumarDias(hoy, -diasLookback), diasLookback);
-      const dias_cobertura = consumo_diario_promedio > 0 ? stock_actual / consumo_diario_promedio : null;
+      const consumo_diario_promedio = esRelleno ? 0 : calcularConsumoDiarioPromedio(data, insumo.id, hoy, diasLookback);
+      const consumoAnterior = esRelleno ? 0 : calcularConsumoDiarioPromedio(data, insumo.id, sumarDias(hoy, -diasLookback), diasLookback);
+      const dias_cobertura = !esRelleno && consumo_diario_promedio > 0 ? stock_actual / consumo_diario_promedio : null;
       const necesidad_pedidos_pendientes = necesidadPendientes.get(insumo.id) ?? 0;
       const faltante_para_pedidos_pendientes = Math.max(0, necesidad_pedidos_pendientes - stock_actual);
       const variacion_consumo_pct =
-        consumoAnterior > 0 ? ((consumo_diario_promedio - consumoAnterior) / consumoAnterior) * 100 : null;
+        !esRelleno && consumoAnterior > 0 ? ((consumo_diario_promedio - consumoAnterior) / consumoAnterior) * 100 : null;
 
       // Sugerencia: cubrir lo que falta para los pedidos ya comprometidos + volver a tener el
-      // stock mínimo cargado (si hay) + un colchón de 7 días de consumo promedio.
+      // stock mínimo cargado (si hay) + un colchón de 7 días de consumo promedio (0 para relleno,
+      // que no tiene un "ritmo diario" del que sacar un colchón).
       const colchonSeguridad = consumo_diario_promedio * 7;
       const objetivoStock = Math.max(insumo.stock_minimo ?? 0, colchonSeguridad) + necesidad_pedidos_pendientes;
       const cantidad_sugerida_compra = Math.max(0, Math.round(objetivoStock - stock_actual));
@@ -96,13 +108,15 @@ export function calcularAlertasStock(data: RicordoDataV2, hoy: string, diasLookb
       let mensaje: string;
       if (faltante_para_pedidos_pendientes > 0) {
         mensaje = `Los pedidos confirmados o en producción necesitan ${fNumIa(necesidad_pedidos_pendientes)} ${insumo.unidad} de ${insumo.nombre}, pero solo hay ${fNumIa(stock_actual)} — faltan ${fNumIa(faltante_para_pedidos_pendientes)} ${insumo.unidad}.`;
+      } else if (esRelleno) {
+        mensaje = `${insumo.nombre} es de relleno (tanda mensual) y está por debajo del mínimo cargado — se planifica desde Exportar a Sheets → RECETAS_RELLENO.`;
       } else if (dias_cobertura != null) {
         mensaje = `Quedan ~${Math.floor(dias_cobertura)} día(s) de ${insumo.nombre} al ritmo de consumo actual.`;
       } else {
         mensaje = `Sin consumo registrado de ${insumo.nombre} en los últimos ${diasLookback} días — no se puede estimar cobertura.`;
       }
 
-      return {
+      const fila: AlertaStockInsumo = {
         insumo_id: insumo.id,
         insumo_nombre: insumo.nombre,
         unidad: insumo.unidad,
@@ -117,7 +131,11 @@ export function calcularAlertasStock(data: RicordoDataV2, hoy: string, diasLookb
         severidad,
         mensaje,
       };
-    });
+      return fila;
+    })
+    // Relleno sin nada accionable (ni faltante real ni por debajo del mínimo) no se lista acá — se
+    // sigue desde el Sheet, no tiene sentido un renglón "informativo" basado en un ritmo que no aplica.
+    .filter((fila) => !soloRelleno.has(fila.insumo_id) || fila.severidad !== "informativa");
 
   const ordenSeveridad: Record<SeveridadAlerta, number> = { critica: 0, importante: 1, informativa: 2 };
   return filas.sort((a, b) => {
