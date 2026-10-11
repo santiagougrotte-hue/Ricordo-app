@@ -37,6 +37,8 @@ import {
   calcularBalanceGeneral,
   recetaEfectivaVariante,
   costoUnidadProductoBase,
+  costoUnidadProducto,
+  valorStockProductos,
   idsExcluidosPorRevision,
   calcularEerrEstructurado,
 } from "./calc-v2";
@@ -117,6 +119,41 @@ test("valorStockInsumos: solo suma insumos con controla_stock activo, al precio 
   const { documento } = migrarAV2(fixture());
   // stock de ING-1 = 12 (ver test anterior) × $500 = $6000; PKG-1 no controla stock, no suma.
   assert.equal(valorStockInsumos(documento.data), 6000);
+});
+
+test("calcularStock/valorStockProductos: el stock de un producto es UN SOLO pool compartido entre todas sus variantes/canales", () => {
+  const data = emptyDataV2();
+  data.productos = [{ id: "P1", nombre: "Calabaza", activo: true }];
+  data.producto_variantes = [
+    { id: "V-MAYO-8", producto_id: "P1", nombre: "Calabaza mayorista 8u", canal: "Mayorista", unidades_por_paquete: 8, precio_venta: 3000, activo: true },
+    { id: "V-MINO-12", producto_id: "P1", nombre: "Calabaza minorista 12u", canal: "Minorista", unidades_por_paquete: 12, precio_venta: 5000, activo: true },
+  ];
+  data.insumos = [{ id: "ING-1", nombre: "Harina", tipo: "ingrediente", unidad: "kg", precio_actual: 100, controla_stock: true, activo: true }];
+  data.recetas = [{ id: "REC-1", producto_id: "P1", nombre: "Calabaza", activa: true }];
+  data.receta_items = [{ id: "RI-1", receta_id: "REC-1", insumo_id: "ING-1", etapa: "masa", cantidad: 1 }];
+  // Se produjeron 10 cajas de 8u (= 80 unidades sueltas) y se vendió 1 caja de 12u (= 12
+  // unidades), de la OTRA presentación — el pool compartido tiene que descontarlo igual.
+  data.inventario_movimientos = [
+    { id: "MOV-1", fecha: "2026-01-01", tipo: "produccion", origen_tipo: "produccion", item_tipo: "producto", item_id: "P1", cantidad: 80 },
+    { id: "MOV-2", fecha: "2026-01-02", tipo: "venta", origen_tipo: "pedido", item_tipo: "producto", item_id: "P1", cantidad: -12 },
+  ];
+  assert.equal(calcularStock(data, "producto", "P1"), 68);
+  // costoUnidadProducto usa una variante de referencia (la primera con unidades_por_paquete,
+  // V-MAYO-8): 1kg de harina × 8 (unidades_por_paquete) × $100/kg = $800 la caja, / 8 = $100 la
+  // unidad — mismo resultado con cualquiera de las dos variantes porque ambas heredan la misma
+  // receta compartida, sin mano de obra ni packaging en este fixture.
+  assert.equal(costoUnidadProducto(data, "P1"), 100);
+  assert.equal(valorStockProductos(data), 6800);
+});
+
+test("calcularStock/valorStockProductos: sin ninguna variante con unidades_por_paquete no se puede valorizar (da 0, nunca inventa un factor)", () => {
+  const data = emptyDataV2();
+  data.productos = [{ id: "P1", nombre: "Calabaza", activo: true }];
+  data.producto_variantes = [{ id: "V1", producto_id: "P1", nombre: "Calabaza", precio_venta: 1000, activo: true }];
+  data.inventario_movimientos = [{ id: "MOV-1", fecha: "2026-01-01", tipo: "produccion", item_tipo: "producto", item_id: "P1", cantidad: 10 }];
+  assert.equal(calcularStock(data, "producto", "P1"), 10);
+  assert.equal(costoUnidadProducto(data, "P1"), 0);
+  assert.equal(valorStockProductos(data), 0);
 });
 
 test("saldoCaja: saldo inicial + ingresos - egresos de movimientos_financieros", () => {
@@ -233,14 +270,18 @@ test("calcularComprasCmvInventario: compras/CMV/inventario no se confunden, y la
   assert.equal(r.variacion_inventario_insumos, 1000);
   assert.equal(r.ajustes_conteo.total, 0); // el único conteo del fixture es de julio, fuera del rango
   assert.equal(r.mermas.total, 0);
-  // Se vendieron 2 unidades sin haber producción registrada: el stock de productos queda en -2
-  // (estimado a costo de receta vigente, $650) — por eso también dispara la alerta de stock negativo.
+  // Se vendieron 2 cajas (24 unidades, 12u/caja) sin haber producción registrada: el stock
+  // compartido del producto "Calabaza" queda en -24 unidades — valorizado a $650/12 = $54,1666
+  // por unidad (costo de la única variante del producto, misma estimación que antes pero ahora
+  // por unidad suelta) × -24 = -1300, igual que antes porque solo hay una variante en este fixture.
   assert.equal(r.inventario_productos_final, -1300);
   // La conciliación del CMV (inicial + producción − final de productos) debe coincidir con el CMV real.
   assert.equal(r.cmv_conciliado_estimado, r.cmv.total);
   // La conciliación de insumos también cierra en cero en este fixture (no hay diferencia sin explicar).
   assert.equal(r.diferencia_no_explicada, 0);
-  assert.ok(r.alertas.some((a) => a.mensaje.includes("Stock negativo") && a.mensaje.includes("Calabaza mayorista")));
+  // La alerta ahora es por producto base ("Calabaza"), no por la variante vendida: el stock es un
+  // solo pool compartido, ya no se trackea por presentación.
+  assert.ok(r.alertas.some((a) => a.mensaje.includes("Stock negativo") && a.mensaje.includes("Calabaza")));
   assert.ok(r.alertas.some((a) => a.mensaje.includes("último conteo")));
 });
 

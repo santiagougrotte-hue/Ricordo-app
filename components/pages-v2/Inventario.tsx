@@ -27,6 +27,7 @@ import {
 import { Modal } from "@/components/Modal";
 import { fARS, fNum, calcularStock, valorStockInsumos, categoriasPorAmbito } from "@/lib/calc-v2";
 import { calcularStockReservado, calcularStockDisponible } from "@/lib/produccion-v2";
+import { refUnidades } from "@/lib/resumen-sheets";
 import { calcularAlertasStock } from "@/lib/ia-stock";
 import type { SeveridadAlerta } from "@/lib/ia-stock";
 import type { Insumo, TipoInsumo, TipoInventarioMovimiento, TipoItemStock } from "@/lib/types-v2";
@@ -247,7 +248,7 @@ function MovimientosTab() {
 
   function nombreItem(itemTipo: TipoItemStock, itemId: string) {
     if (itemTipo === "insumo") return data.insumos.find((i) => i.id === itemId)?.nombre ?? "(eliminado)";
-    return data.producto_variantes.find((v) => v.id === itemId)?.nombre ?? "(eliminado)";
+    return data.productos.find((p) => p.id === itemId)?.nombre ?? "(eliminado)";
   }
 
   function registrar() {
@@ -339,13 +340,13 @@ function MovimientosTab() {
           <Field label="Clase de ítem">
             <Select value={form.item_tipo} onChange={(e) => setForm({ ...form, item_tipo: e.target.value as TipoItemStock, item_id: "" })}>
               <option value="insumo">Insumo</option>
-              <option value="producto_variante">Producto terminado</option>
+              <option value="producto">Producto terminado (por sabor)</option>
             </Select>
           </Field>
           <Field label="Ítem">
             <Select value={form.item_id} onChange={(e) => setForm({ ...form, item_id: e.target.value })}>
               <option value="">Seleccionar…</option>
-              {(form.item_tipo === "insumo" ? data.insumos : data.producto_variantes).map((x) => (
+              {(form.item_tipo === "insumo" ? data.insumos : data.productos.filter((p) => p.activo)).map((x) => (
                 <option key={x.id} value={x.id}>
                   {x.nombre}
                 </option>
@@ -448,16 +449,19 @@ function ProductosTerminadosTab() {
   const [search, setSearch] = useState("");
   const umbral = data.configuracion.umbral_stock_bajo_producto;
 
+  // Un solo stock por sabor (producto base), en unidades sueltas, compartido entre todas sus
+  // presentaciones/canales — ver TipoItemStock en types-v2.ts. "Cajas ref." es solo una lectura
+  // auxiliar (unidades / tamaño de caja típico de esa línea), no una presentación concreta.
   const filas = useMemo(
     () =>
-      data.producto_variantes
-        .filter((v) => v.activo)
-        .filter((v) => !search || v.nombre.toLowerCase().includes(search.toLowerCase()))
-        .map((v) => ({
-          variante: v,
-          fisico: calcularStock(data, "producto_variante", v.id),
-          reservado: calcularStockReservado(data, "producto_variante", v.id),
-          disponible: calcularStockDisponible(data, "producto_variante", v.id),
+      data.productos
+        .filter((p) => p.activo)
+        .filter((p) => !search || p.nombre.toLowerCase().includes(search.toLowerCase()))
+        .map((p) => ({
+          producto: p,
+          fisico: calcularStock(data, "producto", p.id),
+          reservado: calcularStockReservado(data, "producto", p.id),
+          disponible: calcularStockDisponible(data, "producto", p.id),
         })),
     [data, search]
   );
@@ -466,12 +470,13 @@ function ProductosTerminadosTab() {
   return (
     <div>
       <p className="mb-4 text-[12.5px] text-text3">
-        Cajas de pasta, pizzas, lasañas y demás productos terminados listos para vender. El mínimo usado acá es el
-        umbral general de Configuración → General (&ldquo;Stock bajo de producto&rdquo;) — todavía no hay un mínimo
-        particular por producto.
+        Stock de productos terminados por sabor — compartido entre todas sus presentaciones/canales de venta (una
+        caja Mayorista de 8u y una Minorista de 12u del mismo sabor descuentan el mismo stock). El mínimo usado acá
+        es el umbral general de Configuración → General (&ldquo;Stock bajo de producto&rdquo;, en unidades sueltas)
+        — todavía no hay un mínimo particular por producto.
       </p>
       <StatGrid>
-        <KpiCard label="Variantes activas" value={fNum(filas.length, 0)} color="blue" />
+        <KpiCard label="Productos activos" value={fNum(filas.length, 0)} color="blue" />
         <KpiCard label="Bajo mínimo" value={fNum(bajoMinimo.length, 0)} color={bajoMinimo.length > 0 ? "red" : "green"} />
       </StatGrid>
       <div className="mb-4 min-w-[180px] max-w-[300px]">
@@ -486,18 +491,20 @@ function ProductosTerminadosTab() {
               <thead>
                 <tr>
                   <Th>Producto</Th>
-                  <Th>Físico</Th>
+                  <Th>Físico (unidades)</Th>
                   <Th>Reservado</Th>
                   <Th>Disponible</Th>
+                  <Th>≈ cajas ref.</Th>
                 </tr>
               </thead>
               <tbody>
                 {filas.map((f) => (
-                  <TrHover key={f.variante.id} className={f.disponible < umbral ? "bg-red-dim/30" : ""}>
-                    <Td main>{f.variante.nombre}</Td>
+                  <TrHover key={f.producto.id} className={f.disponible < umbral ? "bg-red-dim/30" : ""}>
+                    <Td main>{f.producto.nombre}</Td>
                     <Td>{fNum(f.fisico, 0)}</Td>
                     <Td className="text-text3">{f.reservado > 0 ? fNum(f.reservado, 0) : "—"}</Td>
                     <Td className={f.disponible < 0 ? "text-red font-semibold" : ""}>{fNum(f.disponible, 0)}</Td>
+                    <Td className="text-text3">{fNum(f.disponible / refUnidades(f.producto.linea), 1)}</Td>
                   </TrHover>
                 ))}
               </tbody>

@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { emptyDataV2 } from "../types-v2";
-import { migrarV2aV3, conCobrosSeptiembreConfirmados } from "./v3";
+import { migrarV2aV3, conCobrosSeptiembreConfirmados, conStockPorProducto } from "./v3";
 
 test("migrarV2aV3: saca las secciones huérfanas de la raíz y las preserva en legacy si tenían datos", () => {
   const base = emptyDataV2() as unknown as Record<string, unknown>;
@@ -198,4 +198,42 @@ test("conCobrosSeptiembreConfirmados: carga el cobro de los pedidos de septiembr
   // Idempotente: correrla de nuevo no duplica.
   const dos = conCobrosSeptiembreConfirmados(una);
   assert.equal(dos, una); // misma referencia: no hizo ningún cambio la segunda vez
+});
+
+test("conStockPorProducto: convierte movimientos/reservas de 'producto_variante' (cajas de una presentación) a 'producto' (unidades sueltas, pool compartido), idempotente", () => {
+  const base = emptyDataV2();
+  base.producto_variantes = [
+    { id: "V-MAYO-8", producto_id: "P1", nombre: "Calabaza mayorista 8u", unidades_por_paquete: 8, precio_venta: 3000, activo: true },
+    { id: "V-MINO-12", producto_id: "P1", nombre: "Calabaza minorista 12u", unidades_por_paquete: 12, precio_venta: 5000, activo: true },
+  ];
+  base.inventario_movimientos = [
+    { id: "MOV-1", fecha: "2026-01-01", tipo: "produccion", item_tipo: "producto_variante" as never, item_id: "V-MAYO-8", cantidad: 10 },
+    { id: "MOV-2", fecha: "2026-01-02", tipo: "venta", item_tipo: "producto_variante" as never, item_id: "V-MINO-12", cantidad: -2 },
+    // Variante eliminada del catálogo (ej. una "con salsa" de la limpieza de Fase 2) — no hay
+    // forma de saber a qué producto convertirla, queda tal cual, como historial huérfano.
+    { id: "MOV-3", fecha: "2026-01-03", tipo: "ajuste", item_tipo: "producto_variante" as never, item_id: "V-ELIMINADA", cantidad: 5 },
+  ];
+  base.reservas = [{ id: "RSV-1", item_tipo: "producto_variante" as never, item_id: "V-MAYO-8", cantidad: 3, origen_tipo: "pedido", origen_id: "PED-1", estado: "activa", fecha: "2026-01-04" }];
+
+  const una = conStockPorProducto(base);
+  const mov1 = una.inventario_movimientos.find((m) => m.id === "MOV-1")!;
+  const mov2 = una.inventario_movimientos.find((m) => m.id === "MOV-2")!;
+  const mov3 = una.inventario_movimientos.find((m) => m.id === "MOV-3")!;
+  assert.equal(mov1.item_tipo, "producto");
+  assert.equal(mov1.item_id, "P1");
+  assert.equal(mov1.cantidad, 80); // 10 cajas × 8u
+  assert.equal(mov2.item_tipo, "producto");
+  assert.equal(mov2.item_id, "P1");
+  assert.equal(mov2.cantidad, -24); // -2 cajas × 12u — mismo pool que la variante de 8u
+  assert.equal(mov3.item_tipo, "producto_variante"); // variante inexistente: queda sin tocar
+  assert.equal(mov3.item_id, "V-ELIMINADA");
+
+  const reserva = una.reservas.find((r) => r.id === "RSV-1")!;
+  assert.equal(reserva.item_tipo, "producto");
+  assert.equal(reserva.item_id, "P1");
+  assert.equal(reserva.cantidad, 24); // 3 cajas × 8u
+
+  // Idempotente: correrla de nuevo no vuelve a tocar nada (ya no queda ningún item_tipo viejo).
+  const dos = conStockPorProducto(una);
+  assert.equal(dos, una);
 });
