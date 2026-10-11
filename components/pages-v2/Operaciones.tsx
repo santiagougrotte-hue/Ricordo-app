@@ -430,7 +430,10 @@ function ProduccionTab() {
     const variante = data.producto_variantes.find((v) => v.id === form.producto_variante_id);
     if (!variante) return;
     const produccionId = uid("PRD");
-    const consumo = recetaEfectivaVariante(data, variante);
+    // Solo se descuentan los insumos que realmente se trackean (controla_stock) — el resto de la
+    // receta (ej. verduras que se compran al día, sin stock cargado) no genera un movimiento que
+    // nadie va a leer.
+    const consumo = recetaEfectivaVariante(data, variante).filter((c) => data.insumos.find((i) => i.id === c.insumo_id)?.controla_stock);
     // El stock de productos terminados es un solo pool por sabor (variante.producto_id), en
     // unidades sueltas — producir "cantidad" cajas de ESTA presentación suma cantidad × sus
     // unidades_por_paquete al pool compartido, sin importar en qué presentación se termine

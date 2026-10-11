@@ -30,7 +30,7 @@ import { calcularStockReservado, calcularStockDisponible } from "@/lib/produccio
 import { refUnidades } from "@/lib/resumen-sheets";
 import { calcularAlertasStock } from "@/lib/ia-stock";
 import type { SeveridadAlerta } from "@/lib/ia-stock";
-import type { Insumo, TipoInsumo, TipoInventarioMovimiento, TipoItemStock } from "@/lib/types-v2";
+import type { Insumo, TipoInsumo, TipoInventarioMovimiento, TipoItemStock, RicordoDataV2 } from "@/lib/types-v2";
 
 const SEVERIDAD_LABEL: Record<SeveridadAlerta, string> = { critica: "Crítica", importante: "Importante", informativa: "Informativa" };
 const SEVERIDAD_COLOR: Record<SeveridadAlerta, "red" | "orange" | "blue"> = { critica: "red", importante: "orange", informativa: "blue" };
@@ -55,20 +55,26 @@ function MateriasPrimasTab() {
   const { toast } = useToast();
   const [filtro, setFiltro] = useState<"todos" | TipoInsumo>("todos");
   const [search, setSearch] = useState("");
+  const [mostrarTodos, setMostrarTodos] = useState(false);
   const [modalOpen, setModalOpen] = useState(false);
   const [editando, setEditando] = useState<string | null>(null);
   const [form, setForm] = useState(insumoVacio());
 
   const valorStock = valorStockInsumos(data);
   const bajoMinimo = data.insumos.filter((i) => i.controla_stock && i.stock_minimo != null && calcularStock(data, "insumo", i.id) < i.stock_minimo);
+  const sinStockControlado = data.insumos.filter((i) => !i.controla_stock).length;
 
+  // Por default solo se listan los insumos con stock controlado — la mayoría del catálogo real
+  // (verduras que se compran al día, etc.) no lo tiene, y mostrar un "stock" que nadie carga ni
+  // lee es puro ruido. "Mostrar todos" los trae de vuelta para poder editar precio/categoría.
   const filasInsumos = useMemo(
     () =>
       data.insumos
+        .filter((i) => mostrarTodos || i.controla_stock)
         .filter((i) => filtro === "todos" || filtro === i.tipo)
         .filter((i) => !search || i.nombre.toLowerCase().includes(search.toLowerCase()))
         .map((i) => ({ tipo: "insumo" as const, id: i.id, nombre: i.nombre, sub: i.tipo, unidad: i.unidad, stock: calcularStock(data, "insumo", i.id), insumo: i })),
-    [data, filtro, search]
+    [data, filtro, search, mostrarTodos]
   );
 
   function abrirNuevo() {
@@ -111,7 +117,19 @@ function MateriasPrimasTab() {
         <div className="min-w-[180px] max-w-[300px] flex-1">
           <SearchInput placeholder="Buscar…" value={search} onChange={(e) => setSearch(e.target.value)} />
         </div>
-        <Button onClick={abrirNuevo}>+ Nuevo insumo</Button>
+        <div className="flex items-center gap-2.5">
+          {!mostrarTodos && sinStockControlado > 0 && (
+            <Button size="sm" variant="ghost" onClick={() => setMostrarTodos(true)}>
+              Mostrar también los {sinStockControlado} sin stock controlado
+            </Button>
+          )}
+          {mostrarTodos && (
+            <Button size="sm" variant="ghost" onClick={() => setMostrarTodos(false)}>
+              Ocultar los que no controlan stock
+            </Button>
+          )}
+          <Button onClick={abrirNuevo}>+ Nuevo insumo</Button>
+        </div>
       </div>
       <FilterTabs
         value={filtro}
@@ -346,7 +364,7 @@ function MovimientosTab() {
           <Field label="Ítem">
             <Select value={form.item_id} onChange={(e) => setForm({ ...form, item_id: e.target.value })}>
               <option value="">Seleccionar…</option>
-              {(form.item_tipo === "insumo" ? data.insumos : data.productos.filter((p) => p.activo)).map((x) => (
+              {(form.item_tipo === "insumo" ? data.insumos.filter((i) => i.controla_stock) : data.productos.filter((p) => p.activo)).map((x) => (
                 <option key={x.id} value={x.id}>
                   {x.nombre}
                 </option>
@@ -447,8 +465,10 @@ function AlertasStockTab() {
 }
 
 function ProductosTerminadosTab() {
-  const { data } = useStoreV2();
+  const { data, setData } = useStoreV2();
+  const { toast } = useToast();
   const [search, setSearch] = useState("");
+  const [contando, setContando] = useState<{ producto: RicordoDataV2["productos"][number]; cajas: number } | null>(null);
   const umbral = data.configuracion.umbral_stock_bajo_producto;
 
   // Un solo stock por sabor (producto base), en unidades sueltas, compartido entre todas sus
@@ -469,13 +489,45 @@ function ProductosTerminadosTab() {
   );
   const bajoMinimo = filas.filter((f) => f.disponible < umbral);
 
+  function abrirConteo(producto: RicordoDataV2["productos"][number], fisicoActual: number) {
+    const ref = refUnidades(producto.linea);
+    setContando({ producto, cajas: Math.round((fisicoActual / ref) * 100) / 100 });
+  }
+
+  // Un "conteo" resetea el stock físico conocido a la fecha de hoy al valor observado (no es un
+  // ajuste que se suma/resta) — mismo mecanismo que ya existe para insumos (ver calcularStock).
+  function guardarConteo() {
+    if (!contando) return;
+    const ref = refUnidades(contando.producto.linea);
+    const unidades = Math.round(contando.cajas * ref);
+    setData((d) => ({
+      ...d,
+      inventario_movimientos: [
+        ...d.inventario_movimientos,
+        {
+          id: uid("MOV"),
+          fecha: new Date().toISOString().slice(0, 10),
+          tipo: "conteo" as const,
+          origen_tipo: "conteo_manual",
+          item_tipo: "producto" as const,
+          item_id: contando.producto.id,
+          cantidad: unidades,
+          notas: `Conteo físico: ${fNum(contando.cajas, 2)} caja(s) de ${ref}u`,
+        },
+      ],
+    }));
+    toast(`Stock de ${contando.producto.nombre} actualizado a ${fNum(unidades, 0)} unidades`);
+    setContando(null);
+  }
+
   return (
     <div>
       <p className="mb-4 text-[12.5px] text-text3">
         Stock de productos terminados por sabor — compartido entre todas sus presentaciones/canales de venta (una
         caja Mayorista de 8u y una Minorista de 12u del mismo sabor descuentan el mismo stock). El mínimo usado acá
         es el umbral general de Configuración → General (&ldquo;Stock bajo de producto&rdquo;, en unidades sueltas)
-        — todavía no hay un mínimo particular por producto.
+        — todavía no hay un mínimo particular por producto. &ldquo;Contar stock&rdquo; carga la cantidad física real
+        que tenés de ese sabor (en cajas de referencia) y reemplaza el cálculo acumulado desde ahí en adelante.
       </p>
       <StatGrid>
         <KpiCard label="Productos activos" value={fNum(filas.length, 0)} color="blue" />
@@ -497,6 +549,7 @@ function ProductosTerminadosTab() {
                   <Th>Reservado</Th>
                   <Th>Disponible</Th>
                   <Th>≈ cajas ref.</Th>
+                  <Th>Acciones</Th>
                 </tr>
               </thead>
               <tbody>
@@ -507,6 +560,11 @@ function ProductosTerminadosTab() {
                     <Td className="text-text3">{f.reservado > 0 ? fNum(f.reservado, 0) : "—"}</Td>
                     <Td className={f.disponible < 0 ? "text-red font-semibold" : ""}>{fNum(f.disponible, 0)}</Td>
                     <Td className="text-text3">{fNum(f.disponible / refUnidades(f.producto.linea), 1)}</Td>
+                    <Td>
+                      <Button size="sm" variant="ghost" onClick={() => abrirConteo(f.producto, f.fisico)}>
+                        Contar stock
+                      </Button>
+                    </Td>
                   </TrHover>
                 ))}
               </tbody>
@@ -514,6 +572,32 @@ function ProductosTerminadosTab() {
           </TableWrap>
         )}
       </Card>
+
+      <Modal
+        open={contando != null}
+        onClose={() => setContando(null)}
+        title={`Contar stock — ${contando?.producto.nombre ?? ""}`}
+        footer={
+          <>
+            <Button variant="ghost" onClick={() => setContando(null)}>
+              Cancelar
+            </Button>
+            <Button onClick={guardarConteo}>Guardar conteo</Button>
+          </>
+        }
+      >
+        {contando && (
+          <FormGrid>
+            <Field label={`Cantidad física (en cajas de ${refUnidades(contando.producto.linea)}u)`} full>
+              <Input type="number" value={contando.cajas} onChange={(e) => setContando({ ...contando, cajas: Number(e.target.value) })} />
+            </Field>
+            <p className="col-span-full text-[12.5px] text-text3">
+              = {fNum(contando.cajas * refUnidades(contando.producto.linea), 0)} unidades sueltas. Reemplaza el stock calculado de{" "}
+              {contando.producto.nombre} a partir de hoy — no se suma a lo anterior.
+            </p>
+          </FormGrid>
+        )}
+      </Modal>
     </div>
   );
 }
