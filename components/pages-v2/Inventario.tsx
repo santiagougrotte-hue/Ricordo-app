@@ -377,7 +377,9 @@ function AlertasStockTab() {
       <p className="mb-4 text-[12.5px] text-text3">
         Calculado a partir del libro de movimientos y de los pedidos Confirmado/En producción — nunca compra ni ajusta
         stock por sí sola, solo calcula días de cobertura y sugiere una cantidad a comprar. La decisión queda siempre
-        del lado humano.
+        del lado humano. Los insumos que solo se usan para el relleno (se preparan en una tanda mensual, no al ritmo
+        diario/semanal de masa y packaging) no aparecen acá — se planifican desde Finanzas → Exportar a Sheets →
+        RECETAS_RELLENO.
       </p>
       <StatGrid>
         <KpiCard label="Alertas críticas" value={fNum(criticas.length, 0)} color={criticas.length > 0 ? "red" : "green"} />

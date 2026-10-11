@@ -112,11 +112,14 @@ test("resumenGastosSheets: compras_insumos, una fila por categoría, excluye las
   assert.equal(porCategoria.has("Costo Indirecto — Viajes de compra"), false);
 });
 
-test("resumenRecetasRellenoSheets: solo ítems de etapa relleno de productos activos", () => {
-  const filas = resumenRecetasRellenoSheets(fixture());
+test("resumenRecetasRellenoSheets: solo ítems de etapa relleno de productos activos, con el stock actual del insumo", () => {
+  const data = fixture();
+  data.inventario_movimientos = [{ id: "MOV-1", fecha: "2026-09-01", tipo: "compra", item_tipo: "insumo", item_id: "ING-01", cantidad: 7 }];
+  const filas = resumenRecetasRellenoSheets(data);
   assert.equal(filas.length, 1);
   assert.equal(filas[0].producto_id, "PROD-01");
   assert.equal(filas[0].cantidad_por_unidad, 0.005);
+  assert.equal(filas[0].stock_actual, 7);
 });
 
 test("resumenRepartoSheets: agrupa pedidos entregados por zona fija, pedido sin zona cae en Otro, suma Compras Berazategui aparte", () => {
