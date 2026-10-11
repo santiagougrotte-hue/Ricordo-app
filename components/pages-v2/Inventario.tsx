@@ -59,6 +59,7 @@ function MateriasPrimasTab() {
   const [modalOpen, setModalOpen] = useState(false);
   const [editando, setEditando] = useState<string | null>(null);
   const [form, setForm] = useState(insumoVacio());
+  const [contando, setContando] = useState<{ insumo: Insumo; cantidad: number } | null>(null);
 
   const valorStock = valorStockInsumos(data);
   const bajoMinimo = data.insumos.filter((i) => i.controla_stock && i.stock_minimo != null && calcularStock(data, "insumo", i.id) < i.stock_minimo);
@@ -104,6 +105,34 @@ function MateriasPrimasTab() {
       toast("Insumo creado");
     }
     setModalOpen(false);
+  }
+
+  function abrirConteo(insumo: Insumo, stockActual: number) {
+    setContando({ insumo, cantidad: Math.round(stockActual * 100) / 100 });
+  }
+
+  // Igual que el conteo de productos terminados: resetea el stock calculado a la fecha de hoy al
+  // valor observado, no se suma/resta sobre lo anterior.
+  function guardarConteo() {
+    if (!contando) return;
+    setData((d) => ({
+      ...d,
+      inventario_movimientos: [
+        ...d.inventario_movimientos,
+        {
+          id: uid("MOV"),
+          fecha: new Date().toISOString().slice(0, 10),
+          tipo: "conteo" as const,
+          origen_tipo: "conteo_manual",
+          item_tipo: "insumo" as const,
+          item_id: contando.insumo.id,
+          cantidad: contando.cantidad,
+          notas: "Conteo físico",
+        },
+      ],
+    }));
+    toast(`Stock de ${contando.insumo.nombre} actualizado a ${fNum(contando.cantidad, 2)} ${contando.insumo.unidad}`);
+    setContando(null);
   }
 
   return (
@@ -175,7 +204,20 @@ function MateriasPrimasTab() {
                     </Td>
                     <Td>{f.insumo?.stock_minimo != null ? fNum(f.insumo.stock_minimo, 2) : "—"}</Td>
                     <Td>{f.insumo ? fARS(f.insumo.precio_actual) : "—"}</Td>
-                    <Td>{f.insumo && <Button size="sm" variant="ghost" onClick={() => abrirEdicion(f.insumo!)}>Editar</Button>}</Td>
+                    <Td className="whitespace-nowrap">
+                      {f.insumo && (
+                        <>
+                          <Button size="sm" variant="ghost" onClick={() => abrirEdicion(f.insumo!)}>
+                            Editar
+                          </Button>
+                          {f.insumo.controla_stock && (
+                            <Button size="sm" variant="ghost" onClick={() => abrirConteo(f.insumo!, f.stock)}>
+                              Contar stock
+                            </Button>
+                          )}
+                        </>
+                      )}
+                    </Td>
                   </TrHover>
                 ))}
               </tbody>
@@ -183,6 +225,31 @@ function MateriasPrimasTab() {
           </TableWrap>
         )}
       </Card>
+
+      <Modal
+        open={contando != null}
+        onClose={() => setContando(null)}
+        title={`Contar stock — ${contando?.insumo.nombre ?? ""}`}
+        footer={
+          <>
+            <Button variant="ghost" onClick={() => setContando(null)}>
+              Cancelar
+            </Button>
+            <Button onClick={guardarConteo}>Guardar conteo</Button>
+          </>
+        }
+      >
+        {contando && (
+          <FormGrid>
+            <Field label={`Cantidad física (${contando.insumo.unidad})`} full>
+              <Input type="number" value={contando.cantidad} onChange={(e) => setContando({ ...contando, cantidad: Number(e.target.value) })} />
+            </Field>
+            <p className="col-span-full text-[12.5px] text-text3">
+              Reemplaza el stock calculado de {contando.insumo.nombre} a partir de hoy — no se suma a lo anterior.
+            </p>
+          </FormGrid>
+        )}
+      </Modal>
 
       <Modal
         open={modalOpen}
