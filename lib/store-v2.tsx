@@ -21,7 +21,7 @@ import { emptyData as emptyDataV1, type RicordoData } from "./types";
 import { emptyDataV2, type RicordoDataV2, type RicordoDocument } from "./types-v2";
 import { mapBackupToRicordoData, repararConceptoPackagingEnRecetas } from "./seed";
 import { migrarAV2 } from "./migration/v2";
-import { migrarV2aV3 } from "./migration/v3";
+import { migrarV2aV3, conCobrosSeptiembreConfirmados } from "./migration/v3";
 import backupSeed from "./data/backup-seed.json";
 import { supabase, supabaseConfigured } from "./supabase";
 import { useAuth } from "./auth-context";
@@ -84,7 +84,10 @@ function tieneSchemaVersion(valor: unknown, version: number): valor is { schema_
 export function comoV3(valorCrudo: unknown): { data: RicordoDataV2; metadata: RicordoDocument["metadata"] } {
   if (tieneSchemaVersion(valorCrudo, 3)) {
     const v = valorCrudo as { metadata: RicordoDocument["metadata"]; data: unknown };
-    return { data: conBaseV2(v.data), metadata: v.metadata };
+    // Parche aparte de la migración v2→v3 (que un documento ya v3 nunca vuelve a correr, a
+    // propósito): idempotente y no toca `metadata` — si ya se aplicó antes, `data` queda con la
+    // misma referencia (sin cambios), así que no dispara un guardado de más.
+    return { data: conCobrosSeptiembreConfirmados(conBaseV2(v.data)), metadata: v.metadata };
   }
   if (tieneSchemaVersion(valorCrudo, 2)) {
     const v = valorCrudo as { data: unknown };

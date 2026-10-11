@@ -23,7 +23,8 @@
 // automática de saber si esos saldos ya se reflejaron en otro lado, así que no se descartan solo
 // porque la pantalla que los mostraba ya no existe.
 
-import type { RicordoDataV2, LineaProducto } from "../types-v2";
+import type { RicordoDataV2, LineaProducto, MovimientoFinanciero } from "../types-v2";
+import { uid } from "../id";
 
 // --- Fase 2 (limpieza de datos del negocio) -------------------------------------------------------
 // A diferencia de lo de arriba (secciones que el código ya no usa, para cualquier instalación), acá
@@ -90,6 +91,49 @@ function conSaldoInicialCaja(data: RicordoDataV2): RicordoDataV2 {
   };
 }
 
+/** Pedidos de septiembre que el dueño del negocio confirmó que ya se cobraron en su momento (fuera
+ * de la app, nunca se registró el cobro acá) — ningún pedido viejo tenía un movimiento de cobro
+ * vinculado por id (ver conGastoRepartoPedido/Cuentas pendientes), así que seguían apareciendo como
+ * "pendientes de cobro" para siempre. Se carga el cobro completo con la fecha del propio pedido
+ * como aproximación (no hay forma de saber la fecha real de cada cobro) — idempotente: si el
+ * pedido ya tiene un movimiento "venta_pedido" (cobrado desde Cuentas pendientes o re-migrado), no
+ * se duplica. */
+const PEDIDOS_SEPTIEMBRE_YA_COBRADOS = [
+  "PED-mtk0d91b1",
+  "PED-mtt4yvu49",
+  "PED-mu2rcsbp1",
+  "PED-mu4lvh4fh",
+  "PED-mu5ehf8es",
+  "PED-muab22xj1",
+  "PED-mue0nf002",
+  "PED-muiob84k1",
+  "PED-mumo31hpc",
+  "PED-mumhjpeb1",
+  "PED-munxcw711",
+];
+
+export function conCobrosSeptiembreConfirmados(data: RicordoDataV2): RicordoDataV2 {
+  const yaTieneCobro = new Set(data.movimientos_financieros.filter((m) => m.origen_tipo === "venta_pedido").map((m) => m.origen_id));
+  const nuevos: MovimientoFinanciero[] = [];
+  for (const pedidoId of PEDIDOS_SEPTIEMBRE_YA_COBRADOS) {
+    if (yaTieneCobro.has(pedidoId)) continue;
+    const pedido = data.pedidos.find((p) => p.id === pedidoId);
+    if (!pedido) continue;
+    nuevos.push({
+      id: uid("MOVF"),
+      fecha: pedido.fecha,
+      tipo: "ingreso",
+      concepto: `Cobro pedido ${pedido.id}`,
+      monto: pedido.total,
+      origen_tipo: "venta_pedido",
+      origen_id: pedido.id,
+      estado: "confirmado",
+    });
+  }
+  if (nuevos.length === 0) return data;
+  return { ...data, movimientos_financieros: [...data.movimientos_financieros, ...nuevos] };
+}
+
 const CAMPOS_HUERFANOS_RAIZ = [
   "plan_produccion",
   "ordenes_produccion",
@@ -148,5 +192,7 @@ export function migrarV2aV3(dataV2: RicordoDataV2): RicordoDataV2 {
   data.configuracion = configuracion;
   data.legacy = legacy;
 
-  return conSaldoInicialCaja(conFechaDeCorte(conLineaPorDefecto(limpiarCapreseYConSalsa(data as unknown as RicordoDataV2))));
+  return conCobrosSeptiembreConfirmados(
+    conSaldoInicialCaja(conFechaDeCorte(conLineaPorDefecto(limpiarCapreseYConSalsa(data as unknown as RicordoDataV2))))
+  );
 }

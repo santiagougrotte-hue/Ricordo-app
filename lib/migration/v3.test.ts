@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { emptyDataV2 } from "../types-v2";
-import { migrarV2aV3 } from "./v3";
+import { migrarV2aV3, conCobrosSeptiembreConfirmados } from "./v3";
 
 test("migrarV2aV3: saca las secciones huérfanas de la raíz y las preserva en legacy si tenían datos", () => {
   const base = emptyDataV2() as unknown as Record<string, unknown>;
@@ -179,4 +179,23 @@ test("migrarV2aV3: fuerza la fecha de corte real del negocio (2026-09-01) sobre 
   const resultado = migrarV2aV3(base);
   assert.equal(resultado.configuracion.fecha_corte_cmv, "2026-09-01");
   assert.equal(resultado.configuracion.fecha_corte_compras, "2026-09-01");
+});
+
+test("conCobrosSeptiembreConfirmados: carga el cobro de los pedidos de septiembre que el dueño confirmó, idempotente", () => {
+  const base = emptyDataV2();
+  base.pedidos = [
+    { id: "PED-mtk0d91b1", fecha: "2026-09-02", cliente_id: "C1", estado: "Entregado", canal: "Minorista", descuento: 0, costo_envio: 0, total: 48000 },
+    { id: "PED-munxcw711", fecha: "2026-09-30", cliente_id: "C1", estado: "Entregado", canal: "Minorista", descuento: 0, costo_envio: 0, total: 20000 },
+    { id: "PED-no-de-la-lista", fecha: "2026-09-10", cliente_id: "C1", estado: "Entregado", canal: "Minorista", descuento: 0, costo_envio: 0, total: 99999 },
+  ];
+
+  const una = conCobrosSeptiembreConfirmados(base);
+  const cobros = una.movimientos_financieros.filter((m) => m.origen_tipo === "venta_pedido");
+  assert.equal(cobros.length, 2); // solo los 2 de la lista que existen en pedidos, no "PED-no-de-la-lista"
+  assert.ok(cobros.some((m) => m.origen_id === "PED-mtk0d91b1" && m.monto === 48000));
+  assert.ok(cobros.some((m) => m.origen_id === "PED-munxcw711" && m.monto === 20000));
+
+  // Idempotente: correrla de nuevo no duplica.
+  const dos = conCobrosSeptiembreConfirmados(una);
+  assert.equal(dos, una); // misma referencia: no hizo ningún cambio la segunda vez
 });
