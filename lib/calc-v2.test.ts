@@ -544,6 +544,29 @@ test("calcularDineroLibre: descuenta cuentas por pagar del saldo de caja", () =>
   assert.equal(libre.dinero_libre, 1000000 - 200000);
 });
 
+test("calcularCuentasPorCobrar/Pagar/DineroLibre: con fecha_saldo_inicial_caja, ignoran pedidos/compras anteriores (nunca tuvieron un cobro/pago vinculado por id, no se inventa que siguen pendientes)", () => {
+  const data = emptyDataV2();
+  data.configuracion.saldo_inicial_caja = 500000;
+  data.configuracion.fecha_saldo_inicial_caja = "2026-09-01";
+  data.pedidos = [
+    { id: "PED-VIEJO", fecha: "2026-08-15", cliente_id: "C1", estado: "Entregado", canal: "Minorista", descuento: 0, costo_envio: 0, total: 50000 },
+    { id: "PED-NUEVO", fecha: "2026-09-10", cliente_id: "C1", estado: "Entregado", canal: "Minorista", descuento: 0, costo_envio: 0, total: 30000 },
+  ];
+  data.compras = [
+    { id: "COM-VIEJA", fecha: "2026-08-20", proveedor_id: "P1", estado_pago: "pagado", total: 100000 },
+    { id: "COM-NUEVA", fecha: "2026-09-05", proveedor_id: "P1", estado_pago: "pendiente", total: 20000 },
+  ];
+
+  const cobrar = calcularCuentasPorCobrar(data, "2026-10-01");
+  assert.deepEqual(cobrar.map((c) => c.pedido_id), ["PED-NUEVO"]);
+
+  const pagar = calcularCuentasPorPagar(data, "2026-10-01");
+  assert.deepEqual(pagar.map((c) => c.compra_id), ["COM-NUEVA"]);
+
+  const libre = calcularDineroLibre(data, "2026-10-01");
+  assert.equal(libre.cuentas_por_pagar, 20000); // solo COM-NUEVA, no los $100.000 de COM-VIEJA
+});
+
 test("calcularBalanceGeneral: ACTIVO = PASIVO + PATRIMONIO NETO con aportes/retiros/préstamos/resultado", () => {
   const data = emptyDataV2();
   data.configuracion.saldo_inicial_caja = 0;
