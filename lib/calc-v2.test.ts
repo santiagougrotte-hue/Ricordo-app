@@ -567,6 +567,32 @@ test("calcularCuentasPorCobrar/Pagar/DineroLibre: con fecha_saldo_inicial_caja, 
   assert.equal(libre.cuentas_por_pagar, 20000); // solo COM-NUEVA, no los $100.000 de COM-VIEJA
 });
 
+test("calcularCuentasPorCobrar/Pagar/DineroLibre: no cuentan pedidos/compras posteriores a la fecha 'hoy' pedida (snapshot a una fecha pasada)", () => {
+  const data = emptyDataV2();
+  data.configuracion.saldo_inicial_caja = 500000;
+  data.configuracion.fecha_saldo_inicial_caja = "2026-09-01";
+  data.pedidos = [
+    { id: "PED-SEP", fecha: "2026-09-10", cliente_id: "C1", estado: "Entregado", canal: "Minorista", descuento: 0, costo_envio: 0, total: 30000 },
+    { id: "PED-OCT", fecha: "2026-10-05", cliente_id: "C1", estado: "Entregado", canal: "Minorista", descuento: 0, costo_envio: 0, total: 22500 },
+  ];
+  data.compras = [
+    { id: "COM-SEP", fecha: "2026-09-05", proveedor_id: "P1", estado_pago: "pendiente", total: 20000 },
+    { id: "COM-OCT", fecha: "2026-10-08", proveedor_id: "P1", estado_pago: "pendiente", total: 15000 },
+  ];
+
+  // "Resumen de septiembre": un snapshot al 30/9 no debe ver nada de octubre todavía.
+  const cobrarSep = calcularCuentasPorCobrar(data, "2026-09-30");
+  assert.deepEqual(cobrarSep.map((c) => c.pedido_id), ["PED-SEP"]);
+  const pagarSep = calcularCuentasPorPagar(data, "2026-09-30");
+  assert.deepEqual(pagarSep.map((c) => c.compra_id), ["COM-SEP"]);
+  const libreSep = calcularDineroLibre(data, "2026-09-30");
+  assert.equal(libreSep.cuentas_por_pagar, 20000);
+
+  // "Resumen de octubre" (o "hoy"): ya ve las dos.
+  const cobrarOct = calcularCuentasPorCobrar(data, "2026-10-31");
+  assert.equal(cobrarOct.length, 2);
+});
+
 test("calcularBalanceGeneral: ACTIVO = PASIVO + PATRIMONIO NETO con aportes/retiros/préstamos/resultado", () => {
   const data = emptyDataV2();
   data.configuracion.saldo_inicial_caja = 0;
