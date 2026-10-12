@@ -36,15 +36,22 @@ export interface CartTotals {
   boxSubtotal: number;
   /** Hay salsas o complementos (no suman cajas). */
   hasExtras: boolean;
+  /** Cajas y subtotal que entran en la promo por cajas (sin lo que ya tiene precio especial). */
+  promoBoxes: number;
+  promoSubtotal: number;
 }
 
-export function cartTotals(items: { product: Pick<Product, 'price' | 'countsAsBox'>; quantity: number }[]): CartTotals {
-  let subtotal = 0, boxes = 0, boxSubtotal = 0, hasExtras = false;
+export function cartTotals(items: { product: Pick<Product, 'price' | 'countsAsBox' | 'promoEligible'>; quantity: number }[]): CartTotals {
+  let subtotal = 0, boxes = 0, boxSubtotal = 0, hasExtras = false, promoBoxes = 0, promoSubtotal = 0;
   for (const { product: p, quantity: q } of items) {
     subtotal += p.price * q;
     if (p.countsAsBox) { boxes += q; boxSubtotal += p.price * q; } else hasExtras = true;
+    if (p.promoEligible !== false) {
+      promoSubtotal += p.price * q;
+      if (p.countsAsBox) promoBoxes += q;
+    }
   }
-  return { subtotal, boxes, boxSubtotal, hasExtras };
+  return { subtotal, boxes, boxSubtotal, hasExtras, promoBoxes, promoSubtotal };
 }
 
 /** % de descuento: X por cada caja arriba del umbral de envío gratis, con tope. */
@@ -93,6 +100,8 @@ export interface Quote {
   promoGifts: number;
   /** Siguiente escalón de la promo y cuántas cajas faltan (null si no hay promo o ya está en el último). */
   promoNext: { missing: number; tier: PromoTier } | null;
+  /** Hay productos con precio especial propio que no entran en la promo (lasaña de lanzamiento). */
+  promoExcluded: boolean;
 }
 
 /** La promo está vigente ahora (prendida y dentro de sus fechas). */
@@ -141,13 +150,15 @@ export function quote(method: DeliveryMethod, lookup: ZoneLookup, cart: CartTota
   const q = baseQuote(method, lookup, cart, settings, distanceCost);
   const promo = settings.promo;
   if (!promoActive(promo, now)) return q;
-  const { tier, next } = promoTier(promo, cart.boxes);
-  const promoNext = next && cart.boxes > 0 ? { missing: next.minBoxes - cart.boxes, tier: next } : null;
-  if (!tier || (tier.pct <= 0 && tier.gifts <= 0)) return { ...q, promoNext };
+  // Lo que ya tiene precio especial (lasaña de lanzamiento) no suma cajas ni lleva el %.
+  const { tier, next } = promoTier(promo, cart.promoBoxes);
+  const promoNext = next && cart.promoBoxes > 0 ? { missing: next.minBoxes - cart.promoBoxes, tier: next } : null;
+  const promoExcluded = cart.subtotal > cart.promoSubtotal;
+  if (!tier || (tier.pct <= 0 && tier.gifts <= 0)) return { ...q, promoNext, promoExcluded };
   // Igual que create_order: % sobre el total de los productos, en lugar del descuento por cajas extra.
-  const discount = Math.round((cart.subtotal * tier.pct) / 100);
+  const discount = Math.round((cart.promoSubtotal * tier.pct) / 100);
   return {
-    ...q, promoName: promo.name, promoGifts: promo.giftProductId ? tier.gifts : 0, promoNext,
+    ...q, promoName: promo.name, promoGifts: promo.giftProductId ? tier.gifts : 0, promoNext, promoExcluded,
     discountPct: tier.pct, discount, discountBoxes: 0, discountMax: 0, missingForNextDiscount: null, nextDiscountPct: null,
     total: q.shippingCost === null ? null : cart.subtotal - discount + q.shippingCost,
   };
@@ -158,7 +169,7 @@ function baseQuote(method: DeliveryMethod, lookup: ZoneLookup, cart: CartTotals,
   const pickupOk = settings.pickupEnabled && boxes >= settings.pickupMinBoxes && boxes > 0;
   const base = {
     method, boxes, nextBoxShipping: null, discountPct: 0, discount: 0, discountBoxes: 0, discountMax: 0, missingForNextDiscount: null, nextDiscountPct: null, suggestPickup: false,
-    freeFromBoxes: null, missingForFree: null, shippingEstimated: false, promoName: null, promoGifts: 0, promoNext: null,
+    freeFromBoxes: null, missingForFree: null, shippingEstimated: false, promoName: null, promoGifts: 0, promoNext: null, promoExcluded: false,
   };
   if (method === 'pickup') {
     const missing = Math.max(settings.pickupMinBoxes - boxes, 0);

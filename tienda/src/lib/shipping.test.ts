@@ -37,7 +37,7 @@ describe('zona por localidad', () => {
 
 describe('qué cuenta como caja', () => {
   it('las salsas no suman cajas ni entran en el descuento', () => {
-    expect(cart(3, 2)).toEqual({ subtotal: 36000, boxes: 3, boxSubtotal: 30000, hasExtras: true });
+    expect(cart(3, 2)).toEqual({ subtotal: 36000, boxes: 3, boxSubtotal: 30000, hasExtras: true, promoBoxes: 3, promoSubtotal: 36000 });
   });
 });
 

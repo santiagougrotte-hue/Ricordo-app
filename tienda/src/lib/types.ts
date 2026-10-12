@@ -27,6 +27,10 @@ export interface Product {
   countsAsBox: boolean;
   sortOrder: number;
   media: ProductMedia[];
+  /** Precio anterior, se muestra tachado (lanzamientos y ofertas). */
+  listPrice?: number | null;
+  /** Entra en las promos por cajas (Día de la Madre). false = ya tiene su precio especial. */
+  promoEligible?: boolean;
   /** Pedido para la sesión de fotos mientras no haya fotos reales. */
   shotNote?: string;
 }

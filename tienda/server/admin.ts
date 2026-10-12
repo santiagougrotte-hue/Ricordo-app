@@ -132,16 +132,20 @@ export async function handleAdmin(req: Request, path: string, env: AdminEnv, dep
     if (name.length < 2 || !/^[a-z0-9-]+$/.test(slug) || !TYPES.includes(d.pastaType)) return bad('Revisá nombre, tipo y dirección (slug).');
     const price = int(d.price, 1), stock = int(d.stock), low = int(d.lowStockThreshold), order = Number.isInteger(d.sortOrder) ? d.sortOrder : 99;
     if (price === null || stock === null || low === null) return bad('Precio, stock y umbral tienen que ser números enteros.');
-    const vals = [slug, name, d.pastaType, String(d.filling ?? ''), String(d.description ?? ''), price, stock, low, !!d.featured, !!d.active, order, d.countsAsBox !== false];
+    const listPrice = d.listPrice == null || d.listPrice === '' ? null : int(d.listPrice, 1);
+    if (d.listPrice != null && d.listPrice !== '' && (listPrice === null || listPrice <= price)) return bad('El precio anterior tiene que ser mayor que el precio.');
+    const vals = [slug, name, d.pastaType, String(d.filling ?? ''), String(d.description ?? ''), price, stock, low, !!d.featured, !!d.active, order, d.countsAsBox !== false,
+                  listPrice, d.promoEligible !== false];
     try {
       if (d.id) {
         if (!UUID.test(d.id)) return bad('Producto inválido');
         await q(`update products set slug=$2, name=$3, pasta_type=$4, filling=$5, description=$6, price=$7, stock=$8,
-                   low_stock_threshold=$9, featured=$10, active=$11, sort_order=$12, counts_as_box=$13, updated_at=now() where id=$1`, [d.id, ...vals]);
+                   low_stock_threshold=$9, featured=$10, active=$11, sort_order=$12, counts_as_box=$13,
+                   list_price=$14, promo_eligible=$15, updated_at=now() where id=$1`, [d.id, ...vals]);
         return json({ id: d.id });
       }
-      const [r] = await q<{ id: string }>(`insert into products (slug, name, pasta_type, filling, description, price, stock, low_stock_threshold, featured, active, sort_order, counts_as_box)
-                                          values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12) returning id`, vals);
+      const [r] = await q<{ id: string }>(`insert into products (slug, name, pasta_type, filling, description, price, stock, low_stock_threshold, featured, active, sort_order, counts_as_box, list_price, promo_eligible)
+                                          values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14) returning id`, vals);
       return json({ id: r.id });
     } catch (e) {
       return bad(/unique|duplicate/i.test((e as Error).message) ? 'duplicate slug' : (e as Error).message, 409);

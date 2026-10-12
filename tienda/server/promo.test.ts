@@ -75,13 +75,26 @@ describe.skipIf(!TEST_DB)('promo por cajas en create_order', () => {
     expect(qt3.promoNext).toMatchObject({ missing: 1, tier: { minBoxes: 4, pct: 15, gifts: 1 } });
   });
 
-  it('la lasaña (oculta al principio) cuenta como caja para la promo', async () => {
+  it('la lasaña de lanzamiento ($16.000, antes $18.000) se puede sumar pero queda fuera de la promo', async () => {
     const LASANA = '00000000-0000-4000-8000-000000000021';
-    expect((await q<{ active: boolean; price: number; units_per_box: number }>('select active, price, units_per_box from products where id = $1', [LASANA]))[0])
-      .toEqual({ active: false, price: 18000, units_per_box: 1 });
-    await q('update products set active = true, stock = 5 where id = $1', [LASANA]);
-    const o = await order(2, [{ productId: LASANA, quantity: 1 }]);
-    expect(o).toMatchObject({ discount_pct: 10, discount: Math.round((price * 2 + 18000) * 0.1) });
+    expect((await q('select active, price, list_price, promo_eligible, units_per_box, counts_as_box from products where id = $1', [LASANA]))[0])
+      .toEqual({ active: true, price: 16000, list_price: 18000, promo_eligible: false, units_per_box: 1, counts_as_box: true });
+    expect(await q(`select kind::text, url from product_media where product_id = $1 order by sort_order`, [LASANA]))
+      .toEqual([{ kind: 'photo', url: '/fotos/lasana-para-compartir.webp' }, { kind: 'video', url: '/fotos/lasana-video.mp4' }]);
+    await q('update products set stock = 5 where id = $1', [LASANA]);
+    // 2 cajas + 1 lasaña: no llega a la opción 1 (la lasaña no suma)
+    expect(await order(2, [{ productId: LASANA, quantity: 1 }])).toMatchObject({ discount: 0, promo_name: null, subtotal: price * 2 + 16000 });
+    // 3 cajas + 1 lasaña: 10% solo sobre las cajas
+    const o = await order(3, [{ productId: LASANA, quantity: 1 }]);
+    expect(o).toMatchObject({ discount_pct: 10, discount: Math.round(price * 3 * 0.1), subtotal: price * 3 + 16000 });
+    // el carrito da lo mismo
+    const [row] = await q(PROMO_SQL);
+    const settings = { pickupEnabled: true, pickupMinBoxes: 1, pickupAddress: '', whatsappPhone: '', transferInfo: '', cutoffWeekday: 4, cutoffTime: '13:00', promo: mapPromo(row) } as StoreSettings;
+    const qt = quote('pickup', { status: 'empty' }, cartTotals([
+      { product: { price, countsAsBox: true }, quantity: 3 },
+      { product: { price: 16000, countsAsBox: true, promoEligible: false }, quantity: 1 },
+    ]), settings);
+    expect([qt.discount, qt.total, qt.promoExcluded, qt.boxes]).toEqual([o.discount, o.total, true, 4]);
   });
 
   it('apagada o vencida no aplica', async () => {

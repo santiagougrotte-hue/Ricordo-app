@@ -11,6 +11,7 @@ export function mapProduct(r: Row): Product & { active: boolean } {
     id: r.id, slug: r.slug, name: r.name, pastaType: r.pasta_type, filling: r.filling, description: r.description,
     unitsPerBox: r.units_per_box, price: r.price, stock: r.stock, lowStockThreshold: r.low_stock_threshold,
     featured: r.featured, countsAsBox: r.counts_as_box, sortOrder: r.sort_order, active: r.active,
+    listPrice: r.list_price ?? null, promoEligible: r.promo_eligible !== false,
     media: ((r.media ?? []) as Row[])
       .map((m) => ({ id: m.id, url: String(m.url).startsWith('/') ? m.url : `/media/${m.url}`, kind: m.kind, alt: m.alt, isCover: m.is_cover, sortOrder: m.sort_order }))
       .sort((a, b) => Number(b.isCover) - Number(a.isCover) || a.sortOrder - b.sortOrder),

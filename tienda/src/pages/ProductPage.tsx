@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { useStore } from '../state/store';
 import { PASTA_LABEL, productKind, productTitle } from '../lib/types';
-import { money } from '../lib/money';
+import { Price } from '../components/Price';
 import { Gallery } from '../components/Gallery';
 import { InViewVideo, srcSet, videoPoster } from '../components/ProductMediaView';
 import { cutoffWithDate, deliverySentence } from '../lib/delivery';
@@ -56,7 +56,13 @@ export function ProductPage() {
           <p className="pdp-filling">{product.filling}</p>
           <p className="pdp-desc">{product.description}</p>
 
-          {product.countsAsBox !== false && <div className="tag-box pdp-tag" data-reveal="paper">
+          {product.pastaType === 'lasagna' && <div className="tag-box pdp-tag" data-reveal="paper">
+            <div className="tag-in">
+              <div className="tag-row"><span className="label">Tamaño</span><span className="fill">800 g, para 2 personas</span></div>
+              <div className="tag-row"><span className="label">Viene en</span><span className="fill">bandeja de aluminio</span></div>
+            </div>
+          </div>}
+          {product.countsAsBox !== false && product.pastaType !== 'lasagna' && <div className="tag-box pdp-tag" data-reveal="paper">
             <div className="tag-in">
               <div className="tag-row"><span className="label">Unidades</span><span className="fill">12 por caja</span></div>
               <div className="tag-row"><span className="label">Conservación</span><span className="fill">freezer, hasta 3 meses</span></div>
@@ -65,7 +71,7 @@ export function ProductPage() {
           </div>}
 
           <div className="pdp-buy">
-            <p className="price price-l">{money(product.price)}<small>{product.countsAsBox === false ? ' c/u' : ' la caja'}</small></p>
+            <Price product={product} large />
             {low && <p className="hand low">¡quedan {product.stock}!</p>}
             {soldOut ? (
               <p className="block-reason">Este gusto se agotó. Volvemos a tenerlo en la próxima tanda.</p>

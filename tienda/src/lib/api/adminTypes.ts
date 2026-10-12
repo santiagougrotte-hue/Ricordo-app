@@ -80,6 +80,10 @@ export interface ProductDraft {
   countsAsBox: boolean;
   active: boolean;
   sortOrder: number;
+  /** Precio anterior, tachado (null = sin precio especial). */
+  listPrice: number | null;
+  /** Entra en las promos por cajas (Día de la Madre). */
+  promoEligible: boolean;
 }
 
 export type OrderEvent = { type: 'insert' | 'update'; order: AdminOrder };

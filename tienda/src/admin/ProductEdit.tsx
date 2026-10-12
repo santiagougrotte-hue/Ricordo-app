@@ -7,7 +7,7 @@ import { compressImage, MAX_VIDEO_MB } from './image';
 import { Icon } from '../components/Icon';
 
 const EMPTY: ProductDraft = {
-  slug: '', name: '', pastaType: 'ravioles', filling: '', description: '', price: 0, stock: 0, lowStockThreshold: 3, featured: false, countsAsBox: true, active: true, sortOrder: 99,
+  slug: '', name: '', pastaType: 'ravioles', filling: '', description: '', price: 0, stock: 0, lowStockThreshold: 3, featured: false, countsAsBox: true, active: true, sortOrder: 99, listPrice: null, promoEligible: true,
 };
 export function slugify(s: string) {
   return s.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
@@ -28,7 +28,7 @@ export function ProductEdit() {
     const list = await adminApi.listProducts();
     const p = list.find((x) => x.id === id) ?? null;
     setProduct(p);
-    if (p) setD({ id: p.id, slug: p.slug, name: p.name, pastaType: p.pastaType, filling: p.filling, description: p.description, price: p.price, stock: p.stock, lowStockThreshold: p.lowStockThreshold, featured: p.featured, countsAsBox: p.countsAsBox !== false, active: p.active, sortOrder: p.sortOrder });
+    if (p) setD({ id: p.id, slug: p.slug, name: p.name, pastaType: p.pastaType, filling: p.filling, description: p.description, price: p.price, stock: p.stock, lowStockThreshold: p.lowStockThreshold, featured: p.featured, countsAsBox: p.countsAsBox !== false, active: p.active, sortOrder: p.sortOrder, listPrice: p.listPrice ?? null, promoEligible: p.promoEligible !== false });
   }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => { void load(); }, [id]);
@@ -107,9 +107,15 @@ export function ProductEdit() {
         <F label="Relleno" id="p-fill"><input id="p-fill" className="input" value={d.filling} onChange={(e) => set('filling', e.target.value)} /></F>
         <F label="Descripción" id="p-desc"><textarea id="p-desc" className="input" rows={3} value={d.description} onChange={(e) => set('description', e.target.value)} /></F>
         <div className="adm-grid3">
-          <F label="Precio por caja ($)" id="p-price"><input id="p-price" className="input" type="number" inputMode="numeric" min={0} value={d.price} onChange={(e) => set('price', Math.max(0, Math.floor(+e.target.value)))} /></F>
+          <F label={d.pastaType === 'lasagna' || !d.countsAsBox ? 'Precio ($)' : 'Precio por caja ($)'} id="p-price"><input id="p-price" className="input" type="number" inputMode="numeric" min={0} value={d.price} onChange={(e) => set('price', Math.max(0, Math.floor(+e.target.value)))} /></F>
           <F label="Cajas en stock" id="p-stock"><input id="p-stock" className="input" type="number" inputMode="numeric" min={0} value={d.stock} onChange={(e) => set('stock', Math.max(0, Math.floor(+e.target.value)))} /></F>
           <F label="Avisar con (stock bajo)" id="p-low"><input id="p-low" className="input" type="number" inputMode="numeric" min={0} value={d.lowStockThreshold} onChange={(e) => set('lowStockThreshold', Math.max(0, Math.floor(+e.target.value)))} /></F>
+        </div>
+        <div className="adm-grid3">
+          <F label="Precio anterior, tachado ($, opcional)" id="p-list"><input id="p-list" className="input" type="number" inputMode="numeric" min={0} placeholder="Sin precio especial" value={d.listPrice ?? ''} onChange={(e) => set('listPrice', e.target.value === '' ? null : Math.max(0, Math.floor(+e.target.value)))} /></F>
+          <div className="adm-checks">
+            <label className="switch"><input type="checkbox" checked={d.promoEligible} onChange={(e) => set('promoEligible', e.target.checked)} /><span>Entra en la promo por cajas (Día de la Madre). Desactivalo si ya tiene su precio especial.</span></label>
+          </div>
         </div>
         <div className="adm-grid3">
           <F label="Orden en la tienda" id="p-order"><input id="p-order" className="input" type="number" inputMode="numeric" value={d.sortOrder} onChange={(e) => set('sortOrder', Math.floor(+e.target.value))} /></F>
@@ -120,7 +126,7 @@ export function ProductEdit() {
             <label className="switch"><input type="checkbox" checked={d.countsAsBox} onChange={(e) => set('countsAsBox', e.target.checked)} /><span>Cuenta como caja (para mínimos, envío gratis y descuentos). Desactivalo en salsas y complementos.</span></label>
           </div>
         </div>
-        <p className="small muted">Todas las cajas son de 12 unidades.</p>
+        <p className="small muted">Las cajas son de 12 unidades; la lasaña, una bandeja para 2. Con precio anterior, la tienda lo muestra tachado.</p>
         {msg && <p className={msg.ok ? 'field-hint' : 'field-error'} role="status">{msg.text}</p>}
         <button type="submit" className="btn btn-ink" disabled={busy}>{busy ? 'Guardando…' : isNew ? 'Crear producto' : 'Guardar cambios'}</button>
         {product && !product.active && (

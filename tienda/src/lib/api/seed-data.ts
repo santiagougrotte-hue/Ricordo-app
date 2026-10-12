@@ -11,6 +11,8 @@ import fotoJyq from '../../assets/fotos/jamon-queso-mano.webp';
 import fotoJyqIng from '../../assets/fotos/jamon-queso-ingredientes.webp';
 import fotoSalsa from '../../assets/fotos/salsa-potes.webp';
 import fotoSalsa2 from '../../assets/fotos/salsa-casera.webp';
+import fotoLasana from '../../assets/fotos/lasana-para-compartir.webp';
+import videoLasana from '../../assets/fotos/lasana-video.mp4';
 
 // Datos de ejemplo — los mismos que netlify/database/migrations/*_example-data. Precios, rellenos y CPs son ilustrativos.
 // Gusto real (igual que netlify/database/migrations/*_gusto-cabutia).
@@ -120,7 +122,7 @@ export const SALSA: Product = {
   ],
 };
 
-// Igual que netlify/database/migrations/*_lasana (oculta hasta tener fotos).
+// Igual que netlify/database/migrations/*_lasana y *_lasana-lanzamiento (en la demo, con stock para probarla).
 export const LASANA: Product = {
   id: '00000000-0000-4000-8000-000000000021',
   slug: 'lasana-de-ragu',
@@ -129,13 +131,18 @@ export const LASANA: Product = {
   filling: 'Ragú de bondiola y roast beef, zanahoria, cebolla, apio, vino tinto, salsa de tomate casera, muzzarella y sardo',
   description: 'Bandeja de 800 g, para 2 personas. Ragú de bondiola y roast beef cocinado lento con zanahoria, cebolla, apio y vino tinto, salsa de tomate casera, muzzarella y sardo.',
   unitsPerBox: 1,
-  price: 18000,
-  stock: 0,
+  price: 16000,
+  listPrice: 18000,
+  promoEligible: false,
+  stock: 8,
   lowStockThreshold: 3,
   featured: false,
   countsAsBox: true,
   sortOrder: 15,
-  media: [],
+  media: [
+    { id: 'm-lasana-1', url: fotoLasana, kind: 'photo', alt: 'Lasaña para compartir: bandeja de lasaña sin TACC con ragú, muzzarella y sardo', isCover: true, sortOrder: 0 },
+    { id: 'm-lasana-2', url: videoLasana, kind: 'video', alt: 'Armando la lasaña: capas de masa, ragú, salsa de tomate, muzzarella y sardo', isCover: false, sortOrder: 1 },
+  ],
 };
 
 /** Productos de ejemplo: ocultos en la tienda (sirven de modelo en el panel). */

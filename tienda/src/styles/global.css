@@ -310,6 +310,9 @@ textarea.input { resize: vertical; }
 .price { font: var(--weight-regular) var(--text-display-m) / 1 var(--font-display); }
 .price small { font: var(--weight-regular) var(--text-small) / 1 var(--font-ui); color: var(--color-text-muted); }
 .price-l { font-size: var(--text-display-l); }
+.price-deal { color: var(--color-primary); }
+.price-was { font: var(--weight-regular) var(--text-body) / 1 var(--font-ui); color: var(--color-text-muted); text-decoration-thickness: 2px; text-decoration-color: var(--color-accent); margin-right: var(--space-1); }
+.price-l .price-was { font-size: var(--text-body-l); }
 .low { font-size: var(--text-hand); color: var(--color-warning); transform: rotate(-2deg); }
 .sold-out .ph { filter: grayscale(0.6); opacity: 0.75; }
 .prod-skeleton .ph::after { display: none; }
@@ -409,6 +412,21 @@ textarea.input { resize: vertical; }
 .foot-grid .label { margin-bottom: var(--space-2); }
 .foot-link { display: inline-flex; gap: var(--space-2); align-items: center; min-height: var(--tap-min); }
 .foot-small { margin-top: var(--space-10); font-size: var(--text-caption); color: var(--color-text-muted); }
+
+/* ── Lanzamiento (lasaña) ─────────────────────────────── */
+.launch { display: grid; gap: var(--space-8); align-items: center; margin-block: var(--space-12); }
+.launch-media { display: grid; grid-template-columns: 1fr 1fr; gap: var(--space-4); align-items: start; }
+.launch-photo { transform: rotate(-1.5deg); }
+.launch-video { transform: rotate(1.5deg); margin-top: var(--space-8); }
+.launch-photo img, .launch-video .ph-video { position: static; aspect-ratio: 9 / 16; object-fit: cover; }
+.launch-text { display: grid; gap: var(--space-3); justify-items: start; }
+.launch-kicker { color: var(--color-primary); }
+.launch-title { font-size: clamp(2.5rem, 6vw, 4.5rem); }
+.launch-video .ph-video { background: var(--color-surface-sunken); }
+.launch-hand { transform: rotate(-2deg); color: var(--color-primary); margin: var(--space-2) 0 calc(-1 * var(--space-2)); }
+@media (min-width: 900px) {
+  .launch { grid-template-columns: 1.1fr 1fr; }
+}
 
 /* ── Promo Día de la Madre ───────────────────────────── */
 .heart { display: inline-block; vertical-align: -0.15em; color: var(--color-accent); flex: none; }

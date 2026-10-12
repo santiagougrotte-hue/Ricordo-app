@@ -76,7 +76,7 @@ export function CartDrawer() {
                 <div className="cart-thumb"><ProductCover product={product} ratio="1 / 1" sizes="72px" tape={false} /></div>
                 <div className="cart-info">
                   <p className="cart-name">{product.name}</p>
-                  <p className="muted small">{money(product.price)} {soldByUnit(product) ? 'c/u' : 'la caja'} · {PASTA_LABEL[product.pastaType].toLowerCase()}</p>
+                  <p className="muted small">{product.listPrice && product.listPrice > product.price && <s className="price-was">{money(product.listPrice)}</s>} {money(product.price)} {soldByUnit(product) ? 'c/u' : 'la caja'} · {PASTA_LABEL[product.pastaType].toLowerCase()}</p>
                   {quantity >= product.stock && <p className="small warn">No hay más cajas de este gusto.</p>}
                 </div>
                 <div className="cart-qty">

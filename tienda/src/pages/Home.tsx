@@ -6,6 +6,7 @@ import { HeroLogo } from '../components/HeroLogo';
 import { Icon } from '../components/Icon';
 import { Stamp } from '../components/Stamp';
 import { PromoSection } from '../components/MothersDay';
+import { LaunchLasagna } from '../components/LaunchLasagna';
 import { ProductLabel, ProductSkeleton } from '../components/ProductLabel';
 import { LocalityForm } from '../components/LocalityForm';
 import { srcSet, InViewVideo as AutoVideo } from '../components/ProductMediaView';
@@ -62,6 +63,8 @@ export function Home() {
       </section>
 
       <PromoSection />
+
+      <LaunchLasagna />
 
       <section className="sec wrap" aria-labelledby="h-dest">
         <header className="sec-head" data-reveal="rise">

@@ -106,11 +106,11 @@ export function createDemoApi(): StoreApi {
       let promoName: string | null = null, gifts = 0;
       const promo = s.promo;
       if (promoActive(promo)) {
-        const { tier } = promoTier(promo, boxes);
+        const { tier } = promoTier(promo, totals.promoBoxes);
         if (tier && (tier.pct > 0 || tier.gifts > 0)) {
           promoName = promo.name;
           pct = tier.pct;
-          discount = Math.round((subtotal * tier.pct) / 100);
+          discount = Math.round((totals.promoSubtotal * tier.pct) / 100);
           gifts = promo.giftProductId && db.products.some((x) => x.id === promo.giftProductId) ? tier.gifts : 0;
         }
       }

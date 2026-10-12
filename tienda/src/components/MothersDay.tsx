@@ -112,7 +112,7 @@ export function PromoGiftRow({ gifts }: { gifts: number }) {
 /** Aviso del carrito: qué escalón tiene y cuánto falta para el siguiente. */
 export function PromoCartNote({ q }: { q: Quote }) {
   const promo = useActivePromo();
-  if (!promo || q.boxes === 0) return null;
+  if (!promo || (!q.promoName && !q.promoNext && !q.promoExcluded)) return null;
   const gift = promo.giftName ?? 'salsa';
   return (
     <p className="promo-note small" aria-live="polite">
@@ -121,6 +121,7 @@ export function PromoCartNote({ q }: { q: Quote }) {
       {q.promoNext
         ? <>Sumá {cajas(q.promoNext.missing)} más y tenés {tierText(q.promoNext.tier, gift)}{q.promoName ? '' : ` por el ${promo.name}`}.</>
         : q.promoName ? '¡Llegaste a la mejor opción!' : null}
+      {q.promoExcluded && <> La lasaña ya tiene su precio de lanzamiento: no suma cajas ni lleva el descuento de la promo.</>}
     </p>
   );
 }

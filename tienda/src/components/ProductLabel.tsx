@@ -1,7 +1,7 @@
 import { Link } from 'react-router-dom';
 import type { Product } from '../lib/types';
 import { productKind } from '../lib/types';
-import { money } from '../lib/money';
+import { Price } from './Price';
 import { useStore } from '../state/store';
 import { ProductCover } from './ProductMediaView';
 import { Icon } from './Icon';
@@ -40,7 +40,7 @@ export function ProductLabel({ product, size = 'm', eager = false, level = 3, pa
           {size === 'l' && <p className="prod-desc">{product.description}</p>}
           {low && <p className="hand low">¡quedan {product.stock}!</p>}
           <div className="prod-buy">
-            <p className="price">{money(product.price)}<small>{product.countsAsBox === false ? " c/u" : " la caja"}</small></p>
+            <Price product={product} />
             {soldOut ? (
               <span className="sold-note">Vuelve pronto</span>
             ) : qty > 0 ? (
