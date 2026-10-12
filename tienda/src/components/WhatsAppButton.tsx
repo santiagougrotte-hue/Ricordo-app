@@ -23,7 +23,7 @@ export function WhatsAppButton() {
   const slug = /^\/cajas\/([^/]+)/.exec(pathname)?.[1];
   const product = slug ? products.find((p) => p.slug === slug) : undefined;
   const text = product
-    ? product.pastaType === 'salsa'
+    ? product.pastaType === 'salsa' || product.pastaType === 'lasagna'
       ? `Hola Ricordo! Tengo una consulta sobre la ${product.name.toLowerCase()}.`
       : `Hola Ricordo! Tengo una consulta sobre los ${PASTA_LABEL[product.pastaType].toLowerCase()} de ${product.name.toLowerCase()}.`
     : pathname === '/checkout'

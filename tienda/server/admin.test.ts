@@ -253,7 +253,8 @@ describe.skipIf(!TEST_DB)('migraciones: gusto real cargado', () => {
     const { q, pool } = await freshDb(false);
     const c = await getCatalog(q);
     // los productos de ejemplo (ocultos y sin pedidos) se borraron
-    expect(await q(`select 1 from products where not active`)).toHaveLength(0);
+    // Solo la lasaña, que arranca oculta hasta tener fotos.
+    expect(await q(`select slug from products where not active`)).toEqual([{ slug: 'lasana-de-ragu' }]);
     expect(await q(`select 1 from products where id::text like '00000000-0000-4000-8000-00000000000_'`)).toHaveLength(0);
     expect(c.products.map((p) => p.name)).toEqual(['Cabutia', 'Osobuco', 'Espinaca', 'Jamón y queso', 'Salsa de tomate']);
     expect(c.products[3]).toMatchObject({ price: 11000, pastaType: 'sorrentinos', featured: true, filling: 'Jamón cocido, muzzarella y queso sardo' });

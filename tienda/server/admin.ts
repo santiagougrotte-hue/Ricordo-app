@@ -30,7 +30,7 @@ export interface AdminDeps {
 
 const STATUSES = ['new', 'confirmed', 'preparing', 'shipped', 'delivered', 'cancelled'];
 const PAY = ['pending', 'paid', 'refunded'];
-const TYPES = ['ravioles', 'sorrentinos', 'cappellacci', 'salsa'];
+const TYPES = ['ravioles', 'sorrentinos', 'cappellacci', 'salsa', 'lasagna'];
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const MEDIA_TYPES: Record<string, string> = { 'image/webp': 'webp', 'image/jpeg': 'jpg', 'image/png': 'png', 'video/mp4': 'mp4', 'video/webm': 'webm' };
 export const MAX_UPLOAD = 5.5 * 1024 * 1024; // límite de cuerpo de las funciones de Netlify (~6 MB)

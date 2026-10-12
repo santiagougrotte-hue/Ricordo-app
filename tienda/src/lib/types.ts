@@ -1,4 +1,4 @@
-export type PastaType = 'ravioles' | 'sorrentinos' | 'cappellacci' | 'salsa';
+export type PastaType = 'ravioles' | 'sorrentinos' | 'cappellacci' | 'salsa' | 'lasagna';
 export type DeliveryMethod = 'delivery' | 'pickup';
 export type PaymentMethod = 'transfer' | 'cash';
 
@@ -194,4 +194,18 @@ export const PASTA_LABEL: Record<PastaType, string> = {
   sorrentinos: 'Sorrentinos',
   cappellacci: 'Cappellacci',
   salsa: 'Salsa',
+  lasagna: 'Lasaña',
 };
+
+/** "Sorrentinos · caja x 12", "Lasaña · para 2", "Salsa". */
+export function productKind(p: Pick<Product, 'pastaType' | 'unitsPerBox' | 'countsAsBox'>): string {
+  if (p.pastaType === 'lasagna') return `${PASTA_LABEL.lasagna} · para 2`;
+  return p.countsAsBox === false ? PASTA_LABEL[p.pastaType] : `${PASTA_LABEL[p.pastaType]} · caja x ${p.unitsPerBox}`;
+}
+
+/** Se vende por unidad (bandeja, pote), no por caja. */
+export const soldByUnit = (p: Pick<Product, 'pastaType' | 'countsAsBox'>) => p.countsAsBox === false || p.pastaType === 'lasagna';
+
+/** "Sorrentinos de cabutia", pero "Lasaña de ragú" o "Salsa de tomate" tal cual (el nombre ya lo dice). */
+export const productTitle = (p: Pick<Product, 'pastaType' | 'name'>) =>
+  p.pastaType === 'lasagna' || p.pastaType === 'salsa' ? p.name : `${PASTA_LABEL[p.pastaType]} de ${p.name.toLowerCase()}`;

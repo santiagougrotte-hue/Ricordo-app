@@ -120,6 +120,24 @@ export const SALSA: Product = {
   ],
 };
 
+// Igual que netlify/database/migrations/*_lasana (oculta hasta tener fotos).
+export const LASANA: Product = {
+  id: '00000000-0000-4000-8000-000000000021',
+  slug: 'lasana-de-ragu',
+  name: 'Lasaña de ragú',
+  pastaType: 'lasagna',
+  filling: 'Ragú de bondiola y roast beef, zanahoria, cebolla, apio, vino tinto, salsa de tomate casera, muzzarella y sardo',
+  description: 'Bandeja de 800 g, para 2 personas. Ragú de bondiola y roast beef cocinado lento con zanahoria, cebolla, apio y vino tinto, salsa de tomate casera, muzzarella y sardo.',
+  unitsPerBox: 1,
+  price: 18000,
+  stock: 0,
+  lowStockThreshold: 3,
+  featured: false,
+  countsAsBox: true,
+  sortOrder: 15,
+  media: [],
+};
+
 /** Productos de ejemplo: ocultos en la tienda (sirven de modelo en el panel). */
 export const EXAMPLE_IDS = [1, 2, 3, 4, 5].map((n) => `00000000-0000-4000-8000-00000000000${n}`);
 
@@ -129,6 +147,7 @@ export const SEED_PRODUCTS: Product[] = [
   ESPINACA,
   JAMON_QUESO,
   SALSA,
+  LASANA,
   {
     id: '00000000-0000-4000-8000-000000000001',
     slug: 'sorrentinos-jamon-muzza-nuez',

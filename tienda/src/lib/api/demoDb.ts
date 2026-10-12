@@ -4,7 +4,7 @@ import type { Locality, Product, ShippingZone, StoreSettings } from '../types';
 import { EXAMPLE_IDS, SEED_LOCALITIES, SEED_PRODUCTS, SEED_SETTINGS, SEED_ZONES } from './seed-data';
 import type { AdminOrder, AdminSettings, ShippingConfig } from './adminTypes';
 
-const KEY = 'ricordo-demo-db-v20';
+const KEY = 'ricordo-demo-db-v21';
 const CHANNEL = 'ricordo-demo';
 
 export interface DemoDb {
@@ -30,7 +30,7 @@ function fresh(): DemoDb {
     settings: { ...(SEED_SETTINGS as StoreSettings), notifyEmail: '' },
     orders: [],
     nextNumber: 1001,
-    inactive: [],
+    inactive: ['00000000-0000-4000-8000-000000000021'],
   };
 }
 

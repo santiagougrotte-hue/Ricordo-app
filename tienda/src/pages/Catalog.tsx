@@ -5,7 +5,7 @@ import { ProductLabel, ProductSkeleton } from '../components/ProductLabel';
 import { useDocumentTitle } from './useDocumentTitle';
 import { useReveal } from '../motion/useMotion';
 
-const TYPES: PastaType[] = ['ravioles', 'sorrentinos', 'cappellacci', 'salsa'];
+const TYPES: PastaType[] = ['ravioles', 'sorrentinos', 'cappellacci', 'lasagna', 'salsa'];
 
 export function Catalog() {
   useDocumentTitle('Nuestros productos · Ricordo');
@@ -26,7 +26,7 @@ export function Catalog() {
         <span className="sec-n" aria-hidden="true">{String(sorted.length).padStart(2, '0')}</span>
         <div>
           <h1 id="h-cat" className="d-xl">{active ? PASTA_LABEL[active] : 'Nuestros productos'}</h1>
-          <p className="lede">Pastas sin TACC en cajas de 12 unidades. Se guardan en el freezer hasta 3 meses.</p>
+          <p className="lede">{products.some((p) => p.pastaType === 'lasagna') ? 'Pastas sin TACC: cajas de 12 unidades y lasaña para 2.' : 'Pastas sin TACC en cajas de 12 unidades.'} Se guardan en el freezer hasta 3 meses.</p>
         </div>
       </header>
       {present.length > 1 && <nav className="filters" aria-label="Filtrar por tipo de pasta">

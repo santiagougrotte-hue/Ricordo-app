@@ -1,6 +1,6 @@
 import { Link } from 'react-router-dom';
 import type { Product } from '../lib/types';
-import { PASTA_LABEL } from '../lib/types';
+import { productKind } from '../lib/types';
 import { money } from '../lib/money';
 import { useStore } from '../state/store';
 import { ProductCover } from './ProductMediaView';
@@ -35,7 +35,7 @@ export function ProductLabel({ product, size = 'm', eager = false, level = 3, pa
       </Link>
       <div className="tag-box">
         <div className="tag-in">
-          <p className="label">{product.countsAsBox === false ? PASTA_LABEL[product.pastaType] : `${PASTA_LABEL[product.pastaType]} · caja x ${product.unitsPerBox}`}</p>
+          <p className="label">{productKind(product)}</p>
           <H className="prod-name"><Link to={href}>{product.name}</Link></H>
           {size === 'l' && <p className="prod-desc">{product.description}</p>}
           {low && <p className="hand low">¡quedan {product.stock}!</p>}

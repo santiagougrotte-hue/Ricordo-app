@@ -9,7 +9,7 @@ import { PromoSection } from '../components/MothersDay';
 import { ProductLabel, ProductSkeleton } from '../components/ProductLabel';
 import { LocalityForm } from '../components/LocalityForm';
 import { srcSet, InViewVideo as AutoVideo } from '../components/ProductMediaView';
-import { PASTA_LABEL } from '../lib/types';
+import { productTitle } from '../lib/types';
 import fotoIngredientes from '../assets/fotos/cabutia-ingredientes.webp';
 import videoAmasado from '../assets/fotos/amasado-masa-nero.mp4';
 import posterAmasado from '../assets/fotos/amasado-masa-nero-poster.webp';
@@ -67,7 +67,7 @@ export function Home() {
         <header className="sec-head" data-reveal="rise">
           <span className="sec-n" aria-hidden="true">01</span>
           <div>
-            <h2 id="h-dest" className="d-xl">{single ? `${PASTA_LABEL[single.pastaType]} de ${single.name.toLowerCase()}` : pair || all ? 'Los gustos' : 'Las que más salen'}</h2>
+            <h2 id="h-dest" className="d-xl">{single ? productTitle(single) : pair || all ? 'Los gustos' : 'Las que más salen'}</h2>
             <p className="lede">{single ? `${single.filling}. Caja de 12.` : pair || all ? 'Hechos a mano, sin TACC. Cada caja trae 12.' : 'Cada caja trae 12. Se cocinan del freezer a la olla, sin descongelar.'}</p>
           </div>
         </header>

@@ -75,6 +75,15 @@ describe.skipIf(!TEST_DB)('promo por cajas en create_order', () => {
     expect(qt3.promoNext).toMatchObject({ missing: 1, tier: { minBoxes: 4, pct: 15, gifts: 1 } });
   });
 
+  it('la lasaña (oculta al principio) cuenta como caja para la promo', async () => {
+    const LASANA = '00000000-0000-4000-8000-000000000021';
+    expect((await q<{ active: boolean; price: number; units_per_box: number }>('select active, price, units_per_box from products where id = $1', [LASANA]))[0])
+      .toEqual({ active: false, price: 18000, units_per_box: 1 });
+    await q('update products set active = true, stock = 5 where id = $1', [LASANA]);
+    const o = await order(2, [{ productId: LASANA, quantity: 1 }]);
+    expect(o).toMatchObject({ discount_pct: 10, discount: Math.round((price * 2 + 18000) * 0.1) });
+  });
+
   it('apagada o vencida no aplica', async () => {
     await q(`update store_settings set promo_ends_at = now() - interval '1 minute'`);
     expect(await order(5)).toMatchObject({ discount: 0, promo_name: null, gift_count: 0 });

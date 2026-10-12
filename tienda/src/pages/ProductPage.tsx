@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { useStore } from '../state/store';
-import { PASTA_LABEL } from '../lib/types';
+import { PASTA_LABEL, productKind, productTitle } from '../lib/types';
 import { money } from '../lib/money';
 import { Gallery } from '../components/Gallery';
 import { InViewVideo, srcSet, videoPoster } from '../components/ProductMediaView';
@@ -20,7 +20,7 @@ export function ProductPage() {
   const product = products.find((p) => p.slug === slug);
   const [qty, setQty] = useState(1);
   useReveal(`${status}-${slug}`);
-  useDocumentTitle(product ? `${PASTA_LABEL[product.pastaType]} de ${product.name} · Ricordo` : 'Ricordo');
+  useDocumentTitle(product ? `${productTitle(product)} · Ricordo` : 'Ricordo');
 
   if (status === 'loading') {
     return (
@@ -50,7 +50,7 @@ export function ProductPage() {
           <Stamp className="pdp-stamp" lines={['SIN', 'TACC']} label="Sin TACC" />
         </div>
         <div className="pdp-info">
-          <p className="label">{product.countsAsBox === false ? PASTA_LABEL[product.pastaType] : `${PASTA_LABEL[product.pastaType]} · caja x ${product.unitsPerBox}`}</p>
+          <p className="label">{productKind(product)}</p>
           <h1 className="d-xl pdp-name">{product.name}</h1>
           <p className="label pdp-lleva">Lo que lleva</p>
           <p className="pdp-filling">{product.filling}</p>
