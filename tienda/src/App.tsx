@@ -4,7 +4,7 @@ import { useStore } from './state/store';
 import { api } from './lib/api';
 import { Header } from './components/Header';
 import { Footer } from './components/Footer';
-import { PromoBanner } from './components/MothersDay';
+import { PromoBanner } from './components/Promo';
 import { CartDrawer } from './components/CartDrawer';
 import { WhatsAppButton } from './components/WhatsAppButton';
 import { Home } from './pages/Home';

@@ -277,5 +277,6 @@ export const SEED_SETTINGS: StoreSettings = {
     enabled: true, name: 'Día de la Madre', startsAt: '2026-10-01T03:00:00.000Z', endsAt: '2026-10-19T03:00:00.000Z',
     tiers: [{ minBoxes: 3, pct: 10, gifts: 0 }, { minBoxes: 4, pct: 15, gifts: 1 }, { minBoxes: 5, pct: 15, gifts: 2 }],
     giftProductId: '00000000-0000-4000-8000-000000000020', giftName: 'Salsa de tomate',
+    theme: 'madre', message: '',
   },
 };

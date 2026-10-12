@@ -72,7 +72,7 @@ export const mapLocality = (l: Row): Locality => ({
 });
 
 export const PROMO_SQL = `
-  select s.promo_enabled, s.promo_name, s.promo_starts_at, s.promo_ends_at, s.promo_tiers, s.promo_gift_product_id, p.name as promo_gift_name
+  select s.promo_enabled, s.promo_name, s.promo_theme, s.promo_message, s.promo_starts_at, s.promo_ends_at, s.promo_tiers, s.promo_gift_product_id, p.name as promo_gift_name
   from store_settings s left join products p on p.id = s.promo_gift_product_id limit 1`;
 
 export function mapPromo(r: Row): Promo {
@@ -83,6 +83,7 @@ export function mapPromo(r: Row): Promo {
       .map((t) => ({ minBoxes: Number(t.minBoxes), pct: Number(t.pct) || 0, gifts: Number(t.gifts) || 0 }))
       .sort((a, b) => a.minBoxes - b.minBoxes),
     giftProductId: r.promo_gift_product_id ?? null, giftName: r.promo_gift_name ?? null,
+    theme: r.promo_theme === 'general' ? 'general' : 'madre', message: r.promo_message ?? '',
   };
 }
 

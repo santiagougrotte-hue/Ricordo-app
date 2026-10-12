@@ -23,7 +23,7 @@ export function Products() {
                   <span className="adm-thumb">{cover ? <img src={cover.url} alt="" loading="lazy" /> : <span className="small muted">sin foto</span>}</span>
                   <span>
                     <b>{p.name}</b>
-                    <small>{PASTA_LABEL[p.pastaType]} · {money(p.price)} · {p.stock} {p.pastaType === 'lasagna' ? 'bandejas' : p.pastaType === 'salsa' ? 'potes' : 'cajas'}{p.featured ? ' · destacado' : ''}{p.active ? '' : ' · oculto'}</small>
+                    <small>{PASTA_LABEL[p.pastaType]} · {p.listPrice && p.listPrice > p.price ? <><s>{money(p.listPrice)}</s> </> : null}{money(p.price)}{p.listPrice && p.listPrice > p.price ? ' (oferta)' : ''} · {p.stock} {p.pastaType === 'lasagna' ? 'bandejas' : p.pastaType === 'salsa' ? 'potes' : 'cajas'}{p.featured ? ' · destacado' : ''}{p.active ? '' : ' · oculto'}</small>
                   </span>
                   <span className="small">{p.media.length} {p.media.length === 1 ? 'archivo' : 'archivos'}</span>
                 </Link>

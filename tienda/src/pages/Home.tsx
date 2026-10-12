@@ -5,7 +5,7 @@ import { cutoffShort, cutoffWithDate, deliveryDateFor, deliveryLabel } from '../
 import { HeroLogo } from '../components/HeroLogo';
 import { Icon } from '../components/Icon';
 import { Stamp } from '../components/Stamp';
-import { PromoSection } from '../components/MothersDay';
+import { PromoSection } from '../components/Promo';
 import { LaunchLasagna } from '../components/LaunchLasagna';
 import { ProductLabel, ProductSkeleton } from '../components/ProductLabel';
 import { LocalityForm } from '../components/LocalityForm';

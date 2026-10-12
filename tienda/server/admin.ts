@@ -388,12 +388,15 @@ export async function handleAdmin(req: Request, path: string, env: AdminEnv, dep
       if (isNaN(+starts) || isNaN(+ends) || ends <= starts) return bad('Revisá las fechas de la promo.');
       const tiers = Array.isArray(p.tiers) ? (p.tiers as Record<string, unknown>[]) : [];
       const clean = tiers.map((t) => ({ minBoxes: int(t.minBoxes, 1), pct: int(t.pct), gifts: int(t.gifts) }));
+      if (clean.length === 0) return bad('La promo necesita al menos una opción.');
+      if (new Set(clean.map((t) => t.minBoxes)).size < clean.length) return bad('Dos opciones de la promo no pueden empezar en la misma cantidad de cajas.');
       if (clean.length > 6 || clean.some((t) => t.minBoxes === null || t.pct === null || t.pct > 50 || t.gifts === null || t.gifts > 10)) {
         return bad('Revisá las opciones de la promo (cajas desde 1, descuento hasta 50%, hasta 10 regalos).');
       }
-      await q(`update store_settings set promo_enabled=$1, promo_name=$2, promo_starts_at=$3, promo_ends_at=$4, promo_tiers=$5`,
+      await q(`update store_settings set promo_enabled=$1, promo_name=$2, promo_starts_at=$3, promo_ends_at=$4, promo_tiers=$5, promo_theme=$6, promo_message=$7`,
         [!!p.enabled, String(p.name ?? '').trim().slice(0, 60) || 'Promo', starts.toISOString(), ends.toISOString(),
-         JSON.stringify(clean.sort((a, b) => a.minBoxes! - b.minBoxes!))]);
+         JSON.stringify(clean.sort((a, b) => a.minBoxes! - b.minBoxes!)), p.theme === 'general' ? 'general' : 'madre',
+         String(p.message ?? '').trim().slice(0, 140)]);
     }
     return json({ ok: true });
   }

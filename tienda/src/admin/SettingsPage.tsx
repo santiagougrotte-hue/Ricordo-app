@@ -12,7 +12,7 @@ const TZ_OFFSET = '-03:00';
 const arDay = (iso: string) => new Date(new Date(iso).getTime() - 3 * 3600_000).toISOString().slice(0, 10);
 const nextDay = (d: string) => new Date(new Date(`${d}T00:00:00${TZ_OFFSET}`).getTime() + 86400_000).toISOString();
 
-/** Promo por cajas (Día de la Madre): prender/apagar, fechas y opciones. */
+/** Promo (Día de la Madre u otra): prender/apagar, fechas, cartel y opciones. Una promo a la vez. */
 function PromoFields({ promo, onChange }: { promo: Promo; onChange: (p: Promo) => void }) {
   const set = <K extends keyof Promo>(k: K, v: Promo[K]) => onChange({ ...promo, [k]: v });
   const lastDay = arDay(new Date(new Date(promo.endsAt).getTime() - 1).toISOString());
@@ -22,9 +22,33 @@ function PromoFields({ promo, onChange }: { promo: Promo; onChange: (p: Promo) =
     : now < new Date(promo.startsAt) ? 'Todavía no empezó.' : 'Ya terminó: no se ve en la tienda.';
   return (
     <>
-      <h3 className="label">Promo {promo.name}</h3>
-      <label className="switch"><input type="checkbox" checked={promo.enabled} onChange={(e) => set('enabled', e.target.checked)} /><span>Promo prendida (descuento, regalos y decoración)</span></label>
-      <p className="small muted">{state} El descuento va sobre el total de los productos y reemplaza al de cajas extra. Los regalos salen del stock de {promo.giftName ?? 'la salsa'}; si no hay, igual figuran en el pedido.</p>
+      <h3 className="label">Promoción</h3>
+      <label className="switch"><input type="checkbox" checked={promo.enabled} onChange={(e) => set('enabled', e.target.checked)} /><span>Promo prendida (descuento, regalos, cartel y sección en el inicio)</span></label>
+      <p className="small muted">{state} El descuento va sobre el total de la compra (sin los productos que ya tienen precio especial) y reemplaza al de cajas extra. Los regalos salen del stock de {promo.giftName ?? 'la salsa'}; si no hay, igual figuran en el pedido.</p>
+      <div className="adm-grid2">
+        <div className="field">
+          <label className="field-label" htmlFor="s-pname">Nombre de la promo</label>
+          <input id="s-pname" className="input" maxLength={60} value={promo.name} onChange={(e) => set('name', e.target.value)} placeholder="Ej.: Día de la Madre, Semana de la pasta" />
+        </div>
+        <div className="field">
+          <label className="field-label" htmlFor="s-ptheme">Estilo</label>
+          <select id="s-ptheme" className="input" value={promo.theme} onChange={(e) => set('theme', e.target.value as Promo['theme'])}>
+            <option value="general">General (cartel y sección simples)</option>
+            <option value="madre">Día de la Madre (corazones y frases para mamá)</option>
+          </select>
+        </div>
+      </div>
+      <div className="field">
+        <label className="field-label" htmlFor="s-pmsg">Texto del cartel de arriba (opcional)</label>
+        <input id="s-pmsg" className="input" maxLength={140} value={promo.message} onChange={(e) => set('message', e.target.value)} placeholder="Si lo dejás vacío: “hasta 15% off + salsas de regalo”" />
+      </div>
+      <div className="stack-row">
+        <button type="button" className="btn btn-line" onClick={() => set('tiers', [{ minBoxes: 1, pct: 10, gifts: 0 }])}>Usar “% en toda la compra”</button>
+        <button type="button" className="btn btn-line" disabled={promo.tiers.length >= 6} onClick={() => {
+          const last = promo.tiers[promo.tiers.length - 1];
+          set('tiers', [...promo.tiers, { minBoxes: (last?.minBoxes ?? 0) + 1, pct: last?.pct ?? 10, gifts: 0 }]);
+        }}>Agregar opción</button>
+      </div>
       <div className="adm-grid2">
         <div className="field">
           <label className="field-label" htmlFor="s-pfrom">Desde</label>
@@ -36,7 +60,7 @@ function PromoFields({ promo, onChange }: { promo: Promo; onChange: (p: Promo) =
         </div>
       </div>
       <div className="adm-table-wrap"><table className="adm-table">
-        <thead><tr><th>Opción</th><th>Desde (cajas)</th><th>Descuento %</th><th>Salsas de regalo</th></tr></thead>
+        <thead><tr><th>Opción</th><th>Desde (cajas)</th><th>Descuento %</th><th>Salsas de regalo</th><th><span className="sr">Quitar</span></th></tr></thead>
         <tbody>
           {promo.tiers.map((t, i) => (
             <tr key={i}>
@@ -47,10 +71,14 @@ function PromoFields({ promo, onChange }: { promo: Promo; onChange: (p: Promo) =
                     value={t[k]} onChange={(e) => set('tiers', promo.tiers.map((x, j) => (j === i ? { ...x, [k]: Math.max(0, Math.floor(+e.target.value || 0)) } : x)))} />
                 </td>
               ))}
+              <td>
+                <button type="button" className="link" disabled={promo.tiers.length <= 1} onClick={() => set('tiers', promo.tiers.filter((_, j) => j !== i))}>Quitar</button>
+              </td>
             </tr>
           ))}
         </tbody>
       </table></div>
+      <p className="small muted">“Desde 1 caja” = el % vale para cualquier compra. Guardá los ajustes para que se vea en la tienda.</p>
     </>
   );
 }

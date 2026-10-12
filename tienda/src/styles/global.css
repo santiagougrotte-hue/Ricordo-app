@@ -433,6 +433,8 @@ textarea.input { resize: vertical; }
 .promo-bar { display: flex; align-items: center; justify-content: center; flex-wrap: wrap; gap: var(--space-1) var(--space-2); margin: 0; padding: var(--space-2) var(--gutter); text-align: center; font-size: var(--text-caption); background: var(--color-accent); color: var(--color-on-accent); }
 .promo-bar .heart { color: var(--color-on-accent); }
 .promo-bar b { font-weight: var(--weight-medium); }
+.promo-bar-pct { display: inline-grid; place-items: center; width: 1.4em; height: 1.4em; border-radius: 50%; background: var(--color-on-accent); color: var(--color-accent); font-weight: var(--weight-medium); font-size: 0.85em; }
+.promo-single { width: min(100%, 22rem); margin-top: var(--space-4); transform: rotate(-1deg); }
 .promo-bar-link { color: inherit; font-weight: var(--weight-medium); text-underline-offset: 3px; }
 .sec-promo { margin-block: var(--space-8); }
 .promo-madre { position: relative; overflow: hidden; padding: var(--space-12) var(--space-4); border: var(--rule-label) solid var(--color-rule); border-radius: var(--radius-label); background: var(--color-surface); box-shadow: var(--shadow-paper); text-align: center; }

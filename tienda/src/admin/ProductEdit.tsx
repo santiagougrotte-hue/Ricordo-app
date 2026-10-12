@@ -112,7 +112,14 @@ export function ProductEdit() {
           <F label="Avisar con (stock bajo)" id="p-low"><input id="p-low" className="input" type="number" inputMode="numeric" min={0} value={d.lowStockThreshold} onChange={(e) => set('lowStockThreshold', Math.max(0, Math.floor(+e.target.value)))} /></F>
         </div>
         <div className="adm-grid3">
-          <F label="Precio anterior, tachado ($, opcional)" id="p-list"><input id="p-list" className="input" type="number" inputMode="numeric" min={0} placeholder="Sin precio especial" value={d.listPrice ?? ''} onChange={(e) => set('listPrice', e.target.value === '' ? null : Math.max(0, Math.floor(+e.target.value)))} /></F>
+          <div>
+            <F label="Precio anterior, tachado ($, opcional)" id="p-list"><input id="p-list" className="input" type="number" inputMode="numeric" min={0} placeholder="Sin precio especial" value={d.listPrice ?? ''} onChange={(e) => set('listPrice', e.target.value === '' ? null : Math.max(0, Math.floor(+e.target.value)))} /></F>
+            {d.listPrice ? (
+              <button type="button" className="link" onClick={() => setD({ ...d, price: d.listPrice!, listPrice: null })}>Terminar la oferta (volver a ${d.listPrice.toLocaleString('es-AR')})</button>
+            ) : d.price > 0 && (
+              <button type="button" className="link" onClick={() => setD({ ...d, listPrice: d.price })}>Bajar el precio: tachar ${d.price.toLocaleString('es-AR')} y poner el nuevo arriba</button>
+            )}
+          </div>
           <div className="adm-checks">
             <label className="switch"><input type="checkbox" checked={d.promoEligible} onChange={(e) => set('promoEligible', e.target.checked)} /><span>Entra en la promo por cajas (Día de la Madre). Desactivalo si ya tiene su precio especial.</span></label>
           </div>

@@ -102,6 +102,10 @@ export interface Promo {
   tiers: PromoTier[];
   giftProductId: string | null;
   giftName: string | null;
+  /** 'madre': corazones y frases para mamá · 'general': sin decoración temática. */
+  theme: 'madre' | 'general';
+  /** Texto del cartel de arriba (vacío = se arma solo). */
+  message: string;
 }
 
 export interface StoreSettings {

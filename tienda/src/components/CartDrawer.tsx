@@ -7,7 +7,7 @@ import { Sheet } from './Sheet';
 import { Qty } from './Qty';
 import { Ruler } from './Ruler';
 import { Icon } from './Icon';
-import { PromoCartNote, PromoGiftRow } from './MothersDay';
+import { PromoCartNote, PromoGiftRow } from './Promo';
 import { LocalityForm, ShippingFacts } from './LocalityForm';
 import { MethodToggle } from './MethodToggle';
 import { ProductCover } from './ProductMediaView';

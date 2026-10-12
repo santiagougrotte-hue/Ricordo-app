@@ -10,7 +10,7 @@ import type { OrderError, PaymentMethod } from '../lib/types';
 import { Icon } from '../components/Icon';
 import { MethodToggle } from '../components/MethodToggle';
 import { LocalitySelect } from '../components/LocalityForm';
-import { PromoCartNote, PromoGiftRow } from '../components/MothersDay';
+import { PromoCartNote, PromoGiftRow } from '../components/Promo';
 import { Turnstile, type TurnstileHandle } from '../components/Turnstile';
 import { useDocumentTitle } from './useDocumentTitle';
 

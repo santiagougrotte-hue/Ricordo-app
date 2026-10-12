@@ -195,6 +195,27 @@ describe.skipIf(!TEST_DB)('API del panel contra Netlify Database (Postgres real)
     expect(JSON.stringify(cat)).not.toContain('yo@ricordo.com');
   });
 
+  it('promos: una promo general con % en toda la compra y su cartel; precio anterior tachado en cualquier producto', async () => {
+    const s = { pickupEnabled: true, pickupMinBoxes: 2, pickupAddress: 'Calle 1', whatsappPhone: '5491155551234', transferInfo: 'Alias X', notifyEmail: 'yo@ricordo.com', cutoffWeekday: 3, cutoffTime: '18:30' };
+    const promo = { enabled: true, name: 'Semana de la pasta', theme: 'general', message: '10% off en toda tu compra',
+      startsAt: new Date(Date.now() - 86400_000).toISOString(), endsAt: new Date(Date.now() + 86400_000).toISOString(), tiers: [{ minBoxes: 1, pct: 10, gifts: 0 }] };
+    expect((await call('POST', 'settings', { body: { ...s, promo: { ...promo, tiers: [] } } })).status).toBe(400);
+    expect((await call('POST', 'settings', { body: { ...s, promo: { ...promo, tiers: [{ minBoxes: 2, pct: 10, gifts: 0 }, { minBoxes: 2, pct: 15, gifts: 0 }] } } })).status).toBe(400);
+    expect((await call('POST', 'settings', { body: { ...s, promo } })).status).toBe(200);
+    expect((await getCatalog(q)).settings.promo).toMatchObject({ name: 'Semana de la pasta', theme: 'general', message: '10% off en toda tu compra', tiers: [{ minBoxes: 1, pct: 10, gifts: 0 }] });
+    // apagada: no sale en la tienda
+    expect((await call('POST', 'settings', { body: { ...s, promo: { ...promo, enabled: false } } })).status).toBe(200);
+    expect((await getCatalog(q)).settings.promo).toBeNull();
+
+    const [p] = await q<{ id: string; slug: string; name: string; pasta_type: string }>(`select id, slug, name, pasta_type from products where active and pasta_type = 'sorrentinos' limit 1`);
+    const draft = { id: p.id, slug: p.slug, name: p.name, pastaType: p.pasta_type, filling: 'x', description: 'x', price: 10000, stock: 5, lowStockThreshold: 1, featured: false, active: true, sortOrder: 1, countsAsBox: true, promoEligible: true };
+    expect((await call('POST', 'products', { body: { ...draft, listPrice: 9000 } })).status).toBe(400); // el anterior tiene que ser mayor
+    expect((await call('POST', 'products', { body: { ...draft, listPrice: 12000 } })).status).toBe(200);
+    expect((await getCatalog(q)).products.find((x) => x.id === p.id)).toMatchObject({ price: 10000, listPrice: 12000, promoEligible: true });
+    expect((await call('POST', 'products', { body: { ...draft, listPrice: null } })).status).toBe(200);
+    expect((await getCatalog(q)).products.find((x) => x.id === p.id)?.listPrice).toBeNull();
+  });
+
   it('probar aviso de WhatsApp: sin clave avisa qué falta; con clave manda al número de la tienda', async () => {
     expect((await call('POST', 'notify-test')).data.error).toContain('CALLMEBOT_APIKEY');
     const urls: string[] = [];
