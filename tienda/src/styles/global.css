@@ -410,6 +410,42 @@ textarea.input { resize: vertical; }
 .foot-link { display: inline-flex; gap: var(--space-2); align-items: center; min-height: var(--tap-min); }
 .foot-small { margin-top: var(--space-10); font-size: var(--text-caption); color: var(--color-text-muted); }
 
+/* ── Promo Día de la Madre ───────────────────────────── */
+.heart { display: inline-block; vertical-align: -0.15em; color: var(--color-accent); flex: none; }
+.promo-bar { display: flex; align-items: center; justify-content: center; flex-wrap: wrap; gap: var(--space-1) var(--space-2); margin: 0; padding: var(--space-2) var(--gutter); text-align: center; font-size: var(--text-caption); background: var(--color-accent); color: var(--color-on-accent); }
+.promo-bar .heart { color: var(--color-on-accent); }
+.promo-bar b { font-weight: var(--weight-medium); }
+.promo-bar-link { color: inherit; font-weight: var(--weight-medium); text-underline-offset: 3px; }
+.sec-promo { margin-block: var(--space-8); }
+.promo-madre { position: relative; overflow: hidden; padding: var(--space-12) var(--space-4); border: var(--rule-label) solid var(--color-rule); border-radius: var(--radius-label); background: var(--color-surface); box-shadow: var(--shadow-paper); text-align: center; }
+.promo-in { position: relative; max-width: 60rem; margin: 0 auto; display: grid; gap: var(--space-4); justify-items: center; }
+.promo-hand { font-size: calc(var(--text-hand) * 1.2); color: var(--color-primary); transform: rotate(-3deg); }
+.promo-madre .lede { max-width: 42ch; margin: 0 auto; }
+.promo-tiers { list-style: none; margin: var(--space-4) 0 0; padding: 0; width: 100%; display: grid; grid-template-columns: repeat(auto-fit, minmax(12rem, 1fr)); gap: var(--space-4); }
+.promo-tier { position: relative; display: grid; gap: var(--space-1); padding: var(--space-6) var(--space-4); text-align: center; }
+.promo-tier:nth-child(odd) { transform: rotate(-1deg); }
+.promo-tier:nth-child(even) { transform: rotate(1deg); }
+.promo-tier.best { border-color: var(--color-accent); }
+.promo-boxes { margin: 0; font: var(--weight-regular) var(--text-display-s) / 1.1 var(--font-display); }
+.promo-pct { margin: 0; font: var(--weight-regular) var(--text-display-l) / 1 var(--font-display); color: var(--color-primary); white-space: nowrap; }
+.promo-tier .small { margin: 0; }
+.promo-badge { position: absolute; top: calc(-1 * var(--space-3)); right: calc(-1 * var(--space-2)); transform: rotate(12deg); }
+.promo-frases { list-style: none; margin: var(--space-2) 0 0; padding: 0; display: flex; flex-wrap: wrap; justify-content: center; gap: var(--space-2) var(--space-6); font-family: var(--font-hand); font-size: clamp(1.25rem, 4.5vw, var(--text-hand)); line-height: 1.15; color: var(--color-pencil); }
+.promo-when { color: var(--color-text-muted); max-width: 52ch; margin: 0; }
+.promo-note { display: block; margin: var(--space-2) 0 0; padding: var(--space-2) var(--space-3); border-radius: var(--radius-label); background: var(--color-surface-sunken); }
+.totals .gift dd { color: var(--color-success); font-weight: var(--weight-medium); }
+.hearts-float { position: absolute; inset: 0; pointer-events: none; }
+.hearts-float span { position: absolute; left: calc(4% + var(--i) * 11%); bottom: -2rem; opacity: 0.22; animation: corazon 9s ease-in calc(var(--i) * -1.1s) infinite; }
+.hearts-float span:nth-child(even) { animation-duration: 12s; }
+@keyframes corazon {
+  0% { transform: translateY(0) rotate(-8deg); opacity: 0; }
+  15% { opacity: 0.25; }
+  100% { transform: translateY(-34rem) rotate(10deg); opacity: 0; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .hearts-float span { bottom: calc(10% + var(--i) * 8%); opacity: 0.15; }
+}
+
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation: none !important; transition: none !important; }
 }

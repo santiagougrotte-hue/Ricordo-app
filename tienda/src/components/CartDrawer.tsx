@@ -7,6 +7,7 @@ import { Sheet } from './Sheet';
 import { Qty } from './Qty';
 import { Ruler } from './Ruler';
 import { Icon } from './Icon';
+import { PromoCartNote, PromoGiftRow } from './MothersDay';
 import { LocalityForm, ShippingFacts } from './LocalityForm';
 import { MethodToggle } from './MethodToggle';
 import { ProductCover } from './ProductMediaView';
@@ -25,11 +26,12 @@ export function CartDrawer() {
     <>
       <dl className="totals">
         <div><dt>Subtotal</dt><dd>{money(subtotal)}</dd></div>
-        {q && q.discount > 0 && <div className="discount"><dt>{discountLabel(q.discountPct, q.discountBoxes)}</dt><dd>−{money(q.discount)}</dd></div>}
+        {q && q.discount > 0 && <div className="discount"><dt>{discountLabel(q.discountPct, q.discountBoxes, q.promoName)}</dt><dd>−{money(q.discount)}</dd></div>}
         <div>
           <dt>{method === 'pickup' ? 'Retiro en Berazategui' : zone ? `Envío a ${zone.name}` : 'Envío'}</dt>
           <dd>{!q || q.shippingCost === null ? '—' : q.shippingCost === 0 ? 'Gratis' : `${q.shippingEstimated ? 'aprox. ' : ''}${money(q.shippingCost)}`}</dd>
         </div>
+        {q && q.promoGifts > 0 && <PromoGiftRow gifts={q.promoGifts} />}
         <div className="grand"><dt>Total</dt><dd>{!q || q.total === null ? '—' : money(q.total)}</dd></div>
       </dl>
       {q?.shippingEstimated && <p className="small muted">El envío se ajusta según la distancia a tu dirección; lo ves exacto al completar el pedido.</p>}
@@ -90,6 +92,7 @@ export function CartDrawer() {
               <Ruler boxes={totals.boxes} min={q.minBoxes} free={zone ? zone.freeFromBoxes : null} maxDiscountAt={zone ? maxDiscountAt(zone) : null} />
             )}
             <p id="cart-msg" className={'cart-msg' + (notFound ? ' sr' : '')} aria-live="polite">{msg}</p>
+            {q && <PromoCartNote q={q} />}
             {q?.suggestPickup && (
               <button type="button" className="btn btn-line" onClick={() => setMethod('pickup')}>
                 <Icon name="local" /> Retirar en Berazategui

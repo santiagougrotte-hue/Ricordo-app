@@ -4,6 +4,7 @@
 // 5) arma el comprobante  6) avisa al dueño (email / Telegram). Si el aviso falla, el pedido igual queda.
 import type { OrderInput, OrderReceipt, OrderResult, ShortItem } from '../src/lib/types';
 import { orderMessage } from '../src/lib/orderMessage';
+import { discountLabel } from '../src/lib/shipping';
 import { sendPush, type PushPayload } from './push';
 import type { Query } from './db';
 import { allow, ipHash } from './http';
@@ -188,12 +189,12 @@ async function loadReceipt(created: { order_id: string; order_number: number; to
       delivery_method: OrderReceipt['deliveryMethod']; delivery_date: string | null;
       delivery_window_label: string; payment_method: OrderReceipt['paymentMethod']; customer_name: string; locality: string | null;
       created_at: string; customer_phone: string; address: string | null; postal_code: string | null; notes: string | null;
-      flexible_delivery: boolean; lat: string | null; lng: string | null;
+      flexible_delivery: boolean; lat: string | null; lng: string | null; promo_name: string | null;
       items: { product_name: string; quantity: number; unit_price: number }[];
     }>(
       `select o.number, o.subtotal, o.discount, o.discount_pct, o.shipping_cost, o.total, o.box_count, o.delivery_method,
               to_char(o.delivery_date, 'YYYY-MM-DD') as delivery_date, o.delivery_window_label, o.payment_method, o.customer_name, o.locality,
-              o.created_at, o.customer_phone, o.address, o.postal_code, o.notes, o.flexible_delivery, o.lat, o.lng,
+              o.created_at, o.customer_phone, o.address, o.postal_code, o.notes, o.flexible_delivery, o.lat, o.lng, o.promo_name,
               (select json_agg(json_build_object('product_name', product_name, 'quantity', quantity, 'unit_price', unit_price)) from order_items where order_id = o.id) as items
        from orders o where o.id = $1`,
       [created.order_id],
@@ -205,7 +206,7 @@ async function loadReceipt(created: { order_id: string; order_number: number; to
       windowLabel: o.delivery_window_label, paymentMethod: o.payment_method, customerName: o.customer_name, locality: o.locality,
       lines: (o.items ?? []).map((i) => ({ name: i.product_name, quantity: i.quantity, unitPrice: i.unit_price })),
       createdAt: new Date(o.created_at).toISOString(), customerPhone: o.customer_phone, address: o.address, postalCode: o.postal_code,
-      notes: o.notes, flexibleDelivery: o.flexible_delivery,
+      notes: o.notes, flexibleDelivery: o.flexible_delivery, promoName: o.promo_name,
       lat: o.lat === null ? null : Number(o.lat), lng: o.lng === null ? null : Number(o.lng),
     };
   } catch {
@@ -230,7 +231,7 @@ export function orderSummaryText(r: OrderReceipt, input: OrderInput): string {
     `Pago: ${r.paymentMethod === 'cash' ? 'efectivo' : 'transferencia'}`,
     '',
     lines,
-    `Subtotal ${peso(r.subtotal)}${r.discount ? ` · Descuento ${r.discountPct}% en cajas extra −${peso(r.discount)}` : ''} · Envío ${r.shippingCost ? peso(r.shippingCost) : 'gratis'}`,
+    `Subtotal ${peso(r.subtotal)}${r.discount ? ` · ${discountLabel(r.discountPct, undefined, r.promoName)} −${peso(r.discount)}` : ''} · Envío ${r.shippingCost ? peso(r.shippingCost) : 'gratis'}`,
     input.notes ? `\nNotas: ${input.notes}` : '',
   ].join('\n');
 }

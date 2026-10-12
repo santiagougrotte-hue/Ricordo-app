@@ -57,11 +57,11 @@ export function Confirmation() {
             <div className="tag-in">
               <p className="label tag-title">Caja Nº {r.number}</p>
               <ul className="sum-lines">
-                {r.lines.map((l) => <li key={l.name}><span>{l.quantity} × {l.name}</span><span>{money(l.unitPrice * l.quantity)}</span></li>)}
+                {r.lines.map((l) => <li key={l.name + ':' + l.unitPrice}><span>{l.unitPrice === 0 ? '🎁 ' : ''}{l.quantity} × {l.name}{l.unitPrice === 0 ? ' de regalo' : ''}</span><span>{money(l.unitPrice * l.quantity)}</span></li>)}
               </ul>
               <dl className="totals">
                 <div><dt>Subtotal</dt><dd>{money(r.subtotal)}</dd></div>
-                {r.discount > 0 && <div className="discount"><dt>{discountLabel(r.discountPct)}</dt><dd>−{money(r.discount)}</dd></div>}
+                {r.discount > 0 && <div className="discount"><dt>{discountLabel(r.discountPct, undefined, r.promoName)}</dt><dd>−{money(r.discount)}</dd></div>}
                 <div><dt>{r.deliveryMethod === 'pickup' ? 'Retiro' : 'Envío'}</dt><dd>{r.shippingCost === 0 ? 'Gratis' : money(r.shippingCost)}</dd></div>
                 <div className="grand"><dt>Total</dt><dd>{money(r.total)}</dd></div>
               </dl>

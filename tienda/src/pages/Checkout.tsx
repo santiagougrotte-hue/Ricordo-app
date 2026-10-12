@@ -10,6 +10,7 @@ import type { OrderError, PaymentMethod } from '../lib/types';
 import { Icon } from '../components/Icon';
 import { MethodToggle } from '../components/MethodToggle';
 import { LocalitySelect } from '../components/LocalityForm';
+import { PromoCartNote, PromoGiftRow } from '../components/MothersDay';
 import { Turnstile, type TurnstileHandle } from '../components/Turnstile';
 import { useDocumentTitle } from './useDocumentTitle';
 
@@ -247,17 +248,19 @@ export function Checkout() {
               </ul>
               <dl className="totals">
                 <div><dt>Subtotal</dt><dd>{money(subtotal)}</dd></div>
-                {q && q.discount > 0 && <div className="discount"><dt>{discountLabel(q.discountPct, q.discountBoxes)}</dt><dd>−{money(q.discount)}</dd></div>}
+                {q && q.discount > 0 && <div className="discount"><dt>{discountLabel(q.discountPct, q.discountBoxes, q.promoName)}</dt><dd>−{money(q.discount)}</dd></div>}
                 <div>
                   <dt>{method === 'pickup' ? 'Retiro' : zone ? `Envío a ${zone.name}` : 'Envío'}</dt>
                   <dd>{!q || q.shippingCost === null ? '—' : q.shippingCost === 0 ? 'Gratis' : `${q.shippingEstimated ? 'aprox. ' : ''}${money(q.shippingCost)}`}</dd>
                 </div>
-                <div className="grand"><dt>Total</dt><dd>{!q || q.total === null ? '—' : money(q.total)}</dd></div>
+                {q && q.promoGifts > 0 && <PromoGiftRow gifts={q.promoGifts} />}
+        <div className="grand"><dt>Total</dt><dd>{!q || q.total === null ? '—' : money(q.total)}</dd></div>
               </dl>
               {method === 'delivery' && lookup.status !== 'found' && lookup.status !== 'not_found' && (
                 <p className="block-reason">Elegí tu localidad para calcular el envío.</p>
               )}
               {q && method === 'delivery' && zone && q.canCheckout && <p className="small">{cartMessage(q, lookup)}</p>}
+              {q && <PromoCartNote q={q} />}
               {blocked && (
                 <p className="block-reason">{blocked} <Link to="/cajas">Sumar cajas</Link></p>
               )}

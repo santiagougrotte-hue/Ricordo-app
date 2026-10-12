@@ -1,6 +1,6 @@
 // Datos públicos de la tienda: solo lo activo. Nunca el email de aviso ni pedidos.
 import type { Query } from './db';
-import type { Locality, Product, ShippingZone, StoreSettings } from '../src/lib/types';
+import type { Locality, Product, Promo, ShippingZone, StoreSettings } from '../src/lib/types';
 import { mapBand } from './distance';
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
@@ -22,13 +22,14 @@ export const PRODUCTS_SQL = `
   from products p`;
 
 export async function getCatalog(q: Query, opts: { distanceEnabled?: boolean } = {}): Promise<{ products: Product[]; zones: ShippingZone[]; localities: Locality[]; settings: StoreSettings }> {
-  const [products, zones, localities, [s], [cfg], bands] = await Promise.all([
+  const [products, zones, localities, [s], [cfg], bands, [promo]] = await Promise.all([
     q(`${PRODUCTS_SQL} where p.active order by p.sort_order`),
     q(`select * from shipping_zones where active order by sort_order`),
     q(`select l.* from localities l join shipping_zones z on z.id = l.zone_id where l.active and z.active order by l.sort_order, l.name`),
     q(`select * from store_public_settings()`),
     q(`select pricing_mode, absorb_per_box, rounding, fuel_price, consumption_100km, product_margin_pct, min_margin_pct, max_shipping from shipping_config limit 1`),
     q(`select * from shipping_bands order by up_to_km nulls last`),
+    q(PROMO_SQL),
   ]);
   return {
     products: products.map((r) => {
@@ -40,6 +41,8 @@ export async function getCatalog(q: Query, opts: { distanceEnabled?: boolean } =
     localities: localities.map(mapLocality),
     settings: {
       ...mapSettings(s as Row),
+      // Solo la promo vigente o por venir (una vencida o apagada no se manda).
+      promo: promo && (promo as Row).promo_enabled && new Date((promo as Row).promo_ends_at) > new Date() ? mapPromo(promo as Row) : null,
       distanceEnabled: !!opts.distanceEnabled,
       // La tabla de escalones es pública (se muestra en "¿Llegamos a tu casa?"); el origen no.
       shippingBands: opts.distanceEnabled && (cfg as Row | undefined)?.pricing_mode === 'bands' ? bands.map(mapBand) : [],
@@ -66,6 +69,21 @@ export const mapLocality = (l: Row): Locality => ({
   id: l.id, name: l.name, partido: l.partido, zoneId: l.zone_id,
   kmRoundTrip: l.km_round_trip == null ? null : Number(l.km_round_trip), tollRoundTrip: l.toll_round_trip ?? 0,
 });
+
+export const PROMO_SQL = `
+  select s.promo_enabled, s.promo_name, s.promo_starts_at, s.promo_ends_at, s.promo_tiers, s.promo_gift_product_id, p.name as promo_gift_name
+  from store_settings s left join products p on p.id = s.promo_gift_product_id limit 1`;
+
+export function mapPromo(r: Row): Promo {
+  return {
+    enabled: r.promo_enabled, name: r.promo_name,
+    startsAt: new Date(r.promo_starts_at).toISOString(), endsAt: new Date(r.promo_ends_at).toISOString(),
+    tiers: ((r.promo_tiers ?? []) as Row[])
+      .map((t) => ({ minBoxes: Number(t.minBoxes), pct: Number(t.pct) || 0, gifts: Number(t.gifts) || 0 }))
+      .sort((a, b) => a.minBoxes - b.minBoxes),
+    giftProductId: r.promo_gift_product_id ?? null, giftName: r.promo_gift_name ?? null,
+  };
+}
 
 export function mapSettings(s: Row): StoreSettings {
   return {

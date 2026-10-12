@@ -88,7 +88,7 @@ export function orderMessage(r: OrderReceipt, { to, transferInfo }: MessageOptio
     '💰 *Resumen*',
     '',
     `Subtotal: ${money(r.subtotal)}`,
-    r.discount > 0 && `${discountLabel(r.discountPct)}: −${money(r.discount)}`,
+    r.discount > 0 && `${discountLabel(r.discountPct, undefined, r.promoName)}: −${money(r.discount)}`,
     r.deliveryMethod === 'delivery' && `Envío: ${r.shippingCost > 0 ? `+${money(r.shippingCost)}` : '¡gratis! 🎉'}`,
     `*TOTAL: ${money(r.total)}*`,
     '',

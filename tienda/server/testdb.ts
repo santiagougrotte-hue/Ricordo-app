@@ -18,6 +18,8 @@ export async function freshDb(withExamples = true): Promise<{ q: Query; pool: pg
     await pool.query(readFileSync(join(dir, m, 'migration.sql'), 'utf8'));
   }
   if (withExamples) await pool.query(examples);
+  // La promo (Día de la Madre) tiene fechas reales: apagada salvo en sus propias pruebas.
+  await pool.query('update store_settings set promo_enabled = false');
   return { q: poolQuery(pool), pool };
 }
 

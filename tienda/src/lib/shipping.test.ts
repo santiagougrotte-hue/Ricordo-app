@@ -1,6 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import { byPartido, cartMessage, marginShipping, discountAmount, matchTypedLocality, cartTotals, discountPct, findZone as find, OTHER_LOCALITY, quote, type LocalityChoice } from './shipping';
-import { SEED_LOCALITIES, SEED_SETTINGS, SEED_ZONES as REAL_ZONES } from './api/seed-data';
+import { SEED_LOCALITIES, SEED_SETTINGS as SEED_WITH_PROMO, SEED_ZONES as REAL_ZONES } from './api/seed-data';
+
+// La promo del Día de la Madre tiene fechas reales: estas pruebas son sin promo (la promo tiene las suyas).
+const SEED_SETTINGS = { ...SEED_WITH_PROMO, promo: null };
 
 // Estas pruebas se escribieron con los valores anteriores a "envío por cajas" (fijos 1500…6000, CABA fijo).
 const LEGACY: Record<string, { shippingCost: number; freeFromBoxes: number; distancePricing: boolean; tollRoundTrip: number }> = {

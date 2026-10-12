@@ -3,7 +3,7 @@
 import type { Query } from './db';
 import type { MediaStore } from './media';
 import { allow, clearCookie, ipHash, json, readCookie, sameText, sessionCookie, signSession, verifySession } from './http';
-import { mapLocality, mapProduct, mapSettings, mapZone, PRODUCTS_SQL } from './catalog';
+import { mapLocality, mapProduct, mapPromo, mapSettings, mapZone, PRODUCTS_SQL, PROMO_SQL } from './catalog';
 import { loadBands, mapShippingConfig } from './distance';
 import { sendWhatsapp } from './createOrder';
 import { sendPush, validSubscription, vapidKeys } from './push';
@@ -51,7 +51,7 @@ export function mapOrder(r: Row) {
     km: r.km_round_trip === null ? null : Number(r.km_round_trip), distancePriced: r.distance_priced,
     lat: r.lat === null ? null : Number(r.lat), lng: r.lng === null ? null : Number(r.lng),
     deliveryDate: day(r.delivery_date), deliveredOn: day(r.delivered_on), flexibleDelivery: r.flexible_delivery, windowLabel: r.delivery_window_label,
-    notes: r.notes, subtotal: r.subtotal, discount: r.discount, discountPct: r.discount_pct, shippingCost: r.shipping_cost, total: r.total, paymentMethod: r.payment_method,
+    notes: r.notes, subtotal: r.subtotal, discount: r.discount, discountPct: r.discount_pct, promoName: r.promo_name ?? null, giftCount: r.gift_count ?? 0, shippingCost: r.shipping_cost, total: r.total, paymentMethod: r.payment_method,
     paymentStatus: r.payment_status, status: r.status,
     items: (r.items as Row[]).map((i) => ({ productId: i.product_id, productName: i.product_name, quantity: i.quantity, unitPrice: i.unit_price })),
   };
@@ -366,8 +366,8 @@ export async function handleAdmin(req: Request, path: string, env: AdminEnv, dep
 
   // ── Ajustes ──
   if (path === 'settings' && method === 'GET') {
-    const [s] = await q(`select * from store_settings limit 1`);
-    return json({ settings: { ...mapSettings(s), notifyEmail: s.notify_email ?? '' } });
+    const [[s], [promo]] = await Promise.all([q(`select * from store_settings limit 1`), q(PROMO_SQL)]);
+    return json({ settings: { ...mapSettings(s), notifyEmail: s.notify_email ?? '', promo: promo ? mapPromo(promo) : null } });
   }
   if (path === 'settings' && method === 'POST') {
     const s = await body();
@@ -378,6 +378,19 @@ export async function handleAdmin(req: Request, path: string, env: AdminEnv, dep
                notify_email=$6, cutoff_weekday=$7, cutoff_time=$8`,
       [!!s.pickupEnabled, s.pickupMinBoxes, String(s.pickupAddress ?? ''), String(s.whatsappPhone ?? '').replace(/\D/g, ''), String(s.transferInfo ?? ''),
        String(s.notifyEmail ?? '').trim() || null, wd, s.cutoffTime]);
+    if (s.promo && typeof s.promo === 'object') {
+      const p = s.promo as Record<string, unknown>;
+      const starts = new Date(String(p.startsAt)), ends = new Date(String(p.endsAt));
+      if (isNaN(+starts) || isNaN(+ends) || ends <= starts) return bad('Revisá las fechas de la promo.');
+      const tiers = Array.isArray(p.tiers) ? (p.tiers as Record<string, unknown>[]) : [];
+      const clean = tiers.map((t) => ({ minBoxes: int(t.minBoxes, 1), pct: int(t.pct), gifts: int(t.gifts) }));
+      if (clean.length > 6 || clean.some((t) => t.minBoxes === null || t.pct === null || t.pct > 50 || t.gifts === null || t.gifts > 10)) {
+        return bad('Revisá las opciones de la promo (cajas desde 1, descuento hasta 50%, hasta 10 regalos).');
+      }
+      await q(`update store_settings set promo_enabled=$1, promo_name=$2, promo_starts_at=$3, promo_ends_at=$4, promo_tiers=$5`,
+        [!!p.enabled, String(p.name ?? '').trim().slice(0, 60) || 'Promo', starts.toISOString(), ends.toISOString(),
+         JSON.stringify(clean.sort((a, b) => a.minBoxes! - b.minBoxes!))]);
+    }
     return json({ ok: true });
   }
 

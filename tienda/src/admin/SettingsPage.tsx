@@ -4,6 +4,56 @@ import type { AdminSettings } from '../lib/api/adminTypes';
 import { DAYS, cutoffWithDate } from '../lib/delivery';
 import { useLoad } from './useLoad';
 import { PushCard } from './PushCard';
+import type { Promo } from '../lib/types';
+import { promoActive } from '../lib/shipping';
+
+const TZ_OFFSET = '-03:00';
+/** ISO → "2026-10-18" (día en Argentina). */
+const arDay = (iso: string) => new Date(new Date(iso).getTime() - 3 * 3600_000).toISOString().slice(0, 10);
+const nextDay = (d: string) => new Date(new Date(`${d}T00:00:00${TZ_OFFSET}`).getTime() + 86400_000).toISOString();
+
+/** Promo por cajas (Día de la Madre): prender/apagar, fechas y opciones. */
+function PromoFields({ promo, onChange }: { promo: Promo; onChange: (p: Promo) => void }) {
+  const set = <K extends keyof Promo>(k: K, v: Promo[K]) => onChange({ ...promo, [k]: v });
+  const lastDay = arDay(new Date(new Date(promo.endsAt).getTime() - 1).toISOString());
+  const now = new Date();
+  const active = promoActive(promo as Promo | null, now);
+  const state = active ? 'Se ve en la tienda ahora.' : !promo.enabled ? 'Apagada.'
+    : now < new Date(promo.startsAt) ? 'Todavía no empezó.' : 'Ya terminó: no se ve en la tienda.';
+  return (
+    <>
+      <h3 className="label">Promo {promo.name}</h3>
+      <label className="switch"><input type="checkbox" checked={promo.enabled} onChange={(e) => set('enabled', e.target.checked)} /><span>Promo prendida (descuento, regalos y decoración)</span></label>
+      <p className="small muted">{state} El descuento va sobre el total de los productos y reemplaza al de cajas extra. Los regalos salen del stock de {promo.giftName ?? 'la salsa'}; si no hay, igual figuran en el pedido.</p>
+      <div className="adm-grid2">
+        <div className="field">
+          <label className="field-label" htmlFor="s-pfrom">Desde</label>
+          <input id="s-pfrom" className="input" type="date" value={arDay(promo.startsAt)} onChange={(e) => e.target.value && set('startsAt', new Date(`${e.target.value}T00:00:00${TZ_OFFSET}`).toISOString())} />
+        </div>
+        <div className="field">
+          <label className="field-label" htmlFor="s-pto">Último día (termina a la noche)</label>
+          <input id="s-pto" className="input" type="date" value={lastDay} onChange={(e) => e.target.value && set('endsAt', nextDay(e.target.value))} />
+        </div>
+      </div>
+      <div className="adm-table-wrap"><table className="adm-table">
+        <thead><tr><th>Opción</th><th>Desde (cajas)</th><th>Descuento %</th><th>Salsas de regalo</th></tr></thead>
+        <tbody>
+          {promo.tiers.map((t, i) => (
+            <tr key={i}>
+              <td>{i + 1}</td>
+              {(['minBoxes', 'pct', 'gifts'] as const).map((k) => (
+                <td key={k}>
+                  <input className="input" type="number" min={k === 'minBoxes' ? 1 : 0} max={k === 'pct' ? 50 : undefined} inputMode="numeric" aria-label={`Opción ${i + 1}: ${k === 'minBoxes' ? 'desde cajas' : k === 'pct' ? 'descuento' : 'regalos'}`}
+                    value={t[k]} onChange={(e) => set('tiers', promo.tiers.map((x, j) => (j === i ? { ...x, [k]: Math.max(0, Math.floor(+e.target.value || 0)) } : x)))} />
+                </td>
+              ))}
+            </tr>
+          ))}
+        </tbody>
+      </table></div>
+    </>
+  );
+}
 
 export function SettingsPage() {
   const settings = useLoad(() => adminApi.getSettings());
@@ -89,6 +139,7 @@ export function SettingsPage() {
             <input id="s-pmin" className="input" type="number" min={0} inputMode="numeric" value={s.pickupMinBoxes} onChange={(e) => set('pickupMinBoxes', Math.max(0, Math.floor(+e.target.value || 0)))} />
           </div>
         </div>
+        {s.promo && <PromoFields promo={s.promo} onChange={(p) => set('promo', p)} />}
         {msg && <p className={msg.ok ? 'field-hint' : 'field-error'} role="status">{msg.text}</p>}
         <button type="button" className="btn btn-ink" onClick={() => void save()}>Guardar ajustes</button>
       </section>

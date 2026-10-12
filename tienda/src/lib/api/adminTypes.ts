@@ -47,6 +47,9 @@ export interface AdminOrder {
   subtotal: number;
   discount: number;
   discountPct: number;
+  /** Promo aplicada (ej. Día de la Madre) y regalos que lleva. */
+  promoName?: string | null;
+  giftCount?: number;
   shippingCost: number;
   total: number;
   paymentMethod: PaymentMethod | 'mercadopago';

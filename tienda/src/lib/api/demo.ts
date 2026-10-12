@@ -1,6 +1,6 @@
 import type { StoreApi } from './types';
 import type { OrderInput, OrderResult, ShortItem } from '../types';
-import { cartTotals, discountAmount, discountPct, extraBoxes, findZone, quote } from '../shipping';
+import { cartTotals, discountAmount, discountPct, extraBoxes, findZone, promoActive, promoTier, quote } from '../shipping';
 import { normalizePostalCode } from '../postal';
 import { deliveryDateFor, deliveryLabel } from '../delivery';
 import { readDb, writeDb } from './demoDb';
@@ -102,7 +102,22 @@ export function createDemoApi(): StoreApi {
         }
       }
 
+      // Promo (igual que create_order): % sobre el total de los productos + regalos, en lugar del descuento por cajas extra.
+      let promoName: string | null = null, gifts = 0;
+      const promo = s.promo;
+      if (promoActive(promo)) {
+        const { tier } = promoTier(promo, boxes);
+        if (tier && (tier.pct > 0 || tier.gifts > 0)) {
+          promoName = promo.name;
+          pct = tier.pct;
+          discount = Math.round((subtotal * tier.pct) / 100);
+          gifts = promo.giftProductId && db.products.some((x) => x.id === promo.giftProductId) ? tier.gifts : 0;
+        }
+      }
+      const gift = gifts ? db.products.find((x) => x.id === promo!.giftProductId)! : null;
+
       for (const [id, q] of merged) db.products.find((x) => x.id === id)!.stock -= q;
+      if (gift) gift.stock = Math.max(0, gift.stock - gifts);
       const number = db.nextNumber;
       const order: AdminOrder = {
         id: `demo-${number}`,
@@ -126,12 +141,17 @@ export function createDemoApi(): StoreApi {
         subtotal,
         discount,
         discountPct: pct,
+        promoName,
+        giftCount: gifts,
         shippingCost: shipping,
         total: subtotal - discount + shipping,
         paymentMethod: input.paymentMethod,
         paymentStatus: 'pending',
         status: 'new',
-        items: [...merged].map(([id, q]) => ({ productId: id, productName: byId.get(id)!.name, quantity: q, unitPrice: byId.get(id)!.price })),
+        items: [
+          ...[...merged].map(([id, q]) => ({ productId: id, productName: byId.get(id)!.name, quantity: q, unitPrice: byId.get(id)!.price })),
+          ...(gift ? [{ productId: gift.id, productName: gift.name, quantity: gifts, unitPrice: 0 }] : []),
+        ],
       };
       db.orders.push(order);
       db.nextNumber = number + 1;
@@ -144,7 +164,7 @@ export function createDemoApi(): StoreApi {
           deliveryMethod: order.deliveryMethod, deliveryDate: date, windowLabel: label, locality, paymentMethod: input.paymentMethod, customerName: order.customerName,
           lines: order.items.map((i) => ({ name: i.productName, quantity: i.quantity, unitPrice: i.unitPrice })),
           createdAt: order.createdAt, customerPhone: phone, address: order.address, postalCode: cp, notes: order.notes,
-          flexibleDelivery: order.flexibleDelivery,
+          flexibleDelivery: order.flexibleDelivery, promoName,
         },
       };
     },

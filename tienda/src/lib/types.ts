@@ -81,6 +81,25 @@ export interface DistanceQuote {
   km: number | null;
 }
 
+export interface PromoTier {
+  minBoxes: number;
+  /** % de descuento sobre el total de los productos. */
+  pct: number;
+  /** Salsas (u otro producto) de regalo. */
+  gifts: number;
+}
+
+/** Promo por cantidad de cajas (ej. Día de la Madre). Reemplaza al descuento por cajas extra; el envío no cambia. */
+export interface Promo {
+  enabled: boolean;
+  name: string;
+  startsAt: string;
+  endsAt: string;
+  tiers: PromoTier[];
+  giftProductId: string | null;
+  giftName: string | null;
+}
+
 export interface StoreSettings {
   pickupEnabled: boolean;
   pickupMinBoxes: number;
@@ -95,6 +114,8 @@ export interface StoreSettings {
   /** Escalones de envío por km de ida (vacío si se cobra con la fórmula de nafta o sin cálculo por distancia). */
   shippingBands?: { upToKm: number | null; price: number }[];
   /** Envío por cajas: envío = viaje − cajas × absorbPerBox (redondeado hacia arriba). */
+  /** Promo vigente o por venir (null/ausente = no hay). */
+  promo?: Promo | null;
   shippingByBoxes?: { absorbPerBox: number; rounding: number; fuelPrice?: number; consumption100km?: number; productMarginPct?: number; minMarginPct?: number; maxShipping?: number };
 }
 
@@ -135,6 +156,8 @@ export interface OrderReceipt {
   paymentMethod: PaymentMethod;
   lines: { name: string; quantity: number; unitPrice: number }[];
   customerName: string;
+  /** Nombre de la promo aplicada (el descuento es sobre el total de los productos). */
+  promoName?: string | null;
   /** Datos para el resumen de WhatsApp (los del propio cliente, nunca de otro). */
   createdAt?: string;
   customerPhone?: string;

@@ -1,7 +1,7 @@
 // Envío, mínimos y descuentos. Se cuentan CAJAS (solo productos con countsAsBox).
 // Cálculo informativo para el carrito: el definitivo lo hace create_order() en la base, con la misma regla.
 import { money } from './money';
-import type { DeliveryMethod, Locality, Product, ShippingZone, StoreSettings } from './types';
+import type { DeliveryMethod, Locality, Product, Promo, PromoTier, ShippingZone, StoreSettings } from './types';
 
 /** "Otra localidad": no está en la lista → se ofrece WhatsApp o retiro. */
 export const OTHER_LOCALITY = 'otra';
@@ -87,6 +87,33 @@ export interface Quote {
   suggestPickup: boolean;
   /** Envío por cajas: cuánto quedaría el envío con una caja más (null si no aplica o ya es gratis). */
   nextBoxShipping: number | null;
+  /** Promo aplicada (el descuento pasa a ser sobre el total de los productos). */
+  promoName: string | null;
+  /** Regalos de la promo (ej. salsas). */
+  promoGifts: number;
+  /** Siguiente escalón de la promo y cuántas cajas faltan (null si no hay promo o ya está en el último). */
+  promoNext: { missing: number; tier: PromoTier } | null;
+}
+
+/** La promo está vigente ahora (prendida y dentro de sus fechas). */
+export function promoActive(p: Promo | null | undefined, now: Date = new Date()): p is Promo {
+  return !!p && p.enabled && now >= new Date(p.startsAt) && now < new Date(p.endsAt) && p.tiers.length > 0;
+}
+
+/** Escalón alcanzado con esas cajas y el siguiente (igual que create_order: el de más cajas que se alcance). */
+export function promoTier(p: Promo, boxes: number): { tier: PromoTier | null; next: PromoTier | null } {
+  const tiers = [...p.tiers].sort((a, b) => a.minBoxes - b.minBoxes);
+  let tier: PromoTier | null = null;
+  for (const t of tiers) if (t.minBoxes <= boxes) tier = t;
+  return { tier, next: tiers.find((t) => t.minBoxes > boxes) ?? null };
+}
+
+/** "10% de descuento", "15% + 1 salsa de regalo", "15% + 2 salsas de regalo". */
+export function tierText(t: PromoTier, giftName = 'salsa'): string {
+  const gift = giftName.toLowerCase().startsWith('salsa') ? ['salsa', 'salsas'] : [giftName, giftName];
+  const pct = t.pct > 0 ? `${t.pct}% de descuento` : '';
+  const g = t.gifts > 0 ? `${t.gifts} ${t.gifts === 1 ? gift[0] : gift[1]} de regalo` : '';
+  return [pct, g].filter(Boolean).join(' + ');
 }
 
 /**
@@ -110,12 +137,28 @@ export function marginShipping(
   return { shipping: 0, slack };
 }
 
-export function quote(method: DeliveryMethod, lookup: ZoneLookup, cart: CartTotals, settings: StoreSettings, distanceCost: number | null = null): Quote {
+export function quote(method: DeliveryMethod, lookup: ZoneLookup, cart: CartTotals, settings: StoreSettings, distanceCost: number | null = null, now: Date = new Date()): Quote {
+  const q = baseQuote(method, lookup, cart, settings, distanceCost);
+  const promo = settings.promo;
+  if (!promoActive(promo, now)) return q;
+  const { tier, next } = promoTier(promo, cart.boxes);
+  const promoNext = next && cart.boxes > 0 ? { missing: next.minBoxes - cart.boxes, tier: next } : null;
+  if (!tier || (tier.pct <= 0 && tier.gifts <= 0)) return { ...q, promoNext };
+  // Igual que create_order: % sobre el total de los productos, en lugar del descuento por cajas extra.
+  const discount = Math.round((cart.subtotal * tier.pct) / 100);
+  return {
+    ...q, promoName: promo.name, promoGifts: promo.giftProductId ? tier.gifts : 0, promoNext,
+    discountPct: tier.pct, discount, discountBoxes: 0, discountMax: 0, missingForNextDiscount: null, nextDiscountPct: null,
+    total: q.shippingCost === null ? null : cart.subtotal - discount + q.shippingCost,
+  };
+}
+
+function baseQuote(method: DeliveryMethod, lookup: ZoneLookup, cart: CartTotals, settings: StoreSettings, distanceCost: number | null): Quote {
   const { boxes, subtotal } = cart;
   const pickupOk = settings.pickupEnabled && boxes >= settings.pickupMinBoxes && boxes > 0;
   const base = {
     method, boxes, nextBoxShipping: null, discountPct: 0, discount: 0, discountBoxes: 0, discountMax: 0, missingForNextDiscount: null, nextDiscountPct: null, suggestPickup: false,
-    freeFromBoxes: null, missingForFree: null, shippingEstimated: false,
+    freeFromBoxes: null, missingForFree: null, shippingEstimated: false, promoName: null, promoGifts: 0, promoNext: null,
   };
   if (method === 'pickup') {
     const missing = Math.max(settings.pickupMinBoxes - boxes, 0);
@@ -212,9 +255,9 @@ export function cartMessage(q: Quote, lookup: ZoneLookup): string {
   return `¡Envío gratis! Tus cajas extra tienen ${q.discountPct}% de descuento. Sumá ${cajas(q.missingForNextDiscount)} más y llegás al ${q.nextDiscountPct}%.`;
 }
 
-/** Texto del renglón de descuento: aclara que va solo sobre las cajas extra. */
-export const discountLabel = (pct: number, extraBoxes?: number) =>
-  extraBoxes ? `Descuento ${pct}% en ${extraBoxes === 1 ? '1 caja extra' : `${extraBoxes} cajas extra`}` : `Descuento ${pct}% en cajas extra`;
+/** Texto del renglón de descuento: aclara que va solo sobre las cajas extra (o es la promo, sobre el total). */
+export const discountLabel = (pct: number, extraBoxes?: number, promoName?: string | null) =>
+  promoName ? `Promo ${promoName} ${pct}%` : extraBoxes ? `Descuento ${pct}% en ${extraBoxes === 1 ? '1 caja extra' : `${extraBoxes} cajas extra`}` : `Descuento ${pct}% en cajas extra`;
 
 /** Cantidad de cajas desde la que se llega al tope de descuento (null si la zona no tiene descuento). */
 export function maxDiscountAt(z: Pick<ShippingZone, 'freeFromBoxes' | 'discountPerBox' | 'discountMax'>): number | null {

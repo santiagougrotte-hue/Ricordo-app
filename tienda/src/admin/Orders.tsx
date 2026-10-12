@@ -209,11 +209,11 @@ function OrderDetail({ order: o }: { order: AdminOrder }) {
       <section className="adm-block">
         <h3 className="label">{o.boxCount} {o.boxCount === 1 ? 'caja' : 'cajas'}</h3>
         <ul className="sum-lines">
-          {o.items.map((i) => <li key={i.productId}><span>{i.quantity} × {i.productName}</span><span>{money(i.quantity * i.unitPrice)}</span></li>)}
+          {o.items.map((i) => <li key={i.productId + ':' + i.unitPrice}><span>{i.unitPrice === 0 ? '🎁 ' : ''}{i.quantity} × {i.productName}{i.unitPrice === 0 ? ' (regalo)' : ''}</span><span>{money(i.quantity * i.unitPrice)}</span></li>)}
         </ul>
         <dl className="totals">
           <div><dt>Subtotal</dt><dd>{money(o.subtotal)}</dd></div>
-          {o.discount > 0 && <div className="discount"><dt>{discountLabel(o.discountPct)}</dt><dd>−{money(o.discount)}</dd></div>}
+          {o.discount > 0 && <div className="discount"><dt>{discountLabel(o.discountPct, undefined, o.promoName)}</dt><dd>−{money(o.discount)}</dd></div>}
           <div><dt>Envío{o.distancePriced && o.km ? ` (${o.km} km ida y vuelta)` : ''}</dt><dd>{o.shippingCost ? money(o.shippingCost) : 'Gratis'}</dd></div>
           <div className="grand"><dt>Total</dt><dd>{money(o.total)}</dd></div>
         </dl>

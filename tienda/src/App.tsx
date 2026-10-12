@@ -4,6 +4,7 @@ import { useStore } from './state/store';
 import { api } from './lib/api';
 import { Header } from './components/Header';
 import { Footer } from './components/Footer';
+import { PromoBanner } from './components/MothersDay';
 import { CartDrawer } from './components/CartDrawer';
 import { WhatsAppButton } from './components/WhatsAppButton';
 import { Home } from './pages/Home';
@@ -49,6 +50,7 @@ export function App() {
       {api.mode === 'demo' && (
         <aside className="demo-bar" aria-label="Aviso">Modo demo: datos de ejemplo, los pedidos no se guardan en ningún lado.</aside>
       )}
+      <PromoBanner />
       <Header />
       <main id="main" tabIndex={-1}>
         {status === 'error' ? (
