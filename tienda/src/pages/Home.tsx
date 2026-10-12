@@ -62,9 +62,9 @@ export function Home() {
         </div>
       </section>
 
-      <PromoSection />
-
       <LaunchLasagna />
+
+      <PromoSection />
 
       <section className="sec wrap" aria-labelledby="h-dest">
         <header className="sec-head" data-reveal="rise">

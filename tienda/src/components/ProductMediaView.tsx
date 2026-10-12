@@ -114,8 +114,8 @@ function CyclingPhotos({ photos, ratio, sizes, eager, name, position }: { photos
 /** Póster de un video: por convención, /fotos/x.mp4 → /fotos/x-poster.webp (así no se ve un recuadro vacío antes de reproducir). */
 export function videoPoster(url: string): string | undefined {
   if (url === videoAmasado) return posterAmasado;
-  const m = /^(\/fotos\/.+)\.mp4$/.exec(url);
-  return m ? `${m[1]}-poster.webp` : undefined;
+  // Solo los videos que tienen su póster en /fotos (los demás muestran el primer cuadro).
+  return url === '/fotos/amasado-masa-nero.mp4' ? '/fotos/amasado-masa-nero-poster.webp' : undefined;
 }
 
 /** Netlify Image CDN: versiones redimensionadas (y en AVIF/WebP según el navegador) de las fotos de /media/. */
@@ -127,20 +127,25 @@ export function srcSet(url: string): string | undefined {
 /** Video del producto: sin sonido, en loop, y solo mientras se ve (ahorra datos y batería). */
 function InViewVideo({ src, poster, label, preload = 'none' }: { src: string; poster?: string; label: string; preload?: 'none' | 'metadata' }) {
   const ref = useRef<HTMLVideoElement>(null);
+  // Si el celular no deja reproducir solo (ahorro de batería, reducir movimiento), se muestran los controles para darle play.
+  const [manual, setManual] = useState(false);
   useEffect(() => {
     const v = ref.current;
-    if (!v || !canAnimate()) return;
+    if (!v) return;
+    if (!canAnimate()) { setManual(true); return; }
     const io = new IntersectionObserver(
       ([e]) => {
-        if (e.intersectionRatio >= 0.6) void v.play().catch(() => {});
+        if (e.intersectionRatio >= 0.5) void v.play().catch(() => setManual(true));
         else v.pause();
       },
-      { threshold: [0, 0.6] },
+      { threshold: [0, 0.5] },
     );
     io.observe(v);
     return () => io.disconnect();
   }, []);
-  return <video ref={ref} className="ph-video" src={src} poster={poster} muted loop playsInline preload={preload} aria-label={`Video: ${label}`} />;
+  // Sin póster, "#t=0.001" hace que el navegador (Safari incluido) muestre el primer cuadro en vez de un recuadro vacío.
+  const url = poster || src.includes('#') ? src : `${src}#t=0.001`;
+  return <video ref={ref} className="ph-video" src={url} poster={poster} muted loop playsInline controls={manual} preload={poster ? preload : 'metadata'} aria-label={`Video: ${label}`} />;
 }
 
 export { InViewVideo };
