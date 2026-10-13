@@ -60,6 +60,7 @@ function MateriasPrimasTab() {
   const [editando, setEditando] = useState<string | null>(null);
   const [form, setForm] = useState(insumoVacio());
   const [contando, setContando] = useState<{ insumo: Insumo; cantidad: number } | null>(null);
+  const [fusionando, setFusionando] = useState<{ insumo: Insumo; destinoId: string } | null>(null);
 
   const valorStock = valorStockInsumos(data);
   const bajoMinimo = data.insumos.filter((i) => i.controla_stock && i.stock_minimo != null && calcularStock(data, "insumo", i.id) < i.stock_minimo);
@@ -133,6 +134,34 @@ function MateriasPrimasTab() {
     }));
     toast(`Stock de ${contando.insumo.nombre} actualizado a ${fNum(contando.cantidad, 2)} ${contando.insumo.unidad}`);
     setContando(null);
+  }
+
+  function abrirFusion(insumo: Insumo) {
+    setFusionando({ insumo, destinoId: "" });
+  }
+
+  // Fusionar un insumo duplicado con otro: mueve todas sus referencias (recetas, ajustes por
+  // variante, ítems de compra, historial de precios, movimientos de inventario) al insumo que se
+  // conserva, y recién ahí borra el duplicado — nunca se pierde el historial, solo queda bajo otro
+  // id. No hay vuelta atrás (no es un "ajuste" auditable como un conteo), por eso pide confirmar.
+  function guardarFusion() {
+    if (!fusionando || !fusionando.destinoId) return;
+    const { insumo, destinoId } = fusionando;
+    const destino = data.insumos.find((i) => i.id === destinoId);
+    if (!destino || destinoId === insumo.id) return;
+    setData((d) => ({
+      ...d,
+      insumos: d.insumos.filter((i) => i.id !== insumo.id),
+      receta_items: d.receta_items.map((ri) => (ri.insumo_id === insumo.id ? { ...ri, insumo_id: destinoId } : ri)),
+      ajustes_receta_variante: d.ajustes_receta_variante.map((a) => (a.insumo_id === insumo.id ? { ...a, insumo_id: destinoId } : a)),
+      compra_items: d.compra_items.map((ci) => (ci.insumo_id === insumo.id ? { ...ci, insumo_id: destinoId } : ci)),
+      historial_precios: d.historial_precios.map((hp) => (hp.insumo_id === insumo.id ? { ...hp, insumo_id: destinoId } : hp)),
+      inventario_movimientos: d.inventario_movimientos.map((m) =>
+        m.item_tipo === "insumo" && m.item_id === insumo.id ? { ...m, item_id: destinoId } : m
+      ),
+    }));
+    toast(`"${insumo.nombre}" fusionado con "${destino.nombre}" — recetas, compras y movimientos ya quedaron bajo ese insumo`);
+    setFusionando(null);
   }
 
   return (
@@ -215,6 +244,9 @@ function MateriasPrimasTab() {
                               Contar stock
                             </Button>
                           )}
+                          <Button size="sm" variant="ghost" onClick={() => abrirFusion(f.insumo!)}>
+                            Fusionar con otro
+                          </Button>
                         </>
                       )}
                     </Td>
@@ -225,6 +257,46 @@ function MateriasPrimasTab() {
           </TableWrap>
         )}
       </Card>
+
+      <Modal
+        open={fusionando != null}
+        onClose={() => setFusionando(null)}
+        title={`Fusionar "${fusionando?.insumo.nombre ?? ""}" con otro insumo`}
+        footer={
+          <>
+            <Button variant="ghost" onClick={() => setFusionando(null)}>
+              Cancelar
+            </Button>
+            <Button onClick={guardarFusion} disabled={!fusionando?.destinoId}>
+              Fusionar y borrar &ldquo;{fusionando?.insumo.nombre}&rdquo;
+            </Button>
+          </>
+        }
+      >
+        {fusionando && (
+          <FormGrid>
+            <p className="col-span-full text-[12.5px] text-text3">
+              Usá esto cuando el mismo insumo quedó cargado dos veces (ej. &ldquo;Bolsa al vacío&rdquo; duplicado). Elegí cuál de los
+              dos insumos se conserva — las recetas, compras, historial de precios y movimientos de stock de &ldquo;
+              {fusionando.insumo.nombre}&rdquo; pasan a ese insumo, y después se borra &ldquo;{fusionando.insumo.nombre}&rdquo;. No
+              se puede deshacer.
+            </p>
+            <Field label="Conservar" full>
+              <Select value={fusionando.destinoId} onChange={(e) => setFusionando({ ...fusionando, destinoId: e.target.value })}>
+                <option value="">Seleccionar…</option>
+                {data.insumos
+                  .filter((i) => i.id !== fusionando.insumo.id)
+                  .sort((a, b) => a.nombre.localeCompare(b.nombre))
+                  .map((i) => (
+                    <option key={i.id} value={i.id}>
+                      {i.nombre} ({i.unidad}, stock {fNum(calcularStock(data, "insumo", i.id), 2)})
+                    </option>
+                  ))}
+              </Select>
+            </Field>
+          </FormGrid>
+        )}
+      </Modal>
 
       <Modal
         open={contando != null}
