@@ -2,7 +2,17 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { emptyDataV2 } from "./types-v2";
 import type { RicordoDataV2 } from "./types-v2";
-import { resumenProductosSheets, resumenGastosSheets, resumenRecetasRellenoSheets, resumenRepartoSheets } from "./resumen-sheets";
+import {
+  resumenProductosSheets,
+  resumenGastosSheets,
+  resumenRecetasRellenoSheets,
+  resumenRepartoSheets,
+  resumenPreciosFormatosSheets,
+  resumenStockInsumosSheets,
+  formatearNumero,
+  celdaTexto,
+  decimalesPorColumna,
+} from "./resumen-sheets";
 
 function fixture(): RicordoDataV2 {
   const data = emptyDataV2();
@@ -122,6 +132,50 @@ test("resumenRecetasRellenoSheets: solo ítems de etapa relleno de productos act
   assert.equal(filas[0].stock_actual, 7);
 });
 
+test("formatearNumero/celdaTexto: separador coma por defecto, 5 decimales en RECETAS_RELLENO sin perder cantidades chicas", () => {
+  // Antes el redondeo genérico a 2 decimales hacía que 0,005 (bug real: una cantidad_por_unidad
+  // de relleno) diera 0 — acá nunca se pierde, y el separador coma evita que Sheets (configuración
+  // regional Argentina) pegue "0.03" como texto o lea "8.11" como fecha.
+  assert.equal(formatearNumero(0.005, 5, "coma"), "0,005");
+  assert.equal(formatearNumero(0.0006, 5, "coma"), "0,0006");
+  assert.equal(formatearNumero(8.11, 2, "coma"), "8,11");
+  assert.equal(formatearNumero(0.83, 2, "coma"), "0,83");
+  assert.equal(formatearNumero(8.11, 2, "punto"), "8.11"); // con "punto" elegido, se mantiene el punto
+  assert.equal(formatearNumero(5000, 2, "coma"), "5000"); // entero: sin parte decimal, sin separador
+  assert.equal(celdaTexto("texto", 5, "coma"), "texto"); // una celda no-numérica pasa intacta
+
+  const data = fixture();
+  const filas = resumenRecetasRellenoSheets(data);
+  const decimales = decimalesPorColumna(8, { 4: 5, 7: 3 }); // HEADERS_RECETAS: índice 4 = cantidad_por_unidad, 7 = stock_actual
+  const fila = filas[0];
+  assert.equal(celdaTexto(fila.cantidad_por_unidad, decimales[4], "coma"), "0,005");
+});
+
+test("resumenRecetasRellenoSheets: un producto de línea Lasaña trae todas las etapas salvo packaging, sumando el mismo insumo repetido en 2 etapas", () => {
+  const data = fixture();
+  data.productos.push({ id: "PROD-LAS", nombre: "Lasaña", activo: true, linea: "Lasaña" });
+  data.recetas.push({ id: "REC-LAS", producto_id: "PROD-LAS", nombre: "Receta Lasaña", activa: true });
+  data.insumos.push(
+    { id: "ING-RAGU", nombre: "Ragú", unidad: "kg", tipo: "ingrediente", precio_actual: 2000, activo: true, controla_stock: false },
+    { id: "ING-QUESO", nombre: "Queso", unidad: "kg", tipo: "ingrediente", precio_actual: 3000, activo: true, controla_stock: false },
+    { id: "ING-BOLSA", nombre: "Bolsa lasaña", unidad: "unidad", tipo: "packaging", precio_actual: 50, activo: true, controla_stock: false }
+  );
+  data.receta_items.push(
+    { id: "RL-1", receta_id: "REC-LAS", insumo_id: "ING-RAGU", etapa: "salsa", cantidad: 0.1 },
+    { id: "RL-2", receta_id: "REC-LAS", insumo_id: "ING-QUESO", etapa: "terminacion", cantidad: 0.05 },
+    { id: "RL-3", receta_id: "REC-LAS", insumo_id: "ING-QUESO", etapa: "masa", cantidad: 0.02 }, // mismo insumo, otra etapa -> se suma
+    { id: "RL-4", receta_id: "REC-LAS", insumo_id: "ING-BOLSA", etapa: "packaging", cantidad: 1 } // packaging: excluido
+  );
+  const filas = resumenRecetasRellenoSheets(data).filter((f) => f.producto_id === "PROD-LAS");
+  assert.equal(filas.length, 2); // Ragú + Queso (sumado) — Bolsa queda afuera
+  assert.ok(filas.every((f) => f.cantidad_por_unidad > 0));
+  const ragu = filas.find((f) => f.insumo_id === "ING-RAGU")!;
+  assert.equal(ragu.cantidad_por_unidad, 0.1);
+  const queso = filas.find((f) => f.insumo_id === "ING-QUESO")!;
+  assert.equal(queso.cantidad_por_unidad, 0.07); // 0.05 (terminación) + 0.02 (masa)
+  assert.equal(filas.some((f) => f.insumo_id === "ING-BOLSA"), false);
+});
+
 test("resumenRepartoSheets: agrupa pedidos entregados por zona fija, pedido sin zona cae en Otro, suma Compras Berazategui aparte", () => {
   const filas = resumenRepartoSheets(fixture(), "2026-09");
   const zona1 = filas.find((f) => f.recorrido === "Zona 1 - Cercana")!;
@@ -135,4 +189,72 @@ test("resumenRepartoSheets: agrupa pedidos entregados por zona fija, pedido sin 
   assert.equal(compras.costo_total, 7000);
   // Siempre las 7 zonas + la fila de compras, aunque alguna esté en 0.
   assert.equal(filas.length, 8);
+});
+
+test("resumenPreciosFormatosSheets: una fila por variante activa (con y sin ventas), costo = costoVariante/costoManoDeObraVariante, ordenado por producto/canal/unidades", () => {
+  const filas = resumenPreciosFormatosSheets(fixture(), "2026-09");
+  // 2 variantes activas de Calabaza + 1 de Salsa = 3 filas, aunque Salsa no tuvo ventas.
+  assert.equal(filas.length, 3);
+
+  const calabaza = filas.filter((f) => f.producto_id === "PROD-01");
+  assert.equal(calabaza.length, 2);
+  // Minorista antes que Mayorista, dentro del mismo producto.
+  assert.equal(calabaza[0].canal, "Minorista");
+  assert.equal(calabaza[1].canal, "Mayorista");
+
+  const minorista = calabaza[0];
+  assert.equal(minorista.precio_venta, 10000);
+  assert.equal(minorista.costo_total_paquete, minorista.costo_insumos_paquete + minorista.costo_mo_paquete);
+  // PED-01 (Entregado, Minorista, 1×VAR-MIN12, $500 de descuento) cuenta; PED-03 (Cancelado, mismo variante) no.
+  assert.equal(minorista.paquetes_vendidos_mes, 1);
+  assert.equal(minorista.descuentos_mes, 500);
+
+  const mayorista = calabaza[1];
+  // PED-02 (Confirmado, no Cancelado) sí cuenta para RESUMEN_PRODUCTOS/PRECIOS_FORMATOS por igual.
+  assert.equal(mayorista.paquetes_vendidos_mes, 1);
+  assert.equal(mayorista.descuentos_mes, 0);
+
+  const salsa = filas.find((f) => f.producto_id === "PROD-14")!;
+  assert.equal(salsa.paquetes_vendidos_mes, 0);
+  assert.equal(salsa.descuentos_mes, 0);
+});
+
+test("resumenPreciosFormatosSheets: un mes sin ningún pedido igual trae todas las variantes activas, en 0", () => {
+  const filas = resumenPreciosFormatosSheets(fixture(), "2020-01");
+  assert.equal(filas.length, 3);
+  assert.ok(filas.every((f) => f.paquetes_vendidos_mes === 0 && f.descuentos_mes === 0));
+  assert.ok(filas.every((f) => f.costo_total_paquete >= 0));
+});
+
+test("resumenStockInsumosSheets: un insumo por fila aunque esté en varias etapas/recetas, nunca repetido; insumo sin stock controlado queda afuera", () => {
+  const data = fixture();
+  data.insumos = [
+    { id: "ING-01", nombre: "Harina", unidad: "kg", tipo: "ingrediente", precio_actual: 1000, activo: true, controla_stock: true, categoria_id: "CAT-ING" },
+    { id: "ING-02", nombre: "Sal", unidad: "kg", tipo: "ingrediente", precio_actual: 200, activo: true, controla_stock: true },
+    { id: "ING-03", nombre: "Bolsa", unidad: "unidad", tipo: "packaging", precio_actual: 50, activo: true, controla_stock: false },
+  ];
+  data.categorias.push({ id: "CAT-ING", nombre: "Harinas", ambito: "insumo", activo: true });
+  data.inventario_movimientos = [
+    { id: "M1", fecha: "2026-09-01", tipo: "compra", item_tipo: "insumo", item_id: "ING-01", cantidad: 10 },
+    { id: "M2", fecha: "2026-09-10", tipo: "conteo", item_tipo: "insumo", item_id: "ING-01", cantidad: 8 },
+    { id: "M3", fecha: "2026-09-05", tipo: "consumo", item_tipo: "insumo", item_id: "ING-02", cantidad: -5 },
+  ];
+  const filas = resumenStockInsumosSheets(data);
+  // ING-01 aparece en 2 receta_items del fixture base (masa y relleno, mismo producto) — una sola fila.
+  assert.equal(filas.filter((f) => f.insumo_id === "ING-01").length, 1);
+  assert.equal(filas.some((f) => f.insumo_id === "ING-03"), false);
+
+  const harina = filas.find((f) => f.insumo_id === "ING-01")!;
+  assert.equal(harina.stock_actual, 8); // el conteo del 10/9 resetea la compra anterior
+  assert.equal(harina.categoria, "Harinas");
+  assert.equal(harina.valor_stock, 8000);
+  assert.equal(harina.fecha_ultimo_conteo, "2026-09-10");
+
+  const sal = filas.find((f) => f.insumo_id === "ING-02")!;
+  assert.equal(sal.stock_actual, -5);
+  assert.equal(sal.valor_stock, 0); // stock negativo nunca valoriza negativo
+  assert.equal(sal.fecha_ultimo_conteo, ""); // nunca se contó
+
+  const totalValorStock = filas.reduce((acc, f) => acc + f.valor_stock, 0);
+  assert.equal(totalValorStock, 8000);
 });
