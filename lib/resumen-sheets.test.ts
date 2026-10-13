@@ -158,21 +158,24 @@ test("resumenRecetasRellenoSheets: un producto de línea Lasaña trae todas las 
   data.insumos.push(
     { id: "ING-RAGU", nombre: "Ragú", unidad: "kg", tipo: "ingrediente", precio_actual: 2000, activo: true, controla_stock: false },
     { id: "ING-QUESO", nombre: "Queso", unidad: "kg", tipo: "ingrediente", precio_actual: 3000, activo: true, controla_stock: false },
+    { id: "ING-ALUMINIO", nombre: "Bandeja de aluminio", unidad: "unidad", tipo: "ingrediente", precio_actual: 300, activo: true, controla_stock: false },
     { id: "ING-BOLSA", nombre: "Bolsa lasaña", unidad: "unidad", tipo: "packaging", precio_actual: 50, activo: true, controla_stock: false }
   );
   data.receta_items.push(
     { id: "RL-1", receta_id: "REC-LAS", insumo_id: "ING-RAGU", etapa: "salsa", cantidad: 0.1 },
     { id: "RL-2", receta_id: "REC-LAS", insumo_id: "ING-QUESO", etapa: "terminacion", cantidad: 0.05 },
     { id: "RL-3", receta_id: "REC-LAS", insumo_id: "ING-QUESO", etapa: "masa", cantidad: 0.02 }, // mismo insumo, otra etapa -> se suma
-    { id: "RL-4", receta_id: "REC-LAS", insumo_id: "ING-BOLSA", etapa: "packaging", cantidad: 1 } // packaging: excluido
+    { id: "RL-4", receta_id: "REC-LAS", insumo_id: "ING-ALUMINIO", etapa: "armado", cantidad: 1 }, // nueva etapa "armado": entra igual, no es packaging
+    { id: "RL-5", receta_id: "REC-LAS", insumo_id: "ING-BOLSA", etapa: "packaging", cantidad: 1 } // packaging: excluido
   );
   const filas = resumenRecetasRellenoSheets(data).filter((f) => f.producto_id === "PROD-LAS");
-  assert.equal(filas.length, 2); // Ragú + Queso (sumado) — Bolsa queda afuera
+  assert.equal(filas.length, 3); // Ragú + Queso (sumado) + Bandeja (armado) — Bolsa queda afuera
   assert.ok(filas.every((f) => f.cantidad_por_unidad > 0));
   const ragu = filas.find((f) => f.insumo_id === "ING-RAGU")!;
   assert.equal(ragu.cantidad_por_unidad, 0.1);
   const queso = filas.find((f) => f.insumo_id === "ING-QUESO")!;
   assert.equal(queso.cantidad_por_unidad, 0.07); // 0.05 (terminación) + 0.02 (masa)
+  assert.ok(filas.some((f) => f.insumo_id === "ING-ALUMINIO"));
   assert.equal(filas.some((f) => f.insumo_id === "ING-BOLSA"), false);
 });
 

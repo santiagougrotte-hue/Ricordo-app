@@ -11,7 +11,7 @@ import type { Adjunto, Cliente, Proveedor } from "./types";
 export type Canal = "Minorista" | "Mayorista";
 export type EstadoPedido = "Confirmado" | "Produccion" | "Entregado" | "Cancelado";
 export type TipoInsumo = "ingrediente" | "packaging";
-export type EtapaReceta = "masa" | "relleno" | "salsa" | "terminacion" | "packaging";
+export type EtapaReceta = "masa" | "relleno" | "salsa" | "terminacion" | "armado" | "packaging";
 export type TipoInventarioMovimiento = "compra" | "produccion" | "consumo" | "venta" | "conteo" | "ajuste" | "merma";
 export type TipoMovimientoFinanciero = "ingreso" | "egreso" | "transferencia";
 export type EstadoMovimientoFinanciero = "confirmado" | "pendiente";

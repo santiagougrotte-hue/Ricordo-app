@@ -42,7 +42,7 @@ import type { Canal, EtapaReceta, LineaProducto, OperacionAjusteReceta, Producto
 const TIPOS_UNIDAD_VENTA: TipoUnidadVenta[] = ["caja", "unidad", "pote", "bolsa", "otro"];
 const LINEAS_PRODUCTO: LineaProducto[] = ["Pasta", "Salsa", "Pizza", "Lasaña"];
 
-const ETAPAS: EtapaReceta[] = ["masa", "relleno", "salsa", "terminacion", "packaging"];
+const ETAPAS: EtapaReceta[] = ["masa", "relleno", "salsa", "terminacion", "armado", "packaging"];
 const OPERACIONES: OperacionAjusteReceta[] = ["sumar", "reemplazar", "restar"];
 const OPERACION_LABEL: Record<OperacionAjusteReceta, string> = {
   sumar: "Agregar (insumo extra, no toca la receta base)",
@@ -182,6 +182,9 @@ function FichaProducto({ productoId }: { productoId: string }) {
   function actualizarCantidadRecetaItem(id: string, cantidad: number) {
     if (cantidad < 0) return; // una cantidad negativa generaría un costo (y CMV) negativo
     setData((d) => ({ ...d, receta_items: d.receta_items.map((i) => (i.id === id ? { ...i, cantidad } : i)) }));
+  }
+  function actualizarEtapaRecetaItem(id: string, etapa: EtapaReceta) {
+    setData((d) => ({ ...d, receta_items: d.receta_items.map((i) => (i.id === id ? { ...i, etapa } : i)) }));
   }
 
   function actualizarMinutosManoObra(minutos: number) {
@@ -409,7 +412,17 @@ function FichaProducto({ productoId }: { productoId: string }) {
                 {recetaItems.map((i) => (
                   <TrHover key={i.id}>
                     <Td>
-                      {i.etapa}
+                      <Select
+                        className="w-28"
+                        value={i.etapa}
+                        onChange={(e) => actualizarEtapaRecetaItem(i.id, e.target.value as EtapaReceta)}
+                      >
+                        {ETAPAS.map((e) => (
+                          <option key={e} value={e}>
+                            {e}
+                          </option>
+                        ))}
+                      </Select>
                       {!ETAPAS_POR_UNIDAD.includes(i.etapa) && (
                         <span className="ml-1.5 text-[11px] text-text3">(no escala por presentación)</span>
                       )}
