@@ -69,6 +69,7 @@ export function Checkout() {
     setF((v) => ({ ...v, [k]: e.target.value }));
     if (k === 'address') setAddress({ street: e.target.value, postalCode: address.postalCode });
     if (errors[k]) setErrors((x) => ({ ...x, [k]: undefined }));
+    setServerError(null);
   };
 
   function validate(): Errors {
@@ -110,7 +111,14 @@ export function Checkout() {
     setErrors(errs);
     const first = Object.keys(errs)[0];
     if (first) {
-      document.getElementById(`f-${first}`)?.focus();
+      // El aviso también va junto al botón (en el celular los campos quedan lejos, arriba) y la página sube al primero que falta.
+      const missing: Record<string, string> = { name: 'tu nombre', phone: 'tu celular', email: 'el email', locality: 'tu localidad', payment: 'cómo pagás' };
+      setServerError(`Para confirmar te falta completar: ${Object.keys(errs).map((k) => missing[k] ?? k).join(', ')}.`);
+      const el = document.getElementById(`f-${first}`);
+      // El radio de pago es invisible: se muestra su grupo de opciones.
+      const target = first === 'payment' ? el?.closest('.pay') ?? el : el;
+      target?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      el?.focus({ preventScroll: true });
       return;
     }
     if (q && !q.canCheckout) {
