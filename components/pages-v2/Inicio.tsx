@@ -32,7 +32,7 @@ import { GraficoLinea, IndicadorCrecimiento } from "@/components/charts";
 import {
   cmvPeriodo,
   saldoCaja,
-  calcularStock,
+  insumosBajoMinimo,
   cobrosPeriodo,
   itemsSinCostoDeterminado,
   fARS,
@@ -53,6 +53,7 @@ import {
 } from "@/lib/analitica-ventas";
 import { generarResumenInteligente } from "@/lib/resumen-inteligente";
 import type { Conclusion } from "@/lib/resumen-inteligente";
+import type { InsumoBajoMinimo } from "@/lib/calc-v2";
 import type { EstadoPedido, Canal } from "@/lib/types-v2";
 
 const ESTADO_COLOR: Record<EstadoPedido, "blue" | "orange" | "green" | "red"> = {
@@ -207,14 +208,9 @@ export function Inicio() {
   const comprasPendientes = useMemo(() => data.compras.filter((c) => c.estado_pago === "pendiente"), [data.compras]);
   const totalComprasPendientes = comprasPendientes.reduce((acc, c) => acc + c.total, 0);
 
-  const alertasStock = useMemo(
-    () =>
-      data.insumos
-        .filter((i) => i.controla_stock && i.activo)
-        .map((i) => ({ insumo: i, stock: calcularStock(data, "insumo", i.id) }))
-        .filter(({ insumo, stock }) => insumo.stock_minimo != null && stock < insumo.stock_minimo),
-    [data]
-  );
+  const alertasStock = useMemo(() => insumosBajoMinimo(data), [data]);
+  const alertasIngredientes = alertasStock.filter((a) => a.insumo.tipo === "ingrediente");
+  const alertasPackaging = alertasStock.filter((a) => a.insumo.tipo === "packaging");
 
   // Alerta de pedidos de mañana sin entregar — regla verificable sobre datos reales.
   const pedidosMananaSinEntregar = useMemo(() => {
@@ -300,9 +296,14 @@ export function Inicio() {
         <KpiCard label="Compras sin pagar" value={fARS(totalComprasPendientes)} sub={`${comprasPendientes.length} compra(s)`} color="orange" icon={PackagePlus} />
       </StatGrid>
 
-      {alertasStock.length > 0 && (
+      {alertasIngredientes.length > 0 && (
         <Alert kind="warning">
-          {alertasStock.length} insumo(s) por debajo del stock mínimo: {alertasStock.map(({ insumo }) => insumo.nombre).join(", ")}.
+          {alertasIngredientes.length} ingrediente(s) por debajo del mínimo: {alertasIngredientes.map((a) => a.insumo.nombre).join(", ")}.
+        </Alert>
+      )}
+      {alertasPackaging.length > 0 && (
+        <Alert kind="warning">
+          {alertasPackaging.length} envase(s)/packaging por debajo del mínimo: {alertasPackaging.map((a) => a.insumo.nombre).join(", ")}.
         </Alert>
       )}
 
@@ -481,32 +482,54 @@ export function Inicio() {
         )}
       </Card>
 
-      <Card title="Stock bajo mínimo">
-        {alertasStock.length === 0 ? (
-          <EmptyState text="Todos los insumos están por encima de su stock mínimo." />
+      <Card title="Ingredientes bajo mínimo">
+        {alertasIngredientes.length === 0 ? (
+          <EmptyState text="Todos los ingredientes están por encima de su stock mínimo." />
         ) : (
-          <TableWrap>
-            <table className="w-full">
-              <thead>
-                <tr>
-                  <Th>Insumo</Th>
-                  <Th>Stock actual</Th>
-                  <Th>Mínimo</Th>
-                </tr>
-              </thead>
-              <tbody>
-                {alertasStock.map(({ insumo, stock }) => (
-                  <TrHover key={insumo.id}>
-                    <Td main>{insumo.nombre}</Td>
-                    <Td className="text-red">{fNum(stock, 2)}</Td>
-                    <Td>{fNum(insumo.stock_minimo ?? 0, 2)}</Td>
-                  </TrHover>
-                ))}
-              </tbody>
-            </table>
-          </TableWrap>
+          <TablaBajoMinimo alertas={alertasIngredientes} />
+        )}
+      </Card>
+
+      <Card title="Packaging bajo mínimo">
+        {alertasPackaging.length === 0 ? (
+          <EmptyState text="Todo el packaging está por encima de su stock mínimo." />
+        ) : (
+          <TablaBajoMinimo alertas={alertasPackaging} />
         )}
       </Card>
     </div>
+  );
+}
+
+function TablaBajoMinimo({ alertas }: { alertas: InsumoBajoMinimo[] }) {
+  return (
+    <TableWrap>
+      <table className="w-full">
+        <thead>
+          <tr>
+            <Th>Insumo</Th>
+            <Th>Stock actual</Th>
+            <Th>Mínimo</Th>
+            <Th>Falta</Th>
+          </tr>
+        </thead>
+        <tbody>
+          {alertas.map(({ insumo, stock, falta }) => (
+            <TrHover key={insumo.id}>
+              <Td main>{insumo.nombre}</Td>
+              <Td className="text-red">
+                {fNum(stock, 2)} {insumo.unidad}
+              </Td>
+              <Td>
+                {fNum(insumo.stock_minimo ?? 0, 2)} {insumo.unidad}
+              </Td>
+              <Td className="font-medium text-orange">
+                {fNum(falta, 2)} {insumo.unidad}
+              </Td>
+            </TrHover>
+          ))}
+        </tbody>
+      </table>
+    </TableWrap>
   );
 }

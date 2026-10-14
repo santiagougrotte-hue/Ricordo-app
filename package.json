@@ -7,7 +7,7 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
-    "test": "tsx --test 'lib/**/*.test.ts'"
+    "test": "tsx --test 'lib/**/*.test.ts' 'components/**/*.test.ts'"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.115.0",

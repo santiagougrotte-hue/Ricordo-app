@@ -21,6 +21,7 @@ import type {
   Compra,
   TipoUnidadVenta,
   TipoItemStock,
+  Insumo,
 } from "./types-v2";
 import { fARS, fFechaCorta, fNum, fPct, inPeriod, inYear, isAfter } from "./calc";
 
@@ -257,6 +258,27 @@ export function valorStockInsumos(data: RicordoDataV2, hastaFecha?: string): num
   return data.insumos
     .filter((i) => i.controla_stock)
     .reduce((acc, i) => acc + calcularStock(data, "insumo", i.id, hastaFecha) * i.precio_actual, 0);
+}
+
+export interface InsumoBajoMinimo {
+  insumo: Insumo;
+  stock: number;
+  falta: number;
+}
+
+/** Insumos con stock controlado por debajo de su `stock_minimo` — chequeo simple de umbral, sin
+ * promediar consumo ni mirar pedidos pendientes (eso es `calcularAlertasStock`, la IA de Sección
+ * 20). Nunca inventa un mínimo: un insumo sin `stock_minimo` cargado jamás aparece acá, pase lo
+ * que pase con su stock. Usado por Inicio, Inventario → Materias primas y el contador del menú. */
+export function insumosBajoMinimo(data: RicordoDataV2): InsumoBajoMinimo[] {
+  return data.insumos
+    .filter((i) => i.controla_stock && i.activo && i.stock_minimo != null)
+    .map((i) => {
+      const stock = calcularStock(data, "insumo", i.id);
+      return { insumo: i, stock, falta: Math.round((i.stock_minimo! - stock) * 100) / 100 };
+    })
+    .filter((x) => x.falta > 0)
+    .sort((a, b) => b.falta - a.falta);
 }
 
 /** Valorización ESTIMADA del inventario de productos terminados: usa el costo de receta vigente
@@ -1443,9 +1465,10 @@ export function calcularCuentasPorCobrar(data: RicordoDataV2, hoy: string): Cuen
   // Los pedidos de antes del corte de caja nunca tuvieron un cobro vinculado por id (el sistema
   // viejo registraba el ingreso como un movimiento de caja suelto) — mostrarlos acá como
   // "pendientes de cobro" sería inventar una deuda que probablemente ya se cobró en su momento.
+  // Lo mismo, a mano, para cualquier pedido marcado `saldo_historico` desde "Saldar históricos…".
   const corte = data.configuracion.fecha_saldo_inicial_caja;
   return data.pedidos
-    .filter((p) => p.estado === "Entregado" && p.fecha <= hoy && (!corte || p.fecha >= corte))
+    .filter((p) => p.estado === "Entregado" && !p.saldo_historico && p.fecha <= hoy && (!corte || p.fecha >= corte))
     .map((p) => {
       const cobrado = totalCobradoPedido(data, p.id);
       return {
@@ -1476,10 +1499,11 @@ export interface CuentaPorPagar {
 
 export function calcularCuentasPorPagar(data: RicordoDataV2, hoy: string): CuentaPorPagar[] {
   // Mismo criterio que calcularCuentasPorCobrar: las compras de antes del corte de caja nunca
-  // tuvieron un pago vinculado por id, no inventamos que siguen pendientes.
+  // tuvieron un pago vinculado por id, no inventamos que siguen pendientes. Lo mismo, a mano,
+  // para cualquier compra marcada `saldo_historico` desde "Saldar históricos…".
   const corte = data.configuracion.fecha_saldo_inicial_caja;
   return data.compras
-    .filter((c) => c.fecha <= hoy && (!corte || c.fecha >= corte))
+    .filter((c) => !c.saldo_historico && c.fecha <= hoy && (!corte || c.fecha >= corte))
     .map((c) => {
       const pagado = totalPagadoCompra(data, c.id);
       return {
@@ -1495,6 +1519,88 @@ export function calcularCuentasPorPagar(data: RicordoDataV2, hoy: string): Cuent
     })
     .filter((c) => c.saldo > 0)
     .sort((a, b) => (a.fecha_vencimiento || a.fecha).localeCompare(b.fecha_vencimiento || b.fecha));
+}
+
+// --- Saldar históricos (Finanzas → Por cobrar/Por pagar → "Saldar históricos…") ----------------
+// Ventas/compras de antes de que el negocio empezara a controlar la caja en la app (antes de
+// `fecha_saldo_inicial_caja`) que, en la realidad, ya se cobraron/pagaron en su momento — pero
+// como el sistema viejo nunca vinculó ese cobro/pago por id, el cálculo (`totalCobradoPedido`/
+// `totalPagadoCompra`) las sigue viendo con saldo abierto. "Saldar históricos" cierra ese saldo a
+// mano, de forma explícita y auditable (a diferencia del corte automático de
+// calcularCuentasPorCobrar/Pagar, que simplemente las esconde) — reversible con "Deshacer", y
+// NUNCA genera un movimiento de caja: esa plata ya entró/salió hace tiempo, fuera de la app.
+
+export interface PedidoHistoricoPendiente {
+  pedido_id: string;
+  cliente_id: string;
+  fecha: string;
+  saldo: number;
+}
+
+/** Pedidos Entregados con saldo de cobro abierto, con fecha ANTERIOR a `fechaCorte` — a propósito
+ * ignora `configuracion.fecha_saldo_inicial_caja` (que ya los esconde de Cuentas por cobrar): acá
+ * se listan igual, para poder cerrarlos explícitamente en vez de depender de que queden ocultos. */
+export function pedidosPendientesAntesDe(data: RicordoDataV2, fechaCorte: string): PedidoHistoricoPendiente[] {
+  return data.pedidos
+    .filter((p) => p.estado === "Entregado" && !p.saldo_historico && p.fecha < fechaCorte)
+    .map((p) => ({ pedido_id: p.id, cliente_id: p.cliente_id, fecha: p.fecha, saldo: Math.round(p.total - totalCobradoPedido(data, p.id)) }))
+    .filter((p) => p.saldo > 0)
+    .sort((a, b) => a.fecha.localeCompare(b.fecha));
+}
+
+export function saldarPedidosHistoricos(data: RicordoDataV2, pedidoIds: string[], fecha: string): RicordoDataV2 {
+  const ids = new Set(pedidoIds);
+  if (ids.size === 0) return data;
+  return { ...data, pedidos: data.pedidos.map((p) => (ids.has(p.id) ? { ...p, saldo_historico: true, saldado_el: fecha } : p)) };
+}
+
+export function deshacerSaldoHistoricoPedido(data: RicordoDataV2, pedidoId: string): RicordoDataV2 {
+  return {
+    ...data,
+    pedidos: data.pedidos.map((p) => {
+      if (p.id !== pedidoId) return p;
+      // Saca los campos del todo (no los deja en `false`/`undefined`) para que deshacer devuelva
+      // exactamente el mismo pedido de antes de saldar, no uno con las mismas dos claves de más.
+      const copia = { ...p };
+      delete copia.saldo_historico;
+      delete copia.saldado_el;
+      return copia;
+    }),
+  };
+}
+
+export interface CompraHistoricaPendiente {
+  compra_id: string;
+  proveedor_id: string;
+  fecha: string;
+  saldo: number;
+}
+
+export function comprasPendientesAntesDe(data: RicordoDataV2, fechaCorte: string): CompraHistoricaPendiente[] {
+  return data.compras
+    .filter((c) => !c.saldo_historico && c.fecha < fechaCorte)
+    .map((c) => ({ compra_id: c.id, proveedor_id: c.proveedor_id, fecha: c.fecha, saldo: Math.round(c.total - totalPagadoCompra(data, c.id)) }))
+    .filter((c) => c.saldo > 0)
+    .sort((a, b) => a.fecha.localeCompare(b.fecha));
+}
+
+export function saldarComprasHistoricas(data: RicordoDataV2, compraIds: string[], fecha: string): RicordoDataV2 {
+  const ids = new Set(compraIds);
+  if (ids.size === 0) return data;
+  return { ...data, compras: data.compras.map((c) => (ids.has(c.id) ? { ...c, saldo_historico: true, saldado_el: fecha } : c)) };
+}
+
+export function deshacerSaldoHistoricoCompra(data: RicordoDataV2, compraId: string): RicordoDataV2 {
+  return {
+    ...data,
+    compras: data.compras.map((c) => {
+      if (c.id !== compraId) return c;
+      const copia = { ...c };
+      delete copia.saldo_historico;
+      delete copia.saldado_el;
+      return copia;
+    }),
+  };
 }
 
 // --- Balance General / Estado de Situación Patrimonial ----------------------------------------

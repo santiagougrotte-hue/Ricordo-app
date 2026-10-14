@@ -25,7 +25,7 @@ import {
   SearchInput,
 } from "@/components/ui";
 import { Modal } from "@/components/Modal";
-import { fARS, fNum, calcularStock, valorStockInsumos, categoriasPorAmbito } from "@/lib/calc-v2";
+import { fARS, fNum, calcularStock, valorStockInsumos, categoriasPorAmbito, insumosBajoMinimo } from "@/lib/calc-v2";
 import { calcularStockReservado, calcularStockDisponible } from "@/lib/produccion-v2";
 import { refUnidades } from "@/lib/resumen-sheets";
 import { calcularAlertasStock } from "@/lib/ia-stock";
@@ -61,10 +61,16 @@ function MateriasPrimasTab() {
   const [form, setForm] = useState(insumoVacio());
   const [contando, setContando] = useState<{ insumo: Insumo; cantidad: number } | null>(null);
   const [fusionando, setFusionando] = useState<{ insumo: Insumo; destinoId: string } | null>(null);
+  const [editandoMinimos, setEditandoMinimos] = useState(false);
+  const [minimos, setMinimos] = useState<Record<string, number | undefined>>({});
 
   const valorStock = valorStockInsumos(data);
-  const bajoMinimo = data.insumos.filter((i) => i.controla_stock && i.stock_minimo != null && calcularStock(data, "insumo", i.id) < i.stock_minimo);
+  const bajoMinimo = insumosBajoMinimo(data);
   const sinStockControlado = data.insumos.filter((i) => !i.controla_stock).length;
+  const insumosControlados = useMemo(
+    () => [...data.insumos.filter((i) => i.controla_stock)].sort((a, b) => a.nombre.localeCompare(b.nombre)),
+    [data.insumos]
+  );
 
   // Por default solo se listan los insumos con stock controlado — la mayoría del catálogo real
   // (verduras que se compran al día, etc.) no lo tiene, y mostrar un "stock" que nadie carga ni
@@ -164,6 +170,21 @@ function MateriasPrimasTab() {
     setFusionando(null);
   }
 
+  function abrirEditarMinimos() {
+    const inicial: Record<string, number | undefined> = {};
+    for (const i of insumosControlados) inicial[i.id] = i.stock_minimo;
+    setMinimos(inicial);
+    setEditandoMinimos(true);
+  }
+  function guardarMinimos() {
+    setData((d) => ({
+      ...d,
+      insumos: d.insumos.map((i) => (i.id in minimos ? { ...i, stock_minimo: minimos[i.id] } : i)),
+    }));
+    toast("Mínimos actualizados");
+    setEditandoMinimos(false);
+  }
+
   return (
     <div>
       <StatGrid>
@@ -186,23 +207,75 @@ function MateriasPrimasTab() {
               Ocultar los que no controlan stock
             </Button>
           )}
+          <Button size="sm" variant="ghost" onClick={abrirEditarMinimos}>
+            Editar mínimos
+          </Button>
           <Button onClick={abrirNuevo}>+ Nuevo insumo</Button>
         </div>
       </div>
-      <FilterTabs
-        value={filtro}
-        onChange={(v) => setFiltro(v as typeof filtro)}
-        options={[
-          { value: "todos", label: "Todos" },
-          { value: "ingrediente", label: "Ingredientes" },
-          { value: "packaging", label: "Envases" },
-        ]}
-      />
 
-      <Card>
-        {filasInsumos.length === 0 ? (
-          <EmptyState text="No hay resultados." />
-        ) : (
+      {editandoMinimos ? (
+        <Card>
+          <p className="mb-3 text-[12.5px] text-text3">
+            Cargá el stock mínimo de cada insumo con stock controlado y guardalos todos de una — así las alertas de
+            stock bajo (Inicio, Inventario) tienen algo contra qué comparar.
+          </p>
+          {insumosControlados.length === 0 ? (
+            <EmptyState text="No hay insumos con stock controlado todavía." />
+          ) : (
+            <TableWrap>
+              <table className="w-full">
+                <thead>
+                  <tr>
+                    <Th>Nombre</Th>
+                    <Th>Unidad</Th>
+                    <Th>Stock actual</Th>
+                    <Th>Stock mínimo</Th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {insumosControlados.map((i) => (
+                    <TrHover key={i.id}>
+                      <Td main>{i.nombre}</Td>
+                      <Td>{i.unidad}</Td>
+                      <Td>{fNum(calcularStock(data, "insumo", i.id), 2)}</Td>
+                      <Td>
+                        <Input
+                          type="number"
+                          className="w-28"
+                          value={minimos[i.id] ?? ""}
+                          onChange={(e) => setMinimos({ ...minimos, [i.id]: e.target.value ? Number(e.target.value) : undefined })}
+                        />
+                      </Td>
+                    </TrHover>
+                  ))}
+                </tbody>
+              </table>
+            </TableWrap>
+          )}
+          <div className="mt-3 flex justify-end gap-2">
+            <Button variant="ghost" onClick={() => setEditandoMinimos(false)}>
+              Cancelar
+            </Button>
+            <Button onClick={guardarMinimos}>Guardar</Button>
+          </div>
+        </Card>
+      ) : (
+        <>
+          <FilterTabs
+            value={filtro}
+            onChange={(v) => setFiltro(v as typeof filtro)}
+            options={[
+              { value: "todos", label: "Todos" },
+              { value: "ingrediente", label: "Ingredientes" },
+              { value: "packaging", label: "Envases" },
+            ]}
+          />
+
+          <Card>
+            {filasInsumos.length === 0 ? (
+              <EmptyState text="No hay resultados." />
+            ) : (
           <TableWrap>
             <table className="w-full">
               <thead>
@@ -255,8 +328,10 @@ function MateriasPrimasTab() {
               </tbody>
             </table>
           </TableWrap>
-        )}
-      </Card>
+            )}
+          </Card>
+        </>
+      )}
 
       <Modal
         open={fusionando != null}

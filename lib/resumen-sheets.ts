@@ -2,8 +2,9 @@
 // para pegarse directo en la Google Sheet de planificación/análisis (que ahora vive fuera de la
 // app). Los nombres de columna son el contrato con esa Sheet — no renombrar sin avisar.
 
-import type { RicordoDataV2 } from "./types-v2";
+import type { RicordoDataV2, EtapaReceta } from "./types-v2";
 import { recetaEfectivaVariante, costoVariante, costoManoDeObraVariante, calcularStock } from "./calc-v2";
+import { calcularCuponesMes } from "./analitica-ventas";
 
 function redondear(n: number, decimales: number): number {
   const factor = 10 ** decimales;
@@ -265,10 +266,19 @@ export function gastosATSV(filas: FilaResumenGasto[]): string {
 // la próxima tanda planeada (cantidad_por_unidad × unidades a producir − stock_actual).
 //
 // Qué etapas entran depende de la línea del producto: en Pasta, la masa se planifica aparte y el
-// packaging no va acá — solo importa el relleno (tanda mensual). En cualquier otra línea (Lasaña,
-// Pizza, Salsa, etc.) no hay ese reparto masa/relleno por separado, así que entra la receta
-// completa salvo el packaging (que sigue sin planificarse acá, es por caja/presentación). Si el
-// mismo insumo aparece en más de una etapa del mismo producto, se suma en una sola fila.
+// packaging no va acá — entran relleno y armado (ensamblado puntual, ej. una porción de algo que
+// se arma junto con el relleno). En cualquier otra línea (Lasaña, Pizza, Salsa, etc.) no hay ese
+// reparto masa/relleno por separado, así que entra la receta completa salvo el packaging (que
+// sigue sin planificarse acá, es por caja/presentación). Si el mismo insumo aparece en más de una
+// etapa del mismo producto, se suma en una sola fila.
+//
+// `exportaEtapa` es la única fuente de verdad de la regla — la usan tanto esta función como
+// `avisosRecetaNoExportada` (detecta productos con la línea puesta mal: si tienen ítems en una
+// etapa que no sea masa/packaging y que la línea actual no exporta, probablemente la línea está
+// mal cargada, no que ese ingrediente deba perderse en silencio).
+function exportaEtapa(linea: string | undefined, etapa: EtapaReceta): boolean {
+  return linea === "Pasta" ? etapa === "relleno" || etapa === "armado" : etapa !== "packaging";
+}
 
 export interface FilaRecetaRelleno {
   producto_id: string;
@@ -286,10 +296,7 @@ export function resumenRecetasRellenoSheets(data: RicordoDataV2): FilaRecetaRell
   for (const producto of data.productos.filter((p) => p.activo)) {
     const receta = data.recetas.find((r) => r.producto_id === producto.id && r.activa);
     if (!receta) continue;
-    const esPasta = producto.linea === "Pasta";
-    const itemsRelevantes = data.receta_items.filter(
-      (ri) => ri.receta_id === receta.id && (esPasta ? ri.etapa === "relleno" : ri.etapa !== "packaging")
-    );
+    const itemsRelevantes = data.receta_items.filter((ri) => ri.receta_id === receta.id && exportaEtapa(producto.linea, ri.etapa));
     const cantidadPorInsumo = new Map<string, number>();
     for (const item of itemsRelevantes) {
       cantidadPorInsumo.set(item.insumo_id, (cantidadPorInsumo.get(item.insumo_id) ?? 0) + item.cantidad);
@@ -316,6 +323,39 @@ export function recetasRellenoATSV(filas: FilaRecetaRelleno[]): string {
     ["producto_id", "producto", "insumo_id", "insumo", "cantidad_por_unidad", "unidad", "precio_actual", "stock_actual"],
     filas.map((f) => [f.producto_id, f.producto, f.insumo_id, f.insumo, f.cantidad_por_unidad, f.unidad, f.precio_actual, f.stock_actual])
   );
+}
+
+/** Detecta productos activos con ítems de receta que NO se exportan en RECETAS_RELLENO y que no
+ * son masa ni packaging (esos dos nunca entran a propósito, no son un error) — típicamente, un
+ * producto de línea Pasta con ingredientes de salsa/terminación cargados, que con la regla de
+ * Pasta (solo relleno + armado) quedan afuera en silencio. Casi siempre significa que la línea del
+ * producto está mal puesta (ej. es una Lasaña cargada como Pasta) — se muestra como aviso, nunca
+ * se corrige sola. */
+export interface AvisoRecetaNoExportada {
+  producto_id: string;
+  producto: string;
+  linea: string;
+  etapa: EtapaReceta;
+  cantidad: number;
+}
+
+export function avisosRecetaNoExportada(data: RicordoDataV2): AvisoRecetaNoExportada[] {
+  const avisos: AvisoRecetaNoExportada[] = [];
+  for (const producto of data.productos.filter((p) => p.activo)) {
+    const receta = data.recetas.find((r) => r.producto_id === producto.id && r.activa);
+    if (!receta) continue;
+    const porEtapa = new Map<EtapaReceta, number>();
+    for (const item of data.receta_items) {
+      if (item.receta_id !== receta.id) continue;
+      if (item.etapa === "masa" || item.etapa === "packaging") continue;
+      if (exportaEtapa(producto.linea, item.etapa)) continue;
+      porEtapa.set(item.etapa, (porEtapa.get(item.etapa) ?? 0) + 1);
+    }
+    for (const [etapa, cantidad] of porEtapa) {
+      avisos.push({ producto_id: producto.id, producto: producto.nombre, linea: producto.linea ?? "", etapa, cantidad });
+    }
+  }
+  return avisos;
 }
 
 // --- 4) RESUMEN_REPARTO ----------------------------------------------------------------------------
@@ -508,4 +548,23 @@ export function resumenStockInsumosSheets(data: RicordoDataV2): FilaStockInsumo[
     if (a.tipo !== b.tipo) return a.tipo === "ingrediente" ? -1 : 1;
     return a.insumo.localeCompare(b.insumo);
   });
+}
+
+// --- 7) CUPONES_MES ---------------------------------------------------------------------------
+// Una fila por cada código de cupón / tipo de descuento usado en el mes (lo que manda la web de
+// pedidos) — reusa `calcularCuponesMes` (lib/analitica-ventas.ts), la misma cuenta que ya muestra
+// Ventas → Analítica, para que nunca se desincronicen.
+
+export interface FilaCuponMes {
+  mes: string;
+  cupon_codigo: string;
+  tipo_descuento: string;
+  pedidos: number;
+  total_descuento: number;
+  total_vendido: number;
+}
+
+export function resumenCuponesMesSheets(data: RicordoDataV2, mes: string): FilaCuponMes[] {
+  const { mesCol, desde, hasta } = rangoMes(mes);
+  return calcularCuponesMes(data, desde, hasta).map((c) => ({ mes: mesCol, ...c }));
 }

@@ -4,7 +4,7 @@ import React, { useMemo, useState } from "react";
 import { useStoreV2 } from "@/lib/store-v2";
 import { useToast } from "@/lib/toast";
 import { fARS } from "@/lib/calc-v2";
-import { Button, Card, Field, Input, Select } from "@/components/ui";
+import { Button, Card, Field, Input, Select, Alert } from "@/components/ui";
 import { Modal } from "@/components/Modal";
 import {
   resumenProductosSheets,
@@ -13,10 +13,21 @@ import {
   resumenRepartoSheets,
   resumenPreciosFormatosSheets,
   resumenStockInsumosSheets,
+  resumenCuponesMesSheets,
+  avisosRecetaNoExportada,
   celdaTexto,
   decimalesPorColumna,
   type SeparadorDecimal,
 } from "@/lib/resumen-sheets";
+
+const ETAPA_LABEL: Record<string, string> = {
+  masa: "masa",
+  relleno: "relleno",
+  salsa: "salsa",
+  terminacion: "terminación",
+  armado: "armado",
+  packaging: "packaging",
+};
 
 function mesAnteriorAHoy(): string {
   const hoy = new Date();
@@ -228,6 +239,7 @@ const HEADERS_STOCK_INSUMOS = [
   "valor_stock",
   "fecha_ultimo_conteo",
 ];
+const HEADERS_CUPONES = ["mes", "cupon_codigo", "tipo_descuento", "pedidos", "total_descuento", "total_vendido"];
 
 // cantidad_por_unidad (índice 4) con 5 decimales, stock_actual (índice 7) con 3 — el resto, 2 por default.
 const DECIMALES_RECETAS = decimalesPorColumna(HEADERS_RECETAS.length, { 4: 5, 7: 3 });
@@ -237,6 +249,7 @@ const DECIMALES_PRODUCTOS = decimalesPorColumna(HEADERS_PRODUCTOS.length);
 const DECIMALES_GASTOS = decimalesPorColumna(HEADERS_GASTOS.length);
 const DECIMALES_REPARTO = decimalesPorColumna(HEADERS_REPARTO.length);
 const DECIMALES_PRECIOS_FORMATOS = decimalesPorColumna(HEADERS_PRECIOS_FORMATOS.length);
+const DECIMALES_CUPONES = decimalesPorColumna(HEADERS_CUPONES.length);
 
 export function ResumenSheetsButton() {
   const { data } = useStoreV2();
@@ -252,10 +265,12 @@ export function ResumenSheetsButton() {
   const productos = useMemo(() => (open ? resumenProductosSheets(data, mes) : []), [open, data, mes]);
   const gastos = useMemo(() => (open ? resumenGastosSheets(data, mes) : []), [open, data, mes]);
   const recetas = useMemo(() => (open ? resumenRecetasRellenoSheets(data) : []), [open, data]);
+  const avisosRecetas = useMemo(() => (open ? avisosRecetaNoExportada(data) : []), [open, data]);
   const reparto = useMemo(() => (open ? resumenRepartoSheets(data, mes) : []), [open, data, mes]);
   const preciosFormatos = useMemo(() => (open ? resumenPreciosFormatosSheets(data, mes) : []), [open, data, mes]);
   const stockInsumos = useMemo(() => (open ? resumenStockInsumosSheets(data) : []), [open, data]);
   const totalValorStock = useMemo(() => stockInsumos.reduce((acc, f) => acc + f.valor_stock, 0), [stockInsumos]);
+  const cupones = useMemo(() => (open ? resumenCuponesMesSheets(data, mes) : []), [open, data, mes]);
 
   const filasProductos = useMemo(
     () =>
@@ -325,6 +340,10 @@ export function ResumenSheetsButton() {
       ]),
     [stockInsumos]
   );
+  const filasCupones = useMemo(
+    () => cupones.map((f) => [f.mes, f.cupon_codigo, f.tipo_descuento, f.pedidos, f.total_descuento, f.total_vendido]),
+    [cupones]
+  );
 
   return (
     <>
@@ -361,9 +380,15 @@ export function ResumenSheetsButton() {
           decimales={DECIMALES_GASTOS}
           separador={separador}
         />
+        {avisosRecetas.map((a) => (
+          <Alert key={`${a.producto_id}-${a.etapa}`} kind="warning">
+            {a.producto}: {a.cantidad} ingrediente{a.cantidad === 1 ? "" : "s"} en etapa &ldquo;{ETAPA_LABEL[a.etapa] ?? a.etapa}&rdquo; no se
+            exporta{a.cantidad === 1 ? "" : "n"} porque la línea es {a.linea || "—"}. ¿La línea es correcta?
+          </Alert>
+        ))}
         <TablaResumen
           titulo="RECETAS_RELLENO"
-          ayuda="Receta vigente de cada producto activo — no depende del mes elegido. En Pasta, solo el relleno (la masa se planifica aparte, el packaging no va); en cualquier otra línea (Lasaña, Pizza, Salsa, etc.) toda la receta salvo el packaging. Incluye el stock actual de cada insumo (se arma en tanda mensual, no está en Inventario → Alertas de stock) para planificar la próxima compra/tanda."
+          ayuda="Receta vigente de cada producto activo — no depende del mes elegido. En Pasta, relleno + armado (la masa se planifica aparte, el packaging no va); en cualquier otra línea (Lasaña, Pizza, Salsa, etc.) toda la receta salvo el packaging. Incluye el stock actual de cada insumo (se arma en tanda mensual, no está en Inventario → Alertas de stock) para planificar la próxima compra/tanda."
           headers={HEADERS_RECETAS}
           filas={filasRecetas}
           archivo="recetas_relleno.csv"
@@ -401,6 +426,15 @@ export function ResumenSheetsButton() {
         <p className="mb-2 text-[12.5px] text-text2">
           Valor total de stock de insumos: <span className="font-semibold">{fARS(totalValorStock)}</span>
         </p>
+        <TablaResumen
+          titulo="CUPONES_MES"
+          ayuda="Pedidos del mes con un cupón o tipo de descuento cargado (lo que manda la web de pedidos) — agrupado por código/tipo: cuántos pedidos lo usaron, cuánto se descontó y cuánto se vendió en esos pedidos."
+          headers={HEADERS_CUPONES}
+          filas={filasCupones}
+          archivo={`cupones_${mes}.csv`}
+          decimales={DECIMALES_CUPONES}
+          separador={separador}
+        />
       </Modal>
     </>
   );

@@ -25,7 +25,7 @@ import {
   SearchInput,
 } from "@/components/ui";
 import { Modal } from "@/components/Modal";
-import { fARS, fNum, recetaEfectivaVariante } from "@/lib/calc-v2";
+import { fARS, fNum, recetaEfectivaVariante, deshacerSaldoHistoricoCompra } from "@/lib/calc-v2";
 import type { EstadoPagoCompra } from "@/lib/types-v2";
 import type { Proveedor } from "@/lib/types";
 
@@ -115,6 +115,11 @@ function ComprasTab() {
     setForm({ proveedor_id: "", fecha: new Date().toISOString().slice(0, 10), descripcion: "", estado_pago: "pagado", metodo_pago: "", notas: "", items: [itemCompraVacio()] });
   }
 
+  function deshacerHistorico(compraId: string) {
+    setData((d) => deshacerSaldoHistoricoCompra(d, compraId));
+    toast(`Compra ${compraId} vuelve a estar pendiente de pago`);
+  }
+
   function marcarPagada(compraId: string) {
     setData((d) => {
       const compra = d.compras.find((c) => c.id === compraId);
@@ -172,11 +177,22 @@ function ComprasTab() {
                                 <span className="text-text3">Total:&nbsp;</span>
                                 <span className="font-semibold text-accent">{fARS(c.total)}</span>
                               </span>
-                              <Badge color={c.estado_pago === "pagado" ? "green" : "orange"}>{c.estado_pago}</Badge>
-                              {c.estado_pago === "pendiente" && (
-                                <Button size="sm" onClick={() => marcarPagada(c.id)}>
-                                  Marcar pagada
-                                </Button>
+                              {c.saldo_historico ? (
+                                <>
+                                  <Badge color="blue">Saldado (histórico) el {c.saldado_el}</Badge>
+                                  <Button size="sm" variant="ghost" onClick={() => deshacerHistorico(c.id)}>
+                                    Deshacer
+                                  </Button>
+                                </>
+                              ) : (
+                                <>
+                                  <Badge color={c.estado_pago === "pagado" ? "green" : "orange"}>{c.estado_pago}</Badge>
+                                  {c.estado_pago === "pendiente" && (
+                                    <Button size="sm" onClick={() => marcarPagada(c.id)}>
+                                      Marcar pagada
+                                    </Button>
+                                  )}
+                                </>
                               )}
                             </div>
                           </div>

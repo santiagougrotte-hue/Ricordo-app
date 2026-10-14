@@ -96,7 +96,22 @@ export interface Pedido {
   direccion_entrega_snapshot?: string;
   latitud_entrega?: number;
   longitud_entrega?: number;
+  /** Saldo histórico cerrado a mano (Finanzas → Por cobrar → "Saldar históricos…") — ventas
+   * anteriores al arranque del control de caja (`fecha_saldo_inicial_caja`) que ya se cobraron en
+   * su momento pero nunca se registró el cobro. Cerrarlo NO genera un ingreso de caja (ya se cobró
+   * de verdad, hace tiempo): solo saca el pedido de `calcularCuentasPorCobrar`, para no seguir
+   * mostrando como "pendiente" una deuda que no existe. Reversible con "Deshacer". */
+  saldo_historico?: boolean;
+  saldado_el?: string;
+  /** Código de cupón / tipo de descuento que mandó la web de pedidos (cliente frecuente, cupón
+   * puntual, o cargado a mano) — informativo, para el reporte de descuentos del mes
+   * (Ventas → Analítica y Exportar a Sheets → CUPONES_MES). No reemplaza a `motivo_descuento`
+   * (texto libre): esto es la clave estructurada para agrupar. */
+  cupon_codigo?: string;
+  tipo_descuento?: TipoDescuento;
 }
+
+export type TipoDescuento = "cupon" | "cliente_frecuente" | "manual";
 
 export type OrigenPedido = "web" | "manual";
 
@@ -301,6 +316,10 @@ export interface Compra {
   fecha_vencimiento?: string;
   notas?: string;
   adjunto?: Adjunto;
+  /** Mismo mecanismo que `Pedido.saldo_historico` — compras anteriores al corte de caja que ya se
+   * pagaron en su momento pero nunca se registró el pago. Ver `calcularCuentasPorPagar`. */
+  saldo_historico?: boolean;
+  saldado_el?: string;
 }
 
 export interface Produccion {

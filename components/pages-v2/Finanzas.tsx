@@ -46,6 +46,10 @@ import {
   calcularDineroLibre,
   calcularBalanceGeneral,
   calcularEerrEstructurado,
+  pedidosPendientesAntesDe,
+  saldarPedidosHistoricos,
+  comprasPendientesAntesDe,
+  saldarComprasHistoricas,
 } from "@/lib/calc-v2";
 import type { EerrLinea, CuentaPorCobrar, CuentaPorPagar } from "@/lib/calc-v2";
 import { useRouter } from "@/lib/nav-context";
@@ -1613,9 +1617,39 @@ function CuentasPorCobrarTab() {
   const { toast } = useToast();
   const [cobrando, setCobrando] = useState<CuentaPorCobrar | null>(null);
   const [form, setForm] = useState({ fecha: hoyIso(), monto: 0, metodo_pago: "" });
+  const [saldarAbierto, setSaldarAbierto] = useState(false);
+  const [corteSaldar, setCorteSaldar] = useState(data.configuracion.fecha_saldo_inicial_caja || "2026-09-01");
+  const [excluidos, setExcluidos] = useState<Set<string>>(new Set());
 
   const cuentas = useMemo(() => calcularCuentasPorCobrar(data, hoyIso()), [data]);
   const totalPendiente = cuentas.reduce((acc, c) => acc + c.saldo, 0);
+
+  const historicos = useMemo(() => (saldarAbierto ? pedidosPendientesAntesDe(data, corteSaldar) : []), [saldarAbierto, data, corteSaldar]);
+  const historicosSeleccionados = historicos.filter((h) => !excluidos.has(h.pedido_id));
+  const totalHistoricoSeleccionado = historicosSeleccionados.reduce((acc, h) => acc + h.saldo, 0);
+
+  function abrirSaldarHistoricos() {
+    setCorteSaldar(data.configuracion.fecha_saldo_inicial_caja || "2026-09-01");
+    setExcluidos(new Set());
+    setSaldarAbierto(true);
+  }
+  function toggleExcluido(pedidoId: string) {
+    setExcluidos((prev) => {
+      const next = new Set(prev);
+      if (next.has(pedidoId)) next.delete(pedidoId);
+      else next.add(pedidoId);
+      return next;
+    });
+  }
+  function confirmarSaldarHistoricos() {
+    const ids = historicosSeleccionados.map((h) => h.pedido_id);
+    if (ids.length === 0) return;
+    if (!confirm(`¿Saldar ${ids.length} pedido(s) por ${fARS(totalHistoricoSeleccionado)}? No se registra ningún cobro nuevo en caja — se asume que esa plata ya se cobró en su momento, antes de controlar la caja en la app.`))
+      return;
+    setData((d) => saldarPedidosHistoricos(d, ids, hoyIso()));
+    toast(`${ids.length} pedido(s) saldado(s) como histórico — no se tocó la caja`);
+    setSaldarAbierto(false);
+  }
 
   function abrirCobro(c: CuentaPorCobrar) {
     setCobrando(c);
@@ -1664,6 +1698,11 @@ function CuentasPorCobrarTab() {
         <KpiCard label="Total por cobrar" value={fARS(totalPendiente)} color={totalPendiente > 0 ? "orange" : "green"} />
         <KpiCard label="Cuentas abiertas" value={fNum(cuentas.length, 0)} color="blue" />
       </StatGrid>
+      <div className="mb-3 flex justify-end">
+        <Button variant="ghost" onClick={abrirSaldarHistoricos}>
+          Saldar históricos…
+        </Button>
+      </div>
       <Card>
         {cuentas.length === 0 ? (
           <EmptyState text="No hay cuentas por cobrar abiertas." />
@@ -1737,6 +1776,62 @@ function CuentasPorCobrarTab() {
           </FormGrid>
         )}
       </Modal>
+
+      <Modal
+        open={saldarAbierto}
+        onClose={() => setSaldarAbierto(false)}
+        title="Saldar históricos"
+        wide
+        footer={
+          <>
+            <Button variant="ghost" onClick={() => setSaldarAbierto(false)}>
+              Cancelar
+            </Button>
+            <Button onClick={confirmarSaldarHistoricos} disabled={historicosSeleccionados.length === 0}>
+              Saldar {historicosSeleccionados.length} pedido{historicosSeleccionados.length === 1 ? "" : "s"} ({fARS(totalHistoricoSeleccionado)})
+            </Button>
+          </>
+        }
+      >
+        <p className="mb-3 text-[12.5px] text-text3">
+          Ventas anteriores a la fecha de corte que ya cobraste en su momento pero nunca se registró el cobro. Saldarlas
+          las saca de esta lista — no genera ningún ingreso de caja (esa plata no entra de nuevo ahora, ya entró hace
+          tiempo). Destildá las que de verdad todavía te deban.
+        </p>
+        <Field label="Fecha de corte" full>
+          <Input type="date" value={corteSaldar} onChange={(e) => setCorteSaldar(e.target.value)} className="w-40" />
+        </Field>
+        {historicos.length === 0 ? (
+          <EmptyState text="No hay pedidos con saldo pendiente anteriores a esa fecha." />
+        ) : (
+          <TableWrap>
+            <table className="w-full">
+              <thead>
+                <tr>
+                  <Th></Th>
+                  <Th>Cliente</Th>
+                  <Th>Pedido</Th>
+                  <Th>Fecha</Th>
+                  <Th>Saldo</Th>
+                </tr>
+              </thead>
+              <tbody>
+                {historicos.map((h) => (
+                  <TrHover key={h.pedido_id}>
+                    <Td>
+                      <input type="checkbox" checked={!excluidos.has(h.pedido_id)} onChange={() => toggleExcluido(h.pedido_id)} />
+                    </Td>
+                    <Td main>{data.clientes.find((cl) => cl.id === h.cliente_id)?.nombre ?? "—"}</Td>
+                    <Td>{h.pedido_id}</Td>
+                    <Td>{h.fecha}</Td>
+                    <Td className="text-orange">{fARS(h.saldo)}</Td>
+                  </TrHover>
+                ))}
+              </tbody>
+            </table>
+          </TableWrap>
+        )}
+      </Modal>
     </div>
   );
 }
@@ -1746,9 +1841,39 @@ function CuentasPorPagarTab() {
   const { toast } = useToast();
   const [pagando, setPagando] = useState<CuentaPorPagar | null>(null);
   const [form, setForm] = useState({ fecha: hoyIso(), monto: 0, metodo_pago: "" });
+  const [saldarAbierto, setSaldarAbierto] = useState(false);
+  const [corteSaldar, setCorteSaldar] = useState(data.configuracion.fecha_saldo_inicial_caja || "2026-09-01");
+  const [excluidos, setExcluidos] = useState<Set<string>>(new Set());
 
   const cuentas = useMemo(() => calcularCuentasPorPagar(data, hoyIso()), [data]);
   const totalPendiente = cuentas.reduce((acc, c) => acc + c.saldo, 0);
+
+  const historicos = useMemo(() => (saldarAbierto ? comprasPendientesAntesDe(data, corteSaldar) : []), [saldarAbierto, data, corteSaldar]);
+  const historicosSeleccionados = historicos.filter((h) => !excluidos.has(h.compra_id));
+  const totalHistoricoSeleccionado = historicosSeleccionados.reduce((acc, h) => acc + h.saldo, 0);
+
+  function abrirSaldarHistoricos() {
+    setCorteSaldar(data.configuracion.fecha_saldo_inicial_caja || "2026-09-01");
+    setExcluidos(new Set());
+    setSaldarAbierto(true);
+  }
+  function toggleExcluido(compraId: string) {
+    setExcluidos((prev) => {
+      const next = new Set(prev);
+      if (next.has(compraId)) next.delete(compraId);
+      else next.add(compraId);
+      return next;
+    });
+  }
+  function confirmarSaldarHistoricos() {
+    const ids = historicosSeleccionados.map((h) => h.compra_id);
+    if (ids.length === 0) return;
+    if (!confirm(`¿Saldar ${ids.length} compra(s) por ${fARS(totalHistoricoSeleccionado)}? No se registra ningún pago nuevo en caja — se asume que esa plata ya se pagó en su momento, antes de controlar la caja en la app.`))
+      return;
+    setData((d) => saldarComprasHistoricas(d, ids, hoyIso()));
+    toast(`${ids.length} compra(s) saldada(s) como histórico — no se tocó la caja`);
+    setSaldarAbierto(false);
+  }
 
   function abrirPago(c: CuentaPorPagar) {
     setPagando(c);
@@ -1796,6 +1921,11 @@ function CuentasPorPagarTab() {
         <KpiCard label="Total por pagar" value={fARS(totalPendiente)} color={totalPendiente > 0 ? "orange" : "green"} />
         <KpiCard label="Cuentas abiertas" value={fNum(cuentas.length, 0)} color="blue" />
       </StatGrid>
+      <div className="mb-3 flex justify-end">
+        <Button variant="ghost" onClick={abrirSaldarHistoricos}>
+          Saldar históricos…
+        </Button>
+      </div>
       <Card>
         {cuentas.length === 0 ? (
           <EmptyState text="No hay cuentas por pagar abiertas." />
@@ -1867,6 +1997,62 @@ function CuentasPorPagarTab() {
               <Input value={form.metodo_pago} onChange={(e) => setForm({ ...form, metodo_pago: e.target.value })} />
             </Field>
           </FormGrid>
+        )}
+      </Modal>
+
+      <Modal
+        open={saldarAbierto}
+        onClose={() => setSaldarAbierto(false)}
+        title="Saldar históricos"
+        wide
+        footer={
+          <>
+            <Button variant="ghost" onClick={() => setSaldarAbierto(false)}>
+              Cancelar
+            </Button>
+            <Button onClick={confirmarSaldarHistoricos} disabled={historicosSeleccionados.length === 0}>
+              Saldar {historicosSeleccionados.length} compra{historicosSeleccionados.length === 1 ? "" : "s"} ({fARS(totalHistoricoSeleccionado)})
+            </Button>
+          </>
+        }
+      >
+        <p className="mb-3 text-[12.5px] text-text3">
+          Compras anteriores a la fecha de corte que ya pagaste en su momento pero nunca se registró el pago. Saldarlas
+          las saca de esta lista — no genera ningún egreso de caja (esa plata no sale de nuevo ahora, ya salió hace
+          tiempo). Destildá las que de verdad todavía debas.
+        </p>
+        <Field label="Fecha de corte" full>
+          <Input type="date" value={corteSaldar} onChange={(e) => setCorteSaldar(e.target.value)} className="w-40" />
+        </Field>
+        {historicos.length === 0 ? (
+          <EmptyState text="No hay compras con saldo pendiente anteriores a esa fecha." />
+        ) : (
+          <TableWrap>
+            <table className="w-full">
+              <thead>
+                <tr>
+                  <Th></Th>
+                  <Th>Proveedor</Th>
+                  <Th>Compra</Th>
+                  <Th>Fecha</Th>
+                  <Th>Saldo</Th>
+                </tr>
+              </thead>
+              <tbody>
+                {historicos.map((h) => (
+                  <TrHover key={h.compra_id}>
+                    <Td>
+                      <input type="checkbox" checked={!excluidos.has(h.compra_id)} onChange={() => toggleExcluido(h.compra_id)} />
+                    </Td>
+                    <Td main>{data.proveedores.find((p) => p.id === h.proveedor_id)?.nombre ?? "—"}</Td>
+                    <Td>{h.compra_id}</Td>
+                    <Td>{h.fecha}</Td>
+                    <Td className="text-orange">{fARS(h.saldo)}</Td>
+                  </TrHover>
+                ))}
+              </tbody>
+            </table>
+          </TableWrap>
         )}
       </Modal>
     </div>
