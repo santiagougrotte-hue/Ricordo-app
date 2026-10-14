@@ -50,6 +50,8 @@ export interface AdminOrder {
   /** Promo aplicada (ej. Día de la Madre) y regalos que lleva. */
   promoName?: string | null;
   giftCount?: number;
+  couponCode?: string | null;
+  discountReason?: string | null;
   shippingCost: number;
   total: number;
   paymentMethod: PaymentMethod | 'mercadopago';
@@ -85,6 +87,9 @@ export interface ProductDraft {
   /** Entra en las promos por cajas (Día de la Madre). */
   promoEligible: boolean;
 }
+
+export type { Coupon, CouponUse } from '../coupons';
+export type CouponDraft = Omit<import('../coupons').Coupon, 'id' | 'uses' | 'createdAt' | 'totalDiscounted'> & { id?: number };
 
 export type OrderEvent = { type: 'insert' | 'update'; order: AdminOrder };
 
@@ -123,6 +128,9 @@ export interface AdminApi {
   saveShippingConfig(c: ShippingConfig): Promise<void>;
 
   getSettings(): Promise<AdminSettings>;
+  listCoupons(): Promise<import('../coupons').Coupon[]>;
+  saveCoupon(c: CouponDraft): Promise<number>;
+  couponUses(id: number): Promise<import('../coupons').CouponUse[]>;
   saveSettings(s: AdminSettings): Promise<void>;
   /** Manda un WhatsApp de prueba al número de avisos. Devuelve el resultado legible. */
   testWhatsapp(): Promise<string>;

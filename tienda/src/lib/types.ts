@@ -146,7 +146,14 @@ export interface OrderInput {
   flexibleDelivery: boolean;
   items: CartLine[];
   turnstileToken?: string;
+  /** Código de cupón (el descuento lo calcula y valida el servidor). */
+  couponCode?: string;
 }
+
+/** Resultado de validar un cupón (lo calcula el servidor con los precios de la base). */
+export type CouponCheck =
+  | { ok: true; code: string; type: 'porcentaje' | 'monto'; value: number; minPurchase: number | null; discount: number }
+  | { ok: false; message: string };
 
 export interface OrderReceipt {
   orderId: string;
@@ -166,6 +173,9 @@ export interface OrderReceipt {
   customerName: string;
   /** Nombre de la promo aplicada (el descuento es sobre el total de los productos). */
   promoName?: string | null;
+  /** Motivo del descuento que quedó ("Cupón VUELVE10", "Promo Día de la Madre"…). */
+  discountReason?: string | null;
+  couponCode?: string | null;
   /** Datos para el resumen de WhatsApp (los del propio cliente, nunca de otro). */
   createdAt?: string;
   customerPhone?: string;
@@ -192,6 +202,7 @@ export type OrderError =
   | { code: 'RC004'; message: string }
   | { code: 'RC005'; message: string }
   | { code: 'RC006'; message: string }
+  | { code: 'RC007'; message: string }
   | { code: 'NETWORK'; message: string }
   | { code: 'CAPTCHA'; message: string };
 

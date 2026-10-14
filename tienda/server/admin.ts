@@ -4,6 +4,7 @@ import type { Query } from './db';
 import type { MediaStore } from './media';
 import { allow, clearCookie, ipHash, json, readCookie, sameText, sessionCookie, signSession, verifySession } from './http';
 import { mapLocality, mapProduct, mapPromo, mapSettings, mapZone, PRODUCTS_SQL, PROMO_SQL } from './catalog';
+import { COUPONS_SQL, mapCoupon, parseCoupon } from './coupons';
 import { loadBands, mapShippingConfig } from './distance';
 import { sendWhatsapp } from './createOrder';
 import { sendPush, validSubscription, vapidKeys } from './push';
@@ -51,7 +52,7 @@ export function mapOrder(r: Row) {
     km: r.km_round_trip === null ? null : Number(r.km_round_trip), distancePriced: r.distance_priced,
     lat: r.lat === null ? null : Number(r.lat), lng: r.lng === null ? null : Number(r.lng),
     deliveryDate: day(r.delivery_date), deliveredOn: day(r.delivered_on), flexibleDelivery: r.flexible_delivery, windowLabel: r.delivery_window_label,
-    notes: r.notes, subtotal: r.subtotal, discount: r.discount, discountPct: r.discount_pct, promoName: r.promo_name ?? null, giftCount: r.gift_count ?? 0, shippingCost: r.shipping_cost, total: r.total, paymentMethod: r.payment_method,
+    notes: r.notes, subtotal: r.subtotal, discount: r.discount, discountPct: r.discount_pct, promoName: r.promo_name ?? null, giftCount: r.gift_count ?? 0, couponCode: r.coupon_code ?? null, discountReason: r.discount_reason ?? null, shippingCost: r.shipping_cost, total: r.total, paymentMethod: r.payment_method,
     paymentStatus: r.payment_status, status: r.status,
     items: (r.items as Row[]).map((i) => ({ productId: i.product_id, productName: i.product_name, quantity: i.quantity, unitPrice: i.unit_price })),
   };
@@ -369,6 +370,35 @@ export async function handleAdmin(req: Request, path: string, env: AdminEnv, dep
   }
 
   // ── Ajustes ──
+  // ── Cupones ──
+  if (path === 'coupons' && method === 'GET') {
+    return json({ coupons: (await q(`${COUPONS_SQL} order by c.activo desc, c.creado_el desc`)).map(mapCoupon) });
+  }
+  if (path === 'coupons' && method === 'POST') {
+    const d = await body();
+    const vals = parseCoupon(d);
+    if (typeof vals === 'string') return bad(vals);
+    try {
+      if (d.id != null) {
+        if (!Number.isInteger(d.id)) return bad('Cupón inválido');
+        const r = await q(`update cupones set codigo=$2, tipo=$3, valor=$4, compra_minima=$5, vence_el=$6, usos_maximos=$7, un_uso_por_cliente=$8,
+                             cliente_telefono=normalize_ar_phone($9), activo=$10 where id=$1 returning id`, [d.id, ...vals]);
+        if (!r.length) return bad('Cupón inexistente', 404);
+        return json({ id: d.id });
+      }
+      const [r] = await q<{ id: string }>(`insert into cupones (codigo, tipo, valor, compra_minima, vence_el, usos_maximos, un_uso_por_cliente, cliente_telefono, activo)
+                                         values ($1,$2,$3,$4,$5,$6,$7,normalize_ar_phone($8),$9) returning id`, vals);
+      return json({ id: Number(r.id) });
+    } catch (e) {
+      return bad(/unique|duplicate/i.test((e as Error).message) ? 'Ya hay un cupón con ese código.' : (e as Error).message, 409);
+    }
+  }
+  if (seg[0] === 'coupons' && /^\d+$/.test(seg[1] ?? '') && seg[2] === 'uses' && method === 'GET') {
+    const rows = await q<Row>(`select u.fecha, u.cliente_telefono, u.monto_descontado, o.number, o.customer_name, o.total
+                          from cupones_usos u join orders o on o.id = u.pedido_id where u.cupon_id = $1 order by u.fecha desc limit 200`, [Number(seg[1])]);
+    return json({ uses: rows.map((r) => ({ date: new Date(r.fecha).toISOString(), phone: r.cliente_telefono, discount: r.monto_descontado, orderNumber: Number(r.number), customerName: r.customer_name, total: r.total })) });
+  }
+
   if (path === 'settings' && method === 'GET') {
     const [[s], [promo]] = await Promise.all([q(`select * from store_settings limit 1`), q(PROMO_SQL)]);
     return json({ settings: { ...mapSettings(s), notifyEmail: s.notify_email ?? '', promo: promo ? mapPromo(promo) : null } });

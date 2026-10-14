@@ -3,7 +3,7 @@ import { Link, useNavigate } from 'react-router-dom';
 import { useStore } from '../state/store';
 import { api } from '../lib/api';
 import { money } from '../lib/money';
-import { cartMessage, discountLabel, findZone, quote } from '../lib/shipping';
+import { cartMessage, discountLabel, findZone, quote, withCoupon, type AppliedCoupon } from '../lib/shipping';
 import { deliverySentence } from '../lib/delivery';
 import { whatsappLink } from '../lib/whatsapp';
 import type { OrderError, PaymentMethod } from '../lib/types';
@@ -40,6 +40,11 @@ export function Checkout() {
   const [sending, setSending] = useState(false);
   const [token, setToken] = useState<string | null>(null);
   const captcha = useRef<TurnstileHandle>(null);
+  // Cupón: lo valida el servidor; acá solo se muestra el descuento (el pedido lo vuelve a validar).
+  const [couponInput, setCouponInput] = useState('');
+  const [coupon, setCoupon] = useState<AppliedCoupon | null>(null);
+  const [couponMsg, setCouponMsg] = useState<{ ok: boolean; text: string } | null>(null);
+  const [couponBusy, setCouponBusy] = useState(false);
 
   // La localidad define la zona: mínimo, envío, descuento y fecha se recalculan en vivo.
   const lookup = useMemo(() => findZone(zones, localities, localityChoice), [zones, localities, localityChoice]);
@@ -48,7 +53,21 @@ export function Checkout() {
 
   // El envío sale de la localidad (km y peaje cargados en el panel).
   const distanceCost = distance.cost;
-  const q = settings ? quote(method, lookup, totals, settings, distanceCost) : null;
+  const q = settings ? withCoupon(quote(method, lookup, totals, settings, distanceCost), totals, coupon) : null;
+
+  async function applyCoupon() {
+    const code = couponInput.trim().toUpperCase();
+    if (!code) return setCouponMsg({ ok: false, text: 'Escribí el código del cupón.' });
+    setCouponBusy(true);
+    const r = await api.checkCoupon(code, f.phone, items.map((i) => ({ productId: i.product.id, quantity: i.quantity })));
+    setCouponBusy(false);
+    if (!r.ok) {
+      setCoupon(null);
+      return setCouponMsg({ ok: false, text: r.message });
+    }
+    setCoupon({ code: r.code, type: r.type, value: r.value, minPurchase: r.minPurchase });
+    setCouponMsg({ ok: true, text: `Cupón ${r.code}: ${r.type === 'porcentaje' ? `${r.value}% off` : `${money(r.value)} off`} en tus productos.` });
+  }
 
   // Precarga la confirmación: si no, el router muestra el checkout vacío mientras baja ese código.
   useEffect(() => {
@@ -96,6 +115,10 @@ export function Checkout() {
       }
       case 'RC002': return 'Todavía no llegamos a tu zona, escribinos por WhatsApp. También podés elegir retiro en Berazategui.';
       case 'RC003': return `Sumá ${cajas(err.missing)} más: el mínimo es de ${cajas(err.minBoxes)}.`;
+      case 'RC007':
+        setCoupon(null);
+        setCouponMsg({ ok: false, text: err.message });
+        return `No pudimos aplicar el cupón: ${err.message} Lo sacamos del pedido; si querés, confirmá sin él.`;
       case 'CAPTCHA': return 'No pudimos verificar que no sos un robot. Recargá la página y probá de nuevo.';
       case 'NETWORK': return err.message;
       default: return err.message && err.code === 'RC004' && /localidad|Teléfono|dirección/i.test(err.message)
@@ -140,6 +163,7 @@ export function Checkout() {
       notes: f.notes, paymentMethod: f.payment as PaymentMethod, flexibleDelivery: delivery && f.flexible,
       items: items.map((i) => ({ productId: i.product.id, quantity: i.quantity })),
       turnstileToken: token ?? undefined,
+      couponCode: q?.couponCode ?? undefined,
     });
     setSending(false);
     if (!res.ok) {
@@ -254,9 +278,25 @@ export function Checkout() {
                   <li key={product.id}><span>{quantity} × {product.name}</span><span>{money(product.price * quantity)}</span></li>
                 ))}
               </ul>
+              <div className="coupon">
+                <label className="field-label" htmlFor="f-coupon">¿Tenés un cupón?</label>
+                <div className="coupon-row">
+                  <input id="f-coupon" className="input" autoComplete="off" autoCapitalize="characters" spellCheck={false} maxLength={30}
+                    value={couponInput} onChange={(e) => { setCouponInput(e.target.value.toUpperCase()); if (couponMsg && !coupon) setCouponMsg(null); }}
+                    onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); void applyCoupon(); } }}
+                    aria-describedby={couponMsg ? 'coupon-msg' : undefined} />
+                  {coupon ? (
+                    <button type="button" className="btn btn-line" onClick={() => { setCoupon(null); setCouponInput(''); setCouponMsg(null); }}>Quitar</button>
+                  ) : (
+                    <button type="button" className="btn btn-line" disabled={couponBusy} onClick={() => void applyCoupon()}>{couponBusy ? 'Revisando…' : 'Aplicar'}</button>
+                  )}
+                </div>
+                {couponMsg && <p id="coupon-msg" className={couponMsg.ok ? 'field-hint' : 'field-error'} role="status">{couponMsg.text}</p>}
+                {q?.couponNote && <p className="small">{q.couponNote}</p>}
+              </div>
               <dl className="totals">
                 <div><dt>Subtotal</dt><dd>{money(subtotal)}</dd></div>
-                {q && q.discount > 0 && <div className="discount"><dt>{discountLabel(q.discountPct, q.discountBoxes, q.promoName)}</dt><dd>−{money(q.discount)}</dd></div>}
+                {q && q.discount > 0 && <div className="discount"><dt>{discountLabel(q.discountPct, q.discountBoxes, q.promoName, q.couponCode)}</dt><dd>−{money(q.discount)}</dd></div>}
                 <div>
                   <dt>{method === 'pickup' ? 'Retiro' : zone ? `Envío a ${zone.name}` : 'Envío'}</dt>
                   <dd>{!q || q.shippingCost === null ? '—' : q.shippingCost === 0 ? 'Gratis' : `${q.shippingEstimated ? 'aprox. ' : ''}${money(q.shippingCost)}`}</dd>

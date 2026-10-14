@@ -102,6 +102,37 @@ export interface Quote {
   promoNext: { missing: number; tier: PromoTier } | null;
   /** Hay productos con precio especial propio que no entran en la promo (lasaña de lanzamiento). */
   promoExcluded: boolean;
+  /** Cupón que quedó aplicado (null si no hay o si ganó otro descuento). */
+  couponCode: string | null;
+  /** Aviso sobre el cupón: por qué no se aplicó o qué descuento quedó. */
+  couponNote: string | null;
+}
+
+/** Cupón validado por el servidor; el carrito lo recalcula con los cambios (el pedido lo vuelve a validar). */
+export interface AppliedCoupon { code: string; type: 'porcentaje' | 'monto'; value: number; minPurchase: number | null }
+
+/**
+ * Igual que create_order: el cupón va sobre el subtotal de productos sin envío (sin los de precio especial)
+ * y no se suma a la promo ni al descuento por cajas: queda el mayor.
+ */
+export function withCoupon(q: Quote, cart: CartTotals, c: AppliedCoupon | null): Quote {
+  if (!c) return q;
+  if (c.minPurchase !== null && cart.subtotal < c.minPurchase) {
+    return { ...q, couponNote: `El cupón ${c.code} es para compras desde ${money(c.minPurchase)}.` };
+  }
+  const discount = c.type === 'porcentaje' ? Math.round((cart.promoSubtotal * c.value) / 100) : Math.min(c.value, cart.promoSubtotal);
+  if (discount <= 0) return { ...q, couponNote: `El cupón ${c.code} no aplica a los productos con precio especial.` };
+  if (discount <= q.discount) {
+    const other = q.promoName ? `la promo ${q.promoName}` : 'el descuento por cajas extra';
+    return { ...q, couponNote: `Los descuentos no se suman: quedó ${other} (tu cupón no es mayor).` };
+  }
+  return {
+    ...q, discount, discountPct: c.type === 'porcentaje' ? c.value : 0, discountBoxes: 0, discountMax: 0,
+    missingForNextDiscount: null, nextDiscountPct: null, promoName: null, promoGifts: 0, promoNext: null,
+    couponCode: c.code,
+    couponNote: q.discount > 0 ? `Los descuentos no se suman: quedó tu cupón, que es mayor.` : null,
+    total: q.shippingCost === null ? null : cart.subtotal - discount + q.shippingCost,
+  };
 }
 
 /** La promo está vigente ahora (prendida y dentro de sus fechas). */
@@ -169,7 +200,7 @@ function baseQuote(method: DeliveryMethod, lookup: ZoneLookup, cart: CartTotals,
   const pickupOk = settings.pickupEnabled && boxes >= settings.pickupMinBoxes && boxes > 0;
   const base = {
     method, boxes, nextBoxShipping: null, discountPct: 0, discount: 0, discountBoxes: 0, discountMax: 0, missingForNextDiscount: null, nextDiscountPct: null, suggestPickup: false,
-    freeFromBoxes: null, missingForFree: null, shippingEstimated: false, promoName: null, promoGifts: 0, promoNext: null, promoExcluded: false,
+    freeFromBoxes: null, missingForFree: null, shippingEstimated: false, promoName: null, promoGifts: 0, promoNext: null, promoExcluded: false, couponCode: null, couponNote: null,
   };
   if (method === 'pickup') {
     const missing = Math.max(settings.pickupMinBoxes - boxes, 0);
@@ -267,8 +298,8 @@ export function cartMessage(q: Quote, lookup: ZoneLookup): string {
 }
 
 /** Texto del renglón de descuento: aclara que va solo sobre las cajas extra (o es la promo, sobre el total). */
-export const discountLabel = (pct: number, extraBoxes?: number, promoName?: string | null) =>
-  promoName ? `Promo ${promoName} ${pct}%` : extraBoxes ? `Descuento ${pct}% en ${extraBoxes === 1 ? '1 caja extra' : `${extraBoxes} cajas extra`}` : `Descuento ${pct}% en cajas extra`;
+export const discountLabel = (pct: number, extraBoxes?: number, promoName?: string | null, couponCode?: string | null) =>
+  couponCode ? `Cupón ${couponCode}${pct ? ` ${pct}%` : ''}` : promoName ? `Promo ${promoName} ${pct}%` : extraBoxes ? `Descuento ${pct}% en ${extraBoxes === 1 ? '1 caja extra' : `${extraBoxes} cajas extra`}` : `Descuento ${pct}% en cajas extra`;
 
 /** Cantidad de cajas desde la que se llega al tope de descuento (null si la zona no tiene descuento). */
 export function maxDiscountAt(z: Pick<ShippingZone, 'freeFromBoxes' | 'discountPerBox' | 'discountMax'>): number | null {

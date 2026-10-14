@@ -3,8 +3,9 @@
 import type { Locality, Product, ShippingZone, StoreSettings } from '../types';
 import { EXAMPLE_IDS, SEED_LOCALITIES, SEED_PRODUCTS, SEED_SETTINGS, SEED_ZONES } from './seed-data';
 import type { AdminOrder, AdminSettings, ShippingConfig } from './adminTypes';
+import type { Coupon, CouponUse } from '../coupons';
 
-const KEY = 'ricordo-demo-db-v23';
+const KEY = 'ricordo-demo-db-v24';
 const CHANNEL = 'ricordo-demo';
 
 export interface DemoDb {
@@ -17,6 +18,8 @@ export interface DemoDb {
   nextNumber: number;
   /** Productos desactivados (la tienda no los muestra). */
   inactive: string[];
+  coupons: Coupon[];
+  couponUses: CouponUse[];
 }
 
 function fresh(): DemoDb {
@@ -31,6 +34,10 @@ function fresh(): DemoDb {
     orders: [],
     nextNumber: 1001,
     inactive: [],
+    // Cupón de ejemplo para probar el checkout en la demo.
+    coupons: [{ id: 1, code: 'PRUEBA10', type: 'porcentaje', value: 10, minPurchase: null, expiresOn: null, maxUses: null, uses: 0,
+      onePerCustomer: true, customerPhone: null, active: true, createdAt: new Date().toISOString(), totalDiscounted: 0 }],
+    couponUses: [],
   };
 }
 

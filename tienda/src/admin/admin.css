@@ -173,3 +173,8 @@
 
 .adm-danger { color: var(--color-error); justify-self: start; }
 .adm-num { width: 6.5rem; }
+
+/* Cupones: la fila es un botón (abre la edición) */
+.adm-coupon { width: 100%; grid-template-columns: 1fr auto; text-align: left; cursor: pointer; font: inherit; color: inherit; }
+.adm-coupon small { display: block; color: var(--color-text-muted); }
+.adm-coupon-form .adm-grid2, .adm-coupon-form .adm-grid3 { align-items: start; }

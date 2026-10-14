@@ -4,6 +4,7 @@ import { cartTotals, discountAmount, discountPct, extraBoxes, findZone, promoAct
 import { normalizePostalCode } from '../postal';
 import { deliveryDateFor, deliveryLabel } from '../delivery';
 import { readDb, writeDb } from './demoDb';
+import { evaluateCoupon, normalizePhone } from '../coupons';
 import type { AdminOrder } from './adminTypes';
 import type { StoreSettings } from '../types';
 
@@ -49,6 +50,15 @@ export function createDemoApi(): StoreApi {
     },
     async getSettings() {
       return publicSettings(readDb());
+    },
+    async checkCoupon(code, phone, items) {
+      await wait(250);
+      const db = readDb();
+      const byId = new Map(db.products.filter((p) => !db.inactive.includes(p.id)).map((p) => [p.id, p]));
+      const totals = cartTotals(items.filter((i) => byId.has(i.productId)).map((i) => ({ product: byId.get(i.productId)!, quantity: i.quantity })));
+      const c = db.coupons.find((x) => x.code === code.trim().toUpperCase());
+      const ev = evaluateCoupon(c, phone, totals.subtotal, totals.promoSubtotal, db.couponUses);
+      return 'message' in ev ? { ok: false, message: ev.message } : { ok: true, code: c!.code, type: c!.type, value: c!.value, minPurchase: c!.minPurchase, discount: ev.discount };
     },
     async createOrder(input: OrderInput): Promise<OrderResult> {
       await wait(600);
@@ -114,6 +124,18 @@ export function createDemoApi(): StoreApi {
           gifts = promo.giftProductId && db.products.some((x) => x.id === promo.giftProductId) ? tier.gifts : 0;
         }
       }
+      // Cupón (igual que create_order): se vuelve a validar y queda el mayor descuento.
+      let reason: string | null = discount > 0 ? (promoName ? `Promo ${promoName}` : 'Descuento por cajas extra') : null;
+      let couponCode: string | null = null;
+      const coupon = input.couponCode ? db.coupons.find((c) => c.code === input.couponCode!.trim().toUpperCase()) : undefined;
+      if (input.couponCode) {
+        const ev = evaluateCoupon(coupon, phone, subtotal, totals.promoSubtotal, db.couponUses);
+        if ('message' in ev) return { ok: false, error: { code: 'RC007', message: ev.message } };
+        if (ev.discount > discount) {
+          discount = ev.discount; pct = coupon!.type === 'porcentaje' ? coupon!.value : 0;
+          promoName = null; gifts = 0; couponCode = coupon!.code; reason = `Cupón ${coupon!.code}`;
+        }
+      }
       const gift = gifts ? db.products.find((x) => x.id === promo!.giftProductId)! : null;
 
       for (const [id, q] of merged) db.products.find((x) => x.id === id)!.stock -= q;
@@ -143,6 +165,8 @@ export function createDemoApi(): StoreApi {
         discountPct: pct,
         promoName,
         giftCount: gifts,
+        couponCode,
+        discountReason: reason,
         shippingCost: shipping,
         total: subtotal - discount + shipping,
         paymentMethod: input.paymentMethod,
@@ -154,6 +178,10 @@ export function createDemoApi(): StoreApi {
         ],
       };
       db.orders.push(order);
+      if (couponCode) {
+        db.couponUses.push({ couponId: coupon!.id, date: order.createdAt, phone: normalizePhone(phone), discount, orderNumber: number, customerName: order.customerName, total: order.total });
+        coupon!.uses += 1;
+      }
       db.nextNumber = number + 1;
       writeDb(db, { type: 'order-insert', order });
 
@@ -164,7 +192,7 @@ export function createDemoApi(): StoreApi {
           deliveryMethod: order.deliveryMethod, deliveryDate: date, windowLabel: label, locality, paymentMethod: input.paymentMethod, customerName: order.customerName,
           lines: order.items.map((i) => ({ name: i.productName, quantity: i.quantity, unitPrice: i.unitPrice })),
           createdAt: order.createdAt, customerPhone: phone, address: order.address, postalCode: cp, notes: order.notes,
-          flexibleDelivery: order.flexibleDelivery, promoName,
+          flexibleDelivery: order.flexibleDelivery, promoName, discountReason: reason, couponCode,
         },
       };
     },

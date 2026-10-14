@@ -1,5 +1,5 @@
 import type { StoreApi } from './types';
-import type { AddressSuggestion, DistanceQuote, Locality, OrderResult, Product, ShippingZone, StoreSettings } from '../types';
+import type { AddressSuggestion, CouponCheck, DistanceQuote, Locality, OrderResult, Product, ShippingZone, StoreSettings } from '../types';
 
 interface Catalog { products: Product[]; zones: ShippingZone[]; localities: Locality[]; settings: StoreSettings }
 
@@ -53,6 +53,14 @@ export function createNetlifyApi(): StoreApi {
         return (await res.json()) as OrderResult;
       } catch {
         return { ok: false, error: { code: 'NETWORK', message: 'No pudimos conectarnos. Revisá tu conexión y probá de nuevo.' } };
+      }
+    },
+    async checkCoupon(code, phone, items): Promise<CouponCheck> {
+      try {
+        const res = await fetch('/api/coupon', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ code, phone, items }) });
+        return (await res.json()) as CouponCheck;
+      } catch {
+        return { ok: false, message: 'No pudimos revisar el cupón. Revisá tu conexión y probá de nuevo.' };
       }
     },
   };

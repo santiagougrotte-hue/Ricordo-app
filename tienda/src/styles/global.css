@@ -413,6 +413,11 @@ textarea.input { resize: vertical; }
 .foot-link { display: inline-flex; gap: var(--space-2); align-items: center; min-height: var(--tap-min); }
 .foot-small { margin-top: var(--space-10); font-size: var(--text-caption); color: var(--color-text-muted); }
 
+/* ── Cupón (checkout) */
+.coupon { display: grid; gap: var(--space-1); margin: var(--space-3) 0; }
+.coupon-row { display: flex; gap: var(--space-2); }
+.coupon-row .input { flex: 1; min-width: 0; text-transform: uppercase; letter-spacing: 0.04em; }
+
 /* ── Lanzamiento (lasaña) ─────────────────────────────── */
 .launch { display: grid; gap: var(--space-8); align-items: center; margin-block: var(--space-12); }
 .launch-media { display: grid; grid-template-columns: 1fr 1fr; gap: var(--space-4); align-items: start; }

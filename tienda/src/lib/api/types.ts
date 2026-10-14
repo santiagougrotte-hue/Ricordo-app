@@ -1,4 +1,4 @@
-import type { AddressSuggestion, DistanceQuote, Locality, OrderInput, OrderResult, Product, ShippingZone, StoreSettings } from '../types';
+import type { AddressSuggestion, CouponCheck, DistanceQuote, Locality, OrderInput, OrderResult, Product, ShippingZone, StoreSettings } from '../types';
 
 export interface StoreApi {
   mode: 'demo' | 'live';
@@ -11,4 +11,6 @@ export interface StoreApi {
   searchAddress(text: string): Promise<AddressSuggestion[]>;
   getSettings(): Promise<StoreSettings>;
   createOrder(input: OrderInput): Promise<OrderResult>;
+  /** Valida un cupón con el carrito y el teléfono (lo decide el servidor). */
+  checkCoupon(code: string, phone: string, items: { productId: string; quantity: number }[]): Promise<CouponCheck>;
 }

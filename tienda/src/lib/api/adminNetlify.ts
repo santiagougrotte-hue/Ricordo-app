@@ -1,4 +1,4 @@
-import type { AdminApi, AdminOrder, AdminProduct, AdminSettings, ShippingConfig } from './adminTypes';
+import type { AdminApi, AdminOrder, AdminProduct, AdminSettings, Coupon, CouponUse, ShippingConfig } from './adminTypes';
 import type { Locality, ShippingZone } from '../types';
 
 // Panel contra /api/admin/* (cookie de sesión HttpOnly). Los pedidos nuevos llegan consultando cambios cada pocos segundos.
@@ -129,6 +129,15 @@ export function createAdminNetlify(): AdminApi {
     },
     async saveShippingConfig(c) {
       await post('shipping-config', c);
+    },
+    async listCoupons() {
+      return (await api<{ coupons: Coupon[] }>('coupons')).coupons;
+    },
+    async saveCoupon(c) {
+      return (await post<{ id: number }>('coupons', c)).id;
+    },
+    async couponUses(id) {
+      return (await api<{ uses: Omit<CouponUse, 'couponId'>[] }>(`coupons/${id}/uses`)).uses.map((u) => ({ ...u, couponId: id }));
     },
     async getSettings() {
       return (await api<{ settings: AdminSettings }>('settings')).settings;

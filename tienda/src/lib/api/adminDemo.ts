@@ -1,5 +1,6 @@
 import type { AdminApi, AdminOrder, AdminProduct } from './adminTypes';
 import { onDemoChange, readDb, writeDb } from './demoDb';
+import { normalizePhone } from '../coupons';
 
 const SESSION = 'ricordo-demo-admin';
 export const DEMO_PASSWORD = 'ricordo';
@@ -183,6 +184,29 @@ export function createAdminDemo(): AdminApi {
       const db = readDb();
       db.shippingConfig = c;
       writeDb(db, { type: 'catalog' });
+    },
+    async listCoupons() {
+      const db = readDb();
+      return db.coupons.map((c) => ({ ...c, totalDiscounted: db.couponUses.filter((u) => u.couponId === c.id).reduce((a, u) => a + u.discount, 0) }));
+    },
+    async saveCoupon(c) {
+      const db = readDb();
+      const code = c.code.trim().toUpperCase();
+      if (!/^[A-Z0-9_-]{3,30}$/.test(code)) throw new Error('El código va de 3 a 30 letras o números, sin espacios.');
+      if (db.coupons.some((x) => x.code === code && x.id !== c.id)) throw new Error('Ya hay un cupón con ese código.');
+      const phone = c.customerPhone ? normalizePhone(c.customerPhone) : null;
+      if (c.id != null) {
+        db.coupons = db.coupons.map((x) => (x.id === c.id ? { ...x, ...c, code, customerPhone: phone, id: x.id } : x));
+      } else {
+        const id = Math.max(0, ...db.coupons.map((x) => x.id)) + 1;
+        db.coupons.push({ ...c, code, customerPhone: phone, id, uses: 0, createdAt: new Date().toISOString(), totalDiscounted: 0 });
+        c = { ...c, id };
+      }
+      writeDb(db, { type: 'catalog' });
+      return c.id!;
+    },
+    async couponUses(id) {
+      return readDb().couponUses.filter((u) => u.couponId === id).reverse();
     },
     async getSettings() {
       return readDb().settings;

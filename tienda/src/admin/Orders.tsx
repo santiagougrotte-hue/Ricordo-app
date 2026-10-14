@@ -213,7 +213,7 @@ function OrderDetail({ order: o }: { order: AdminOrder }) {
         </ul>
         <dl className="totals">
           <div><dt>Subtotal</dt><dd>{money(o.subtotal)}</dd></div>
-          {o.discount > 0 && <div className="discount"><dt>{discountLabel(o.discountPct, undefined, o.promoName)}</dt><dd>−{money(o.discount)}</dd></div>}
+          {o.discount > 0 && <div className="discount"><dt>{o.discountReason ?? discountLabel(o.discountPct, undefined, o.promoName)}</dt><dd>−{money(o.discount)}</dd></div>}
           <div><dt>Envío{o.distancePriced && o.km ? ` (${o.km} km ida y vuelta)` : ''}</dt><dd>{o.shippingCost ? money(o.shippingCost) : 'Gratis'}</dd></div>
           <div className="grand"><dt>Total</dt><dd>{money(o.total)}</dd></div>
         </dl>

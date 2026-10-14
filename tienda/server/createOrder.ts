@@ -60,6 +60,7 @@ export function parseInput(raw: unknown): OrderInput | string {
     flexibleDelivery: b.flexibleDelivery === true,
     items: [],
     turnstileToken: str('turnstileToken', 4096),
+    couponCode: str('couponCode', 40).trim().toUpperCase(),
   };
   if (b.deliveryMethod !== 'pickup' && b.deliveryMethod !== 'delivery') return 'Modalidad de entrega inválida';
   if (b.paymentMethod !== 'cash' && b.paymentMethod !== 'transfer') return 'Método de pago no disponible';
@@ -124,6 +125,7 @@ export function mapDbError(e: PgError): OrderResult & { ok: false } {
     case 'RC004':
     case 'RC005':
     case 'RC006':
+    case 'RC007':
       return { ok: false, error: { code: e.code, message: msg } };
     default:
       return { ok: false, error: { code: 'NETWORK', message: 'No pudimos registrar el pedido. Probá de nuevo en un momento.' } };
@@ -153,7 +155,7 @@ export async function handleCreateOrder(raw: unknown, env: ServerEnv, deps: Deps
   let created: { order_id: string; order_number: number; total: number };
   try {
     const rows = await deps.query<{ order_id: string; order_number: string; total: number }>(
-      `select * from create_order($1, $2, $3, $4::delivery_method, $5, $6, $7::smallint, $8, $9::payment_method, $10::jsonb, $11, $12, $13, $14, $15)`,
+      `select * from create_order($1, $2, $3, $4::delivery_method, $5, $6, $7::smallint, $8, $9::payment_method, $10::jsonb, $11, $12, $13, $14, $15, $16)`,
       [
         parsed.customerName, parsed.customerPhone, parsed.customerEmail || null, parsed.deliveryMethod,
         parsed.deliveryMethod === 'delivery' && parsed.address.trim() ? parsed.address : null,
@@ -162,6 +164,7 @@ export async function handleCreateOrder(raw: unknown, env: ServerEnv, deps: Deps
         parsed.notes || null, parsed.paymentMethod,
         JSON.stringify(parsed.items.map((i) => ({ product_id: i.productId, quantity: i.quantity }))),
         parsed.flexibleDelivery, dist?.cost ?? null, dist?.lat ?? null, dist?.lng ?? null, dist?.km ?? null,
+        parsed.couponCode || null,
       ],
     );
     created = { order_id: rows[0].order_id, order_number: Number(rows[0].order_number), total: rows[0].total };
@@ -190,11 +193,12 @@ async function loadReceipt(created: { order_id: string; order_number: number; to
       delivery_window_label: string; payment_method: OrderReceipt['paymentMethod']; customer_name: string; locality: string | null;
       created_at: string; customer_phone: string; address: string | null; postal_code: string | null; notes: string | null;
       flexible_delivery: boolean; lat: string | null; lng: string | null; promo_name: string | null;
+      discount_reason: string | null; coupon_code: string | null;
       items: { product_name: string; quantity: number; unit_price: number }[];
     }>(
       `select o.number, o.subtotal, o.discount, o.discount_pct, o.shipping_cost, o.total, o.box_count, o.delivery_method,
               to_char(o.delivery_date, 'YYYY-MM-DD') as delivery_date, o.delivery_window_label, o.payment_method, o.customer_name, o.locality,
-              o.created_at, o.customer_phone, o.address, o.postal_code, o.notes, o.flexible_delivery, o.lat, o.lng, o.promo_name,
+              o.created_at, o.customer_phone, o.address, o.postal_code, o.notes, o.flexible_delivery, o.lat, o.lng, o.promo_name, o.discount_reason, o.coupon_code,
               (select json_agg(json_build_object('product_name', product_name, 'quantity', quantity, 'unit_price', unit_price)) from order_items where order_id = o.id) as items
        from orders o where o.id = $1`,
       [created.order_id],
@@ -207,6 +211,7 @@ async function loadReceipt(created: { order_id: string; order_number: number; to
       lines: (o.items ?? []).map((i) => ({ name: i.product_name, quantity: i.quantity, unitPrice: i.unit_price })),
       createdAt: new Date(o.created_at).toISOString(), customerPhone: o.customer_phone, address: o.address, postalCode: o.postal_code,
       notes: o.notes, flexibleDelivery: o.flexible_delivery, promoName: o.promo_name,
+      discountReason: o.discount_reason, couponCode: o.coupon_code,
       lat: o.lat === null ? null : Number(o.lat), lng: o.lng === null ? null : Number(o.lng),
     };
   } catch {
@@ -231,7 +236,7 @@ export function orderSummaryText(r: OrderReceipt, input: OrderInput): string {
     `Pago: ${r.paymentMethod === 'cash' ? 'efectivo' : 'transferencia'}`,
     '',
     lines,
-    `Subtotal ${peso(r.subtotal)}${r.discount ? ` · ${discountLabel(r.discountPct, undefined, r.promoName)} −${peso(r.discount)}` : ''} · Envío ${r.shippingCost ? peso(r.shippingCost) : 'gratis'}`,
+    `Subtotal ${peso(r.subtotal)}${r.discount ? ` · ${r.discountReason ?? discountLabel(r.discountPct, undefined, r.promoName)} −${peso(r.discount)}` : ''} · Envío ${r.shippingCost ? peso(r.shippingCost) : 'gratis'}`,
     input.notes ? `\nNotas: ${input.notes}` : '',
   ].join('\n');
 }
