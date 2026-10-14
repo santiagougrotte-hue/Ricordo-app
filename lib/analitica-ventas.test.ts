@@ -14,6 +14,7 @@ import {
   calcularClientesPeriodo,
   calcularDescuentosPeriodo,
   calcularVentasPendientes,
+  calcularCuponesMes,
 } from "./analitica-ventas";
 
 /** Fixture compartido: dos gustos (Jamón y queso, Calabaza), cada uno con variante minorista y
@@ -168,4 +169,34 @@ test("calcularDescuentosPeriodo: reutiliza el EERR, nunca recalcula el reparto d
 test("calcularVentasPendientes: solo Confirmado/Produccion, nunca mezclado con Entregado ni Cancelado", () => {
   const data = fixture();
   assert.equal(calcularVentasPendientes(data, "2026-01-01", "2026-01-31"), 8000); // PED-4
+});
+
+test("calcularCuponesMes: agrupa por cupón/tipo de descuento y suma pedidos, descuento y total vendido del mes", () => {
+  const data = fixture();
+  data.pedidos.push(
+    { id: "PED-5", fecha: "2026-01-12", cliente_id: "CLI-MIN", estado: "Entregado", canal: "Minorista", descuento: 1000, costo_envio: 0, total: 9000, cupon_codigo: "BIENVENIDA10", tipo_descuento: "cupon" },
+    { id: "PED-6", fecha: "2026-01-18", cliente_id: "CLI-MAY", estado: "Entregado", canal: "Mayorista", descuento: 500, costo_envio: 0, total: 20000, cupon_codigo: "BIENVENIDA10", tipo_descuento: "cupon" },
+    { id: "PED-7", fecha: "2026-01-22", cliente_id: "CLI-MIN", estado: "Entregado", canal: "Minorista", descuento: 800, costo_envio: 0, total: 7000, tipo_descuento: "cliente_frecuente" },
+    // Fuera del período (febrero) — no debe sumar al reporte de enero.
+    { id: "PED-8", fecha: "2026-02-01", cliente_id: "CLI-MIN", estado: "Entregado", canal: "Minorista", descuento: 1000, costo_envio: 0, total: 9000, cupon_codigo: "BIENVENIDA10", tipo_descuento: "cupon" },
+    // Cancelado — tampoco debe sumar.
+    { id: "PED-9", fecha: "2026-01-25", cliente_id: "CLI-MIN", estado: "Cancelado", canal: "Minorista", descuento: 1000, costo_envio: 0, total: 9000, cupon_codigo: "BIENVENIDA10", tipo_descuento: "cupon" },
+  );
+  const cupones = calcularCuponesMes(data, "2026-01-01", "2026-01-31");
+  const bienvenida = cupones.find((c) => c.cupon_codigo === "BIENVENIDA10");
+  assert.ok(bienvenida);
+  assert.equal(bienvenida!.tipo_descuento, "cupon");
+  assert.equal(bienvenida!.pedidos, 2); // PED-5 + PED-6, no PED-8 (fuera de mes) ni PED-9 (cancelado)
+  assert.equal(bienvenida!.total_descuento, 1000 + 500);
+  assert.equal(bienvenida!.total_vendido, 9000 + 20000);
+
+  const frecuente = cupones.find((c) => c.tipo_descuento === "cliente_frecuente");
+  assert.ok(frecuente);
+  assert.equal(frecuente!.cupon_codigo, ""); // sin código propio, solo el tipo
+  assert.equal(frecuente!.pedidos, 1);
+  assert.equal(frecuente!.total_descuento, 800);
+  assert.equal(frecuente!.total_vendido, 7000);
+
+  // PED-0..PED-4 no tienen cupón ni tipo de descuento: no generan fila.
+  assert.equal(cupones.length, 2);
 });

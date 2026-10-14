@@ -15,6 +15,7 @@ import {
   calcularEvolucionCanalMensual,
   calcularClientesPeriodo,
   calcularDescuentosPeriodo,
+  calcularCuponesMes,
   calcularVentasPendientes,
 } from "@/lib/analitica-ventas";
 import type { VentasPorCanal, VentasPorGusto } from "@/lib/analitica-ventas";
@@ -214,6 +215,44 @@ function TablaDescuentos({ desc }: { desc: ReturnType<typeof calcularDescuentosP
   );
 }
 
+/** Desglose de `calcularDescuentosPeriodo` por cupón/tipo de descuento (lo que manda la web de
+ * pedidos) — no todo descuento tiene uno cargado (ej. uno manual viejo), por eso puede no sumar
+ * exacto contra "Descuentos otorgados" de arriba. */
+function TablaCupones({ cupones }: { cupones: ReturnType<typeof calcularCuponesMes> }) {
+  return (
+    <Card title="Descuentos y cupones del mes">
+      {cupones.length === 0 ? (
+        <EmptyState text="Ningún pedido del mes trae un cupón o tipo de descuento cargado." />
+      ) : (
+        <TableWrap>
+          <table className="w-full">
+            <thead>
+              <tr>
+                <Th>Cupón</Th>
+                <Th>Tipo</Th>
+                <Th>Pedidos</Th>
+                <Th>Total descontado</Th>
+                <Th>Total vendido</Th>
+              </tr>
+            </thead>
+            <tbody>
+              {cupones.map((c) => (
+                <TrHover key={`${c.cupon_codigo}-${c.tipo_descuento}`}>
+                  <Td main>{c.cupon_codigo || "—"}</Td>
+                  <Td>{c.tipo_descuento || "—"}</Td>
+                  <Td>{fNum(c.pedidos, 0)}</Td>
+                  <Td className="text-orange">{fARS(c.total_descuento)}</Td>
+                  <Td className="text-green">{fARS(c.total_vendido)}</Td>
+                </TrHover>
+              ))}
+            </tbody>
+          </table>
+        </TableWrap>
+      )}
+    </Card>
+  );
+}
+
 function TableroMensual({ mes, anio, comparar }: { mes: number; anio: number; comparar: boolean }) {
   const { data } = useStoreV2();
   const desde = primerDiaMes(mes, anio);
@@ -225,6 +264,7 @@ function TableroMensual({ mes, anio, comparar }: { mes: number; anio: number; co
   const gustos = useMemo(() => calcularVentasPorGusto(data, desde, hasta), [data, desde, hasta]);
   const clientes = useMemo(() => calcularClientesPeriodo(data, desde, hasta), [data, desde, hasta]);
   const descuentos = useMemo(() => calcularDescuentosPeriodo(data, desde, hasta), [data, desde, hasta]);
+  const cupones = useMemo(() => calcularCuponesMes(data, desde, hasta), [data, desde, hasta]);
   const ventasPendientes = useMemo(() => calcularVentasPendientes(data, desde, hasta), [data, desde, hasta]);
 
   const ant = mesAnterior(mes, anio);
@@ -260,6 +300,7 @@ function TableroMensual({ mes, anio, comparar }: { mes: number; anio: number; co
       {productoSeleccionado && <DetalleGustoCard data={data} desde={desde} hasta={hasta} productoId={productoSeleccionado} />}
       <TablaClientes clientes={clientes} />
       <TablaDescuentos desc={descuentos} />
+      <TablaCupones cupones={cupones} />
 
       {comparar && metricasAnt && canalesAnt && (
         <Card title={`Crecimiento vs ${MESES_ANALITICA[ant.mes - 1]} ${ant.anio}`}>

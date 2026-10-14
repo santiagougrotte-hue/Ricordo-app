@@ -96,3 +96,22 @@ test("calcularAlertasStock: un insumo de relleno SÍ aparece si está por debajo
   assert.equal(mozza!.dias_cobertura, null); // nunca se calcula consumo diario para relleno
   assert.match(mozza!.mensaje, /RECETAS_RELLENO/);
 });
+
+test("calcularAlertasStock: un insumo de packaging bajo su mínimo es 'importante'; uno sin mínimo cargado y sin consumo no lo es", () => {
+  const data = fixture();
+  data.insumos.push({ id: "PKG-BOLSA", nombre: "Bolsa al vacío", tipo: "packaging", unidad: "unidad", precio_actual: 50, controla_stock: true, stock_minimo: 100, activo: true });
+  data.insumos.push({ id: "ING-SIN-MIN", nombre: "Premezcla", tipo: "ingrediente", unidad: "kg", precio_actual: 1000, controla_stock: true, activo: true }); // sin stock_minimo
+  data.inventario_movimientos = [
+    { id: "M1", fecha: "2026-08-01", tipo: "compra", item_tipo: "insumo", item_id: "PKG-BOLSA", cantidad: 40 }, // por debajo de 100
+    { id: "M2", fecha: "2026-08-01", tipo: "compra", item_tipo: "insumo", item_id: "ING-SIN-MIN", cantidad: 500 }, // mucho stock, pero sin mínimo con qué compararlo
+  ];
+  const alertas = calcularAlertasStock(data, "2026-08-31");
+
+  const bolsa = alertas.find((a) => a.insumo_id === "PKG-BOLSA")!;
+  assert.ok(bolsa);
+  assert.equal(bolsa.severidad, "importante");
+
+  const sinMinimo = alertas.find((a) => a.insumo_id === "ING-SIN-MIN")!;
+  assert.ok(sinMinimo);
+  assert.notEqual(sinMinimo.severidad, "importante"); // sin mínimo cargado, nunca se infiere uno
+});

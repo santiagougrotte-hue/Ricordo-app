@@ -319,6 +319,37 @@ export function calcularDescuentosPeriodo(data: RicordoDataV2, desde: string, ha
   };
 }
 
+export interface FilaCuponMes {
+  cupon_codigo: string;
+  tipo_descuento: string;
+  pedidos: number;
+  total_descuento: number;
+  total_vendido: number;
+}
+
+/** Descuentos y cupones del mes — a diferencia de `calcularDescuentosPeriodo` (total agregado de
+ * TODOS los descuentos), esto agrupa por `cupon_codigo`/`tipo_descuento` (lo que manda la web de
+ * pedidos: cliente frecuente, cupón puntual, o cargado a mano) para saber qué cupón/tipo se usó
+ * cuánto. Pedidos sin ninguno de los dos cargados (descuento manual viejo, sin estructurar) no
+ * entran acá — siguen sumando al total agregado, pero no tienen una clave por la que agrupar. */
+export function calcularCuponesMes(data: RicordoDataV2, desde: string, hasta: string): FilaCuponMes[] {
+  const porClave = new Map<string, FilaCuponMes>();
+  for (const p of data.pedidos) {
+    if (p.estado === "Cancelado") continue;
+    if (p.fecha < desde || p.fecha > hasta) continue;
+    if (!p.cupon_codigo && !p.tipo_descuento) continue;
+    const clave = `${p.cupon_codigo ?? ""}|${p.tipo_descuento ?? ""}`;
+    const fila = porClave.get(clave) ?? { cupon_codigo: p.cupon_codigo ?? "", tipo_descuento: p.tipo_descuento ?? "", pedidos: 0, total_descuento: 0, total_vendido: 0 };
+    fila.pedidos += 1;
+    fila.total_descuento += p.descuento;
+    fila.total_vendido += p.total;
+    porClave.set(clave, fila);
+  }
+  return [...porClave.values()]
+    .map((f) => ({ ...f, total_descuento: Math.round(f.total_descuento), total_vendido: Math.round(f.total_vendido) }))
+    .sort((a, b) => b.total_descuento - a.total_descuento);
+}
+
 /** Sección 17: pedidos Confirmados/En producción (no Entregados, no Cancelados) del período —
  * nunca se mezclan con las ventas realizadas. */
 export function calcularVentasPendientes(data: RicordoDataV2, desde: string, hasta: string): number {

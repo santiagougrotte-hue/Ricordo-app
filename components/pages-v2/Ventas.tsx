@@ -39,10 +39,11 @@ import {
   estadoCobroPedido,
   diferenciaRepartoPedido,
   costoRealEnvioCalculado,
+  deshacerSaldoHistoricoPedido,
 } from "@/lib/calc-v2";
 import { geocodificarDireccion } from "@/lib/mapas";
 import type { EstadoCobro } from "@/lib/calc-v2";
-import type { Canal, EstadoPedido, Pedido, PedidoItem, ProductoVariante, Reserva, RicordoDataV2, ZonaEntrega } from "@/lib/types-v2";
+import type { Canal, EstadoPedido, Pedido, PedidoItem, ProductoVariante, Reserva, RicordoDataV2, ZonaEntrega, TipoDescuento } from "@/lib/types-v2";
 import { ZONAS_ENTREGA } from "@/lib/types-v2";
 import type { Cliente } from "@/lib/types";
 
@@ -314,6 +315,10 @@ export interface PedidoWeb {
   items: { producto_variante_id: string; cantidad: number; precio_unitario: number }[];
   descuento_monto?: number;
   motivo_descuento?: string;
+  /** Código de cupón puntual, o identificador del beneficio de cliente frecuente, si el descuento
+   * viene de uno de esos dos mecanismos — informativo, para el reporte de cupones del mes. */
+  cupon_codigo?: string;
+  tipo_descuento?: TipoDescuento;
   salsa_de_regalo?: boolean;
   envio_cobrado: number;
   envio_costo_real: number;
@@ -396,6 +401,8 @@ export function crearPedidoDesdeWeb(data: RicordoDataV2, pedidoWeb: PedidoWeb): 
     canal: "Minorista",
     metodo_pago: pedidoWeb.metodo_pago,
     motivo_descuento: pedidoWeb.motivo_descuento,
+    cupon_codigo: pedidoWeb.cupon_codigo,
+    tipo_descuento: pedidoWeb.tipo_descuento,
     zona: pedidoWeb.zona,
     origen: "web",
     id_web: pedidoWeb.id,
@@ -706,6 +713,11 @@ function PedidosTab() {
     toast(`Estado → ${estado}`);
   }
 
+  function deshacerHistorico(pedido: Pedido) {
+    setData((d) => deshacerSaldoHistoricoPedido(d, pedido.id));
+    toast(`Pedido ${pedido.id} vuelve a estar pendiente de cobro`);
+  }
+
   function eliminar(pedido: Pedido) {
     if (!confirm("¿Eliminar este pedido y sus movimientos asociados?")) return;
     setData((d) => ({
@@ -779,7 +791,16 @@ function PedidosTab() {
                       <span className="font-semibold text-accent">{fARS(p.total)}</span>
                     </span>
                     <Badge color={ESTADO_COLOR[p.estado]}>{p.estado}</Badge>
-                    <Badge color={COBRO_COLOR[estadoCobroPedido(data, p)]}>{estadoCobroPedido(data, p)}</Badge>
+                    {p.saldo_historico ? (
+                      <>
+                        <Badge color="blue">Saldado (histórico) el {p.saldado_el}</Badge>
+                        <Button size="sm" variant="ghost" onClick={() => deshacerHistorico(p)}>
+                          Deshacer
+                        </Button>
+                      </>
+                    ) : (
+                      <Badge color={COBRO_COLOR[estadoCobroPedido(data, p)]}>{estadoCobroPedido(data, p)}</Badge>
+                    )}
                     <Select value={p.estado} onChange={(e) => cambiarEstado(p, e.target.value as EstadoPedido)} style={{ width: 130, padding: "4px 8px" }}>
                       {ESTADOS.map((e) => (
                         <option key={e} value={e}>

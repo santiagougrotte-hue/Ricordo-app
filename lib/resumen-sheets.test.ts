@@ -9,6 +9,7 @@ import {
   resumenRepartoSheets,
   resumenPreciosFormatosSheets,
   resumenStockInsumosSheets,
+  avisosRecetaNoExportada,
   formatearNumero,
   celdaTexto,
   decimalesPorColumna,
@@ -177,6 +178,46 @@ test("resumenRecetasRellenoSheets: un producto de línea Lasaña trae todas las 
   assert.equal(queso.cantidad_por_unidad, 0.07); // 0.05 (terminación) + 0.02 (masa)
   assert.ok(filas.some((f) => f.insumo_id === "ING-ALUMINIO"));
   assert.equal(filas.some((f) => f.insumo_id === "ING-BOLSA"), false);
+});
+
+test("resumenRecetasRellenoSheets: un producto de línea Pasta con ítems en relleno Y armado exporta los dos (no solo relleno)", () => {
+  const data = fixture();
+  data.insumos.push({ id: "ING-ARMADO", nombre: "Sello", unidad: "unidad", tipo: "packaging", precio_actual: 10, activo: true, controla_stock: false });
+  // PROD-01 (Calabaza, línea Pasta en el fixture base) ya tiene un ítem de relleno (RECI-02) — le
+  // agrego uno de armado para confirmar que ambas etapas se exportan juntas.
+  data.receta_items.push({ id: "RECI-ARMADO", receta_id: "REC-01", insumo_id: "ING-ARMADO", etapa: "armado", cantidad: 1 });
+  const filas = resumenRecetasRellenoSheets(data).filter((f) => f.producto_id === "PROD-01");
+  assert.equal(filas.length, 2); // el de relleno (ING-01) + el de armado (ING-ARMADO)
+  assert.ok(filas.some((f) => f.insumo_id === "ING-ARMADO" && f.cantidad_por_unidad === 1));
+});
+
+test("avisosRecetaNoExportada: un producto de línea Pasta con ítems en salsa/terminación avisa que no se exportan; uno de otra línea con los mismos ítems no avisa nunca", () => {
+  const data = fixture();
+  // PROD-01 (Calabaza) es línea Pasta en el fixture — le agrego 2 ítems de salsa y 1 de
+  // terminación, que con la regla de Pasta (solo relleno+armado) quedan afuera del export.
+  data.receta_items.push(
+    { id: "RECI-SALSA-1", receta_id: "REC-01", insumo_id: "ING-01", etapa: "salsa", cantidad: 0.01 },
+    { id: "RECI-SALSA-2", receta_id: "REC-01", insumo_id: "ING-01", etapa: "salsa", cantidad: 0.01 },
+    { id: "RECI-TERM-1", receta_id: "REC-01", insumo_id: "ING-01", etapa: "terminacion", cantidad: 0.01 }
+  );
+  // PROD-14 (Salsa) con los MISMOS ítems en salsa/terminación — correctamente clasificada (no
+  // Pasta), esos ítems sí se exportan, así que nunca debería generar un aviso.
+  data.recetas.push({ id: "REC-14", producto_id: "PROD-14", nombre: "Receta Salsa", activa: true });
+  data.receta_items.push({ id: "RECI-14-SALSA", receta_id: "REC-14", insumo_id: "ING-01", etapa: "salsa", cantidad: 0.02 });
+
+  const avisos = avisosRecetaNoExportada(data);
+  const salsa = avisos.find((a) => a.producto_id === "PROD-01" && a.etapa === "salsa")!;
+  assert.ok(salsa);
+  assert.equal(salsa.cantidad, 2);
+  assert.equal(salsa.linea, "Pasta");
+  const terminacion = avisos.find((a) => a.producto_id === "PROD-01" && a.etapa === "terminacion")!;
+  assert.ok(terminacion);
+  assert.equal(terminacion.cantidad, 1);
+  // PROD-14, con la línea correcta, nunca avisa aunque tenga ítems en salsa.
+  assert.equal(
+    avisos.some((a) => a.producto_id === "PROD-14"),
+    false
+  );
 });
 
 test("resumenRepartoSheets: agrupa pedidos entregados por zona fija, pedido sin zona cae en Otro, suma Compras Berazategui aparte", () => {

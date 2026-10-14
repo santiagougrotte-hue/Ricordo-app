@@ -42,6 +42,13 @@ import {
   insumosSoloRelleno,
   idsExcluidosPorRevision,
   calcularEerrEstructurado,
+  pedidosPendientesAntesDe,
+  saldarPedidosHistoricos,
+  deshacerSaldoHistoricoPedido,
+  comprasPendientesAntesDe,
+  saldarComprasHistoricas,
+  deshacerSaldoHistoricoCompra,
+  insumosBajoMinimo,
 } from "./calc-v2";
 
 function fixture(): RicordoData {
@@ -657,6 +664,104 @@ test("calcularCuentasPorCobrar/Pagar/DineroLibre: no cuentan pedidos/compras pos
   // "Resumen de octubre" (o "hoy"): ya ve las dos.
   const cobrarOct = calcularCuentasPorCobrar(data, "2026-10-31");
   assert.equal(cobrarOct.length, 2);
+});
+
+test("pedidosPendientesAntesDe/saldarPedidosHistoricos/deshacerSaldoHistoricoPedido: saldar no cambia la caja, deshacer deja todo igual que antes, y solo lista lo anterior al corte elegido", () => {
+  const data = emptyDataV2();
+  data.configuracion.saldo_inicial_caja = 500000;
+  data.configuracion.fecha_saldo_inicial_caja = "2026-09-01";
+  data.pedidos = [
+    { id: "PED-AGO", fecha: "2026-08-15", cliente_id: "C1", estado: "Entregado", canal: "Minorista", descuento: 0, costo_envio: 0, total: 50000 },
+    { id: "PED-AGO-2", fecha: "2026-08-20", cliente_id: "C1", estado: "Entregado", canal: "Minorista", descuento: 0, costo_envio: 0, total: 30000 },
+    // Posterior al corte elegido (01/09) — nunca tiene que aparecer en la lista de históricos.
+    { id: "PED-SEP", fecha: "2026-09-10", cliente_id: "C1", estado: "Entregado", canal: "Minorista", descuento: 0, costo_envio: 0, total: 20000 },
+  ];
+
+  const corte = "2026-09-01";
+  const antes = pedidosPendientesAntesDe(data, corte);
+  assert.deepEqual(
+    antes.map((p) => p.pedido_id).sort(),
+    ["PED-AGO", "PED-AGO-2"]
+  );
+  assert.equal(antes.some((p) => p.pedido_id === "PED-SEP"), false); // posterior al corte: nunca aparece
+
+  const saldoCajaAntes = saldoCaja(data);
+  const saldado = saldarPedidosHistoricos(data, ["PED-AGO"], "2026-10-13");
+
+  // Saldar no genera ningún movimiento financiero ni cambia el saldo de caja.
+  assert.equal(saldado.movimientos_financieros.length, data.movimientos_financieros.length);
+  assert.equal(saldoCaja(saldado), saldoCajaAntes);
+
+  const pedido = saldado.pedidos.find((p) => p.id === "PED-AGO")!;
+  assert.equal(pedido.saldo_historico, true);
+  assert.equal(pedido.saldado_el, "2026-10-13");
+  // El otro pedido anterior al corte, no seleccionado, sigue pendiente.
+  assert.equal(saldado.pedidos.find((p) => p.id === "PED-AGO-2")!.saldo_historico, undefined);
+
+  // Ya saldado, no vuelve a aparecer en la lista de históricos a saldar.
+  assert.deepEqual(
+    pedidosPendientesAntesDe(saldado, corte).map((p) => p.pedido_id),
+    ["PED-AGO-2"]
+  );
+  // Tampoco en Cuentas por cobrar — por eso dejó de contar como "pendiente".
+  assert.equal(
+    calcularCuentasPorCobrar(saldado, "2026-10-13").some((c) => c.pedido_id === "PED-AGO"),
+    false
+  );
+
+  // Deshacer deja todo exactamente como antes de saldar.
+  const deshecho = deshacerSaldoHistoricoPedido(saldado, "PED-AGO");
+  assert.deepEqual(deshecho, data);
+  assert.equal(saldoCaja(deshecho), saldoCajaAntes);
+});
+
+test("comprasPendientesAntesDe/saldarComprasHistoricas/deshacerSaldoHistoricoCompra: mismo comportamiento que para pedidos, del lado de compras", () => {
+  const data = emptyDataV2();
+  data.configuracion.saldo_inicial_caja = 500000;
+  data.configuracion.fecha_saldo_inicial_caja = "2026-09-01";
+  data.compras = [
+    { id: "COM-AGO", fecha: "2026-08-10", proveedor_id: "P1", estado_pago: "pendiente", total: 15000 },
+    // Posterior al corte elegido — nunca tiene que aparecer en la lista de históricos.
+    { id: "COM-SEP", fecha: "2026-09-05", proveedor_id: "P1", estado_pago: "pendiente", total: 8000 },
+  ];
+
+  const corte = "2026-09-01";
+  const antes = comprasPendientesAntesDe(data, corte);
+  assert.deepEqual(antes.map((c) => c.compra_id), ["COM-AGO"]);
+
+  const saldoCajaAntes = saldoCaja(data);
+  const saldado = saldarComprasHistoricas(data, ["COM-AGO"], "2026-10-13");
+  assert.equal(saldoCaja(saldado), saldoCajaAntes); // nunca genera un egreso de caja
+  const compra = saldado.compras.find((c) => c.id === "COM-AGO")!;
+  assert.equal(compra.saldo_historico, true);
+  assert.equal(compra.saldado_el, "2026-10-13");
+  assert.equal(
+    calcularCuentasPorPagar(saldado, "2026-10-13").some((c) => c.compra_id === "COM-AGO"),
+    false
+  );
+
+  const deshecho = deshacerSaldoHistoricoCompra(saldado, "COM-AGO");
+  assert.deepEqual(deshecho, data);
+  assert.equal(saldoCaja(deshecho), saldoCajaAntes);
+});
+
+test("insumosBajoMinimo: un packaging bajo su mínimo aparece con cuánto falta; uno sin mínimo cargado nunca aparece", () => {
+  const data = emptyDataV2();
+  data.insumos = [
+    { id: "ING-1", nombre: "Harina", unidad: "kg", tipo: "ingrediente", precio_actual: 100, activo: true, controla_stock: true, stock_minimo: 10 },
+    { id: "PKG-1", nombre: "Bolsa al vacío", unidad: "unidad", tipo: "packaging", precio_actual: 50, activo: true, controla_stock: true, stock_minimo: 100 },
+    { id: "ING-2", nombre: "Sal", unidad: "kg", tipo: "ingrediente", precio_actual: 200, activo: true, controla_stock: true }, // sin mínimo cargado
+  ];
+  data.inventario_movimientos = [
+    { id: "M1", fecha: "2026-01-01", tipo: "compra", item_tipo: "insumo", item_id: "ING-1", cantidad: 15 }, // por encima del mínimo
+    { id: "M2", fecha: "2026-01-01", tipo: "compra", item_tipo: "insumo", item_id: "PKG-1", cantidad: 40 }, // por debajo
+    { id: "M3", fecha: "2026-01-01", tipo: "compra", item_tipo: "insumo", item_id: "ING-2", cantidad: 1 }, // da igual, sin mínimo nunca entra
+  ];
+  const bajo = insumosBajoMinimo(data);
+  assert.equal(bajo.length, 1);
+  assert.equal(bajo[0].insumo.id, "PKG-1");
+  assert.equal(bajo[0].stock, 40);
+  assert.equal(bajo[0].falta, 60);
 });
 
 test("calcularBalanceGeneral: ACTIVO = PASIVO + PATRIMONIO NETO con aportes/retiros/préstamos/resultado", () => {

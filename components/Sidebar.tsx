@@ -5,12 +5,16 @@ import { ChevronLeft, ChevronRight, ChevronDown, ChevronUp, X, LogOut } from "lu
 import { NAV } from "@/lib/nav";
 import { useRouter } from "@/lib/nav-context";
 import { useAuth } from "@/lib/auth-context";
+import { useStoreV2 } from "@/lib/store-v2";
+import { insumosBajoMinimo } from "@/lib/calc-v2";
 import { supabaseConfigured } from "@/lib/supabase";
 
 export function Sidebar() {
   const { page, go, collapsed, setCollapsed, mobileOpen, setMobileOpen } = useRouter();
   const { signOut } = useAuth();
+  const { data } = useStoreV2();
   const [closedGroups, setClosedGroups] = useState<Record<string, boolean>>({});
+  const cantidadBajoMinimo = insumosBajoMinimo(data).length;
 
   const toggleGroup = (g: string) =>
     setClosedGroups((prev) => ({ ...prev, [g]: !prev[g] }));
@@ -84,6 +88,11 @@ export function Sidebar() {
                   >
                     <item.icon className="h-[17px] w-[17px] shrink-0 stroke-[1.75]" />
                     <span className={collapsed ? "md:hidden" : ""}>{item.label}</span>
+                    {item.key === "inventario" && cantidadBajoMinimo > 0 && (
+                      <span className="ml-auto flex h-[18px] min-w-[18px] items-center justify-center rounded-full bg-red px-1 text-[10px] font-semibold leading-none text-white">
+                        {cantidadBajoMinimo}
+                      </span>
+                    )}
                   </div>
                 ))}
             </div>
