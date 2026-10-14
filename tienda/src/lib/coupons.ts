@@ -50,3 +50,20 @@ export function evaluateCoupon(c: Coupon | undefined, phone: string, subtotal: n
   if (discount <= 0) return { message: 'Este cupón no aplica a los productos con precio especial.' };
   return { discount };
 }
+
+/**
+ * Mensaje de recontacto desde la plantilla: {nombre}, {descuento}, {codigo}, {vence}.
+ * Sin cupón se sacan las oraciones que hablan del cupón.
+ */
+export function recontactMessage(template: string, v: { name: string; pct?: number; code?: string; expiresOn?: string }): string {
+  const first = v.name.trim().split(/\s+/)[0] || '';
+  let t = template;
+  if (!v.code) {
+    // Fin de oración: . ! ? o un emoji, seguido de mayúscula ("…Ricordo 🍝 Te dejamos…").
+    const keep = t.split(/(?<=[.!?]|\p{Extended_Pictographic})\s+(?=[\p{Lu}¡¿])/u).filter((s) => !/\{(descuento|codigo|vence)\}/.test(s));
+    t = keep.length ? keep.join(' ') : '¡Hola {nombre}!';
+  }
+  const vence = v.expiresOn ? `${v.expiresOn.slice(8, 10)}/${v.expiresOn.slice(5, 7)}` : '';
+  return t.replaceAll('{nombre}', first).replaceAll('{descuento}', v.pct ? `${v.pct}%` : '').replaceAll('{codigo}', v.code ?? '').replaceAll('{vence}', vence)
+    .replace(/\s+([,!.])/g, '$1').replace(/¡Hola\s*!/, '¡Hola!').trim();
+}

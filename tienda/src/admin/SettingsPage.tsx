@@ -168,6 +168,45 @@ export function SettingsPage() {
           </div>
         </div>
         {s.promo && <PromoFields promo={s.promo} onChange={(p) => set('promo', p)} />}
+        {s.loyalty && (
+          <>
+            <h3 className="label">Cliente frecuente</h3>
+            <label className="switch"><input type="checkbox" checked={s.loyalty.enabled} onChange={(e) => set('loyalty', { ...s.loyalty!, enabled: e.target.checked })} /><span>Descuento automático por cliente frecuente</span></label>
+            <div className="adm-grid2">
+              <div className="field">
+                <label className="field-label" htmlFor="s-lev">Cada cuántos pedidos entregados</label>
+                <input id="s-lev" className="input" type="number" min={1} max={50} inputMode="numeric" value={s.loyalty.every} onChange={(e) => set('loyalty', { ...s.loyalty!, every: Math.max(1, Math.floor(+e.target.value || 1)) })} />
+              </div>
+              <div className="field">
+                <label className="field-label" htmlFor="s-lpct">Descuento del pedido siguiente (%)</label>
+                <input id="s-lpct" className="input" type="number" min={1} max={50} inputMode="numeric" value={s.loyalty.pct} onChange={(e) => set('loyalty', { ...s.loyalty!, pct: Math.max(1, Math.floor(+e.target.value || 1)) })} />
+              </div>
+            </div>
+            <p className="small muted">Ej.: cada {s.loyalty.every} pedidos entregados, el {s.loyalty.every + 1}.º tiene {s.loyalty.pct}% off. Se reconoce al cliente por el celular y solo cuentan los pedidos marcados como entregados. No se suma a la promo ni a un cupón: queda el mayor.</p>
+          </>
+        )}
+        {s.recontact && (
+          <>
+            <h3 className="label">Recontacto y recordatorios</h3>
+            <div className="adm-grid2">
+              <div className="field">
+                <label className="field-label" htmlFor="s-rdays">Días sin comprar para recontactar</label>
+                <input id="s-rdays" className="input" type="number" min={1} max={365} inputMode="numeric" value={s.recontact.days} onChange={(e) => set('recontact', { ...s.recontact!, days: Math.max(1, Math.floor(+e.target.value || 1)) })} />
+              </div>
+              <div className="field">
+                <label className="field-label" htmlFor="s-rpct">Cupón personal (%)</label>
+                <input id="s-rpct" className="input" type="number" min={1} max={50} inputMode="numeric" value={s.recontact.couponPct} onChange={(e) => set('recontact', { ...s.recontact!, couponPct: Math.max(1, Math.floor(+e.target.value || 1)) })} />
+              </div>
+            </div>
+            <div className="field">
+              <label className="field-label" htmlFor="s-rtpl">Mensaje de WhatsApp</label>
+              <textarea id="s-rtpl" className="input" rows={3} maxLength={600} value={s.recontact.template} onChange={(e) => set('recontact', { ...s.recontact!, template: e.target.value })} />
+              <p className="small muted">Se reemplazan {'{nombre}'}, {'{descuento}'}, {'{codigo}'} y {'{vence}'}. Si mandás el mensaje sin cupón, se saca la oración del cupón.</p>
+            </div>
+            <label className="switch"><input type="checkbox" checked={s.recontact.reminderEnabled} onChange={(e) => set('recontact', { ...s.recontact!, reminderEnabled: e.target.checked })} /><span>Recordatorio automático por mail (todos los días a las 10) a quien pidió novedades</span></label>
+            <p className="small muted">Le llega un cupón personal a quien hace más de {s.recontact.days} días que no compra y no recibió otro mail en 30 días. Necesita la clave de Resend (RESEND_API_KEY) en Netlify; sin clave no se manda nada.</p>
+          </>
+        )}
         {msg && <p className={msg.ok ? 'field-hint' : 'field-error'} role="status">{msg.text}</p>}
         <button type="button" className="btn btn-ink" onClick={() => void save()}>Guardar ajustes</button>
       </section>

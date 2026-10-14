@@ -27,6 +27,22 @@ const activeLocalities = () => {
 };
 export const PICKUP_LABEL = 'Retiro en Berazategui · día y horario a coordinar por WhatsApp';
 
+/** Igual que loyalty_status(): cuenta los pedidos entregados de ese celular. */
+export function demoLoyalty(db: ReturnType<typeof readDb>, phone: string) {
+  const cfg = db.settings.loyalty ?? { enabled: true, every: 4, pct: 10 };
+  const tel = normalizePhone(phone);
+  const n = cfg.every;
+  const mine = db.orders.filter((o) => normalizePhone(o.customerPhone) === tel);
+  const c = tel.length < 8 ? 0 : mine.filter((o) => o.status === 'delivered').length;
+  const base = { enabled: cfg.enabled, pct: cfg.pct, every: n };
+  if (c > 0 && c % n === 0) {
+    const used = mine.some((o) => o.loyaltyCycle === c / n && o.status !== 'cancelled');
+    if (!used) return { ...base, eligible: cfg.enabled, missing: 0, nth: c + 1, cycle: c / n };
+    return { ...base, eligible: false, missing: n, nth: c + n + 1, cycle: 0 };
+  }
+  return { ...base, eligible: false, missing: n - (c % n), nth: c + (n - (c % n)) + 1, cycle: 0 };
+}
+
 export function createDemoApi(): StoreApi {
   return {
     mode: 'demo',
@@ -50,6 +66,11 @@ export function createDemoApi(): StoreApi {
     },
     async getSettings() {
       return publicSettings(readDb());
+    },
+    async checkLoyalty(phone) {
+      await wait(150);
+      const l = demoLoyalty(readDb(), phone);
+      return { enabled: l.enabled, eligible: l.eligible, pct: l.pct, missing: l.missing, nth: l.nth };
     },
     async checkCoupon(code, phone, items) {
       await wait(250);
@@ -136,6 +157,18 @@ export function createDemoApi(): StoreApi {
           promoName = null; gifts = 0; couponCode = coupon!.code; reason = `Cupón ${coupon!.code}`;
         }
       }
+      // Cliente frecuente (igual que create_order): queda el mayor.
+      let discountType: AdminOrder['discountType'] = discount > 0 ? (promoName ? 'promo' : 'cajas_extra') : null;
+      if (couponCode) discountType = 'cupon';
+      let loyaltyCycle: number | null = null;
+      const loy = demoLoyalty(db, phone);
+      if (loy.eligible) {
+        const d = Math.round((totals.promoSubtotal * loy.pct) / 100);
+        if (d > discount) {
+          discount = d; pct = loy.pct; promoName = null; gifts = 0; couponCode = null;
+          reason = `Cliente frecuente (${loy.nth}ª compra)`; discountType = 'cliente_frecuente'; loyaltyCycle = loy.cycle;
+        }
+      }
       const gift = gifts ? db.products.find((x) => x.id === promo!.giftProductId)! : null;
 
       for (const [id, q] of merged) db.products.find((x) => x.id === id)!.stock -= q;
@@ -167,6 +200,9 @@ export function createDemoApi(): StoreApi {
         giftCount: gifts,
         couponCode,
         discountReason: reason,
+        discountType,
+        loyaltyCycle,
+        marketingOptIn: !!input.marketingOptIn && !!input.customerEmail.trim(),
         shippingCost: shipping,
         total: subtotal - discount + shipping,
         paymentMethod: input.paymentMethod,
@@ -192,7 +228,7 @@ export function createDemoApi(): StoreApi {
           deliveryMethod: order.deliveryMethod, deliveryDate: date, windowLabel: label, locality, paymentMethod: input.paymentMethod, customerName: order.customerName,
           lines: order.items.map((i) => ({ name: i.productName, quantity: i.quantity, unitPrice: i.unitPrice })),
           createdAt: order.createdAt, customerPhone: phone, address: order.address, postalCode: cp, notes: order.notes,
-          flexibleDelivery: order.flexibleDelivery, promoName, discountReason: reason, couponCode,
+          flexibleDelivery: order.flexibleDelivery, promoName, discountReason: reason, couponCode, discountType,
         },
       };
     },

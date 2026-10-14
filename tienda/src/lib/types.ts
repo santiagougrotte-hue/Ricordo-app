@@ -148,7 +148,22 @@ export interface OrderInput {
   turnstileToken?: string;
   /** Código de cupón (el descuento lo calcula y valida el servidor). */
   couponCode?: string;
+  /** "Quiero recibir novedades y descuentos" (destildado por defecto; solo con email). */
+  marketingOptIn?: boolean;
 }
+
+/** Cliente frecuente para un celular (lo calcula el servidor con los pedidos entregados). */
+export interface LoyaltyStatus {
+  enabled: boolean;
+  eligible: boolean;
+  pct: number;
+  /** Compras que faltan para el beneficio (0 si ya le toca). */
+  missing: number;
+  /** Número de compra que lleva el beneficio (ej. 5). */
+  nth: number;
+}
+
+export type DiscountType = 'promo' | 'cajas_extra' | 'cupon' | 'cliente_frecuente';
 
 /** Resultado de validar un cupón (lo calcula el servidor con los precios de la base). */
 export type CouponCheck =
@@ -176,6 +191,7 @@ export interface OrderReceipt {
   /** Motivo del descuento que quedó ("Cupón VUELVE10", "Promo Día de la Madre"…). */
   discountReason?: string | null;
   couponCode?: string | null;
+  discountType?: DiscountType | null;
   /** Datos para el resumen de WhatsApp (los del propio cliente, nunca de otro). */
   createdAt?: string;
   customerPhone?: string;

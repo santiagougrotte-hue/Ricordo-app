@@ -20,6 +20,8 @@ export default async (req: Request, context: Context) => {
     WHATSAPP_NOTIFY_PHONE: Netlify.env.get('WHATSAPP_NOTIFY_PHONE'),
     ORS_API_KEY: Netlify.env.get('ORS_API_KEY'),
     SITE_URL: Netlify.env.get('URL'),
+    GESTION_WEBHOOK_URL: Netlify.env.get('GESTION_WEBHOOK_URL'),
+    GESTION_WEBHOOK_SECRET: Netlify.env.get('GESTION_WEBHOOK_SECRET'),
   };
   const result = await handleCreateOrder(body, env, { query, fetch, ip: context.ip, log: (m, x) => console.error('[create-order]', m, x ?? '') });
   return Response.json(result.body, { status: result.status, headers: { 'Cache-Control': 'no-store' } });

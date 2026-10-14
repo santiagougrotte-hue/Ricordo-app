@@ -3,10 +3,10 @@ import { Link, useNavigate } from 'react-router-dom';
 import { useStore } from '../state/store';
 import { api } from '../lib/api';
 import { money } from '../lib/money';
-import { cartMessage, discountLabel, findZone, quote, withCoupon, type AppliedCoupon } from '../lib/shipping';
+import { cartMessage, discountLabel, findZone, quote, withCoupon, withLoyalty, type AppliedCoupon } from '../lib/shipping';
 import { deliverySentence } from '../lib/delivery';
 import { whatsappLink } from '../lib/whatsapp';
-import type { OrderError, PaymentMethod } from '../lib/types';
+import type { LoyaltyStatus, OrderError, PaymentMethod } from '../lib/types';
 import { Icon } from '../components/Icon';
 import { MethodToggle } from '../components/MethodToggle';
 import { LocalitySelect } from '../components/LocalityForm';
@@ -20,7 +20,7 @@ const NEEDS_CAPTCHA = api.mode === 'live';
 
 interface Form {
   name: string; phone: string; email: string; address: string; postalCode: string; notes: string;
-  payment: PaymentMethod | ''; flexible: boolean;
+  payment: PaymentMethod | ''; flexible: boolean; optIn: boolean;
 }
 type Errors = Partial<Record<keyof Form | 'locality', string>>;
 
@@ -33,7 +33,7 @@ export function Checkout() {
   const { items, subtotal, totals, method, setMethod, settings, zones, localities, localityChoice, setLocalityChoice, status, setQuantity, reload, address, setAddress, distance } = s;
   const navigate = useNavigate();
   const [f, setF] = useState<Form>(() => ({
-    name: '', phone: '', email: '', address: address.street, postalCode: address.postalCode ?? '', notes: '', payment: '', flexible: false,
+    name: '', phone: '', email: '', address: address.street, postalCode: address.postalCode ?? '', notes: '', payment: '', flexible: false, optIn: false,
   }));
   const [errors, setErrors] = useState<Errors>({});
   const [serverError, setServerError] = useState<string | null>(null);
@@ -45,6 +45,16 @@ export function Checkout() {
   const [coupon, setCoupon] = useState<AppliedCoupon | null>(null);
   const [couponMsg, setCouponMsg] = useState<{ ok: boolean; text: string } | null>(null);
   const [couponBusy, setCouponBusy] = useState(false);
+  // Cliente frecuente: se consulta cuando el celular está completo (el pedido lo vuelve a calcular el servidor).
+  const [loyalty, setLoyalty] = useState<LoyaltyStatus | null>(null);
+  const phoneDigits = f.phone.replace(/\D/g, '');
+  useEffect(() => {
+    setLoyalty(null);
+    if (phoneDigits.length < 10) return;
+    let alive = true;
+    const t = setTimeout(() => { void api.checkLoyalty(phoneDigits).then((l) => { if (alive) setLoyalty(l); }); }, 500);
+    return () => { alive = false; clearTimeout(t); };
+  }, [phoneDigits]);
 
   // La localidad define la zona: mínimo, envío, descuento y fecha se recalculan en vivo.
   const lookup = useMemo(() => findZone(zones, localities, localityChoice), [zones, localities, localityChoice]);
@@ -53,7 +63,7 @@ export function Checkout() {
 
   // El envío sale de la localidad (km y peaje cargados en el panel).
   const distanceCost = distance.cost;
-  const q = settings ? withCoupon(quote(method, lookup, totals, settings, distanceCost), totals, coupon) : null;
+  const q = settings ? withLoyalty(withCoupon(quote(method, lookup, totals, settings, distanceCost), totals, coupon), totals, loyalty) : null;
 
   async function applyCoupon() {
     const code = couponInput.trim().toUpperCase();
@@ -163,7 +173,9 @@ export function Checkout() {
       notes: f.notes, paymentMethod: f.payment as PaymentMethod, flexibleDelivery: delivery && f.flexible,
       items: items.map((i) => ({ productId: i.product.id, quantity: i.quantity })),
       turnstileToken: token ?? undefined,
-      couponCode: q?.couponCode ?? undefined,
+      // El cupón aplicado va siempre: el servidor decide cuál descuento queda.
+      couponCode: coupon?.code,
+      marketingOptIn: f.optIn && !!f.email.trim(),
     });
     setSending(false);
     if (!res.ok) {
@@ -205,9 +217,21 @@ export function Checkout() {
             <Field id="phone" label="Celular con WhatsApp" error={errors.phone} hint="Por acá te confirmamos el pedido.">
               <input id="f-phone" className="input" type="tel" inputMode="tel" autoComplete="tel" placeholder="11 5555 1234" value={f.phone} onChange={set('phone')} {...err('phone')} />
             </Field>
+            {loyalty?.enabled && (
+              <p className={'loyalty-msg small' + (loyalty.eligible ? ' on' : '')} role="status">
+                {loyalty.eligible
+                  ? `🎉 Es tu compra número ${loyalty.nth}: tenés ${loyalty.pct}% off`
+                  : `Te ${loyalty.missing === 1 ? 'falta 1 compra' : `faltan ${loyalty.missing} compras`} para tu ${loyalty.pct}% off`}
+                {q?.loyaltyNote && <><br />{q.loyaltyNote}</>}
+              </p>
+            )}
             <Field id="email" label="Email (opcional)" error={errors.email}>
               <input id="f-email" className="input" type="email" autoComplete="email" value={f.email} onChange={set('email')} {...err('email')} />
             </Field>
+            <label className="check">
+              <input type="checkbox" checked={f.optIn} onChange={(e) => setF((v) => ({ ...v, optIn: e.target.checked }))} />
+              <span>Quiero recibir novedades y descuentos {f.email.trim() ? '' : '(dejanos tu email)'}</span>
+            </label>
           </fieldset>
 
           <fieldset className="co-block">
@@ -296,7 +320,7 @@ export function Checkout() {
               </div>
               <dl className="totals">
                 <div><dt>Subtotal</dt><dd>{money(subtotal)}</dd></div>
-                {q && q.discount > 0 && <div className="discount"><dt>{discountLabel(q.discountPct, q.discountBoxes, q.promoName, q.couponCode)}</dt><dd>−{money(q.discount)}</dd></div>}
+                {q && q.discount > 0 && <div className="discount"><dt>{q.discountReason ?? discountLabel(q.discountPct, q.discountBoxes, q.promoName, q.couponCode)}</dt><dd>−{money(q.discount)}</dd></div>}
                 <div>
                   <dt>{method === 'pickup' ? 'Retiro' : zone ? `Envío a ${zone.name}` : 'Envío'}</dt>
                   <dd>{!q || q.shippingCost === null ? '—' : q.shippingCost === 0 ? 'Gratis' : `${q.shippingEstimated ? 'aprox. ' : ''}${money(q.shippingCost)}`}</dd>

@@ -1,7 +1,7 @@
 // Envío, mínimos y descuentos. Se cuentan CAJAS (solo productos con countsAsBox).
 // Cálculo informativo para el carrito: el definitivo lo hace create_order() en la base, con la misma regla.
 import { money } from './money';
-import type { DeliveryMethod, Locality, Product, Promo, PromoTier, ShippingZone, StoreSettings } from './types';
+import type { DeliveryMethod, Locality, LoyaltyStatus, Product, Promo, PromoTier, ShippingZone, StoreSettings } from './types';
 
 /** "Otra localidad": no está en la lista → se ofrece WhatsApp o retiro. */
 export const OTHER_LOCALITY = 'otra';
@@ -106,6 +106,31 @@ export interface Quote {
   couponCode: string | null;
   /** Aviso sobre el cupón: por qué no se aplicó o qué descuento quedó. */
   couponNote: string | null;
+  /** Texto del renglón de descuento cuando no sale de la promo/cupón (ej. "Cliente frecuente (5ª compra) 10%"). */
+  discountReason: string | null;
+  /** Aviso de cliente frecuente cuando le toca pero quedó otro descuento mayor. */
+  loyaltyNote: string | null;
+}
+
+/**
+ * Igual que create_order: cada N pedidos entregados, el siguiente lleva X % (sobre los productos sin precio especial).
+ * No se suma a la promo ni al cupón: queda el mayor y se avisa cuál.
+ */
+export function withLoyalty(q: Quote, cart: CartTotals, l: LoyaltyStatus | null): Quote {
+  if (!l || !l.enabled || !l.eligible) return q;
+  const discount = Math.round((cart.promoSubtotal * l.pct) / 100);
+  if (discount <= 0) return q;
+  const other = q.couponCode ? `tu cupón ${q.couponCode}` : q.promoName ? `la promo ${q.promoName}` : 'el descuento por cajas extra';
+  if (discount <= q.discount) {
+    return { ...q, loyaltyNote: `Por ser cliente frecuente tenés ${l.pct}% off, pero los descuentos no se suman: quedó ${other} (no es menor).` };
+  }
+  return {
+    ...q, discount, discountPct: l.pct, discountBoxes: 0, discountMax: 0, missingForNextDiscount: null, nextDiscountPct: null,
+    promoName: null, promoGifts: 0, promoNext: null, couponCode: null,
+    couponNote: q.couponCode ? `Los descuentos no se suman: quedó tu ${l.pct}% de cliente frecuente, que es mayor que el cupón.` : q.couponNote,
+    discountReason: `Cliente frecuente (${l.nth}ª compra) ${l.pct}%`,
+    total: q.shippingCost === null ? null : cart.subtotal - discount + q.shippingCost,
+  };
 }
 
 /** Cupón validado por el servidor; el carrito lo recalcula con los cambios (el pedido lo vuelve a validar). */
@@ -200,7 +225,7 @@ function baseQuote(method: DeliveryMethod, lookup: ZoneLookup, cart: CartTotals,
   const pickupOk = settings.pickupEnabled && boxes >= settings.pickupMinBoxes && boxes > 0;
   const base = {
     method, boxes, nextBoxShipping: null, discountPct: 0, discount: 0, discountBoxes: 0, discountMax: 0, missingForNextDiscount: null, nextDiscountPct: null, suggestPickup: false,
-    freeFromBoxes: null, missingForFree: null, shippingEstimated: false, promoName: null, promoGifts: 0, promoNext: null, promoExcluded: false, couponCode: null, couponNote: null,
+    freeFromBoxes: null, missingForFree: null, shippingEstimated: false, promoName: null, promoGifts: 0, promoNext: null, promoExcluded: false, couponCode: null, couponNote: null, discountReason: null, loyaltyNote: null,
   };
   if (method === 'pickup') {
     const missing = Math.max(settings.pickupMinBoxes - boxes, 0);

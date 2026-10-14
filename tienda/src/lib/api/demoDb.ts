@@ -5,7 +5,7 @@ import { EXAMPLE_IDS, SEED_LOCALITIES, SEED_PRODUCTS, SEED_SETTINGS, SEED_ZONES 
 import type { AdminOrder, AdminSettings, ShippingConfig } from './adminTypes';
 import type { Coupon, CouponUse } from '../coupons';
 
-const KEY = 'ricordo-demo-db-v24';
+const KEY = 'ricordo-demo-db-v25';
 const CHANNEL = 'ricordo-demo';
 
 export interface DemoDb {
@@ -20,6 +20,8 @@ export interface DemoDb {
   inactive: string[];
   coupons: Coupon[];
   couponUses: CouponUse[];
+  /** Recontacto: celular normalizado → fecha ISO. */
+  contacts: Record<string, string>;
 }
 
 function fresh(): DemoDb {
@@ -30,7 +32,11 @@ function fresh(): DemoDb {
     localities: structuredClone(SEED_LOCALITIES),
     shippingConfig: { originLat: -34.765, originLng: -58.212, pricingMode: 'boxes', absorbPerBox: 3500, productMarginPct: 43, minMarginPct: 28, maxShipping: 12000, fuelPrice: 2080, consumption100km: 7, rounding: 500,
       bands: [{ upToKm: 3, price: 1500 }, { upToKm: 6, price: 2000 }, { upToKm: 10, price: 2500 }, { upToKm: 15, price: 3500 }, { upToKm: 25, price: 4500 }, { upToKm: 40, price: 6000 }, { upToKm: null, price: 8000 }] },
-    settings: { ...(SEED_SETTINGS as StoreSettings), notifyEmail: '' },
+    settings: {
+      ...(SEED_SETTINGS as StoreSettings), notifyEmail: '',
+      loyalty: { enabled: true, every: 4, pct: 10 },
+      recontact: { days: 25, couponPct: 10, reminderEnabled: true, template: '¡Hola {nombre}! Hace un tiempo que no te vemos por Ricordo 🍝 Te dejamos un {descuento} de descuento con el código {codigo}, válido hasta el {vence}.' },
+    },
     orders: [],
     nextNumber: 1001,
     inactive: [],
@@ -38,6 +44,7 @@ function fresh(): DemoDb {
     coupons: [{ id: 1, code: 'PRUEBA10', type: 'porcentaje', value: 10, minPurchase: null, expiresOn: null, maxUses: null, uses: 0,
       onePerCustomer: true, customerPhone: null, active: true, createdAt: new Date().toISOString(), totalDiscounted: 0 }],
     couponUses: [],
+    contacts: {},
   };
 }
 

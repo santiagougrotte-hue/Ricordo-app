@@ -72,3 +72,21 @@ export function parseCoupon(d: Row): string | unknown[] {
   if (phone && phone.length < 8) return 'Revisá el celular del cupón personal.';
   return [code, d.type, value, min, exp, max, !!d.onePerCustomer, phone || null, d.active !== false];
 }
+
+/** Cupón personal de un solo uso para un celular (recontacto y recordatorios). Código tipo VUELVE-7K2P. */
+export async function createPersonalCoupon(q: Query, phone: string, pct: number, days = 15): Promise<{ code: string; expiresOn: string }> {
+  const ABC = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'; // sin 0/O ni 1/I
+  for (let attempt = 0; attempt < 5; attempt++) {
+    const code = 'VUELVE-' + Array.from(crypto.getRandomValues(new Uint8Array(4)), (b) => ABC[b % ABC.length]).join('');
+    const rows = await q<{ vence_el: string }>(
+      `insert into cupones (codigo, tipo, valor, vence_el, usos_maximos, un_uso_por_cliente, cliente_telefono)
+       values ($1, 'porcentaje', $2, (now() at time zone 'America/Argentina/Buenos_Aires')::date + $3::int, 1, true, normalize_ar_phone($4))
+       on conflict (codigo) do nothing returning to_char(vence_el, 'YYYY-MM-DD') as vence_el`,
+      [code, pct, days, phone],
+    );
+    if (rows.length) return { code, expiresOn: rows[0].vence_el };
+  }
+  throw new Error('No se pudo generar un código de cupón');
+}
+
+export { recontactMessage } from '../src/lib/coupons';

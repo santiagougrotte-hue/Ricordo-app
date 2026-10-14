@@ -52,6 +52,9 @@ export interface AdminOrder {
   giftCount?: number;
   couponCode?: string | null;
   discountReason?: string | null;
+  discountType?: import('../types').DiscountType | null;
+  loyaltyCycle?: number | null;
+  marketingOptIn?: boolean;
   shippingCost: number;
   total: number;
   paymentMethod: PaymentMethod | 'mercadopago';
@@ -60,8 +63,18 @@ export interface AdminOrder {
   items: AdminOrderItem[];
 }
 
+export interface LoyaltyConfig { enabled: boolean; every: number; pct: number }
+export interface RecontactConfig { days: number; couponPct: number; template: string; reminderEnabled: boolean }
+
+export interface RecontactCustomer {
+  phone: string; rawPhone: string; name: string; zone: string | null; lastOrderAt: string; orders: number;
+  avgTotal: number; topProducts: string[]; contactedAt: string | null;
+}
+
 export interface AdminSettings extends StoreSettings {
   notifyEmail: string;
+  loyalty?: LoyaltyConfig;
+  recontact?: RecontactConfig;
 }
 
 export interface AdminProduct extends Product {
@@ -131,6 +144,9 @@ export interface AdminApi {
   listCoupons(): Promise<import('../coupons').Coupon[]>;
   saveCoupon(c: CouponDraft): Promise<number>;
   couponUses(id: number): Promise<import('../coupons').CouponUse[]>;
+  recontactList(f: { days?: number; minOrders?: number; zone?: string | null; all?: boolean }): Promise<{ days: number; couponPct: number; zones: string[]; customers: RecontactCustomer[] }>;
+  /** Marca "contactado el" y devuelve el mensaje y el link de WhatsApp (con cupón personal si se pide). */
+  recontactContact(phone: string, coupon: boolean): Promise<{ message: string; url: string; couponCode: string | null; expiresOn: string | null }>;
   saveSettings(s: AdminSettings): Promise<void>;
   /** Manda un WhatsApp de prueba al número de avisos. Devuelve el resultado legible. */
   testWhatsapp(): Promise<string>;

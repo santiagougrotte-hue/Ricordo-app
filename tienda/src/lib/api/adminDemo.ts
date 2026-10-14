@@ -1,6 +1,7 @@
 import type { AdminApi, AdminOrder, AdminProduct } from './adminTypes';
 import { onDemoChange, readDb, writeDb } from './demoDb';
-import { normalizePhone } from '../coupons';
+import { normalizePhone, recontactMessage } from '../coupons';
+import { arWhatsapp } from '../whatsapp';
 
 const SESSION = 'ricordo-demo-admin';
 export const DEMO_PASSWORD = 'ricordo';
@@ -207,6 +208,48 @@ export function createAdminDemo(): AdminApi {
     },
     async couponUses(id) {
       return readDb().couponUses.filter((u) => u.couponId === id).reverse();
+    },
+    async recontactList(f) {
+      const db = readDb();
+      const r = db.settings.recontact ?? { days: 25, couponPct: 10, template: '', reminderEnabled: true };
+      const days = f.days ?? r.days;
+      const cut = Date.now() - days * 86400_000;
+      const groups = new Map<string, typeof db.orders>();
+      for (const o of db.orders) if (o.status !== 'cancelled') groups.set(normalizePhone(o.customerPhone), [...(groups.get(normalizePhone(o.customerPhone)) ?? []), o]);
+      const customers = [...groups].map(([phone, os]) => {
+        const last = os.reduce((a, o) => (o.createdAt > a.createdAt ? o : a));
+        const qty = new Map<string, number>();
+        for (const o of os) for (const i of o.items) if (i.unitPrice > 0) qty.set(i.productName, (qty.get(i.productName) ?? 0) + i.quantity);
+        return {
+          phone, rawPhone: last.customerPhone, name: last.customerName, zone: last.zoneName, lastOrderAt: last.createdAt, orders: os.length,
+          avgTotal: Math.round(os.reduce((a, o) => a + o.total, 0) / os.length),
+          topProducts: [...qty].sort((a, b) => b[1] - a[1]).slice(0, 3).map(([n]) => n), contactedAt: db.contacts[phone] ?? null,
+        };
+      }).filter((c) => Date.parse(c.lastOrderAt) < cut && c.orders >= (f.minOrders ?? 1) && (!f.zone || c.zone === f.zone)
+        && (f.all || !c.contactedAt || Date.parse(c.contactedAt) < cut))
+        .sort((a, b) => b.orders - a.orders || a.lastOrderAt.localeCompare(b.lastOrderAt));
+      const zones = [...new Set(db.orders.map((o) => o.zoneName).filter((z): z is string => !!z))].sort();
+      return { days, couponPct: r.couponPct, zones, customers };
+    },
+    async recontactContact(phone, coupon) {
+      const db = readDb();
+      const r = db.settings.recontact!;
+      const tel = normalizePhone(phone);
+      const last = db.orders.filter((o) => normalizePhone(o.customerPhone) === tel).sort((a, b) => b.createdAt.localeCompare(a.createdAt))[0];
+      if (!last) throw new Error('Cliente inexistente');
+      const wa = arWhatsapp(last.customerPhone);
+      if (!wa) throw new Error('Ese celular no es un WhatsApp argentino válido.');
+      let code: string | null = null, expiresOn: string | null = null;
+      if (coupon) {
+        code = 'VUELVE-' + Math.random().toString(36).slice(2, 6).toUpperCase();
+        expiresOn = new Date(Date.now() - 3 * 3600_000 + 15 * 86400_000).toISOString().slice(0, 10);
+        db.coupons.push({ id: Math.max(0, ...db.coupons.map((x) => x.id)) + 1, code, type: 'porcentaje', value: r.couponPct, minPurchase: null, expiresOn,
+          maxUses: 1, uses: 0, onePerCustomer: true, customerPhone: tel, active: true, createdAt: new Date().toISOString(), totalDiscounted: 0 });
+      }
+      db.contacts[tel] = new Date().toISOString();
+      writeDb(db, { type: 'catalog' });
+      const message = recontactMessage(r.template, { name: last.customerName, pct: r.couponPct, code: code ?? undefined, expiresOn: expiresOn ?? undefined });
+      return { message, url: `https://wa.me/${wa}?text=${encodeURIComponent(message)}`, couponCode: code, expiresOn };
     },
     async getSettings() {
       return readDb().settings;

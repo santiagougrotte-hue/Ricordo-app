@@ -13,6 +13,7 @@ import { Products } from './Products';
 import { ProductEdit } from './ProductEdit';
 import { Zones } from './Zones';
 import { Coupons } from './Coupons';
+import { Recontact } from './Recontact';
 import { SettingsPage } from './SettingsPage';
 import './admin.css';
 
@@ -72,6 +73,7 @@ function Shell({ email, onSignOut }: { email: string; onSignOut: () => void }) {
           <NavLink to="/admin/productos">Productos</NavLink>
           <NavLink to="/admin/zonas">Zonas</NavLink>
           <NavLink to="/admin/cupones">Cupones</NavLink>
+          <NavLink to="/admin/recontactar">Recontactar</NavLink>
           <NavLink to="/admin/ajustes">Ajustes</NavLink>
         </nav>
       </header>
@@ -94,6 +96,7 @@ function Shell({ email, onSignOut }: { email: string; onSignOut: () => void }) {
           <Route path="productos/:id" element={<ProductEdit />} />
           <Route path="zonas" element={<Zones />} />
           <Route path="cupones" element={<Coupons />} />
+          <Route path="recontactar" element={<Recontact />} />
           <Route path="ajustes" element={<SettingsPage />} />
           <Route path="*" element={<Navigate to="pedidos" replace />} />
         </Routes>

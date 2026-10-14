@@ -4,7 +4,9 @@ import type { Query } from './db';
 import type { MediaStore } from './media';
 import { allow, clearCookie, ipHash, json, readCookie, sameText, sessionCookie, signSession, verifySession } from './http';
 import { mapLocality, mapProduct, mapPromo, mapSettings, mapZone, PRODUCTS_SQL, PROMO_SQL } from './catalog';
-import { COUPONS_SQL, mapCoupon, parseCoupon } from './coupons';
+import { COUPONS_SQL, createPersonalCoupon, mapCoupon, parseCoupon, recontactMessage } from './coupons';
+import { loadPedidoDesdeWeb } from './gestion';
+import { arWhatsapp } from '../src/lib/whatsapp';
 import { loadBands, mapShippingConfig } from './distance';
 import { sendWhatsapp } from './createOrder';
 import { sendPush, validSubscription, vapidKeys } from './push';
@@ -43,6 +45,27 @@ const ORDER_SQL = `
 
 const day = (d: unknown) => (d == null ? null : d instanceof Date ? d.toISOString().slice(0, 10) : String(d).slice(0, 10));
 const DATE = /^\d{4}-\d{2}-\d{2}$/;
+
+// Clientes (por celular normalizado) cuya última compra fue hace más de X días.
+const RECONTACT_SQL = `
+  with c as (
+    select normalize_ar_phone(customer_phone) as phone,
+           (array_agg(customer_name order by created_at desc))[1] as name,
+           (array_agg(customer_phone order by created_at desc))[1] as raw_phone,
+           (array_agg(zone_name order by created_at desc))[1] as zone,
+           max(created_at) as last_at, count(*)::int as orders, round(avg(total))::int as avg_total
+    from orders where status <> 'cancelled' group by 1
+  )
+  select c.*, cc.contacted_at,
+         (select array_agg(n) from (
+            select oi.product_name as n from order_items oi join orders o on o.id = oi.order_id
+            where normalize_ar_phone(o.customer_phone) = c.phone and o.status <> 'cancelled' and oi.unit_price > 0
+            group by oi.product_name order by sum(oi.quantity) desc, oi.product_name limit 3) t) as top_products
+  from c left join customer_contacts cc on cc.phone = c.phone
+  where c.last_at < now() - make_interval(days => $1) and c.orders >= $2 and ($3::text is null or c.zone = $3)
+    and ($4 or cc.contacted_at is null or cc.contacted_at < now() - make_interval(days => $1))
+  order by c.orders desc, c.last_at
+  limit 300`;
 
 export function mapOrder(r: Row) {
   return {
@@ -370,6 +393,46 @@ export async function handleAdmin(req: Request, path: string, env: AdminEnv, dep
   }
 
   // ── Ajustes ──
+  // ── App de gestión: el pedido tal como se le manda (contrato crearPedidoDesdeWeb) ──
+  if (seg[0] === 'orders' && UUID.test(seg[1] ?? '') && seg[2] === 'gestion' && method === 'GET') {
+    const p = await loadPedidoDesdeWeb(q, seg[1]);
+    return p ? json({ pedido: p }) : bad('Pedido inexistente', 404);
+  }
+
+  // ── Para recontactar ──
+  if (path === 'recontact' && method === 'GET') {
+    const u = new URL(req.url);
+    const [cfg] = await q<Row>(`select recontact_days, recontact_coupon_pct, recontact_template from store_settings limit 1`);
+    const days = int(Number(u.searchParams.get('days') ?? cfg.recontact_days), 1) ?? cfg.recontact_days;
+    const minOrders = int(Number(u.searchParams.get('minOrders') ?? 1), 1) ?? 1;
+    const zone = u.searchParams.get('zone') || null;
+    const all = u.searchParams.get('all') === '1';
+    const rows = await q<Row>(RECONTACT_SQL, [days, minOrders, zone, all]);
+    const zones = (await q<{ z: string }>(`select distinct zone_name as z from orders where zone_name is not null order by 1`)).map((r) => r.z);
+    return json({
+      days, couponPct: cfg.recontact_coupon_pct, zones,
+      customers: rows.map((r) => ({
+        phone: r.phone, rawPhone: r.raw_phone, name: r.name, zone: r.zone, lastOrderAt: new Date(r.last_at).toISOString(), orders: r.orders,
+        avgTotal: r.avg_total, topProducts: r.top_products ?? [], contactedAt: r.contacted_at ? new Date(r.contacted_at).toISOString() : null,
+      })),
+    });
+  }
+  if (path === 'recontact/contact' && method === 'POST') {
+    const b = await body();
+    const phone = String(b.phone ?? '').replace(/\D/g, '');
+    const [c] = await q<Row>(`select (array_agg(customer_name order by created_at desc))[1] as name, (array_agg(customer_phone order by created_at desc))[1] as raw
+                             from orders where normalize_ar_phone(customer_phone) = normalize_ar_phone($1)`, [phone]);
+    if (!c?.name) return bad('Cliente inexistente', 404);
+    const wa = arWhatsapp(c.raw);
+    if (!wa) return bad('Ese celular no es un WhatsApp argentino válido.');
+    const [cfg] = await q<Row>(`select recontact_coupon_pct, recontact_template from store_settings limit 1`);
+    const coupon = b.coupon === true ? await createPersonalCoupon(q, c.raw, cfg.recontact_coupon_pct) : null;
+    const message = recontactMessage(cfg.recontact_template, { name: c.name, pct: cfg.recontact_coupon_pct, code: coupon?.code, expiresOn: coupon?.expiresOn });
+    await q(`insert into customer_contacts (phone, contacted_at, coupon_code) values (normalize_ar_phone($1), now(), $2)
+             on conflict (phone) do update set contacted_at = now(), coupon_code = excluded.coupon_code`, [c.raw, coupon?.code ?? null]);
+    return json({ message, url: `https://wa.me/${wa}?text=${encodeURIComponent(message)}`, couponCode: coupon?.code ?? null, expiresOn: coupon?.expiresOn ?? null });
+  }
+
   // ── Cupones ──
   if (path === 'coupons' && method === 'GET') {
     return json({ coupons: (await q(`${COUPONS_SQL} order by c.activo desc, c.creado_el desc`)).map(mapCoupon) });
@@ -401,7 +464,9 @@ export async function handleAdmin(req: Request, path: string, env: AdminEnv, dep
 
   if (path === 'settings' && method === 'GET') {
     const [[s], [promo]] = await Promise.all([q(`select * from store_settings limit 1`), q(PROMO_SQL)]);
-    return json({ settings: { ...mapSettings(s), notifyEmail: s.notify_email ?? '', promo: promo ? mapPromo(promo) : null } });
+    return json({ settings: { ...mapSettings(s), notifyEmail: s.notify_email ?? '', promo: promo ? mapPromo(promo) : null,
+      loyalty: { enabled: s.loyalty_enabled, every: s.loyalty_every, pct: s.loyalty_pct },
+      recontact: { days: s.recontact_days, couponPct: s.recontact_coupon_pct, template: s.recontact_template, reminderEnabled: s.reminder_enabled } } });
   }
   if (path === 'settings' && method === 'POST') {
     const s = await body();
@@ -412,6 +477,19 @@ export async function handleAdmin(req: Request, path: string, env: AdminEnv, dep
                notify_email=$6, cutoff_weekday=$7, cutoff_time=$8`,
       [!!s.pickupEnabled, s.pickupMinBoxes, String(s.pickupAddress ?? ''), String(s.whatsappPhone ?? '').replace(/\D/g, ''), String(s.transferInfo ?? ''),
        String(s.notifyEmail ?? '').trim() || null, wd, s.cutoffTime]);
+    if (s.loyalty && typeof s.loyalty === 'object') {
+      const l = s.loyalty as Record<string, unknown>;
+      const every = int(l.every, 1), pct = int(l.pct, 1);
+      if (every === null || every > 50 || pct === null || pct > 50) return bad('Revisá cliente frecuente: cada 1 a 50 pedidos, descuento de 1 a 50%.');
+      await q(`update store_settings set loyalty_enabled=$1, loyalty_every=$2, loyalty_pct=$3`, [!!l.enabled, every, pct]);
+    }
+    if (s.recontact && typeof s.recontact === 'object') {
+      const r = s.recontact as Record<string, unknown>;
+      const days = int(r.days, 1), pct = int(r.couponPct, 1), tpl = String(r.template ?? '').trim();
+      if (days === null || days > 365 || pct === null || pct > 50) return bad('Revisá recontacto: días de 1 a 365, cupón de 1 a 50%.');
+      if (tpl.length < 5 || tpl.length > 600) return bad('Revisá la plantilla del mensaje de recontacto.');
+      await q(`update store_settings set recontact_days=$1, recontact_coupon_pct=$2, recontact_template=$3, reminder_enabled=$4`, [days, pct, tpl, r.reminderEnabled !== false]);
+    }
     if (s.promo && typeof s.promo === 'object') {
       const p = s.promo as Record<string, unknown>;
       const starts = new Date(String(p.startsAt)), ends = new Date(String(p.endsAt));

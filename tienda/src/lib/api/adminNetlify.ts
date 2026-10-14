@@ -139,6 +139,17 @@ export function createAdminNetlify(): AdminApi {
     async couponUses(id) {
       return (await api<{ uses: Omit<CouponUse, 'couponId'>[] }>(`coupons/${id}/uses`)).uses.map((u) => ({ ...u, couponId: id }));
     },
+    async recontactList(f) {
+      const p = new URLSearchParams();
+      if (f.days) p.set('days', String(f.days));
+      if (f.minOrders) p.set('minOrders', String(f.minOrders));
+      if (f.zone) p.set('zone', f.zone);
+      if (f.all) p.set('all', '1');
+      return api(`recontact?${p}`);
+    },
+    async recontactContact(phone, coupon) {
+      return post('recontact/contact', { phone, coupon });
+    },
     async getSettings() {
       return (await api<{ settings: AdminSettings }>('settings')).settings;
     },

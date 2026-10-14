@@ -185,6 +185,37 @@ describe.skipIf(!TEST_DB)('API del panel contra Netlify Database (Postgres real)
     expect(JSON.stringify(await getCatalog(q))).not.toContain('-34.77'); // el origen nunca sale en la tienda
   });
 
+  it('para recontactar: clientes sin comprar hace X días, filtros, WhatsApp con cupón personal y "contactado el"', async () => {
+    const add = (name: string, phone: string, daysAgo: number, zone: string, total: number) => q(
+      `insert into orders (customer_name, customer_phone, delivery_method, subtotal, shipping_cost, total, payment_method, created_at, zone_name, delivery_window_label)
+       values ($1, $2, 'pickup', $5, 0, $5, 'cash', now() - make_interval(days => $3), $4, '') returning id`, [name, phone, daysAgo, zone, total]);
+    const [o1] = await add('Laura Gómez', '1144440001', 60, 'CABA', 20000);
+    await q(`insert into order_items (order_id, product_id, product_name, units_per_box, quantity, unit_price)
+             select $1, id, 'Cabutia', 12, 3, 10000 from products limit 1`, [o1.id]);
+    await add('Laura Gómez', '011 15 4444-0001', 40, 'CABA', 30000);
+    await add('Pedro', '1144440002', 30, 'Berazategui', 10000);
+    await add('Reciente', '1144440003', 3, 'CABA', 10000);
+    const list = await call('GET', 'recontact?days=25');
+    const phones = (list.data.customers as { phone: string }[]).map((c) => c.phone);
+    expect(phones).toContain('1144440001');
+    expect(phones).toContain('1144440002');
+    expect(phones).not.toContain('1144440003');
+    expect(list.data.customers.find((c: { phone: string }) => c.phone === '1144440001')).toMatchObject({ name: 'Laura Gómez', orders: 2, avgTotal: 25000, topProducts: ['Cabutia'], zone: 'CABA', contactedAt: null });
+    expect((await call('GET', 'recontact?days=25&minOrders=2')).data.customers.map((c: { phone: string }) => c.phone)).toEqual(['1144440001']);
+    expect((await call('GET', 'recontact?days=25&zone=Berazategui')).data.customers.map((c: { phone: string }) => c.phone)).toEqual(['1144440002']);
+    const r = await call('POST', 'recontact/contact', { body: { phone: '1144440001', coupon: true } });
+    expect(r.status).toBe(200);
+    expect(r.data.couponCode).toMatch(/^VUELVE-/);
+    expect(r.data.url).toMatch(/^https:\/\/wa\.me\/5491144440001\?text=/);
+    expect(r.data.message).toContain(r.data.couponCode);
+    expect(r.data.message).toMatch(/^¡Hola Laura!/);
+    // ya contactado: no vuelve a aparecer (salvo que se pidan todos)
+    expect((await call('GET', 'recontact?days=25')).data.customers.map((c: { phone: string }) => c.phone)).not.toContain('1144440001');
+    expect((await call('GET', 'recontact?days=25&all=1')).data.customers.find((c: { phone: string }) => c.phone === '1144440001').contactedAt).not.toBeNull();
+    const plain = await call('POST', 'recontact/contact', { body: { phone: '1144440002', coupon: false } });
+    expect(plain.data).toMatchObject({ couponCode: null, message: '¡Hola Pedro! Hace un tiempo que no te vemos por Ricordo 🍝' });
+  });
+
   it('ajustes: email de aviso privado, retiro en cajas y cierre semanal', async () => {
     const s = { pickupEnabled: true, pickupMinBoxes: 2, pickupAddress: 'Calle 1', whatsappPhone: '+54 9 11 5555-1234', transferInfo: 'Alias X', notifyEmail: 'yo@ricordo.com', cutoffWeekday: 3, cutoffTime: '18:30' };
     expect((await call('POST', 'settings', { body: { ...s, cutoffTime: '25:00' } })).status).toBe(400);

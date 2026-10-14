@@ -178,3 +178,8 @@
 .adm-coupon { width: 100%; grid-template-columns: 1fr auto; text-align: left; cursor: pointer; font: inherit; color: inherit; }
 .adm-coupon small { display: block; color: var(--color-text-muted); }
 .adm-coupon-form .adm-grid2, .adm-coupon-form .adm-grid3 { align-items: start; }
+
+/* Para recontactar */
+.adm-recontact-filters { flex-wrap: wrap; align-items: end; gap: var(--space-3); overflow: visible; }
+.adm-recontact-filters .field-label { display: grid; gap: var(--space-1); }
+.adm-recontact td { vertical-align: top; }
