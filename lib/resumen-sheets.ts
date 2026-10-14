@@ -57,9 +57,10 @@ function rangoMes(mes: string): { mesCol: string; desde: string; hasta: string }
 /** Cuántas unidades sueltas representa "una caja" de referencia para cada línea de catálogo —
  * usado para mostrar el stock compartido por producto (ver TipoItemStock) en términos legibles de
  * "cajas", ya que se guarda siempre en unidades sueltas. Exportada para reusar el mismo criterio
- * en Inventario → Productos terminados. */
+ * en Inventario → Productos terminados. Solo la línea Pasta se vende de a 12 (sorrentinos,
+ * ravioles); el resto (Salsa, Lasaña, Pizza o sin línea) se vende de a 1. */
 export function refUnidades(linea: string | undefined): number {
-  return linea === "Salsa" ? 1 : 12;
+  return linea === "Pasta" ? 12 : 1;
 }
 
 // --- 1) RESUMEN_PRODUCTOS -------------------------------------------------------------------------
@@ -121,8 +122,18 @@ export function resumenProductosSheets(data: RicordoDataV2, mes: string): FilaRe
       }
 
       const variantesDelProducto = data.producto_variantes.filter((v) => v.producto_id === producto.id);
-      const varianteMinoristaRef = variantesDelProducto.find((v) => v.activo && v.canal === "Minorista" && v.unidades_por_paquete === ref);
-      const varianteMayoristaRef = variantesDelProducto.find((v) => v.activo && v.canal === "Mayorista" && v.unidades_por_paquete === ref);
+      const varianteRefDeCanal = (canal: "Minorista" | "Mayorista") => {
+        const activasDelCanal = variantesDelProducto.filter((v) => v.activo && v.canal === canal);
+        const exacta = activasDelCanal.find((v) => v.unidades_por_paquete === ref);
+        if (exacta) return exacta;
+        if (activasDelCanal.length === 0) return undefined;
+        console.warn(
+          `resumenProductosSheets: "${producto.nombre}" (línea ${producto.linea ?? "sin línea"}) no tiene variante ${canal} activa de ${ref}u — uso "${activasDelCanal[0].nombre}" como referencia.`
+        );
+        return activasDelCanal[0];
+      };
+      const varianteMinoristaRef = varianteRefDeCanal("Minorista");
+      const varianteMayoristaRef = varianteRefDeCanal("Mayorista");
 
       let costo_insumos_caja_ref = 0;
       if (varianteMinoristaRef) {

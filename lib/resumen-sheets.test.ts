@@ -114,6 +114,54 @@ test("resumenProductosSheets: línea Salsa usa ref=1 (no 12) para cajas equivale
   assert.equal(salsa.unidades_por_caja_ref, 1);
 });
 
+test("resumenProductosSheets: un sorrentino de línea Pasta sigue exportando unidades_por_caja_ref = 12, igual que antes", () => {
+  const filas = resumenProductosSheets(fixture(), "2026-09");
+  const calabaza = filas.find((f) => f.producto_id === "PROD-01")!; // línea Pasta en el fixture
+  assert.equal(calabaza.unidades_por_caja_ref, 12);
+});
+
+test("resumenProductosSheets: una Lasaña con variante minorista de 1 unidad a $18.000 exporta unidades_por_caja_ref=1, el precio y el costo de la receta (no 0)", () => {
+  const data = fixture();
+  data.productos.push({ id: "PROD-LAS", nombre: "Lasaña de ragú", activo: true, linea: "Lasaña" });
+  data.producto_variantes.push({
+    id: "VAR-LAS-MIN",
+    producto_id: "PROD-LAS",
+    canal: "Minorista",
+    activo: true,
+    nombre: "Lasaña de ragú",
+    precio_venta: 18000,
+    unidades_por_paquete: 1,
+  });
+  data.recetas.push({ id: "REC-LAS", producto_id: "PROD-LAS", nombre: "Receta Lasaña", activa: true });
+  data.receta_items.push({ id: "RL-COSTO", receta_id: "REC-LAS", insumo_id: "ING-01", etapa: "masa", cantidad: 2 }); // 2kg harina * $1000 = $2000
+  const filas = resumenProductosSheets(data, "2026-09");
+  const lasagna = filas.find((f) => f.producto_id === "PROD-LAS")!;
+  assert.equal(lasagna.unidades_por_caja_ref, 1);
+  assert.equal(lasagna.precio_minorista_caja_ref, 18000);
+  assert.equal(lasagna.costo_insumos_caja_ref, 2000);
+  assert.ok(lasagna.costo_total_caja_ref > 0);
+});
+
+test("resumenProductosSheets: sin variante exacta de ref, usa la primera variante activa del canal y no exporta 0 en silencio", () => {
+  const data = fixture();
+  // Línea Pasta (ref=12) pero la única variante activa Mayorista es de 6 unidades: no hay
+  // ninguna de 12u, así que cae al fallback en vez de dejar el precio/costo mayorista en 0.
+  data.producto_variantes.push({
+    id: "VAR-SIXPACK",
+    producto_id: "PROD-01",
+    canal: "Mayorista",
+    activo: true,
+    nombre: "Calabaza mayorista 6u",
+    precio_venta: 4500,
+    unidades_por_paquete: 6,
+  });
+  const varianteMay12 = data.producto_variantes.find((v) => v.id === "VAR-MAY12")!;
+  varianteMay12.activo = false; // ya no hay ninguna Mayorista de 12u activa
+  const filas = resumenProductosSheets(data, "2026-09");
+  const calabaza = filas.find((f) => f.producto_id === "PROD-01")!;
+  assert.equal(calabaza.precio_mayorista_caja_ref, 4500); // de la variante de 6u, no 0
+});
+
 test("resumenGastosSheets: compras_insumos, una fila por categoría, excluye las categorías de reparto", () => {
   const filas = resumenGastosSheets(fixture(), "2026-09");
   const porCategoria = new Map(filas.map((f) => [f.categoria, f]));
