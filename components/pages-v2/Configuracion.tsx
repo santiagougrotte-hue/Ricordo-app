@@ -130,6 +130,19 @@ function GeneralTab() {
             onChange={(e) => setUmbral("saldo_inicial_caja", Number(e.target.value))}
           />
         </Field>
+        <Field label="Fecha de corte">
+          <Input
+            type="date"
+            value={data.configuracion.fecha_saldo_inicial_caja ?? ""}
+            onChange={(e) => setUmbral("fecha_saldo_inicial_caja", e.target.value || null)}
+          />
+        </Field>
+        <p className="mt-2 text-[12.5px] text-text3">
+          Pedidos y compras anteriores a esta fecha nunca aparecen en Finanzas → Por cobrar/Por pagar — se asume que
+          todo lo de antes ya se cobró y pagó en su momento, aunque no haya quedado registrado acá. Sin esta fecha
+          cargada, esos saldos viejos sí se cuentan como pendientes (por eso existe también &ldquo;Saldar
+          históricos…&rdquo; en Por cobrar/Por pagar, para los casos puntuales que esta fecha no cubra).
+        </p>
       </Card>
 
       <Card title="Umbrales de alerta">

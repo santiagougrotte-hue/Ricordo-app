@@ -1386,6 +1386,31 @@ export function detectarCanalInconsistente(data: RicordoDataV2): AlertaCanalInco
   return alertas;
 }
 
+// --- Productos sin mano de obra cargada -----------------------------------------------------
+// Sin `minutos_por_unidad`, `costoManoDeObraVariante` da 0 y el costo/margen de ese producto sale
+// mal en todos lados (Productos, Exportar a Sheets, etc.) sin que nada lo avise. `sin_mano_obra_ok`
+// es el escape explícito para los productos que de verdad no llevan mano de obra (ej. una salsa que
+// solo se envasa) — una vez marcado, el producto deja de aparecer acá para siempre (hasta que se
+// desmarque a mano editando la receta).
+
+export interface ProductoSinManoDeObra {
+  producto_id: string;
+  producto: string;
+  receta_id: string;
+}
+
+export function productosSinManoDeObra(data: RicordoDataV2): ProductoSinManoDeObra[] {
+  const avisos: ProductoSinManoDeObra[] = [];
+  for (const producto of data.productos.filter((p) => p.activo)) {
+    const receta = data.recetas.find((r) => r.producto_id === producto.id && r.activa);
+    if (!receta || receta.sin_mano_obra_ok) continue;
+    if (!receta.minutos_por_unidad || receta.minutos_por_unidad <= 0) {
+      avisos.push({ producto_id: producto.id, producto: producto.nombre, receta_id: receta.id });
+    }
+  }
+  return avisos;
+}
+
 // --- Estado de cobro de un pedido -----------------------------------------------------------
 // Se calcula en vivo a partir de los movimientos_financieros ya registrados con
 // origen_tipo "venta_pedido" y origen_id = pedido.id — nunca se guarda como campo propio del

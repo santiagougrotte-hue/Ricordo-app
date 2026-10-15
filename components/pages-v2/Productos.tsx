@@ -35,6 +35,7 @@ import {
   categoriasPorAmbito,
   detectarCanalInconsistente,
   variantesSinFactorReceta,
+  productosSinManoDeObra,
   ETAPAS_POR_UNIDAD,
 } from "@/lib/calc-v2";
 import type { Canal, EtapaReceta, LineaProducto, OperacionAjusteReceta, ProductoVariante, TipoUnidadVenta } from "@/lib/types-v2";
@@ -733,6 +734,7 @@ function ProductosTab() {
   );
   const actual = seleccionado ?? productos[0]?.id ?? null;
   const alertasCanal = useMemo(() => detectarCanalInconsistente(data), [data]);
+  const idsSinManoDeObra = useMemo(() => new Set(productosSinManoDeObra(data).map((a) => a.producto_id)), [data]);
 
   function corregirCanal(varianteId: string, canal: Canal) {
     setData((d) => ({ ...d, producto_variantes: d.producto_variantes.map((v) => (v.id === varianteId ? { ...v, canal } : v)) }));
@@ -815,6 +817,11 @@ function ProductosTab() {
               >
                 {p.nombre}
                 {!p.activo && <span className="ml-1.5 text-text3">(inactivo)</span>}
+                {p.activo && idsSinManoDeObra.has(p.id) && (
+                  <span className="ml-1.5 inline-block">
+                    <Badge color="orange">Sin mano de obra</Badge>
+                  </span>
+                )}
               </div>
             ))}
           </div>

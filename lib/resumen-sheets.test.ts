@@ -6,9 +6,11 @@ import {
   resumenProductosSheets,
   resumenGastosSheets,
   resumenRecetasRellenoSheets,
+  resumenRecetasArmadoSheets,
   resumenRepartoSheets,
   resumenPreciosFormatosSheets,
   resumenStockInsumosSheets,
+  resumenFlujoCajaSemanalSheets,
   avisosRecetaNoExportada,
   formatearNumero,
   celdaTexto,
@@ -200,43 +202,74 @@ test("formatearNumero/celdaTexto: separador coma por defecto, 5 decimales en REC
   assert.equal(celdaTexto(fila.cantidad_por_unidad, decimales[4], "coma"), "0,005");
 });
 
-test("resumenRecetasRellenoSheets: un producto de línea Lasaña trae todas las etapas salvo packaging, sumando el mismo insumo repetido en 2 etapas", () => {
+test("RECETAS_RELLENO / RECETAS_ARMADO: una Lasaña con ítems en relleno, masa, armado y packaging separa relleno de masa+armado, y el packaging no sale en ninguna", () => {
   const data = fixture();
   data.productos.push({ id: "PROD-LAS", nombre: "Lasaña", activo: true, linea: "Lasaña" });
   data.recetas.push({ id: "REC-LAS", producto_id: "PROD-LAS", nombre: "Receta Lasaña", activa: true });
   data.insumos.push(
     { id: "ING-RAGU", nombre: "Ragú", unidad: "kg", tipo: "ingrediente", precio_actual: 2000, activo: true, controla_stock: false },
-    { id: "ING-QUESO", nombre: "Queso", unidad: "kg", tipo: "ingrediente", precio_actual: 3000, activo: true, controla_stock: false },
-    { id: "ING-ALUMINIO", nombre: "Bandeja de aluminio", unidad: "unidad", tipo: "ingrediente", precio_actual: 300, activo: true, controla_stock: false },
+    { id: "ING-LAMINAS", nombre: "Láminas de masa", unidad: "kg", tipo: "ingrediente", precio_actual: 1500, activo: true, controla_stock: false },
+    { id: "ING-MOZZA", nombre: "Mozzarella", unidad: "kg", tipo: "ingrediente", precio_actual: 3000, activo: true, controla_stock: false },
     { id: "ING-BOLSA", nombre: "Bolsa lasaña", unidad: "unidad", tipo: "packaging", precio_actual: 50, activo: true, controla_stock: false }
   );
   data.receta_items.push(
-    { id: "RL-1", receta_id: "REC-LAS", insumo_id: "ING-RAGU", etapa: "salsa", cantidad: 0.1 },
-    { id: "RL-2", receta_id: "REC-LAS", insumo_id: "ING-QUESO", etapa: "terminacion", cantidad: 0.05 },
-    { id: "RL-3", receta_id: "REC-LAS", insumo_id: "ING-QUESO", etapa: "masa", cantidad: 0.02 }, // mismo insumo, otra etapa -> se suma
-    { id: "RL-4", receta_id: "REC-LAS", insumo_id: "ING-ALUMINIO", etapa: "armado", cantidad: 1 }, // nueva etapa "armado": entra igual, no es packaging
-    { id: "RL-5", receta_id: "REC-LAS", insumo_id: "ING-BOLSA", etapa: "packaging", cantidad: 1 } // packaging: excluido
+    { id: "RL-1", receta_id: "REC-LAS", insumo_id: "ING-RAGU", etapa: "relleno", cantidad: 0.3 },
+    { id: "RL-2", receta_id: "REC-LAS", insumo_id: "ING-LAMINAS", etapa: "masa", cantidad: 0.2 },
+    { id: "RL-3", receta_id: "REC-LAS", insumo_id: "ING-MOZZA", etapa: "armado", cantidad: 0.1 },
+    { id: "RL-4", receta_id: "REC-LAS", insumo_id: "ING-BOLSA", etapa: "packaging", cantidad: 1 }
   );
-  const filas = resumenRecetasRellenoSheets(data).filter((f) => f.producto_id === "PROD-LAS");
-  assert.equal(filas.length, 3); // Ragú + Queso (sumado) + Bandeja (armado) — Bolsa queda afuera
-  assert.ok(filas.every((f) => f.cantidad_por_unidad > 0));
-  const ragu = filas.find((f) => f.insumo_id === "ING-RAGU")!;
-  assert.equal(ragu.cantidad_por_unidad, 0.1);
-  const queso = filas.find((f) => f.insumo_id === "ING-QUESO")!;
-  assert.equal(queso.cantidad_por_unidad, 0.07); // 0.05 (terminación) + 0.02 (masa)
-  assert.ok(filas.some((f) => f.insumo_id === "ING-ALUMINIO"));
-  assert.equal(filas.some((f) => f.insumo_id === "ING-BOLSA"), false);
+  const relleno = resumenRecetasRellenoSheets(data).filter((f) => f.producto_id === "PROD-LAS");
+  const armado = resumenRecetasArmadoSheets(data).filter((f) => f.producto_id === "PROD-LAS");
+
+  assert.equal(relleno.length, 1);
+  assert.equal(relleno[0].insumo_id, "ING-RAGU");
+
+  assert.equal(armado.length, 2); // láminas (masa, no-Pasta) + mozzarella (armado)
+  assert.ok(armado.some((f) => f.insumo_id === "ING-LAMINAS"));
+  assert.ok(armado.some((f) => f.insumo_id === "ING-MOZZA"));
+
+  assert.equal(relleno.some((f) => f.insumo_id === "ING-BOLSA"), false);
+  assert.equal(armado.some((f) => f.insumo_id === "ING-BOLSA"), false);
 });
 
-test("resumenRecetasRellenoSheets: un producto de línea Pasta con ítems en relleno Y armado exporta los dos (no solo relleno)", () => {
+test("RECETAS_RELLENO / RECETAS_ARMADO: un sorrentino de línea Pasta con ítems en masa y relleno exporta solo el relleno en RECETAS_RELLENO y no aparece en RECETAS_ARMADO", () => {
   const data = fixture();
-  data.insumos.push({ id: "ING-ARMADO", nombre: "Sello", unidad: "unidad", tipo: "packaging", precio_actual: 10, activo: true, controla_stock: false });
-  // PROD-01 (Calabaza, línea Pasta en el fixture base) ya tiene un ítem de relleno (RECI-02) — le
-  // agrego uno de armado para confirmar que ambas etapas se exportan juntas.
-  data.receta_items.push({ id: "RECI-ARMADO", receta_id: "REC-01", insumo_id: "ING-ARMADO", etapa: "armado", cantidad: 1 });
-  const filas = resumenRecetasRellenoSheets(data).filter((f) => f.producto_id === "PROD-01");
-  assert.equal(filas.length, 2); // el de relleno (ING-01) + el de armado (ING-ARMADO)
-  assert.ok(filas.some((f) => f.insumo_id === "ING-ARMADO" && f.cantidad_por_unidad === 1));
+  // PROD-01 (Calabaza, línea Pasta) ya tiene masa (RECI-01) y relleno (RECI-02) en el fixture base.
+  const relleno = resumenRecetasRellenoSheets(data).filter((f) => f.producto_id === "PROD-01");
+  const armado = resumenRecetasArmadoSheets(data).filter((f) => f.producto_id === "PROD-01");
+  assert.equal(relleno.length, 1);
+  assert.equal(relleno[0].insumo_id, "ING-01");
+  assert.equal(relleno[0].cantidad_por_unidad, 0.005); // solo la cantidad de relleno, no la de masa
+  assert.equal(armado.length, 0); // la masa de Pasta se planea aparte, nunca entra a RECETAS_ARMADO
+});
+
+test("RECETAS_RELLENO: la salsa (sin ningún ítem en etapa relleno) exporta todo menos packaging, como antes", () => {
+  const data = fixture();
+  data.recetas.push({ id: "REC-14", producto_id: "PROD-14", nombre: "Receta Salsa", activa: true });
+  data.insumos.push({ id: "ING-ENVASE", nombre: "Frasco", unidad: "unidad", tipo: "packaging", precio_actual: 200, activo: true, controla_stock: false });
+  data.receta_items.push(
+    { id: "RECI-14-A", receta_id: "REC-14", insumo_id: "ING-01", etapa: "salsa", cantidad: 0.02 },
+    { id: "RECI-14-B", receta_id: "REC-14", insumo_id: "ING-01", etapa: "terminacion", cantidad: 0.01 },
+    { id: "RECI-14-C", receta_id: "REC-14", insumo_id: "ING-ENVASE", etapa: "packaging", cantidad: 1 }
+  );
+  const relleno = resumenRecetasRellenoSheets(data).filter((f) => f.producto_id === "PROD-14");
+  assert.equal(relleno.length, 1); // ING-01 sumado (salsa + terminación) en una fila, el frasco queda afuera
+  assert.equal(relleno[0].cantidad_por_unidad, 0.03);
+  assert.equal(relleno.some((f) => f.insumo_id === "ING-ENVASE"), false);
+});
+
+test("RECETAS_ARMADO: el mismo insumo repetido en armado (y en masa, para una línea no-Pasta) sale sumado en una sola fila", () => {
+  const data = fixture();
+  data.productos.push({ id: "PROD-PIZZA", nombre: "Pizza", activo: true, linea: "Pizza" });
+  data.recetas.push({ id: "REC-PIZZA", producto_id: "PROD-PIZZA", nombre: "Receta Pizza", activa: true });
+  data.receta_items.push(
+    { id: "RP-1", receta_id: "REC-PIZZA", insumo_id: "ING-01", etapa: "armado", cantidad: 0.05 },
+    { id: "RP-2", receta_id: "REC-PIZZA", insumo_id: "ING-01", etapa: "armado", cantidad: 0.02 },
+    { id: "RP-3", receta_id: "REC-PIZZA", insumo_id: "ING-01", etapa: "masa", cantidad: 0.1 }
+  );
+  const armado = resumenRecetasArmadoSheets(data).filter((f) => f.producto_id === "PROD-PIZZA");
+  assert.equal(armado.length, 1);
+  assert.equal(armado[0].cantidad_por_unidad, 0.17); // 0.05 + 0.02 (armado) + 0.1 (masa, no-Pasta)
 });
 
 test("avisosRecetaNoExportada: un producto de línea Pasta con ítems en salsa/terminación avisa que no se exportan; uno de otra línea con los mismos ítems no avisa nunca", () => {
@@ -349,4 +382,51 @@ test("resumenStockInsumosSheets: un insumo por fila aunque esté en varias etapa
 
   const totalValorStock = filas.reduce((acc, f) => acc + f.valor_stock, 0);
   assert.equal(totalValorStock, 8000);
+});
+
+test("resumenFlujoCajaSemanalSheets: da 8 filas, la primera empieza el lunes de la semana actual y solo ella lleva el saldo de caja", () => {
+  const data = emptyDataV2();
+  data.configuracion.saldo_inicial_caja = 50000;
+  // 2026-09-10 es jueves → el lunes de esa semana es 2026-09-07.
+  const filas = resumenFlujoCajaSemanalSheets(data, "2026-09-10");
+  assert.equal(filas.length, 8);
+  assert.equal(filas[0].semana_desde, "07/09/2026");
+  assert.equal(filas[0].saldo_caja_hoy, 50000);
+  assert.ok(filas.slice(1).every((f) => f.saldo_caja_hoy === ""));
+  // cada semana siguiente empieza 7 días después de la anterior.
+  assert.equal(filas[1].semana_desde, "14/09/2026");
+  assert.equal(filas[7].semana_desde, "26/10/2026");
+});
+
+test("resumenFlujoCajaSemanalSheets: una cuenta por cobrar vencida (fecha_vencimiento muy anterior a hoy) aparece en la primera semana", () => {
+  const data = emptyDataV2();
+  data.clientes = [{ id: "CLI-1", nombre: "Cliente" } as RicordoDataV2["clientes"][number]];
+  data.pedidos = [
+    {
+      id: "PED-1",
+      fecha: "2026-08-01",
+      cliente_id: "CLI-1",
+      estado: "Entregado",
+      canal: "Minorista",
+      descuento: 0,
+      costo_envio: 0,
+      total: 5000,
+      fecha_vencimiento: "2026-08-15", // vencido, muy antes del lunes de la semana actual (07/09)
+    },
+  ];
+  const filas = resumenFlujoCajaSemanalSheets(data, "2026-09-10");
+  assert.equal(filas[0].por_cobrar, 5000);
+  assert.ok(filas.slice(1).every((f) => f.por_cobrar === 0));
+});
+
+test("resumenFlujoCajaSemanalSheets: una compra que vence dentro de 10 días aparece en la semana que corresponde", () => {
+  const data = emptyDataV2();
+  data.compras = [
+    { id: "C-1", fecha: "2026-09-05", proveedor_id: "PROV-1", estado_pago: "pendiente", total: 8000, fecha_vencimiento: "2026-09-20" }, // hoy (09-10) + 10 días
+  ];
+  const filas = resumenFlujoCajaSemanalSheets(data, "2026-09-10");
+  // Semana 1 (14/09–20/09) es la que incluye el 20/09.
+  assert.equal(filas[1].semana_desde, "14/09/2026");
+  assert.equal(filas[1].por_pagar, 8000);
+  assert.ok(filas.filter((_, i) => i !== 1).every((f) => f.por_pagar === 0));
 });

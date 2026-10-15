@@ -200,3 +200,10 @@ test("calcularCuponesMes: agrupa por cupón/tipo de descuento y suma pedidos, de
   // PED-0..PED-4 no tienen cupón ni tipo de descuento: no generan fila.
   assert.equal(cupones.length, 2);
 });
+
+test("calcularCuponesMes: un pedido viejo sin cupon_codigo ni tipo_descuento no rompe el reporte", () => {
+  const data = fixture(); // PED-0..PED-4 son pedidos "viejos", ninguno tiene estos campos nuevos
+  assert.doesNotThrow(() => calcularCuponesMes(data, "2026-01-01", "2026-01-31"));
+  const cupones = calcularCuponesMes(data, "2026-01-01", "2026-01-31");
+  assert.deepEqual(cupones, []); // nada que agrupar, pero tampoco explota
+});
