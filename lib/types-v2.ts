@@ -203,6 +203,10 @@ export interface Receta {
    * propia/standalone de una variante vieja no migrada, el valor ya representa el total de esa
    * presentación y no vuelve a escalar). Se convierte a costo con configuracion.costo_mano_obra_hora. */
   minutos_por_unidad?: number;
+  /** Marca explícita de que este producto no lleva mano de obra a propósito (ej. una salsa que
+   * solo se envasa) — apaga el aviso de "sin mano de obra" (Productos y Exportar a Sheets) sin
+   * necesidad de cargar minutos falsos solo para que el aviso desaparezca. */
+  sin_mano_obra_ok?: boolean;
 }
 
 export interface RecetaItem {

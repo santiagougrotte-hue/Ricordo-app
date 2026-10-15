@@ -24,6 +24,7 @@ import {
   calcularMargenPorItem,
   calcularFlujoCaja,
   detectarCanalInconsistente,
+  productosSinManoDeObra,
   totalCobradoPedido,
   estadoCobroPedido,
   variantesSinFactorReceta,
@@ -459,6 +460,25 @@ test("detectarCanalInconsistente: 'mayo' cuenta como mayorista, y la propia vari
   assert.equal(alertas.length, 2);
   assert.ok(alertas.some((a) => a.variante_id === "P1" && a.canal_sugerido === "Minorista"));
   assert.ok(alertas.some((a) => a.variante_id === "V2" && a.canal_sugerido === "Mayorista"));
+});
+
+test("productosSinManoDeObra: un producto activo sin minutos aparece; uno marcado 'No aplica' (sin_mano_obra_ok) no aparece", () => {
+  const data = emptyDataV2();
+  data.productos = [
+    { id: "P-LAS", nombre: "Lasaña de ragú", activo: true },
+    { id: "P-SALSA", nombre: "Salsa filetto", activo: true },
+    { id: "P-OK", nombre: "Sorrentinos", activo: true },
+    { id: "P-INACTIVO", nombre: "Descontinuado", activo: false },
+  ];
+  data.recetas = [
+    { id: "REC-LAS", producto_id: "P-LAS", nombre: "Receta Lasaña", activa: true }, // sin minutos_por_unidad
+    { id: "REC-SALSA", producto_id: "P-SALSA", nombre: "Receta Salsa", activa: true, minutos_por_unidad: 0, sin_mano_obra_ok: true },
+    { id: "REC-OK", producto_id: "P-OK", nombre: "Receta Sorrentinos", activa: true, minutos_por_unidad: 5 },
+    { id: "REC-INACTIVO", producto_id: "P-INACTIVO", nombre: "Receta vieja", activa: true }, // inactivo: no debe avisar
+  ];
+  const avisos = productosSinManoDeObra(data);
+  assert.equal(avisos.length, 1);
+  assert.equal(avisos[0].producto_id, "P-LAS");
 });
 
 test("calcularEerr/calcularMargenPorItem: costo_real_envio distinto de costo_envio no queda en $0 sin motivo", () => {

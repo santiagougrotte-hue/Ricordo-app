@@ -3,7 +3,17 @@
 // app). Los nombres de columna son el contrato con esa Sheet — no renombrar sin avisar.
 
 import type { RicordoDataV2, EtapaReceta } from "./types-v2";
-import { recetaEfectivaVariante, costoVariante, costoManoDeObraVariante, calcularStock } from "./calc-v2";
+import {
+  recetaEfectivaVariante,
+  costoVariante,
+  costoManoDeObraVariante,
+  calcularStock,
+  calcularCuentasPorCobrar,
+  calcularCuentasPorPagar,
+  totalCobradoPedido,
+  saldoCaja,
+  sumarDias,
+} from "./calc-v2";
 import { calcularCuponesMes } from "./analitica-ventas";
 
 function redondear(n: number, decimales: number): number {
@@ -57,9 +67,10 @@ function rangoMes(mes: string): { mesCol: string; desde: string; hasta: string }
 /** Cuántas unidades sueltas representa "una caja" de referencia para cada línea de catálogo —
  * usado para mostrar el stock compartido por producto (ver TipoItemStock) en términos legibles de
  * "cajas", ya que se guarda siempre en unidades sueltas. Exportada para reusar el mismo criterio
- * en Inventario → Productos terminados. */
+ * en Inventario → Productos terminados. Solo la línea Pasta se vende de a 12 (sorrentinos,
+ * ravioles); el resto (Salsa, Lasaña, Pizza o sin línea) se vende de a 1. */
 export function refUnidades(linea: string | undefined): number {
-  return linea === "Salsa" ? 1 : 12;
+  return linea === "Pasta" ? 12 : 1;
 }
 
 // --- 1) RESUMEN_PRODUCTOS -------------------------------------------------------------------------
@@ -121,8 +132,18 @@ export function resumenProductosSheets(data: RicordoDataV2, mes: string): FilaRe
       }
 
       const variantesDelProducto = data.producto_variantes.filter((v) => v.producto_id === producto.id);
-      const varianteMinoristaRef = variantesDelProducto.find((v) => v.activo && v.canal === "Minorista" && v.unidades_por_paquete === ref);
-      const varianteMayoristaRef = variantesDelProducto.find((v) => v.activo && v.canal === "Mayorista" && v.unidades_por_paquete === ref);
+      const varianteRefDeCanal = (canal: "Minorista" | "Mayorista") => {
+        const activasDelCanal = variantesDelProducto.filter((v) => v.activo && v.canal === canal);
+        const exacta = activasDelCanal.find((v) => v.unidades_por_paquete === ref);
+        if (exacta) return exacta;
+        if (activasDelCanal.length === 0) return undefined;
+        console.warn(
+          `resumenProductosSheets: "${producto.nombre}" (línea ${producto.linea ?? "sin línea"}) no tiene variante ${canal} activa de ${ref}u — uso "${activasDelCanal[0].nombre}" como referencia.`
+        );
+        return activasDelCanal[0];
+      };
+      const varianteMinoristaRef = varianteRefDeCanal("Minorista");
+      const varianteMayoristaRef = varianteRefDeCanal("Mayorista");
 
       let costo_insumos_caja_ref = 0;
       if (varianteMinoristaRef) {
@@ -258,26 +279,38 @@ export function gastosATSV(filas: FilaResumenGasto[]): string {
   );
 }
 
-// --- 3) RECETAS_RELLENO (receta vigente, no depende del mes) ---------------------------------------
-// El relleno se arma en una tanda grande una vez por mes (a diferencia de masa/packaging, de ritmo
-// diario/semanal) — por eso esos insumos quedan afuera de la alerta automática de stock
-// (`insumosSoloRelleno`/`calcularAlertasStock` en lib/calc-v2.ts e ia-stock.ts) y se planifican acá
-// a mano: `stock_actual` da el punto de partida para calcular cuánto falta comprar/preparar según
-// la próxima tanda planeada (cantidad_por_unidad × unidades a producir − stock_actual).
+// --- 3) RECETAS_RELLENO / RECETAS_ARMADO (receta vigente, no depende del mes) ----------------------
+// El relleno (ej. el ragú de la lasaña, el relleno de calabaza de los sorrentinos) se prepara en
+// una tanda grande mensual y se congela — por eso esos insumos quedan afuera de la alerta
+// automática de stock (`insumosSoloRelleno`/`calcularAlertasStock` en lib/calc-v2.ts e ia-stock.ts)
+// y se planifican acá a mano: `stock_actual` da el punto de partida para calcular cuánto falta
+// comprar/preparar según la próxima tanda planeada (cantidad_por_unidad × unidades a producir −
+// stock_actual). La masa y el armado de la lasaña (salsa, sardo, mozzarella, láminas) en cambio se
+// compran y usan cada semana, el día que se arma — van en una tabla aparte (RECETAS_ARMADO) para
+// que la planilla los planifique por separado y no mezcle ambos ritmos.
 //
-// Qué etapas entran depende de la línea del producto: en Pasta, la masa se planifica aparte y el
-// packaging no va acá — entran relleno y armado (ensamblado puntual, ej. una porción de algo que
-// se arma junto con el relleno). En cualquier otra línea (Lasaña, Pizza, Salsa, etc.) no hay ese
-// reparto masa/relleno por separado, así que entra la receta completa salvo el packaging (que
-// sigue sin planificarse acá, es por caja/presentación). Si el mismo insumo aparece en más de una
-// etapa del mismo producto, se suma en una sola fila.
-//
-// `exportaEtapa` es la única fuente de verdad de la regla — la usan tanto esta función como
-// `avisosRecetaNoExportada` (detecta productos con la línea puesta mal: si tienen ítems en una
-// etapa que no sea masa/packaging y que la línea actual no exporta, probablemente la línea está
-// mal cargada, no que ese ingrediente deba perderse en silencio).
-function exportaEtapa(linea: string | undefined, etapa: EtapaReceta): boolean {
-  return linea === "Pasta" ? etapa === "relleno" || etapa === "armado" : etapa !== "packaging";
+// `destinoItemReceta` es la única fuente de verdad de a qué tabla va cada ítem de receta (o a
+// ninguna) — la usan `resumenRecetasRellenoSheets`, `resumenRecetasArmadoSheets` y
+// `avisosRecetaNoExportada` por igual, para que las tres nunca puedan quedar desincronizadas:
+//   - packaging: nunca se exporta (se planifica por caja/presentación, no acá).
+//   - armado: siempre a RECETAS_ARMADO.
+//   - masa: en línea Pasta se planea aparte (nunca entra a ningún lado, no es un error); en
+//     cualquier otra línea (Lasaña, Pizza, etc.) entra a RECETAS_ARMADO junto con el armado, porque
+//     ahí es cuando se arma/compra.
+//   - relleno: siempre a RECETAS_RELLENO.
+//   - cualquier otra etapa (salsa, terminación, …): si el producto tiene algún ítem en etapa
+//     relleno, se asume que la receta ya distingue relleno/armado/otras etapas a propósito, y esto
+//     queda sin exportar (probable aviso); si el producto NO tiene ningún ítem en etapa relleno
+//     (ej. una salsa de tomate, con una sola etapa), se exporta igual en RECETAS_RELLENO —
+//     comportamiento histórico preservado para recetas que nunca separaron relleno de lo demás.
+type DestinoItemReceta = "relleno" | "armado" | "sin_exportar" | "excluida";
+
+function destinoItemReceta(linea: string | undefined, etapa: EtapaReceta, tieneRelleno: boolean): DestinoItemReceta {
+  if (etapa === "packaging") return "excluida";
+  if (etapa === "armado") return "armado";
+  if (etapa === "masa") return linea === "Pasta" ? "excluida" : "armado";
+  if (etapa === "relleno") return "relleno";
+  return tieneRelleno ? "sin_exportar" : "relleno";
 }
 
 export interface FilaRecetaRelleno {
@@ -291,46 +324,70 @@ export interface FilaRecetaRelleno {
   stock_actual: number;
 }
 
-export function resumenRecetasRellenoSheets(data: RicordoDataV2): FilaRecetaRelleno[] {
+function filaInsumo(data: RicordoDataV2, producto: { id: string; nombre: string }, insumoId: string, cantidad: number): FilaRecetaRelleno {
+  const insumo = data.insumos.find((i) => i.id === insumoId);
+  return {
+    producto_id: producto.id,
+    producto: producto.nombre,
+    insumo_id: insumoId,
+    insumo: insumo?.nombre ?? "(insumo eliminado)",
+    cantidad_por_unidad: redondear(cantidad, 5),
+    unidad: insumo?.unidad ?? "",
+    precio_actual: insumo?.precio_actual ?? 0,
+    stock_actual: insumo ? redondear(calcularStock(data, "insumo", insumo.id), 3) : 0,
+  };
+}
+
+function filasPorDestino(data: RicordoDataV2, destinoBuscado: "relleno" | "armado"): FilaRecetaRelleno[] {
   const filas: FilaRecetaRelleno[] = [];
   for (const producto of data.productos.filter((p) => p.activo)) {
     const receta = data.recetas.find((r) => r.producto_id === producto.id && r.activa);
     if (!receta) continue;
-    const itemsRelevantes = data.receta_items.filter((ri) => ri.receta_id === receta.id && exportaEtapa(producto.linea, ri.etapa));
+    const itemsDeReceta = data.receta_items.filter((ri) => ri.receta_id === receta.id);
+    const tieneRelleno = itemsDeReceta.some((ri) => ri.etapa === "relleno");
+    const itemsRelevantes = itemsDeReceta.filter((ri) => destinoItemReceta(producto.linea, ri.etapa, tieneRelleno) === destinoBuscado);
     const cantidadPorInsumo = new Map<string, number>();
     for (const item of itemsRelevantes) {
       cantidadPorInsumo.set(item.insumo_id, (cantidadPorInsumo.get(item.insumo_id) ?? 0) + item.cantidad);
     }
     for (const [insumoId, cantidad] of cantidadPorInsumo) {
-      const insumo = data.insumos.find((i) => i.id === insumoId);
-      filas.push({
-        producto_id: producto.id,
-        producto: producto.nombre,
-        insumo_id: insumoId,
-        insumo: insumo?.nombre ?? "(insumo eliminado)",
-        cantidad_por_unidad: redondear(cantidad, 5),
-        unidad: insumo?.unidad ?? "",
-        precio_actual: insumo?.precio_actual ?? 0,
-        stock_actual: insumo ? redondear(calcularStock(data, "insumo", insumo.id), 3) : 0,
-      });
+      filas.push(filaInsumo(data, producto, insumoId, cantidad));
     }
   }
   return filas;
 }
 
-export function recetasRellenoATSV(filas: FilaRecetaRelleno[]): string {
-  return tsv(
-    ["producto_id", "producto", "insumo_id", "insumo", "cantidad_por_unidad", "unidad", "precio_actual", "stock_actual"],
-    filas.map((f) => [f.producto_id, f.producto, f.insumo_id, f.insumo, f.cantidad_por_unidad, f.unidad, f.precio_actual, f.stock_actual])
-  );
+export function resumenRecetasRellenoSheets(data: RicordoDataV2): FilaRecetaRelleno[] {
+  return filasPorDestino(data, "relleno");
 }
 
-/** Detecta productos activos con ítems de receta que NO se exportan en RECETAS_RELLENO y que no
- * son masa ni packaging (esos dos nunca entran a propósito, no son un error) — típicamente, un
- * producto de línea Pasta con ingredientes de salsa/terminación cargados, que con la regla de
- * Pasta (solo relleno + armado) quedan afuera en silencio. Casi siempre significa que la línea del
- * producto está mal puesta (ej. es una Lasaña cargada como Pasta) — se muestra como aviso, nunca
- * se corrige sola. */
+const HEADERS_RECETAS = ["producto_id", "producto", "insumo_id", "insumo", "cantidad_por_unidad", "unidad", "precio_actual", "stock_actual"];
+
+function recetasFilaATSV(f: FilaRecetaRelleno): (string | number)[] {
+  return [f.producto_id, f.producto, f.insumo_id, f.insumo, f.cantidad_por_unidad, f.unidad, f.precio_actual, f.stock_actual];
+}
+
+export function recetasRellenoATSV(filas: FilaRecetaRelleno[]): string {
+  return tsv(HEADERS_RECETAS, filas.map(recetasFilaATSV));
+}
+
+/** RECETAS_ARMADO: masa (en líneas que no son Pasta) + armado de cada producto activo — el trabajo
+ * semanal de armado/compra, separado del relleno mensual (RECETAS_RELLENO). Mismas 8 columnas y
+ * mismo orden que RECETAS_RELLENO. */
+export function resumenRecetasArmadoSheets(data: RicordoDataV2): FilaRecetaRelleno[] {
+  return filasPorDestino(data, "armado");
+}
+
+export function recetasArmadoATSV(filas: FilaRecetaRelleno[]): string {
+  return tsv(HEADERS_RECETAS, filas.map(recetasFilaATSV));
+}
+
+/** Detecta productos activos con ítems de receta que no salen en NINGUNA de las dos tablas de
+ * arriba y que no son packaging ni masa de línea Pasta (esos dos nunca entran a propósito, no son
+ * un error) — típicamente, un producto con ingredientes de salsa/terminación cargados que, al
+ * tener también un ítem de relleno, quedan afuera en silencio. Casi siempre significa que esos
+ * ingredientes tienen que pasar a relleno o a armado, o que la etapa está mal elegida — se muestra
+ * como aviso, nunca se corrige sola. */
 export interface AvisoRecetaNoExportada {
   producto_id: string;
   producto: string;
@@ -344,11 +401,11 @@ export function avisosRecetaNoExportada(data: RicordoDataV2): AvisoRecetaNoExpor
   for (const producto of data.productos.filter((p) => p.activo)) {
     const receta = data.recetas.find((r) => r.producto_id === producto.id && r.activa);
     if (!receta) continue;
+    const itemsDeReceta = data.receta_items.filter((ri) => ri.receta_id === receta.id);
+    const tieneRelleno = itemsDeReceta.some((ri) => ri.etapa === "relleno");
     const porEtapa = new Map<EtapaReceta, number>();
-    for (const item of data.receta_items) {
-      if (item.receta_id !== receta.id) continue;
-      if (item.etapa === "masa" || item.etapa === "packaging") continue;
-      if (exportaEtapa(producto.linea, item.etapa)) continue;
+    for (const item of itemsDeReceta) {
+      if (destinoItemReceta(producto.linea, item.etapa, tieneRelleno) !== "sin_exportar") continue;
       porEtapa.set(item.etapa, (porEtapa.get(item.etapa) ?? 0) + 1);
     }
     for (const [etapa, cantidad] of porEtapa) {
@@ -567,4 +624,85 @@ export interface FilaCuponMes {
 export function resumenCuponesMesSheets(data: RicordoDataV2, mes: string): FilaCuponMes[] {
   const { mesCol, desde, hasta } = rangoMes(mes);
   return calcularCuponesMes(data, desde, hasta).map((c) => ({ mes: mesCol, ...c }));
+}
+
+// --- 8) FLUJO_CAJA_SEMANAL -------------------------------------------------------------------------
+// Se exporta cada viernes, para planificar la semana — a diferencia de las tablas de arriba (mes
+// cerrado, una vez por mes) esto es una foto de HOY de la caja y lo que falta cobrar/pagar,
+// repartido en 8 semanas desde el lunes de la semana actual. Nunca se suma dos veces por pegarse
+// de nuevo: siempre reemplaza (se pega ENCIMA) la foto anterior.
+
+function lunesDeSemana(fechaIso: string): string {
+  const d = new Date(`${fechaIso}T00:00:00`);
+  const dow = d.getDay(); // 0 = domingo … 6 = sábado
+  const offsetHastaLunes = dow === 0 ? -6 : 1 - dow;
+  d.setDate(d.getDate() + offsetHastaLunes);
+  return d.toISOString().slice(0, 10);
+}
+
+function fechaDDMMAAAA(fechaIso: string): string {
+  const [anio, mes, dia] = fechaIso.split("-");
+  return `${dia}/${mes}/${anio}`;
+}
+
+export interface FilaFlujoCajaSemanal {
+  semana_desde: string;
+  saldo_caja_hoy: number | "";
+  por_cobrar: number;
+  pedidos_a_cobrar: number;
+  por_pagar: number;
+}
+
+/** 8 filas, una por semana, empezando el lunes de la semana de `hoy`. Lo vencido (o sin fecha
+ * propia a futuro) siempre cae en la primera fila — nunca se pierde un faltante real por quedar
+ * fuera de las 8 semanas que se muestran; si una fecha cae más allá de la octava semana, se agrupa
+ * en la última en vez de abrir una fila 9 (la Sheet solo tiene 8 filas de destino). */
+export function resumenFlujoCajaSemanalSheets(data: RicordoDataV2, hoy: string): FilaFlujoCajaSemanal[] {
+  const lunes0 = lunesDeSemana(hoy);
+  const semanas = Array.from({ length: 8 }, (_, i) => sumarDias(lunes0, i * 7));
+
+  function indiceSemana(fecha: string): number {
+    if (fecha < semanas[0]) return 0;
+    let idx = 0;
+    for (let i = 0; i < semanas.length; i++) {
+      if (fecha >= semanas[i]) idx = i;
+    }
+    return idx;
+  }
+
+  const porCobrar = new Array(8).fill(0);
+  for (const c of calcularCuentasPorCobrar(data, hoy)) {
+    const fechaEfectiva = c.fecha_vencimiento ?? sumarDias(c.fecha, 7);
+    porCobrar[indiceSemana(fechaEfectiva)] += c.saldo;
+  }
+
+  const porPagar = new Array(8).fill(0);
+  for (const c of calcularCuentasPorPagar(data, hoy)) {
+    const fechaEfectiva = c.fecha_vencimiento ?? sumarDias(c.fecha, 7);
+    porPagar[indiceSemana(fechaEfectiva)] += c.saldo;
+  }
+
+  const pedidosACobrar = new Array(8).fill(0);
+  for (const p of data.pedidos.filter((p) => p.estado === "Confirmado" || p.estado === "Produccion")) {
+    const saldo = Math.round(p.total - totalCobradoPedido(data, p.id));
+    if (saldo <= 0) continue;
+    const idx = p.fecha < hoy ? 0 : indiceSemana(p.fecha);
+    pedidosACobrar[idx] += saldo;
+  }
+
+  const saldo = saldoCaja(data);
+  return semanas.map((semanaDesde, i) => ({
+    semana_desde: fechaDDMMAAAA(semanaDesde),
+    saldo_caja_hoy: i === 0 ? Math.round(saldo) : "",
+    por_cobrar: Math.round(porCobrar[i]),
+    pedidos_a_cobrar: Math.round(pedidosACobrar[i]),
+    por_pagar: Math.round(porPagar[i]),
+  }));
+}
+
+export function flujoCajaSemanalATSV(filas: FilaFlujoCajaSemanal[]): string {
+  return tsv(
+    ["semana_desde", "saldo_caja_hoy", "por_cobrar", "pedidos_a_cobrar", "por_pagar"],
+    filas.map((f) => [f.semana_desde, f.saldo_caja_hoy, f.por_cobrar, f.pedidos_a_cobrar, f.por_pagar])
+  );
 }
