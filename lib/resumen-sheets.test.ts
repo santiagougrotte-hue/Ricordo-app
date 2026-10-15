@@ -11,6 +11,8 @@ import {
   resumenPreciosFormatosSheets,
   resumenStockInsumosSheets,
   resumenFlujoCajaSemanalSheets,
+  varianteDeReferencia,
+  produccionPendientePorSabor,
   avisosRecetaNoExportada,
   formatearNumero,
   celdaTexto,
@@ -382,6 +384,44 @@ test("resumenStockInsumosSheets: un insumo por fila aunque esté en varias etapa
 
   const totalValorStock = filas.reduce((acc, f) => acc + f.valor_stock, 0);
   assert.equal(totalValorStock, 8000);
+});
+
+test("varianteDeReferencia: sin canal busca entre cualquier variante activa del producto; con canal restringe a ese canal", () => {
+  const data = emptyDataV2();
+  data.producto_variantes = [
+    { id: "V-MIN", producto_id: "P1", canal: "Minorista", activo: true, nombre: "X minorista", precio_venta: 100, unidades_por_paquete: 12 },
+    { id: "V-MAY", producto_id: "P1", canal: "Mayorista", activo: true, nombre: "X mayorista", precio_venta: 100, unidades_por_paquete: 6 },
+  ];
+  const sinCanal = varianteDeReferencia(data, "P1", 12);
+  assert.equal(sinCanal?.id, "V-MIN"); // encuentra la de 12u exacta, sin importar el canal
+  const mayorista = varianteDeReferencia(data, "P1", 12, "Mayorista"); // no hay Mayorista de 12u -> cae a la única Mayorista activa
+  assert.equal(mayorista?.id, "V-MAY");
+});
+
+test("produccionPendientePorSabor: agrupa por sabor (producto), no por presentación/canal — suma unidades de distinto tamaño y expresa el total en cajas de referencia", () => {
+  const data = emptyDataV2();
+  data.productos = [{ id: "PROD-CAL", nombre: "Calabaza", activo: true, linea: "Pasta" }];
+  data.producto_variantes = [
+    { id: "VAR-MIN", producto_id: "PROD-CAL", canal: "Minorista", activo: true, nombre: "Calabaza minorista", precio_venta: 10000, unidades_por_paquete: 12 },
+    { id: "VAR-MAY", producto_id: "PROD-CAL", canal: "Mayorista", activo: true, nombre: "Calabaza mayorista", precio_venta: 9000, unidades_por_paquete: 8 },
+  ];
+  data.clientes = [{ id: "CLI-1", nombre: "Cliente" } as RicordoDataV2["clientes"][number]];
+  data.pedidos = [
+    { id: "PED-1", fecha: "2026-09-01", cliente_id: "CLI-1", estado: "Produccion", canal: "Minorista", descuento: 0, costo_envio: 0, total: 20000 },
+    { id: "PED-2", fecha: "2026-09-02", cliente_id: "CLI-1", estado: "Produccion", canal: "Mayorista", descuento: 0, costo_envio: 0, total: 9000 },
+    // Confirmado (no "Produccion" todavía): no debe contar.
+    { id: "PED-3", fecha: "2026-09-03", cliente_id: "CLI-1", estado: "Confirmado", canal: "Minorista", descuento: 0, costo_envio: 0, total: 10000 },
+  ];
+  data.pedido_items = [
+    { id: "I-1", pedido_id: "PED-1", producto_variante_id: "VAR-MIN", nombre_historico: "Calabaza minorista", cantidad: 2, precio_unitario: 10000, descuento: 0, subtotal: 20000 }, // 2 cajas de 12u = 24u
+    { id: "I-2", pedido_id: "PED-2", producto_variante_id: "VAR-MAY", nombre_historico: "Calabaza mayorista", cantidad: 1, precio_unitario: 9000, descuento: 0, subtotal: 9000 }, // 1 caja de 8u = 8u
+    { id: "I-3", pedido_id: "PED-3", producto_variante_id: "VAR-MIN", nombre_historico: "Calabaza minorista", cantidad: 1, precio_unitario: 10000, descuento: 0, subtotal: 10000 },
+  ];
+  const items = produccionPendientePorSabor(data);
+  assert.equal(items.length, 1); // un solo sabor, no "Calabaza minorista" + "Calabaza mayorista" por separado
+  assert.equal(items[0].nombre, "Calabaza");
+  assert.equal(items[0].cantidad, Math.round(((24 + 8) / 12) * 100) / 100); // 32 unidades / 12 (ref línea Pasta)
+  assert.equal(items[0].pedidos, 2); // PED-1 y PED-2 (PED-3 no está "Produccion")
 });
 
 test("resumenFlujoCajaSemanalSheets: da 8 filas, la primera empieza el lunes de la semana actual y solo ella lleva el saldo de caja", () => {
