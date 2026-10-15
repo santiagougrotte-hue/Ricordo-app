@@ -73,6 +73,62 @@ export function refUnidades(linea: string | undefined): number {
   return linea === "Pasta" ? 12 : 1;
 }
 
+/** Variante activa de referencia para "1 caja de `ref` unidades" de un producto — exacta si existe
+ * una con `unidades_por_paquete === ref`; si no, la primera variante activa con `unidades_por_paquete`
+ * cargado (nunca deja de encontrar una referencia en silencio: avisa por consola cuándo cae al
+ * fallback). Sin `canal`, busca entre cualquier variante activa del producto — para usos que no
+ * distinguen canal (ej. registrar producción, donde importa el sabor, no la presentación de venta).
+ * Con `canal`, restringe la búsqueda a ese canal (ej. RESUMEN_PRODUCTOS, que separa costo/precio
+ * minorista de mayorista). */
+export function varianteDeReferencia(
+  data: RicordoDataV2,
+  productoId: string,
+  ref: number,
+  canal?: "Minorista" | "Mayorista"
+) {
+  const candidatas = data.producto_variantes.filter((v) => v.producto_id === productoId && v.activo && (!canal || v.canal === canal));
+  const exacta = candidatas.find((v) => v.unidades_por_paquete === ref);
+  if (exacta) return exacta;
+  if (candidatas.length === 0) return undefined;
+  const fallback = candidatas.find((v) => v.unidades_por_paquete) ?? candidatas[0];
+  console.warn(
+    `varianteDeReferencia: el producto "${productoId}" no tiene variante activa${canal ? ` ${canal}` : ""} de ${ref}u — uso "${fallback.nombre}" como referencia.`
+  );
+  return fallback;
+}
+
+export interface ItemProduccionPendiente {
+  nombre: string;
+  cantidad: number;
+  pedidos: number;
+}
+
+/** Pedidos marcados "En producción" (Ventas → Pedidos), agrupados por sabor (producto) — no por
+ * presentación/canal: físicamente se amasa y se rellena una sola vez por sabor, sin importar si
+ * después se empaqueta como Minorista o Mayorista (mismo pool de stock compartido, ver
+ * `TipoItemStock`). Cada ítem se lleva primero a unidades sueltas (cantidad × unidades_por_paquete
+ * de su variante) para poder sumar presentaciones de distinto tamaño sin mezclar unidades, y el
+ * total final se expresa en "cajas de referencia" (ver `refUnidades`) — misma convención que
+ * Inventario → Productos terminados. */
+export function produccionPendientePorSabor(data: RicordoDataV2): ItemProduccionPendiente[] {
+  const idsPedidos = new Set(data.pedidos.filter((p) => p.estado === "Produccion").map((p) => p.id));
+  const items = data.pedido_items.filter((i) => idsPedidos.has(i.pedido_id));
+  const porProducto = new Map<string, { nombre: string; linea?: string; unidades: number; pedidos: Set<string> }>();
+  for (const item of items) {
+    const variante = item.producto_variante_id ? data.producto_variantes.find((v) => v.id === item.producto_variante_id) : undefined;
+    const producto = variante ? data.productos.find((p) => p.id === variante.producto_id) : undefined;
+    const clave = producto?.id ?? item.producto_variante_id ?? item.id;
+    const unidadesItem = item.cantidad * (variante?.unidades_por_paquete ?? 1);
+    const actual = porProducto.get(clave) ?? { nombre: producto?.nombre ?? item.nombre_historico, linea: producto?.linea, unidades: 0, pedidos: new Set<string>() };
+    actual.unidades += unidadesItem;
+    actual.pedidos.add(item.pedido_id);
+    porProducto.set(clave, actual);
+  }
+  return Array.from(porProducto.values())
+    .map((v) => ({ nombre: v.nombre, cantidad: Math.round((v.unidades / refUnidades(v.linea)) * 100) / 100, pedidos: v.pedidos.size }))
+    .sort((a, b) => b.cantidad - a.cantidad);
+}
+
 // --- 1) RESUMEN_PRODUCTOS -------------------------------------------------------------------------
 
 export interface FilaResumenProducto {
@@ -131,19 +187,8 @@ export function resumenProductosSheets(data: RicordoDataV2, mes: string): FilaRe
         descuentos_total += item.descuento;
       }
 
-      const variantesDelProducto = data.producto_variantes.filter((v) => v.producto_id === producto.id);
-      const varianteRefDeCanal = (canal: "Minorista" | "Mayorista") => {
-        const activasDelCanal = variantesDelProducto.filter((v) => v.activo && v.canal === canal);
-        const exacta = activasDelCanal.find((v) => v.unidades_por_paquete === ref);
-        if (exacta) return exacta;
-        if (activasDelCanal.length === 0) return undefined;
-        console.warn(
-          `resumenProductosSheets: "${producto.nombre}" (línea ${producto.linea ?? "sin línea"}) no tiene variante ${canal} activa de ${ref}u — uso "${activasDelCanal[0].nombre}" como referencia.`
-        );
-        return activasDelCanal[0];
-      };
-      const varianteMinoristaRef = varianteRefDeCanal("Minorista");
-      const varianteMayoristaRef = varianteRefDeCanal("Mayorista");
+      const varianteMinoristaRef = varianteDeReferencia(data, producto.id, ref, "Minorista");
+      const varianteMayoristaRef = varianteDeReferencia(data, producto.id, ref, "Mayorista");
 
       let costo_insumos_caja_ref = 0;
       if (varianteMinoristaRef) {

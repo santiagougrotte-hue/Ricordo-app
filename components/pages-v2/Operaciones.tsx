@@ -26,6 +26,7 @@ import {
 } from "@/components/ui";
 import { Modal } from "@/components/Modal";
 import { fARS, fNum, recetaEfectivaVariante, deshacerSaldoHistoricoCompra } from "@/lib/calc-v2";
+import { refUnidades, varianteDeReferencia } from "@/lib/resumen-sheets";
 import type { EstadoPagoCompra } from "@/lib/types-v2";
 import type { Proveedor } from "@/lib/types";
 
@@ -433,34 +434,52 @@ function ProduccionTab() {
   const { data, setData } = useStoreV2();
   const { toast } = useToast();
   const [modalOpen, setModalOpen] = useState(false);
-  const [form, setForm] = useState({ producto_variante_id: "", cantidad: 1, fecha: new Date().toISOString().slice(0, 10), notas: "" });
+  const [form, setForm] = useState({ producto_id: "", cantidad: 1, fecha: new Date().toISOString().slice(0, 10), notas: "" });
 
-  const varianteNombre = (id: string) => data.producto_variantes.find((v) => v.id === id)?.nombre ?? "(eliminado)";
+  const productosActivos = useMemo(() => data.productos.filter((p) => p.activo), [data.productos]);
+
+  // Se registra por sabor (producto), no por presentación/canal — el pool de stock terminado ya es
+  // compartido entre todas las variantes del mismo producto (ver TipoItemStock), y físicamente se
+  // amasa/rellena una sola vez por sabor, sin importar en qué caja se vende después. "Cantidad" va
+  // en cajas de refUnidades(línea) unidades (12 para Pasta, 1 para el resto), igual convención que
+  // Inventario → Productos terminados.
+  const productoElegido = form.producto_id ? data.productos.find((p) => p.id === form.producto_id) : undefined;
+  const refElegido = productoElegido ? refUnidades(productoElegido.linea) : 1;
+
+  const nombreProductoDeVariante = (varianteId: string) => {
+    const variante = data.producto_variantes.find((v) => v.id === varianteId);
+    if (!variante) return "(eliminado)";
+    return data.productos.find((p) => p.id === variante.producto_id)?.nombre ?? variante.nombre;
+  };
   const producciones = useMemo(() => [...data.produccion].sort((a, b) => b.fecha.localeCompare(a.fecha)), [data.produccion]);
 
   function registrar() {
-    if (!form.producto_variante_id || form.cantidad <= 0) {
-      toast("Elegí un producto y una cantidad mayor a 0", "error");
+    if (!form.producto_id || form.cantidad <= 0) {
+      toast("Elegí un sabor y una cantidad mayor a 0", "error");
       return;
     }
-    const variante = data.producto_variantes.find((v) => v.id === form.producto_variante_id);
-    if (!variante) return;
+    const producto = data.productos.find((p) => p.id === form.producto_id);
+    if (!producto) return;
+    const ref = refUnidades(producto.linea);
+    const variante = varianteDeReferencia(data, producto.id, ref);
+    if (!variante) {
+      toast("Este sabor no tiene ninguna presentación activa cargada — creá una variante primero", "error");
+      return;
+    }
     const produccionId = uid("PRD");
     // Solo se descuentan los insumos que realmente se trackean (controla_stock) — el resto de la
     // receta (ej. verduras que se compran al día, sin stock cargado) no genera un movimiento que
     // nadie va a leer.
     const consumo = recetaEfectivaVariante(data, variante).filter((c) => data.insumos.find((i) => i.id === c.insumo_id)?.controla_stock);
-    // El stock de productos terminados es un solo pool por sabor (variante.producto_id), en
-    // unidades sueltas — producir "cantidad" cajas de ESTA presentación suma cantidad × sus
-    // unidades_por_paquete al pool compartido, sin importar en qué presentación se termine
-    // vendiendo después (ver TipoItemStock en types-v2.ts).
-    const unidadesProducidas = form.cantidad * (variante.unidades_por_paquete ?? 1);
+    // El stock de productos terminados es un solo pool por sabor (producto_id), en unidades
+    // sueltas — producir "cantidad" cajas de referencia suma cantidad × ref al pool compartido.
+    const unidadesProducidas = form.cantidad * ref;
     setData((d) => ({
       ...d,
-      produccion: [...d.produccion, { id: produccionId, producto_variante_id: form.producto_variante_id, cantidad: form.cantidad, fecha: form.fecha, notas: form.notas || undefined }],
+      produccion: [...d.produccion, { id: produccionId, producto_variante_id: variante.id, cantidad: form.cantidad, fecha: form.fecha, notas: form.notas || undefined }],
       inventario_movimientos: [
         ...d.inventario_movimientos,
-        { id: uid("MOV"), fecha: form.fecha, tipo: "produccion" as const, origen_tipo: "produccion", origen_id: produccionId, item_tipo: "producto" as const, item_id: variante.producto_id, cantidad: unidadesProducidas },
+        { id: uid("MOV"), fecha: form.fecha, tipo: "produccion" as const, origen_tipo: "produccion", origen_id: produccionId, item_tipo: "producto" as const, item_id: producto.id, cantidad: unidadesProducidas },
         ...consumo.map((c) => ({
           id: uid("MOV"),
           fecha: form.fecha,
@@ -475,7 +494,7 @@ function ProduccionTab() {
     }));
     toast("Producción registrada, stock de insumos descontado según receta");
     setModalOpen(false);
-    setForm({ producto_variante_id: "", cantidad: 1, fecha: new Date().toISOString().slice(0, 10), notas: "" });
+    setForm({ producto_id: "", cantidad: 1, fecha: new Date().toISOString().slice(0, 10), notas: "" });
   }
 
   return (
@@ -492,8 +511,8 @@ function ProduccionTab() {
               <thead>
                 <tr>
                   <Th>Fecha</Th>
-                  <Th>Producto</Th>
-                  <Th>Cantidad</Th>
+                  <Th>Sabor</Th>
+                  <Th>Cantidad (cajas)</Th>
                   <Th>Notas</Th>
                 </tr>
               </thead>
@@ -501,7 +520,7 @@ function ProduccionTab() {
                 {producciones.map((p) => (
                   <TrHover key={p.id}>
                     <Td>{p.fecha}</Td>
-                    <Td main>{varianteNombre(p.producto_variante_id)}</Td>
+                    <Td main>{nombreProductoDeVariante(p.producto_variante_id)}</Td>
                     <Td>{fNum(p.cantidad, 0)}</Td>
                     <Td>{p.notas ?? "—"}</Td>
                   </TrHover>
@@ -526,17 +545,17 @@ function ProduccionTab() {
         }
       >
         <FormGrid>
-          <Field label="Producto" full>
-            <Select value={form.producto_variante_id} onChange={(e) => setForm({ ...form, producto_variante_id: e.target.value })}>
+          <Field label="Sabor" full>
+            <Select value={form.producto_id} onChange={(e) => setForm({ ...form, producto_id: e.target.value })}>
               <option value="">Seleccionar…</option>
-              {data.producto_variantes.filter((v) => v.activo).map((v) => (
-                <option key={v.id} value={v.id}>
-                  {v.nombre}
+              {productosActivos.map((p) => (
+                <option key={p.id} value={p.id}>
+                  {p.nombre}
                 </option>
               ))}
             </Select>
           </Field>
-          <Field label="Cantidad">
+          <Field label={`Cantidad (en cajas de ${refElegido}u)`}>
             <Input type="number" value={form.cantidad} onChange={(e) => setForm({ ...form, cantidad: Number(e.target.value) })} />
           </Field>
           <Field label="Fecha">

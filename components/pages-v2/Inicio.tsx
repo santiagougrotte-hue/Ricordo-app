@@ -43,6 +43,7 @@ import {
   mesAnterior,
   sumarDias,
 } from "@/lib/calc-v2";
+import { produccionPendientePorSabor } from "@/lib/resumen-sheets";
 import {
   pctCambio,
   calcularMetricasVentas,
@@ -183,27 +184,10 @@ export function Inicio() {
     [data.pedidos]
   );
   // Proxy de "producción pendiente" con lo que existe hoy: pedidos ya marcados "En producción"
-  // (Ventas → Pedidos) y sus líneas — todavía no hay un tablero de producción propio con estados
-  // Pendiente/En elaboración/Terminado por preparación, eso es una mejora más grande aparte.
-  const pedidosEnProduccion = useMemo(
-    () => data.pedidos.filter((p) => p.estado === "Produccion").sort((a, b) => a.fecha.localeCompare(b.fecha)),
-    [data.pedidos]
-  );
-  const itemsEnProduccion = useMemo(() => {
-    const idsPedidos = new Set(pedidosEnProduccion.map((p) => p.id));
-    const items = data.pedido_items.filter((i) => idsPedidos.has(i.pedido_id));
-    const porVariante = new Map<string, { nombre: string; cantidad: number; pedidos: Set<string> }>();
-    for (const item of items) {
-      const clave = item.producto_variante_id ?? item.id;
-      const actual = porVariante.get(clave) ?? { nombre: item.nombre_historico, cantidad: 0, pedidos: new Set<string>() };
-      actual.cantidad += item.cantidad;
-      actual.pedidos.add(item.pedido_id);
-      porVariante.set(clave, actual);
-    }
-    return Array.from(porVariante.values())
-      .map((v) => ({ nombre: v.nombre, cantidad: v.cantidad, pedidos: v.pedidos.size }))
-      .sort((a, b) => b.cantidad - a.cantidad);
-  }, [data.pedido_items, pedidosEnProduccion]);
+  // (Ventas → Pedidos) y sus líneas, agrupadas por sabor (no por presentación/canal) — todavía no
+  // hay un tablero de producción propio con estados Pendiente/En elaboración/Terminado por
+  // preparación, eso es una mejora más grande aparte.
+  const itemsEnProduccion = useMemo(() => produccionPendientePorSabor(data), [data]);
 
   const comprasPendientes = useMemo(() => data.compras.filter((c) => c.estado_pago === "pendiente"), [data.compras]);
   const totalComprasPendientes = comprasPendientes.reduce((acc, c) => acc + c.total, 0);
@@ -464,7 +448,7 @@ export function Inicio() {
               <thead>
                 <tr>
                   <Th>Producto</Th>
-                  <Th>Cantidad</Th>
+                  <Th>Cantidad (cajas)</Th>
                   <Th>Pedidos</Th>
                 </tr>
               </thead>
@@ -472,7 +456,7 @@ export function Inicio() {
                 {itemsEnProduccion.map((it) => (
                   <TrHover key={it.nombre}>
                     <Td main>{it.nombre}</Td>
-                    <Td>{fNum(it.cantidad, 0)}</Td>
+                    <Td>{fNum(it.cantidad, 2)}</Td>
                     <Td className="text-text3">{it.pedidos}</Td>
                   </TrHover>
                 ))}
