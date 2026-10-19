@@ -93,6 +93,20 @@ function GeneralTab() {
         </Field>
       </Card>
 
+      <Card title="Rellenos">
+        <p className="mb-3 text-[12.5px] text-text3">
+          Gramos de relleno cocido por unidad de pasta. Convierte los kilos que cargás en Operaciones → Rellenos en cajas
+          disponibles, y descuenta el relleno usado al registrar una producción (13 g = 156 g por caja de 12).
+        </p>
+        <Field label="Gramos de relleno por unidad">
+          <Input
+            type="number"
+            value={data.configuracion.gramos_relleno_por_unidad ?? 13}
+            onChange={(e) => setUmbral("gramos_relleno_por_unidad", Number(e.target.value))}
+          />
+        </Field>
+      </Card>
+
       <Card title="Ventas mayoristas">
         <p className="mb-3 text-[12.5px] text-text3">
           Variante que representa un frasco de salsa adicional — al elegirla acá, Ventas → Pedidos habilita un campo

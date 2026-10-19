@@ -27,6 +27,7 @@ import {
   SearchInput,
 } from "@/components/ui";
 import { Modal } from "@/components/Modal";
+import { conConsumoInsumosVenta, ORIGEN_CONSUMO_VENTA } from "@/lib/rellenos";
 import { AnaliticaVentasTab } from "./AnaliticaVentas";
 import {
   fARS,
@@ -419,6 +420,7 @@ export function crearPedidoDesdeWeb(data: RicordoDataV2, pedidoWeb: PedidoWeb): 
   let out: RicordoDataV2 = { ...data, clientes, pedidos: [...data.pedidos, nuevoPedido], pedido_items: [...data.pedido_items, ...items] };
   out = { ...out, reservas: reservasActualizadasParaPedido(out, nuevoPedido, items) };
   out = { ...out, ...conGastoRepartoPedido(out, nuevoPedido) };
+  out = { ...out, ...conConsumoInsumosVenta(out, nuevoPedido, items) };
 
   if (/pagad/i.test(pedidoWeb.estado_pago)) {
     out = {
@@ -687,10 +689,11 @@ function PedidosTab() {
       const base = { ...d, pedidos: [...otrosPedidos, nuevoPedido], pedido_items: [...otrosItems, ...nuevosItems] };
       const conReservas = { ...base, reservas: reservasActualizadasParaPedido(base, nuevoPedido, nuevosItems) };
       const conReparto = { ...conReservas, ...conGastoRepartoPedido(conReservas, nuevoPedido) };
+      const conConsumo = { ...conReparto, ...conConsumoInsumosVenta(conReparto, nuevoPedido, nuevosItems) };
       if (nuevoPedido.estado === "Entregado") {
-        return { ...conReparto, ...conMovimientosDeEntrega(conReparto, nuevoPedido, nuevosItems) };
+        return { ...conConsumo, ...conMovimientosDeEntrega(conConsumo, nuevoPedido, nuevosItems) };
       }
-      return conReparto;
+      return conConsumo;
     });
     toast(editando ? "Pedido actualizado" : "Pedido creado");
     if (editando === null) borrarBorradorPedido();
@@ -705,10 +708,11 @@ function PedidosTab() {
       const items = d.pedido_items.filter((i) => i.pedido_id === pedido.id);
       const conReservas = { ...base, reservas: reservasActualizadasParaPedido(base, { ...pedido, estado }, items) };
       const conReparto = { ...conReservas, ...conGastoRepartoPedido(conReservas, { ...pedido, estado }) };
+      const conConsumo = { ...conReparto, ...conConsumoInsumosVenta(conReparto, { ...pedido, estado }, items) };
       if (estado === "Entregado") {
-        return { ...conReparto, ...conMovimientosDeEntrega(conReparto, { ...pedido, estado }, items) };
+        return { ...conConsumo, ...conMovimientosDeEntrega(conConsumo, { ...pedido, estado }, items) };
       }
-      return conReparto;
+      return conConsumo;
     });
     toast(`Estado → ${estado}`);
   }
@@ -724,7 +728,9 @@ function PedidosTab() {
       ...d,
       pedidos: d.pedidos.filter((p) => p.id !== pedido.id),
       pedido_items: d.pedido_items.filter((i) => i.pedido_id !== pedido.id),
-      inventario_movimientos: d.inventario_movimientos.filter((m) => !(m.origen_tipo === "pedido" && m.origen_id === pedido.id)),
+      inventario_movimientos: d.inventario_movimientos.filter(
+        (m) => !((m.origen_tipo === "pedido" || m.origen_tipo === ORIGEN_CONSUMO_VENTA) && m.origen_id === pedido.id)
+      ),
       movimientos_financieros: d.movimientos_financieros.filter(
         (m) => !((m.origen_tipo === "venta_pedido" || m.origen_tipo === "diferencia_envio") && m.origen_id === pedido.id)
       ),

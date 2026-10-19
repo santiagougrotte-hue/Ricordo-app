@@ -13,6 +13,7 @@ import {
   totalCobradoPedido,
   saldoCaja,
   sumarDias,
+  costoRealEnvioCalculado,
 } from "./calc-v2";
 import { calcularCuponesMes } from "./analitica-ventas";
 
@@ -705,4 +706,199 @@ export function flujoCajaSemanalATSV(filas: FilaFlujoCajaSemanal[]): string {
     ["semana_desde", "saldo_caja_hoy", "por_cobrar", "pedidos_a_cobrar", "por_pagar"],
     filas.map((f) => [f.semana_desde, f.saldo_caja_hoy, f.por_cobrar, f.pedidos_a_cobrar, f.por_pagar])
   );
+}
+
+// --- IMPORT_APP: export único para las planillas "Ricordo · Finanzas" y "Ricordo · Productos y
+// compras" ------------------------------------------------------------------------------------------
+// Una sola tabla, un renglón por evento, desde la fecha de inicio del análisis. Se copia entera cada
+// semana y se pega en Finanzas → IMPORT_APP, celda A1, reemplazando lo anterior (no se acumula: cada
+// export ya trae todo el historial desde la fecha de inicio). Los nombres y el orden de las columnas
+// son el contrato con esas dos planillas — no cambiarlos sin cambiar las planillas.
+
+export const HEADERS_IMPORT_APP = [
+  "Tipo", "Fecha", "Referencia", "Contraparte", "Canal", "Producto_ID", "Producto", "Variante", "Formato_u",
+  "Item_ID", "Item", "Clase", "Cantidad", "Unidad", "Precio_unit", "Importe_bruto", "Descuento", "Importe_neto",
+  "Costo_masa", "Costo_relleno", "Costo_packaging", "Costo_MO", "Envio_cobrado", "Envio_costo", "Km", "Medio_pago",
+  "Stock_minimo", "Cajas_que_rinde",
+] as const;
+
+/** Decimales por columna: cantidades de receta y stock necesitan más precisión que los montos. */
+export const DECIMALES_IMPORT_APP = decimalesPorColumna(HEADERS_IMPORT_APP.length, { 12: 5, 14: 2, 26: 3, 27: 1 });
+
+type FilaImport = Partial<Record<(typeof HEADERS_IMPORT_APP)[number], string | number>>;
+
+/** Fecha desde la que arranca el export: la del saldo inicial de caja o la de corte del CMV. */
+export function fechaInicioImportApp(data: RicordoDataV2): string {
+  return data.configuracion.fecha_saldo_inicial_caja ?? data.configuracion.fecha_corte_cmv ?? "";
+}
+
+/** Clase de un insumo para las planillas: packaging, masa (todo lo de stock controlado que no es
+ * packaging = control semanal), relleno (se usa en recetas pero no lleva stock) u otro. */
+export function claseInsumoImport(data: RicordoDataV2, insumoId: string): "masa" | "relleno" | "packaging" | "otro" {
+  const insumo = data.insumos.find((i) => i.id === insumoId);
+  if (!insumo) return "otro";
+  if (insumo.tipo === "packaging") return "packaging";
+  if (insumo.controla_stock) return "masa";
+  return data.receta_items.some((r) => r.insumo_id === insumoId) ? "relleno" : "otro";
+}
+
+function etapaImport(etapa: EtapaReceta): "masa" | "relleno" | "packaging" {
+  if (etapa === "relleno") return "relleno";
+  if (etapa === "packaging") return "packaging";
+  return "masa";
+}
+
+function costoPorEtapaVariante(data: RicordoDataV2, varianteId: string): Record<"masa" | "relleno" | "packaging", number> {
+  const out = { masa: 0, relleno: 0, packaging: 0 };
+  const variante = data.producto_variantes.find((v) => v.id === varianteId);
+  if (!variante) return out;
+  for (const item of recetaEfectivaVariante(data, variante)) {
+    const insumo = data.insumos.find((i) => i.id === item.insumo_id);
+    out[etapaImport(item.etapa)] += item.cantidad * (insumo?.precio_actual ?? 0);
+  }
+  return out;
+}
+
+export function resumenImportApp(data: RicordoDataV2, desde: string = fechaInicioImportApp(data), hoy: string = new Date().toISOString().slice(0, 10)): (string | number)[][] {
+  const filas: FilaImport[] = [];
+  const enRango = (fecha: string) => !desde || fecha >= desde;
+  const nombreCliente = (id: string) => data.clientes.find((c) => c.id === id)?.nombre ?? "";
+  const producto = (id: string) => data.productos.find((p) => p.id === id);
+
+  // VENTA (un renglón por ítem) + PEDIDO (uno por pedido)
+  for (const p of [...data.pedidos].sort((a, b) => a.fecha.localeCompare(b.fecha))) {
+    if (!enRango(p.fecha) || p.estado === "Cancelado") continue;
+    const items = data.pedido_items.filter((i) => i.pedido_id === p.id);
+    const brutoPedido = items.reduce((acc, i) => acc + i.precio_unitario * i.cantidad, 0);
+    const descuentoPedido = p.descuento ?? 0;
+    for (const i of items) {
+      const bruto = i.precio_unitario * i.cantidad;
+      const descuento = (i.descuento ?? 0) + (brutoPedido > 0 ? (descuentoPedido * bruto) / brutoPedido : 0);
+      const variante = i.producto_variante_id ? data.producto_variantes.find((v) => v.id === i.producto_variante_id) : undefined;
+      const base: FilaImport = {
+        Tipo: "VENTA", Fecha: p.fecha, Referencia: p.id, Contraparte: nombreCliente(p.cliente_id), Canal: p.canal,
+        Clase: p.estado, Cantidad: i.cantidad, Precio_unit: i.precio_unitario, Importe_bruto: Math.round(bruto),
+        Descuento: Math.round(descuento), Importe_neto: Math.round(bruto - descuento), Medio_pago: p.metodo_pago ?? "",
+        Item: i.nombre_historico,
+      };
+      if (variante) {
+        const etapas = costoPorEtapaVariante(data, variante.id);
+        const totalReceta = etapas.masa + etapas.relleno + etapas.packaging;
+        // Respeta el costo congelado al vender; la receta actual solo reparte ese costo por etapa.
+        const k = i.costo_unitario_historico != null && totalReceta > 0 ? i.costo_unitario_historico / totalReceta : 1;
+        const mo = i.mano_obra_unitaria_historica ?? costoManoDeObraVariante(data, variante.id);
+        filas.push({
+          ...base, Producto_ID: variante.producto_id, Producto: producto(variante.producto_id)?.nombre ?? "",
+          Variante: variante.nombre.trim(), Formato_u: variante.unidades_por_paquete ?? 1, Item_ID: variante.id,
+          Unidad: (variante.unidades_por_paquete ?? 1) > 1 ? "caja" : "unidad",
+          Costo_masa: Math.round(etapas.masa * k * i.cantidad), Costo_relleno: Math.round(etapas.relleno * k * i.cantidad),
+          Costo_packaging: Math.round(etapas.packaging * k * i.cantidad), Costo_MO: Math.round(mo * i.cantidad),
+        });
+      } else {
+        filas.push({
+          ...base, Producto_ID: "SIN-CATALOGO", Producto: i.nombre_historico, Variante: i.nombre_historico, Formato_u: 12,
+          Item_ID: i.producto_variante_id ?? "", Unidad: "caja", Costo_relleno: Math.round((i.costo_unitario_historico ?? 0) * i.cantidad),
+        });
+      }
+    }
+    const km = p.km_envio ?? 0;
+    const costoEnvio = p.costo_real_envio ?? (km > 0 ? costoRealEnvioCalculado(data, km, p.peaje_envio ?? 0) : 0);
+    filas.push({
+      Tipo: "PEDIDO", Fecha: p.fecha, Referencia: p.id, Contraparte: nombreCliente(p.cliente_id), Canal: p.canal, Clase: p.estado,
+      Item: p.zona ?? "", Cantidad: items.length, Importe_bruto: Math.round(brutoPedido),
+      Descuento: Math.round(descuentoPedido + items.reduce((acc, i) => acc + (i.descuento ?? 0), 0)), Importe_neto: Math.round(p.total),
+      Envio_cobrado: Math.round(p.costo_envio ?? 0), Envio_costo: Math.round(costoEnvio), Km: km, Medio_pago: p.metodo_pago ?? "",
+    });
+  }
+
+  // COMPRA (un renglón por ítem)
+  for (const c of [...data.compras].sort((a, b) => a.fecha.localeCompare(b.fecha))) {
+    if (!enRango(c.fecha)) continue;
+    const proveedor = data.proveedores.find((p) => p.id === c.proveedor_id)?.nombre ?? "";
+    for (const it of data.compra_items.filter((x) => x.compra_id === c.id)) {
+      const insumo = data.insumos.find((i) => i.id === it.insumo_id);
+      filas.push({
+        Tipo: "COMPRA", Fecha: c.fecha, Referencia: c.id, Contraparte: proveedor, Item_ID: it.insumo_id, Item: insumo?.nombre.trim() ?? "",
+        Clase: claseInsumoImport(data, it.insumo_id), Cantidad: it.cantidad, Unidad: (it.unidad ?? insumo?.unidad ?? "").trim(),
+        Precio_unit: it.precio_unitario, Importe_bruto: Math.round(it.subtotal), Importe_neto: Math.round(it.subtotal), Medio_pago: c.metodo_pago ?? "",
+      });
+    }
+  }
+
+  // CAJA (todos los movimientos de dinero confirmados)
+  for (const m of [...data.movimientos_financieros].sort((a, b) => a.fecha.localeCompare(b.fecha))) {
+    if (!enRango(m.fecha) || m.estado !== "confirmado" || m.tipo === "transferencia") continue;
+    const categoria = data.categorias.find((c) => c.id === m.categoria_id)?.nombre ?? "";
+    let item: string;
+    if (m.tipo === "ingreso") item = m.origen_tipo === "venta_pedido" ? "Cobro de venta" : "Otro ingreso";
+    else if (m.origen_tipo === "compra_pago") item = "Pago de compra";
+    else if (m.origen_tipo === "ajuste_saldo") item = "Ajuste de saldo";
+    else if (categoria.includes("Sueldo")) item = "Retiro de sueldo";
+    else if (/Fijo|Alquiler|Amortiz/.test(categoria)) item = "Costo fijo";
+    else item = "Otro egreso";
+    filas.push({
+      Tipo: "CAJA", Fecha: m.fecha, Referencia: m.origen_id ?? m.id, Contraparte: m.concepto, Item: item,
+      Clase: m.tipo === "ingreso" ? "Ingreso" : "Egreso", Importe_bruto: Math.round(m.monto), Importe_neto: Math.round(m.monto), Medio_pago: m.metodo_pago ?? "",
+    });
+  }
+
+  // PRODUCCION (cajas armadas)
+  for (const pr of [...data.produccion].sort((a, b) => a.fecha.localeCompare(b.fecha))) {
+    if (!enRango(pr.fecha)) continue;
+    const v = data.producto_variantes.find((x) => x.id === pr.producto_variante_id);
+    filas.push({
+      Tipo: "PRODUCCION", Fecha: pr.fecha, Referencia: pr.id, Producto_ID: v?.producto_id ?? pr.producto_variante_id,
+      Producto: v ? producto(v.producto_id)?.nombre ?? "" : "", Variante: v?.nombre.trim() ?? "", Formato_u: v?.unidades_por_paquete ?? 12,
+      Cantidad: pr.cantidad, Unidad: "caja", Item: pr.kg_relleno ? `${pr.kg_relleno} kg de relleno` : "",
+    });
+  }
+
+  // RELLENO (tandas de relleno cocido, en kilos)
+  const gRelleno = data.configuracion.gramos_relleno_por_unidad && data.configuracion.gramos_relleno_por_unidad > 0 ? data.configuracion.gramos_relleno_por_unidad : 13;
+  for (const r of [...(data.rellenos_cocidos ?? [])].sort((a, b) => a.fecha.localeCompare(b.fecha))) {
+    if (!enRango(r.fecha)) continue;
+    filas.push({
+      Tipo: "RELLENO", Fecha: r.fecha, Referencia: r.id, Producto_ID: r.producto_id, Producto: producto(r.producto_id)?.nombre ?? "",
+      Cantidad: r.kg, Unidad: "kg", Cajas_que_rinde: Math.floor(r.kg / ((gRelleno * 12) / 1000)),
+    });
+  }
+
+  // STOCK (foto de hoy de los insumos de control semanal: masa y packaging)
+  for (const insumo of data.insumos) {
+    if (!insumo.activo) continue;
+    const clase = claseInsumoImport(data, insumo.id);
+    if (clase !== "masa" && clase !== "packaging") continue;
+    if (clase === "masa" && !insumo.controla_stock) continue;
+    filas.push({
+      Tipo: "STOCK", Fecha: hoy, Item_ID: insumo.id, Item: insumo.nombre.trim(), Clase: clase,
+      Cantidad: Math.max(0, redondear(calcularStock(data, "insumo", insumo.id), 3)), Unidad: insumo.unidad.trim(),
+      Precio_unit: insumo.precio_actual, Stock_minimo: insumo.stock_minimo ?? "",
+    });
+  }
+
+  // RECETA (consumo por paquete de la variante minorista de cada producto activo)
+  for (const p of data.productos.filter((x) => x.activo)) {
+    const variantes = data.producto_variantes.filter((v) => v.producto_id === p.id && v.activo);
+    const v = variantes.find((x) => x.canal === "Minorista") ?? variantes[0];
+    if (!v) continue;
+    const porInsumo = new Map<string, { etapa: "masa" | "relleno" | "packaging"; cantidad: number }>();
+    for (const item of recetaEfectivaVariante(data, v)) {
+      const etapa = etapaImport(item.etapa);
+      const key = `${etapa}|${item.insumo_id}`;
+      const prev = porInsumo.get(key);
+      porInsumo.set(key, { etapa, cantidad: (prev?.cantidad ?? 0) + item.cantidad });
+    }
+    for (const [key, { etapa, cantidad }] of [...porInsumo.entries()].sort()) {
+      if (cantidad <= 0) continue;
+      const insumoId = key.split("|")[1];
+      const insumo = data.insumos.find((i) => i.id === insumoId);
+      filas.push({
+        Tipo: "RECETA", Fecha: hoy, Producto_ID: p.id, Producto: p.nombre, Variante: v.nombre.trim(), Formato_u: v.unidades_por_paquete ?? 1,
+        Item_ID: insumoId, Item: insumo?.nombre.trim() ?? "", Clase: etapa, Cantidad: redondear(cantidad, 5),
+        Unidad: (insumo?.unidad ?? "").trim(), Precio_unit: insumo?.precio_actual ?? 0,
+      });
+    }
+  }
+
+  return filas.map((f) => HEADERS_IMPORT_APP.map((h) => f[h] ?? ""));
 }
