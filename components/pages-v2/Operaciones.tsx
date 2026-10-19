@@ -23,9 +23,11 @@ import {
   Select,
   Textarea,
   SearchInput,
+  Alert,
 } from "@/components/ui";
 import { Modal } from "@/components/Modal";
-import { fARS, fNum, recetaEfectivaVariante, deshacerSaldoHistoricoCompra } from "@/lib/calc-v2";
+import { gramosRellenoPorUnidad, kgRellenoDisponible, kgRellenoParaCajas, resumenRellenos, usaRellenoPorUnidad } from "@/lib/rellenos";
+import { fARS, fNum, deshacerSaldoHistoricoCompra } from "@/lib/calc-v2";
 import type { EstadoPagoCompra } from "@/lib/types-v2";
 import type { Proveedor } from "@/lib/types";
 
@@ -437,6 +439,9 @@ function ProduccionTab() {
 
   const varianteNombre = (id: string) => data.producto_variantes.find((v) => v.id === id)?.nombre ?? "(eliminado)";
   const producciones = useMemo(() => [...data.produccion].sort((a, b) => b.fecha.localeCompare(a.fecha)), [data.produccion]);
+  const varianteElegida = data.producto_variantes.find((v) => v.id === form.producto_variante_id);
+  const kgNecesarios = varianteElegida ? kgRellenoParaCajas(data, varianteElegida, form.cantidad) : 0;
+  const kgDisponibles = varianteElegida ? kgRellenoDisponible(data, varianteElegida.producto_id) : 0;
 
   function registrar() {
     if (!form.producto_variante_id || form.cantidad <= 0) {
@@ -446,34 +451,32 @@ function ProduccionTab() {
     const variante = data.producto_variantes.find((v) => v.id === form.producto_variante_id);
     if (!variante) return;
     const produccionId = uid("PRD");
-    // Solo se descuentan los insumos que realmente se trackean (controla_stock) — el resto de la
-    // receta (ej. verduras que se compran al día, sin stock cargado) no genera un movimiento que
-    // nadie va a leer.
-    const consumo = recetaEfectivaVariante(data, variante).filter((c) => data.insumos.find((i) => i.id === c.insumo_id)?.controla_stock);
+    // Armar NO descuenta insumos: la masa y el packaging se descuentan al cargar la venta, y el
+    // relleno se controla por kilo cocido (Operaciones → Rellenos). Acá solo entran las cajas al
+    // freezer y se registra cuánto relleno cocido se usó.
     // El stock de productos terminados es un solo pool por sabor (variante.producto_id), en
-    // unidades sueltas — producir "cantidad" cajas de ESTA presentación suma cantidad × sus
-    // unidades_por_paquete al pool compartido, sin importar en qué presentación se termine
-    // vendiendo después (ver TipoItemStock en types-v2.ts).
+    // unidades sueltas (ver TipoItemStock en types-v2.ts).
     const unidadesProducidas = form.cantidad * (variante.unidades_por_paquete ?? 1);
+    const kgRelleno = kgRellenoParaCajas(data, variante, form.cantidad);
     setData((d) => ({
       ...d,
-      produccion: [...d.produccion, { id: produccionId, producto_variante_id: form.producto_variante_id, cantidad: form.cantidad, fecha: form.fecha, notas: form.notas || undefined }],
+      produccion: [
+        ...d.produccion,
+        {
+          id: produccionId,
+          producto_variante_id: form.producto_variante_id,
+          cantidad: form.cantidad,
+          fecha: form.fecha,
+          notas: form.notas || undefined,
+          kg_relleno: kgRelleno > 0 ? kgRelleno : undefined,
+        },
+      ],
       inventario_movimientos: [
         ...d.inventario_movimientos,
         { id: uid("MOV"), fecha: form.fecha, tipo: "produccion" as const, origen_tipo: "produccion", origen_id: produccionId, item_tipo: "producto" as const, item_id: variante.producto_id, cantidad: unidadesProducidas },
-        ...consumo.map((c) => ({
-          id: uid("MOV"),
-          fecha: form.fecha,
-          tipo: "consumo" as const,
-          origen_tipo: "produccion",
-          origen_id: produccionId,
-          item_tipo: "insumo" as const,
-          item_id: c.insumo_id,
-          cantidad: -(c.cantidad * form.cantidad),
-        })),
       ],
     }));
-    toast("Producción registrada, stock de insumos descontado según receta");
+    toast(kgRelleno > 0 ? `Producción registrada: ${fNum(kgRelleno, 3)} kg de relleno usados` : "Producción registrada");
     setModalOpen(false);
     setForm({ producto_variante_id: "", cantidad: 1, fecha: new Date().toISOString().slice(0, 10), notas: "" });
   }
@@ -494,6 +497,7 @@ function ProduccionTab() {
                   <Th>Fecha</Th>
                   <Th>Producto</Th>
                   <Th>Cantidad</Th>
+                  <Th>Relleno usado</Th>
                   <Th>Notas</Th>
                 </tr>
               </thead>
@@ -503,6 +507,7 @@ function ProduccionTab() {
                     <Td>{p.fecha}</Td>
                     <Td main>{varianteNombre(p.producto_variante_id)}</Td>
                     <Td>{fNum(p.cantidad, 0)}</Td>
+                    <Td>{p.kg_relleno ? `${fNum(p.kg_relleno, 3)} kg` : "—"}</Td>
                     <Td>{p.notas ?? "—"}</Td>
                   </TrHover>
                 ))}
@@ -536,7 +541,7 @@ function ProduccionTab() {
               ))}
             </Select>
           </Field>
-          <Field label="Cantidad">
+          <Field label="Cajas armadas">
             <Input type="number" value={form.cantidad} onChange={(e) => setForm({ ...form, cantidad: Number(e.target.value) })} />
           </Field>
           <Field label="Fecha">
@@ -546,6 +551,166 @@ function ProduccionTab() {
             <Textarea rows={2} value={form.notas} onChange={(e) => setForm({ ...form, notas: e.target.value })} />
           </Field>
         </FormGrid>
+        {kgNecesarios > 0 && (
+          <div className="mt-3">
+            <Alert kind={kgNecesarios > kgDisponibles ? "warning" : "info"}>
+              Usa {fNum(kgNecesarios, 3)} kg de relleno cocido. Disponible: {fNum(kgDisponibles, 3)} kg.
+              {kgNecesarios > kgDisponibles && " No alcanza con lo cargado: revisá la tanda en Operaciones → Rellenos."}
+            </Alert>
+          </div>
+        )}
+        <p className="mt-2 text-[11.5px] text-text3">Armar no descuenta masa ni packaging: eso se descuenta al cargar la venta.</p>
+      </Modal>
+    </div>
+  );
+}
+
+function RellenosTab() {
+  const { data, setData } = useStoreV2();
+  const { toast } = useToast();
+  const [modalOpen, setModalOpen] = useState(false);
+  const hoy = new Date().toISOString().slice(0, 10);
+  const [form, setForm] = useState({ producto_id: "", kg: 0, fecha: hoy, notas: "" });
+  const resumen = useMemo(() => resumenRellenos(data), [data]);
+  const tandas = useMemo(() => [...(data.rellenos_cocidos ?? [])].sort((a, b) => b.fecha.localeCompare(a.fecha)), [data.rellenos_cocidos]);
+  const productosPasta = data.productos.filter((p) => p.activo && usaRellenoPorUnidad(data, p.id));
+  const gramos = gramosRellenoPorUnidad(data);
+  const nombreProducto = (id: string) => data.productos.find((p) => p.id === id)?.nombre ?? id;
+
+  function guardar() {
+    if (!form.producto_id || !(form.kg > 0)) {
+      toast("Elegí el relleno y cargá los kilos cocidos", "error");
+      return;
+    }
+    setData((d) => ({
+      ...d,
+      rellenos_cocidos: [...(d.rellenos_cocidos ?? []), { id: uid("REL"), fecha: form.fecha, producto_id: form.producto_id, kg: form.kg, notas: form.notas || undefined }],
+    }));
+    toast(`Relleno cargado: alcanza para ${Math.floor(form.kg / ((gramos * 12) / 1000))} cajas de 12`);
+    setModalOpen(false);
+    setForm({ producto_id: "", kg: 0, fecha: hoy, notas: "" });
+  }
+
+  function eliminar(id: string) {
+    if (!window.confirm("¿Eliminar esta tanda de relleno?")) return;
+    setData((d) => ({ ...d, rellenos_cocidos: (d.rellenos_cocidos ?? []).filter((r) => r.id !== id) }));
+    toast("Tanda eliminada");
+  }
+
+  return (
+    <div>
+      <div className="mb-4 flex items-center justify-between gap-3">
+        <p className="text-[12.5px] text-text3">
+          Al terminar cada relleno, pesalo y cargá los kilos cocidos. A {fNum(gramos, 0)} g por unidad, cada caja de 12 usa {fNum((gramos * 12) / 1000, 3)} kg.
+        </p>
+        <Button onClick={() => setModalOpen(true)}>+ Cargar relleno</Button>
+      </div>
+      <Card title="Relleno disponible" className="mb-4">
+        {resumen.length === 0 ? (
+          <EmptyState text="Todavía no cargaste ningún relleno." />
+        ) : (
+          <TableWrap>
+            <table className="w-full">
+              <thead>
+                <tr>
+                  <Th>Relleno</Th>
+                  <Th>Cargado</Th>
+                  <Th>Usado al armar</Th>
+                  <Th>Disponible</Th>
+                  <Th>Cajas de 12 que alcanza</Th>
+                  <Th>Última tanda</Th>
+                </tr>
+              </thead>
+              <tbody>
+                {resumen.map((r) => (
+                  <TrHover key={r.producto_id}>
+                    <Td main>{r.producto}</Td>
+                    <Td>{fNum(r.kg_cargados, 3)} kg</Td>
+                    <Td>{fNum(r.kg_usados, 3)} kg</Td>
+                    <Td>{fNum(r.kg_disponibles, 3)} kg</Td>
+                    <Td>
+                      <Badge color={r.cajas_12_disponibles <= 4 ? "red" : "green"}>{fNum(r.cajas_12_disponibles, 0)}</Badge>
+                    </Td>
+                    <Td>{r.ultima_tanda ?? "—"}</Td>
+                  </TrHover>
+                ))}
+              </tbody>
+            </table>
+          </TableWrap>
+        )}
+      </Card>
+      <Card title="Tandas cargadas">
+        {tandas.length === 0 ? (
+          <EmptyState text="Sin tandas." />
+        ) : (
+          <TableWrap>
+            <table className="w-full">
+              <thead>
+                <tr>
+                  <Th>Fecha</Th>
+                  <Th>Relleno</Th>
+                  <Th>Kilos cocidos</Th>
+                  <Th>Notas</Th>
+                  <Th></Th>
+                </tr>
+              </thead>
+              <tbody>
+                {tandas.map((t) => (
+                  <TrHover key={t.id}>
+                    <Td>{t.fecha}</Td>
+                    <Td main>{nombreProducto(t.producto_id)}</Td>
+                    <Td>{fNum(t.kg, 3)} kg</Td>
+                    <Td>{t.notas ?? "—"}</Td>
+                    <Td>
+                      <Button size="sm" variant="danger" onClick={() => eliminar(t.id)}>
+                        Eliminar
+                      </Button>
+                    </Td>
+                  </TrHover>
+                ))}
+              </tbody>
+            </table>
+          </TableWrap>
+        )}
+      </Card>
+
+      <Modal
+        open={modalOpen}
+        onClose={() => setModalOpen(false)}
+        title="Cargar relleno cocido"
+        footer={
+          <>
+            <Button variant="ghost" onClick={() => setModalOpen(false)}>
+              Cancelar
+            </Button>
+            <Button onClick={guardar}>Guardar relleno</Button>
+          </>
+        }
+      >
+        <FormGrid>
+          <Field label="Relleno" full>
+            <Select value={form.producto_id} onChange={(e) => setForm({ ...form, producto_id: e.target.value })}>
+              <option value="">Seleccionar…</option>
+              {productosPasta.map((p) => (
+                <option key={p.id} value={p.id}>
+                  {p.nombre}
+                </option>
+              ))}
+            </Select>
+          </Field>
+          <Field label="Kilos cocidos (pesados)">
+            <Input type="number" step="0.001" value={form.kg || ""} onChange={(e) => setForm({ ...form, kg: Number(e.target.value) })} />
+          </Field>
+          <Field label="Fecha">
+            <Input type="date" value={form.fecha} onChange={(e) => setForm({ ...form, fecha: e.target.value })} />
+          </Field>
+          <Field label="Notas" full>
+            <Textarea rows={2} value={form.notas} onChange={(e) => setForm({ ...form, notas: e.target.value })} />
+          </Field>
+        </FormGrid>
+        {form.kg > 0 && (
+          <p className="mt-2 text-[12.5px] text-text2">Alcanza para {Math.floor(form.kg / ((gramos * 12) / 1000))} cajas de 12.</p>
+        )}
       </Modal>
     </div>
   );
@@ -556,18 +721,20 @@ export function Operaciones() {
   const [tab, setTab] = useState(tabInicial ?? "compras");
   return (
     <div>
-      <PageHeader title="Operaciones" sub="Compras, proveedores y producción" />
+      <PageHeader title="Operaciones" sub="Compras, proveedores, rellenos y producción" />
       <FilterTabs
         value={tab}
         onChange={setTab}
         options={[
           { value: "compras", label: "Compras" },
           { value: "proveedores", label: "Proveedores" },
+          { value: "rellenos", label: "Rellenos" },
           { value: "produccion", label: "Producción" },
         ]}
       />
       {tab === "compras" && <ComprasTab />}
       {tab === "proveedores" && <ProveedoresTab />}
+      {tab === "rellenos" && <RellenosTab />}
       {tab === "produccion" && <ProduccionTab />}
     </div>
   );

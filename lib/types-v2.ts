@@ -332,6 +332,21 @@ export interface Produccion {
   cantidad: number;
   fecha: string;
   notas?: string;
+  /** Kilos de relleno cocido que usó esta tanda de armado (cajas × unidades × gramos por unidad) —
+   * se descuenta de los rellenos cocidos cargados en Operaciones → Rellenos. Sin cargar en
+   * producciones de antes de existir el control de rellenos. */
+  kg_relleno?: number;
+}
+
+/** Tanda de relleno cocido (se hace una vez por mes): se pesa al terminar y se carga en kilos. Los
+ * ingredientes del relleno no llevan stock propio — este es el único control del relleno. Lo que
+ * queda disponible = kilos cargados − kilos usados por las producciones (`Produccion.kg_relleno`). */
+export interface RellenoCocido {
+  id: string;
+  fecha: string;
+  producto_id: string;
+  kg: number;
+  notas?: string;
 }
 
 // --- Finanzas -------------------------------------------------------------------------------------
@@ -391,6 +406,9 @@ export interface Configuracion {
    * un precio: el campo "Salsa" de la fila solo aparece cuando esto está configurado, y usa
    * siempre el `precio_venta` real de la variante elegida acá. */
   variante_salsa_adicional_id?: string;
+  /** Gramos de relleno cocido por unidad de pasta (default 13 g → 156 g por caja de 12) — convierte
+   * los kilos de relleno cargados en cajas disponibles. */
+  gramos_relleno_por_unidad?: number;
   saldo_inicial_cmv: number;
   saldo_inicial_compras: number;
   fecha_corte_cmv: string | null;
@@ -490,6 +508,8 @@ export interface RicordoDataV2 {
   produccion: Produccion[];
   reservas: Reserva[];
   movimientos_financieros: MovimientoFinanciero[];
+  /** Opcional: documentos anteriores a este campo no lo tienen — leer siempre con `?? []`. */
+  rellenos_cocidos?: RellenoCocido[];
   configuracion: Configuracion;
   datos_pendientes_revision: RevisionItem[];
   /** Todo lo que no es seguro descartar pero tampoco tiene un lugar claro en el esquema nuevo
@@ -528,6 +548,7 @@ export function emptyDataV2(): RicordoDataV2 {
     produccion: [],
     reservas: [],
     movimientos_financieros: [],
+    rellenos_cocidos: [],
     configuracion: {
       envios: {
         litro_nafta: 1200,

@@ -18,6 +18,10 @@ import {
   resumenCuponesMesSheets,
   resumenFlujoCajaSemanalSheets,
   avisosRecetaNoExportada,
+  resumenImportApp,
+  fechaInicioImportApp,
+  HEADERS_IMPORT_APP,
+  DECIMALES_IMPORT_APP,
   celdaTexto,
   decimalesPorColumna,
   type SeparadorDecimal,
@@ -285,6 +289,8 @@ export function ResumenSheetsButton() {
   }
 
   const sinManoDeObra = useMemo(() => (open ? productosSinManoDeObra(data) : []), [open, data]);
+  const filasImportApp = useMemo(() => (open ? resumenImportApp(data) : []), [open, data]);
+  const inicioImportApp = fechaInicioImportApp(data);
 
   function marcarNoAplica(recetaId: string) {
     setData((d) => ({ ...d, recetas: d.recetas.map((r) => (r.id === recetaId ? { ...r, sin_mano_obra_ok: true } : r)) }));
@@ -420,6 +426,22 @@ export function ResumenSheetsButton() {
             </Select>
           </Field>
         </div>
+
+        <BloqueExportacion
+          titulo="Planillas Ricordo · Finanzas y Productos y compras — cada semana, se pega ENCIMA"
+          explicacion={`Todo junto en una sola tabla (ventas, pedidos, compras, caja, producción, rellenos, stock de masa y packaging, y recetas) desde ${inicioImportApp || "el inicio"}. En Finanzas → pestaña IMPORT_APP: seleccioná A1:AB, borrá y pegá en A1. El archivo de Productos y compras lo lee solo de Finanzas.`}
+        >
+          <TablaResumen
+            titulo="IMPORT_APP"
+            ayuda={`${filasImportApp.length} renglones. Usá «Copiar con encabezados»: la planilla espera la fila de títulos en la fila 1.`}
+            nota="Ricordo · Finanzas → pestaña IMPORT_APP, celda A1."
+            headers={[...HEADERS_IMPORT_APP]}
+            filas={filasImportApp}
+            archivo="import_app.csv"
+            decimales={DECIMALES_IMPORT_APP}
+            separador={separador}
+          />
+        </BloqueExportacion>
 
         <BloqueExportacion
           titulo="Cada viernes — se pega ENCIMA de lo anterior"
