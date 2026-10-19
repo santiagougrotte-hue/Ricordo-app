@@ -748,7 +748,7 @@ function etapaImport(etapa: EtapaReceta): "masa" | "relleno" | "packaging" {
   return "masa";
 }
 
-function costoPorEtapaVariante(data: RicordoDataV2, varianteId: string): Record<"masa" | "relleno" | "packaging", number> {
+export function costoPorEtapaVariante(data: RicordoDataV2, varianteId: string): Record<"masa" | "relleno" | "packaging", number> {
   const out = { masa: 0, relleno: 0, packaging: 0 };
   const variante = data.producto_variantes.find((v) => v.id === varianteId);
   if (!variante) return out;

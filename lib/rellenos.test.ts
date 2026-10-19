@@ -134,3 +134,24 @@ test("resumenImportApp: renglones de venta, pedido, relleno, stock y receta con 
   assert.equal(receta.find((f) => col(f, "Item_ID") === "OSOBUCO")?.[HEADERS_IMPORT_APP.indexOf("Clase")], "relleno");
   assert.equal(receta.find((f) => col(f, "Item_ID") === "PREMEZCLA")?.[HEADERS_IMPORT_APP.indexOf("Cantidad")], 0.12);
 });
+
+test("calcularFondoReposicion: CMV de pedidos entregados menos compras, separado masa/packaging y relleno", async () => {
+  const { calcularFondoReposicion } = await import("./fondo-reposicion");
+  const data = fixture();
+  const { p, items } = pedido("Entregado");
+  data.pedidos = [p, { ...p, id: "PED-2", estado: "Confirmado" }];
+  data.pedido_items = [...items, { ...items[0], id: "I2", pedido_id: "PED-2" }];
+  data.proveedores = [{ id: "PRV", nombre: "Proveedor" } as never];
+  data.compras = [{ id: "C1", fecha: "2026-10-18", proveedor_id: "PRV", estado_pago: "pagado", total: 3000 }];
+  data.compra_items = [
+    { id: "CI1", compra_id: "C1", insumo_id: "PREMEZCLA", cantidad: 0.4, precio_unitario: 5000, subtotal: 2000 },
+    { id: "CI2", compra_id: "C1", insumo_id: "OSOBUCO", cantidad: 0.1, precio_unitario: 10000, subtotal: 1000 },
+  ];
+  const f = calcularFondoReposicion(data);
+  // Solo PED-1 (entregado): masa 1200 + packaging 1000 = 2200; relleno 1596.
+  assert.equal(f.cmv_masa_packaging, 2200);
+  assert.equal(f.cmv_relleno, 1596);
+  assert.equal(f.compras_masa_packaging, 2000);
+  assert.equal(f.compras_relleno, 1000);
+  assert.equal(f.disponible_total, 796);
+});

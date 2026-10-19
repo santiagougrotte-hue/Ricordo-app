@@ -26,6 +26,7 @@ import {
   InfoRow,
   Sep,
 } from "@/components/ui";
+import { FondoReposicionCard } from "@/components/FondoReposicionCard";
 import { Modal } from "@/components/Modal";
 import {
   fARS,
@@ -2091,6 +2092,7 @@ function ResumenTab() {
         <KpiCard label="Por cobrar" value={fARS(porCobrar)} color={porCobrar > 0 ? "orange" : "green"} />
         <KpiCard label="Por pagar" value={fARS(porPagar)} color={porPagar > 0 ? "orange" : "green"} />
       </StatGrid>
+      <FondoReposicionCard />
     </div>
   );
 }

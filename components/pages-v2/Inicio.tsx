@@ -27,6 +27,7 @@ import {
   Input,
   Button,
 } from "@/components/ui";
+import { FondoReposicionCard } from "@/components/FondoReposicionCard";
 import { Modal } from "@/components/Modal";
 import { GraficoLinea, IndicadorCrecimiento } from "@/components/charts";
 import {
@@ -295,6 +296,8 @@ export function Inicio() {
         />
         <KpiCard label="Compras sin pagar" value={fARS(totalComprasPendientes)} sub={`${comprasPendientes.length} compra(s)`} color="orange" icon={PackagePlus} />
       </StatGrid>
+
+      <FondoReposicionCard />
 
       {alertasIngredientes.length > 0 && (
         <Alert kind="warning">
