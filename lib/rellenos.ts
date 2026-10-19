@@ -23,10 +23,14 @@ export function gramosRellenoPorUnidad(data: RicordoDataV2): number {
   return g != null && g > 0 ? g : GRAMOS_RELLENO_POR_UNIDAD_DEFAULT;
 }
 
-/** Solo la línea Pasta usa los gramos de relleno por unidad (lasaña, salsa y pizza no). */
+/** Gustos que se producen y se cuentan en cajas de 12 (y llevan los gramos de relleno por unidad):
+ * los de línea Pasta que tienen alguna presentación de más de 1 unidad. Un gusto que solo se vende
+ * por unidad (lasaña, salsa, pizza) se cuenta por unidad, aunque tenga cargada la línea Pasta. */
 export function usaRellenoPorUnidad(data: RicordoDataV2, productoId: string): boolean {
   const producto = data.productos.find((p) => p.id === productoId);
-  return (producto?.linea ?? "Pasta") === "Pasta";
+  if ((producto?.linea ?? "Pasta") !== "Pasta") return false;
+  const variantes = data.producto_variantes.filter((v) => v.producto_id === productoId);
+  return variantes.length === 0 || variantes.some((v) => (v.unidades_por_paquete ?? 1) > 1);
 }
 
 /** Kilos de relleno cocido que lleva armar `cajas` de una variante. 0 si no es pasta. */
@@ -55,9 +59,9 @@ export function resumenRellenos(data: RicordoDataV2): ResumenRelleno[] {
   const usados = new Map<string, number>();
   for (const p of data.produccion) {
     if (!p.kg_relleno) continue;
-    const v = data.producto_variantes.find((x) => x.id === p.producto_variante_id);
-    if (!v) continue;
-    usados.set(v.producto_id, (usados.get(v.producto_id) ?? 0) + p.kg_relleno);
+    const productoId = p.producto_id ?? data.producto_variantes.find((x) => x.id === p.producto_variante_id)?.producto_id;
+    if (!productoId) continue;
+    usados.set(productoId, (usados.get(productoId) ?? 0) + p.kg_relleno);
   }
   const ids = new Set<string>([...rellenos.map((r) => r.producto_id), ...usados.keys()]);
   return [...ids]
@@ -124,23 +128,49 @@ export function conConsumoInsumosVenta(
   return { inventario_movimientos: [...sinPrevios, ...consumoInsumosVenta(d, pedido, items)] };
 }
 
-/** Registra una tanda de armado: suma las cajas al freezer (pool por producto, en unidades) y
- * guarda el relleno cocido usado. No descuenta insumos: masa y packaging se descuentan al confirmar el pedido. */
+/** Unidades por caja del stock de terminados: la pasta se produce y se cuenta siempre en cajas de
+ * 12; el resto de las líneas (lasaña, salsa, pizza) por unidad. */
+export function unidadesPorCajaStock(data: RicordoDataV2, productoId: string): number {
+  return usaRellenoPorUnidad(data, productoId) ? 12 : 1;
+}
+
+/** Presentación que representa la producción de un gusto (la de 12 u., minorista si hay varias). */
+export function varianteDeProduccion(data: RicordoDataV2, productoId: string): ProductoVariante | undefined {
+  const uds = unidadesPorCajaStock(data, productoId);
+  const activas = data.producto_variantes.filter((v) => v.producto_id === productoId && v.activo);
+  return (
+    activas.find((v) => (v.unidades_por_paquete ?? 1) === uds && v.canal === "Minorista") ??
+    activas.find((v) => (v.unidades_por_paquete ?? 1) === uds) ??
+    activas[0]
+  );
+}
+
+/** Kilos de relleno cocido para `cajas` cajas de 12 de un gusto (0 si no es pasta). */
+export function kgRellenoParaCajasGusto(data: RicordoDataV2, productoId: string, cajas: number): number {
+  if (!usaRellenoPorUnidad(data, productoId)) return 0;
+  return Math.round(((cajas * 12 * gramosRellenoPorUnidad(data)) / 1000) * 1000) / 1000;
+}
+
+/** Registra una tanda de armado por gusto: suma `cajas` cajas de 12 (pasta) o unidades (resto) al
+ * stock de terminados de ese gusto y guarda el relleno cocido usado. No descuenta insumos: masa y
+ * packaging se descuentan al confirmar el pedido. */
 export function registrarProduccion(
   d: RicordoDataV2,
-  args: { id: string; movId: string; producto_variante_id: string; cantidad: number; fecha: string; notas?: string }
+  args: { id: string; movId: string; producto_id: string; cajas: number; fecha: string; notas?: string }
 ): RicordoDataV2 {
-  const variante = d.producto_variantes.find((v) => v.id === args.producto_variante_id);
-  if (!variante || args.cantidad <= 0) return d;
-  const kgRelleno = kgRellenoParaCajas(d, variante, args.cantidad);
+  const producto = d.productos.find((p) => p.id === args.producto_id);
+  if (!producto || args.cajas <= 0) return d;
+  const variante = varianteDeProduccion(d, producto.id);
+  const kgRelleno = kgRellenoParaCajasGusto(d, producto.id, args.cajas);
   return {
     ...d,
     produccion: [
       ...d.produccion,
       {
         id: args.id,
-        producto_variante_id: args.producto_variante_id,
-        cantidad: args.cantidad,
+        producto_id: producto.id,
+        producto_variante_id: variante?.id ?? producto.id,
+        cantidad: args.cajas,
         fecha: args.fecha,
         notas: args.notas || undefined,
         kg_relleno: kgRelleno > 0 ? kgRelleno : undefined,
@@ -155,8 +185,8 @@ export function registrarProduccion(
         origen_tipo: "produccion",
         origen_id: args.id,
         item_tipo: "producto",
-        item_id: variante.producto_id,
-        cantidad: args.cantidad * (variante.unidades_por_paquete ?? 1),
+        item_id: producto.id,
+        cantidad: args.cajas * unidadesPorCajaStock(d, producto.id),
       },
     ],
   };

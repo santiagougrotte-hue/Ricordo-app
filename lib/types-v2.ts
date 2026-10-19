@@ -332,6 +332,9 @@ export interface Produccion {
   cantidad: number;
   fecha: string;
   notas?: string;
+  /** Gusto producido (stock de terminados por gusto). Las producciones nuevas se cargan por gusto
+   * en cajas de 12; `producto_variante_id` queda apuntando a la presentación de 12 de ese gusto. */
+  producto_id?: string;
   /** Kilos de relleno cocido que usó esta tanda de armado (cajas × unidades × gramos por unidad) —
    * se descuenta de los rellenos cocidos cargados en Operaciones → Rellenos. Sin cargar en
    * producciones de antes de existir el control de rellenos. */

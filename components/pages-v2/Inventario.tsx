@@ -26,7 +26,7 @@ import {
 } from "@/components/ui";
 import { Modal } from "@/components/Modal";
 import { fARS, fNum, calcularStock, valorStockInsumos, categoriasPorAmbito, insumosBajoMinimo } from "@/lib/calc-v2";
-import { refUnidades } from "@/lib/resumen-sheets";
+import { unidadesPorCajaStock } from "@/lib/rellenos";
 import { calcularAlertasStock } from "@/lib/ia-stock";
 import type { SeveridadAlerta } from "@/lib/ia-stock";
 import type { Insumo, TipoInsumo, TipoInventarioMovimiento, TipoItemStock, RicordoDataV2 } from "@/lib/types-v2";
@@ -701,7 +701,7 @@ function ProductosTerminadosTab() {
   const bajoMinimo = filas.filter((f) => f.fisico < umbral);
 
   function abrirConteo(producto: RicordoDataV2["productos"][number], fisicoActual: number) {
-    const ref = refUnidades(producto.linea);
+    const ref = unidadesPorCajaStock(data, producto.id);
     setContando({ producto, cajas: Math.round((fisicoActual / ref) * 100) / 100 });
   }
 
@@ -709,7 +709,7 @@ function ProductosTerminadosTab() {
   // ajuste que se suma/resta) — mismo mecanismo que ya existe para insumos (ver calcularStock).
   function guardarConteo() {
     if (!contando) return;
-    const ref = refUnidades(contando.producto.linea);
+    const ref = unidadesPorCajaStock(data, contando.producto.id);
     const unidades = Math.round(contando.cajas * ref);
     setData((d) => ({
       ...d,
@@ -736,7 +736,7 @@ function ProductosTerminadosTab() {
       <p className="mb-4 text-[12.5px] text-text3">
         Stock de productos terminados por gusto — compartido entre todas sus presentaciones/canales de venta (una
         caja Mayorista de 8u y una Minorista de 12u del mismo gusto descuentan el mismo stock). Suma al registrar una
-        producción y se descuenta al confirmar el pedido. El mínimo usado acá
+        producción (en cajas de 12) y se descuenta al confirmar el pedido: una caja de 8 vendida resta 8 unidades, o sea 0,67 cajas. El mínimo usado acá
         es el umbral general de Configuración → General (&ldquo;Stock bajo de producto&rdquo;, en unidades sueltas)
         — todavía no hay un mínimo particular por producto. &ldquo;Contar stock&rdquo; carga la cantidad física real
         que tenés de ese sabor (en cajas de referencia) y reemplaza el cálculo acumulado desde ahí en adelante.
@@ -757,8 +757,8 @@ function ProductosTerminadosTab() {
               <thead>
                 <tr>
                   <Th>Producto</Th>
-                  <Th>Stock (unidades)</Th>
-                  <Th>≈ cajas</Th>
+                  <Th>Stock (cajas de 12)</Th>
+                  <Th>Unidades</Th>
                   <Th>Acciones</Th>
                 </tr>
               </thead>
@@ -766,8 +766,10 @@ function ProductosTerminadosTab() {
                 {filas.map((f) => (
                   <TrHover key={f.producto.id} className={f.fisico < umbral ? "bg-red-dim/30" : ""}>
                     <Td main>{f.producto.nombre}</Td>
-                    <Td className={f.fisico < 0 ? "text-red font-semibold" : ""}>{fNum(f.fisico, 0)}</Td>
-                    <Td>{fNum(f.fisico / refUnidades(f.producto.linea), 1)}</Td>
+                    <Td className={f.fisico < 0 ? "text-red font-semibold" : "font-semibold"}>
+                      {unidadesPorCajaStock(data, f.producto.id) > 1 ? fNum(f.fisico / 12, 2) : `${fNum(f.fisico, 0)} u.`}
+                    </Td>
+                    <Td className="text-text3">{fNum(f.fisico, 0)}</Td>
                     <Td>
                       <Button size="sm" variant="ghost" onClick={() => abrirConteo(f.producto, f.fisico)}>
                         Contar stock
@@ -796,11 +798,11 @@ function ProductosTerminadosTab() {
       >
         {contando && (
           <FormGrid>
-            <Field label={`Cantidad física (en cajas de ${refUnidades(contando.producto.linea)}u)`} full>
+            <Field label={`Cantidad física (en cajas de ${unidadesPorCajaStock(data, contando.producto.id)}u)`} full>
               <Input type="number" value={contando.cajas} onChange={(e) => setContando({ ...contando, cajas: Number(e.target.value) })} />
             </Field>
             <p className="col-span-full text-[12.5px] text-text3">
-              = {fNum(contando.cajas * refUnidades(contando.producto.linea), 0)} unidades sueltas. Reemplaza el stock calculado de{" "}
+              = {fNum(contando.cajas * unidadesPorCajaStock(data, contando.producto.id), 0)} unidades sueltas. Reemplaza el stock calculado de{" "}
               {contando.producto.nombre} a partir de hoy — no se suma a lo anterior.
             </p>
           </FormGrid>

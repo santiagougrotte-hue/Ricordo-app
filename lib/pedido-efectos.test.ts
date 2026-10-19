@@ -65,7 +65,7 @@ test("ciclo completo: armar descuenta solo relleno; vender descuenta masa, packa
   let d = base();
 
   // 1) Armar 10 cajas de 12: suma 120 unidades al freezer, usa 1,56 kg de relleno, NO toca masa ni packaging
-  d = registrarProduccion(d, { id: "P1", movId: "M-P1", producto_variante_id: "OSO-12", cantidad: 10, fecha: "2026-10-20" });
+  d = registrarProduccion(d, { id: "P1", movId: "M-P1", producto_id: "OSO", cajas: 10, fecha: "2026-10-20" });
   assert.equal(freezer(d), 120);
   assert.equal(kgRellenoDisponible(d, "OSO"), 1.44);
   assert.equal(stock(d, "PREMEZCLA"), 5);
@@ -105,7 +105,7 @@ test("ciclo completo: armar descuenta solo relleno; vender descuenta masa, packa
 
 test("editar las cantidades de un pedido confirmado recalcula el consumo; cancelarlo lo devuelve todo", () => {
   let d = base();
-  d = registrarProduccion(d, { id: "P1", movId: "M-P1", producto_variante_id: "OSO-12", cantidad: 10, fecha: "2026-10-20" });
+  d = registrarProduccion(d, { id: "P1", movId: "M-P1", producto_id: "OSO", cajas: 10, fecha: "2026-10-20" });
   const { p, its } = pedido("PED-2", "Confirmado", [["OSO-12", 3]]);
   d = guardar(d, p, its);
   assert.equal(stock(d, "BOLSA"), 47);
@@ -146,17 +146,17 @@ test("stock de terminados por gusto: distintas presentaciones y canales del mism
   let d = base();
   d.productos.push({ id: "CAL", nombre: "Ravioles de calabaza", linea: "Pasta", activo: true });
   d.producto_variantes.push({ id: "CAL-10", producto_id: "CAL", nombre: "Calabaza 10", canal: "Mayorista", unidades_por_paquete: 10, precio_venta: 8500, activo: true });
-  d = registrarProduccion(d, { id: "P1", movId: "M1", producto_variante_id: "OSO-12", cantidad: 5, fecha: "2026-10-20" }); // 60 u de osobuco
-  d = registrarProduccion(d, { id: "P2", movId: "M2", producto_variante_id: "CAL-10", cantidad: 3, fecha: "2026-10-20" }); // 30 u de calabaza
+  d = registrarProduccion(d, { id: "P1", movId: "M1", producto_id: "OSO", cajas: 5, fecha: "2026-10-20" }); // 5 cajas de 12 = 60 u de osobuco
+  d = registrarProduccion(d, { id: "P2", movId: "M2", producto_id: "CAL", cajas: 3, fecha: "2026-10-20" }); // 3 cajas de 12 = 36 u de calabaza
   const { p, its } = pedido("PED-3", "Confirmado", [["OSO-12", 1], ["OSO-8", 2], ["CAL-10", 1]]);
   d = guardar(d, p, its);
   assert.equal(freezer(d), 60 - 12 - 16); // osobuco: 12 de la caja minorista + 16 de dos cajas de 8
-  assert.equal(calcularStock(d, "producto", "CAL"), 20); // calabaza: 30 − 10
+  assert.equal(calcularStock(d, "producto", "CAL"), 26); // calabaza: 36 − 10 (vendida en caja de 10)
 });
 
 test("el descuento se ata a la confirmación: un estado fuera de Confirmado/En producción/Entregado no descuenta", () => {
   let d = base();
-  d = registrarProduccion(d, { id: "P1", movId: "M1", producto_variante_id: "OSO-12", cantidad: 2, fecha: "2026-10-20" });
+  d = registrarProduccion(d, { id: "P1", movId: "M1", producto_id: "OSO", cajas: 2, fecha: "2026-10-20" });
   const { p, its } = pedido("PED-4", "Confirmado", [["OSO-12", 1]]);
   // Un estado no confirmado (p. ej. un futuro "Borrador") no toca el stock.
   d = guardar(d, { ...p, estado: "Borrador" as unknown as Pedido["estado"] }, its);
@@ -167,4 +167,16 @@ test("el descuento se ata a la confirmación: un estado fuera de Confirmado/En p
   assert.equal(freezer(d), 12);
   assert.equal(stock(d, "BOLSA"), 49);
   assert.equal(stock(d, "PREMEZCLA"), 4.892);
+});
+
+test("producción por gusto: la pasta entra en cajas de 12; un gusto que se vende por unidad (lasaña) entra por unidad", async () => {
+  const { unidadesPorCajaStock } = await import("./rellenos");
+  let d = base();
+  d.productos.push({ id: "LAS", nombre: "Lasaña", linea: "Pasta", activo: true }); // línea mal cargada como Pasta
+  d.producto_variantes.push({ id: "LAS-1", producto_id: "LAS", nombre: "Lasaña", canal: "Minorista", unidades_por_paquete: 1, precio_venta: 18000, activo: true });
+  assert.equal(unidadesPorCajaStock(d, "OSO"), 12);
+  assert.equal(unidadesPorCajaStock(d, "LAS"), 1);
+  d = registrarProduccion(d, { id: "P1", movId: "M1", producto_id: "LAS", cajas: 6, fecha: "2026-10-20" });
+  assert.equal(calcularStock(d, "producto", "LAS"), 6);
+  assert.equal(d.produccion[0].kg_relleno, undefined); // la lasaña no usa los 13 g por unidad
 });
