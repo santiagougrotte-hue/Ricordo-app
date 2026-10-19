@@ -1,9 +1,9 @@
-// Rellenos cocidos por kilo + consumo de masa/packaging al vender.
+// Rellenos cocidos por kilo + consumo de masa/packaging al confirmar el pedido.
 //
 // Cómo trabaja Ricordo: los rellenos se cocinan una vez por mes y se pesan; los ingredientes del
 // relleno se compran para esa tanda y no llevan stock. Lo que sí se controla semana a semana es la
 // masa (premezcla, goma xántica, huevos…) y el packaging (bolsas de vacío, film…), y eso se
-// descuenta al cargar la venta (no al armar).
+// descuenta al confirmar el pedido (no al armar).
 
 import type { InventarioMovimiento, Pedido, PedidoItem, ProductoVariante, RicordoDataV2 } from "./types-v2";
 import { recetaEfectivaVariante } from "./calc-v2";
@@ -13,6 +13,10 @@ export const GRAMOS_RELLENO_POR_UNIDAD_DEFAULT = 13;
 /** Origen de los movimientos de consumo que genera una venta — distinto de "pedido" (salida de
  * producto terminado al entregar) para poder recrearlos sin tocar aquellos. */
 export const ORIGEN_CONSUMO_VENTA = "pedido_insumos";
+
+/** Estados en los que un pedido ya descontó stock (masa, packaging y producto terminado): desde que
+ * se confirma. Cancelado no descuenta (y devuelve lo que se había descontado). */
+export const ESTADOS_QUE_DESCUENTAN: ReadonlySet<Pedido["estado"]> = new Set<Pedido["estado"]>(["Confirmado", "Produccion", "Entregado"]);
 
 export function gramosRellenoPorUnidad(data: RicordoDataV2): number {
   const g = data.configuracion.gramos_relleno_por_unidad;
@@ -82,7 +86,7 @@ export function kgRellenoDisponible(data: RicordoDataV2, productoId: string): nu
 /** Insumos que una venta descuenta: los de stock controlado (`controla_stock`) de la receta
  * efectiva de la variante, salvo la etapa relleno (el relleno se controla por kilo cocido). */
 export function consumoInsumosVenta(data: RicordoDataV2, pedido: Pedido, items: PedidoItem[]): InventarioMovimiento[] {
-  if (pedido.estado === "Cancelado") return [];
+  if (!ESTADOS_QUE_DESCUENTAN.has(pedido.estado)) return [];
   const porInsumo = new Map<string, number>();
   for (const item of items) {
     if (!item.producto_variante_id) continue;
@@ -109,7 +113,8 @@ export function consumoInsumosVenta(data: RicordoDataV2, pedido: Pedido, items: 
 }
 
 /** Resincroniza (idempotente) el consumo de masa y packaging de un pedido: borra lo que había
- * generado antes y lo vuelve a crear con los ítems actuales. Un pedido cancelado queda sin consumo. */
+ * generado antes y lo vuelve a crear con los ítems actuales. Solo descuenta desde que el pedido está
+ * confirmado; un pedido cancelado queda sin consumo. */
 export function conConsumoInsumosVenta(
   d: RicordoDataV2,
   pedido: Pedido,
@@ -120,7 +125,7 @@ export function conConsumoInsumosVenta(
 }
 
 /** Registra una tanda de armado: suma las cajas al freezer (pool por producto, en unidades) y
- * guarda el relleno cocido usado. No descuenta insumos: masa y packaging se descuentan al vender. */
+ * guarda el relleno cocido usado. No descuenta insumos: masa y packaging se descuentan al confirmar el pedido. */
 export function registrarProduccion(
   d: RicordoDataV2,
   args: { id: string; movId: string; producto_variante_id: string; cantidad: number; fecha: string; notas?: string }

@@ -26,7 +26,6 @@ import {
 } from "@/components/ui";
 import { Modal } from "@/components/Modal";
 import { fARS, fNum, calcularStock, valorStockInsumos, categoriasPorAmbito, insumosBajoMinimo } from "@/lib/calc-v2";
-import { calcularStockReservado, calcularStockDisponible } from "@/lib/produccion-v2";
 import { refUnidades } from "@/lib/resumen-sheets";
 import { calcularAlertasStock } from "@/lib/ia-stock";
 import type { SeveridadAlerta } from "@/lib/ia-stock";
@@ -696,12 +695,10 @@ function ProductosTerminadosTab() {
         .map((p) => ({
           producto: p,
           fisico: calcularStock(data, "producto", p.id),
-          reservado: calcularStockReservado(data, "producto", p.id),
-          disponible: calcularStockDisponible(data, "producto", p.id),
         })),
     [data, search]
   );
-  const bajoMinimo = filas.filter((f) => f.disponible < umbral);
+  const bajoMinimo = filas.filter((f) => f.fisico < umbral);
 
   function abrirConteo(producto: RicordoDataV2["productos"][number], fisicoActual: number) {
     const ref = refUnidades(producto.linea);
@@ -737,8 +734,9 @@ function ProductosTerminadosTab() {
   return (
     <div>
       <p className="mb-4 text-[12.5px] text-text3">
-        Stock de productos terminados por sabor — compartido entre todas sus presentaciones/canales de venta (una
-        caja Mayorista de 8u y una Minorista de 12u del mismo sabor descuentan el mismo stock). El mínimo usado acá
+        Stock de productos terminados por gusto — compartido entre todas sus presentaciones/canales de venta (una
+        caja Mayorista de 8u y una Minorista de 12u del mismo gusto descuentan el mismo stock). Suma al registrar una
+        producción y se descuenta al confirmar el pedido. El mínimo usado acá
         es el umbral general de Configuración → General (&ldquo;Stock bajo de producto&rdquo;, en unidades sueltas)
         — todavía no hay un mínimo particular por producto. &ldquo;Contar stock&rdquo; carga la cantidad física real
         que tenés de ese sabor (en cajas de referencia) y reemplaza el cálculo acumulado desde ahí en adelante.
@@ -759,21 +757,17 @@ function ProductosTerminadosTab() {
               <thead>
                 <tr>
                   <Th>Producto</Th>
-                  <Th>Físico (unidades)</Th>
-                  <Th>Reservado</Th>
-                  <Th>Disponible</Th>
-                  <Th>≈ cajas ref.</Th>
+                  <Th>Stock (unidades)</Th>
+                  <Th>≈ cajas</Th>
                   <Th>Acciones</Th>
                 </tr>
               </thead>
               <tbody>
                 {filas.map((f) => (
-                  <TrHover key={f.producto.id} className={f.disponible < umbral ? "bg-red-dim/30" : ""}>
+                  <TrHover key={f.producto.id} className={f.fisico < umbral ? "bg-red-dim/30" : ""}>
                     <Td main>{f.producto.nombre}</Td>
-                    <Td>{fNum(f.fisico, 0)}</Td>
-                    <Td className="text-text3">{f.reservado > 0 ? fNum(f.reservado, 0) : "—"}</Td>
-                    <Td className={f.disponible < 0 ? "text-red font-semibold" : ""}>{fNum(f.disponible, 0)}</Td>
-                    <Td className="text-text3">{fNum(f.disponible / refUnidades(f.producto.linea), 1)}</Td>
+                    <Td className={f.fisico < 0 ? "text-red font-semibold" : ""}>{fNum(f.fisico, 0)}</Td>
+                    <Td>{fNum(f.fisico / refUnidades(f.producto.linea), 1)}</Td>
                     <Td>
                       <Button size="sm" variant="ghost" onClick={() => abrirConteo(f.producto, f.fisico)}>
                         Contar stock

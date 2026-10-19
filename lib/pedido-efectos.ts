@@ -1,50 +1,43 @@
-// Efectos de guardar un pedido sobre el resto del documento: reservas del freezer, gasto de
-// reparto, consumo de masa y packaging, y salida de producto terminado al entregar. Todos los
+// Efectos de guardar un pedido sobre el resto del documento: gasto de reparto, consumo de masa y
+// packaging, y salida de producto terminado del freezer por gusto, todo al confirmar el pedido. Todos los
 // caminos que crean, editan o cambian el estado de un pedido pasan por `aplicarEfectosPedido`,
 // para que ninguno se saltee un paso.
 
 import { uid } from "./id";
 import { diferenciaRepartoPedido } from "./calc-v2";
-import { conConsumoInsumosVenta } from "./rellenos";
+import { conConsumoInsumosVenta, ESTADOS_QUE_DESCUENTAN } from "./rellenos";
 import type { Pedido, PedidoItem, Reserva, RicordoDataV2 } from "./types-v2";
 
-/** Registrar una entrega genera, de forma idempotente (por `origen_id`), el movimiento de salida
- * de stock por cada ítem — la trazabilidad pedido→inventario que pide el esquema nuevo. Entregar
- * un pedido NO genera caja: una venta entregada y no cobrada es una cuenta por cobrar, no plata en
- * la cuenta (ver Finanzas → Cuentas pendientes para registrar el cobro real, total o parcial). */
-export function conMovimientosDeEntrega(
+/** Salida de producto terminado del freezer al confirmar el pedido — un solo stock por gusto
+ * (`Producto.id`, en unidades sueltas), sin importar la presentación o el canal vendido: cada
+ * ítem descuenta cantidad × unidades_por_paquete de su variante. Se resincroniza en cada guardado
+ * (borra lo que había generado antes y lo vuelve a crear con los ítems actuales), así que editar
+ * cantidades lo corrige y cancelar el pedido devuelve las cajas al freezer. */
+export function conSalidaFreezerPedido(
   d: RicordoDataV2,
   pedido: Pedido,
   items: PedidoItem[]
-): Pick<typeof d, "inventario_movimientos"> {
-  const yaTieneMovStock = d.inventario_movimientos.some((m) => m.origen_tipo === "pedido" && m.origen_id === pedido.id);
-  // El stock de productos terminados es un solo pool por sabor (ver TipoItemStock en
-  // types-v2.ts): cualquier canal/presentación que se venda descuenta el mismo pool, convertido
-  // a unidades sueltas vía unidades_por_paquete de la variante realmente vendida.
-  const nuevosMovStock = yaTieneMovStock
-    ? []
-    : items
-        .flatMap((i) => {
-          if (!i.producto_variante_id) return [];
-          const variante = d.producto_variantes.find((v) => v.id === i.producto_variante_id);
-          if (!variante) return [];
-          return [
-            {
-              id: uid("MOV"),
-              fecha: pedido.fecha,
-              tipo: "venta" as const,
-              origen_tipo: "pedido",
-              origen_id: pedido.id,
-              item_tipo: "producto" as const,
-              item_id: variante.producto_id,
-              cantidad: -(i.cantidad * (variante.unidades_por_paquete ?? 1)),
-            },
-          ];
-        });
-
-  return {
-    inventario_movimientos: [...d.inventario_movimientos, ...nuevosMovStock],
-  };
+): Pick<RicordoDataV2, "inventario_movimientos"> {
+  const sinPrevios = d.inventario_movimientos.filter((m) => !(m.origen_tipo === "pedido" && m.origen_id === pedido.id));
+  if (!ESTADOS_QUE_DESCUENTAN.has(pedido.estado)) return { inventario_movimientos: sinPrevios };
+  const porGusto = new Map<string, number>();
+  for (const i of items) {
+    if (!i.producto_variante_id) continue;
+    const variante = d.producto_variantes.find((v) => v.id === i.producto_variante_id);
+    if (!variante) continue;
+    porGusto.set(variante.producto_id, (porGusto.get(variante.producto_id) ?? 0) + i.cantidad * (variante.unidades_por_paquete ?? 1));
+  }
+  const nuevos = [...porGusto.entries()].map(([productoId, unidades], idx) => ({
+    id: `MOV-${pedido.id}-PT-${idx + 1}`,
+    fecha: pedido.fecha,
+    tipo: "venta" as const,
+    origen_tipo: "pedido",
+    origen_id: pedido.id,
+    item_tipo: "producto" as const,
+    item_id: productoId,
+    cantidad: -unidades,
+  }));
+  return { inventario_movimientos: [...sinPrevios, ...nuevos] };
 }
 
 const CATEGORIA_REPARTO = "Costo Indirecto — Reparto";
@@ -88,49 +81,23 @@ export function conGastoRepartoPedido(
   };
 }
 
-/** Reservas de producto terminado del pedido — Sección 8: confirmar un pedido reserva lo que
- * vendió (sin descontarlo del stock físico todavía); despachar (Entregado) consume esa reserva al
- * mismo tiempo que el movimiento físico real ya la descuenta de verdad; cancelar la libera. Se
- * resincroniza siempre con los ítems ACTUALES del pedido (libera lo viejo, crea lo nuevo) para
- * que editar cantidades o cambiar de producto en un pedido Confirmado/En producción nunca deje
- * una reserva vieja huérfana. */
-export function reservasActualizadasParaPedido(d: RicordoDataV2, pedido: Pedido, items: PedidoItem[]): Reserva[] {
-  const activasPrevias = new Set(d.reservas.filter((r) => r.origen_tipo === "pedido" && r.origen_id === pedido.id && r.estado === "activa").map((r) => r.id));
-  if (pedido.estado === "Entregado") {
-    return d.reservas.map((r) => (activasPrevias.has(r.id) ? { ...r, estado: "consumida" } : r));
-  }
-  if (pedido.estado === "Cancelado") {
-    return d.reservas.map((r) => (activasPrevias.has(r.id) ? { ...r, estado: "liberada" } : r));
-  }
-  const liberadas = d.reservas.map((r) => (activasPrevias.has(r.id) ? { ...r, estado: "liberada" as const } : r));
-  const nuevas: Reserva[] = items.flatMap((i) => {
-    if (!i.producto_variante_id) return [];
-    const variante = d.producto_variantes.find((v) => v.id === i.producto_variante_id);
-    if (!variante) return [];
-    return [
-      {
-        id: uid("RSV"),
-        item_tipo: "producto" as const,
-        item_id: variante.producto_id,
-        cantidad: i.cantidad * (variante.unidades_por_paquete ?? 1),
-        origen_tipo: "pedido" as const,
-        origen_id: pedido.id,
-        estado: "activa" as const,
-        fecha: pedido.fecha,
-      },
-    ];
-  });
-  return [...liberadas, ...nuevas];
+/** Las reservas quedaron sin uso: el producto sale del freezer al confirmar el pedido, no al
+ * entregar ni en una reserva aparte. Al guardar un pedido se cierran las reservas activas que tuviera de antes (consumidas
+ * si sigue vigente, liberadas si se canceló) y no se crean nuevas — así no se descuenta dos veces
+ * el stock disponible. */
+export function reservasActualizadasParaPedido(d: RicordoDataV2, pedido: Pedido): Reserva[] {
+  const estado = pedido.estado === "Cancelado" ? ("liberada" as const) : ("consumida" as const);
+  return d.reservas.map((r) => (r.origen_tipo === "pedido" && r.origen_id === pedido.id && r.estado === "activa" ? { ...r, estado } : r));
 }
 
 
 /** Aplica, en orden y de forma idempotente, todos los efectos de un pedido ya guardado con su
- * estado actual: reservas, gasto de reparto, consumo de masa/packaging y (si está Entregado) la
- * salida de producto terminado del freezer. */
+ * estado actual: cierra reservas viejas, gasto de reparto, consumo de masa/packaging y salida de
+ * producto terminado del freezer (por gusto). Cancelado = sin consumo ni salida. */
 export function aplicarEfectosPedido(d: RicordoDataV2, pedido: Pedido, items: PedidoItem[]): RicordoDataV2 {
-  let out: RicordoDataV2 = { ...d, reservas: reservasActualizadasParaPedido(d, pedido, items) };
+  let out: RicordoDataV2 = { ...d, reservas: reservasActualizadasParaPedido(d, pedido) };
   out = { ...out, ...conGastoRepartoPedido(out, pedido) };
   out = { ...out, ...conConsumoInsumosVenta(out, pedido, items) };
-  if (pedido.estado === "Entregado") out = { ...out, ...conMovimientosDeEntrega(out, pedido, items) };
+  out = { ...out, ...conSalidaFreezerPedido(out, pedido, items) };
   return out;
 }

@@ -451,7 +451,7 @@ function ProduccionTab() {
     const variante = data.producto_variantes.find((v) => v.id === form.producto_variante_id);
     if (!variante) return;
     const produccionId = uid("PRD");
-    // Armar NO descuenta insumos: la masa y el packaging se descuentan al cargar la venta, y el
+    // Armar NO descuenta insumos: la masa y el packaging se descuentan al confirmar el pedido, y el
     // relleno se controla por kilo cocido (Operaciones → Rellenos). Acá solo entran las cajas al
     // freezer y se registra cuánto relleno cocido se usó.
     // El stock de productos terminados es un solo pool por sabor (variante.producto_id), en
@@ -550,7 +550,7 @@ function ProduccionTab() {
             </Alert>
           </div>
         )}
-        <p className="mt-2 text-[11.5px] text-text3">Armar no descuenta masa ni packaging: eso se descuenta al cargar la venta.</p>
+        <p className="mt-2 text-[11.5px] text-text3">Armar no descuenta masa ni packaging: eso se descuenta al confirmar el pedido.</p>
       </Modal>
     </div>
   );
