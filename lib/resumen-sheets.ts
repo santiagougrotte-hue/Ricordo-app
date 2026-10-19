@@ -16,6 +16,7 @@ import {
   costoRealEnvioCalculado,
 } from "./calc-v2";
 import { calcularCuponesMes } from "./analitica-ventas";
+import { unidadesPorCajaStock } from "./rellenos";
 
 function redondear(n: number, decimales: number): number {
   const factor = 10 ** decimales;
@@ -748,7 +749,7 @@ function etapaImport(etapa: EtapaReceta): "masa" | "relleno" | "packaging" {
   return "masa";
 }
 
-function costoPorEtapaVariante(data: RicordoDataV2, varianteId: string): Record<"masa" | "relleno" | "packaging", number> {
+export function costoPorEtapaVariante(data: RicordoDataV2, varianteId: string): Record<"masa" | "relleno" | "packaging", number> {
   const out = { masa: 0, relleno: 0, packaging: 0 };
   const variante = data.producto_variantes.find((v) => v.id === varianteId);
   if (!variante) return out;
@@ -846,10 +847,12 @@ export function resumenImportApp(data: RicordoDataV2, desde: string = fechaInici
   for (const pr of [...data.produccion].sort((a, b) => a.fecha.localeCompare(b.fecha))) {
     if (!enRango(pr.fecha)) continue;
     const v = data.producto_variantes.find((x) => x.id === pr.producto_variante_id);
+    const productoId = pr.producto_id ?? v?.producto_id ?? pr.producto_variante_id;
+    const formato = pr.producto_id ? unidadesPorCajaStock(data, productoId) : v?.unidades_por_paquete ?? 12;
     filas.push({
-      Tipo: "PRODUCCION", Fecha: pr.fecha, Referencia: pr.id, Producto_ID: v?.producto_id ?? pr.producto_variante_id,
-      Producto: v ? producto(v.producto_id)?.nombre ?? "" : "", Variante: v?.nombre.trim() ?? "", Formato_u: v?.unidades_por_paquete ?? 12,
-      Cantidad: pr.cantidad, Unidad: "caja", Item: pr.kg_relleno ? `${pr.kg_relleno} kg de relleno` : "",
+      Tipo: "PRODUCCION", Fecha: pr.fecha, Referencia: pr.id, Producto_ID: productoId,
+      Producto: producto(productoId)?.nombre ?? "", Variante: pr.producto_id ? `Caja de ${formato}` : v?.nombre.trim() ?? "", Formato_u: formato,
+      Cantidad: pr.cantidad, Unidad: formato > 1 ? "caja" : "unidad", Item: pr.kg_relleno ? `${pr.kg_relleno} kg de relleno` : "",
     });
   }
 

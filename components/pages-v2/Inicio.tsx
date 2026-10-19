@@ -27,6 +27,8 @@ import {
   Input,
   Button,
 } from "@/components/ui";
+import { FondoReposicionCard } from "@/components/FondoReposicionCard";
+import { calcularFondoReposicion } from "@/lib/fondo-reposicion";
 import { Modal } from "@/components/Modal";
 import { GraficoLinea, IndicadorCrecimiento } from "@/components/charts";
 import {
@@ -101,6 +103,7 @@ const CATEGORIA_VIAJE_DE_COMPRA = "Costo Indirecto — Viajes de compra";
 
 export function Inicio() {
   const { data, setData } = useStoreV2();
+  const fondo = useMemo(() => calcularFondoReposicion(data), [data]);
   const { toast } = useToast();
   const router = useRouter();
   const { mes, anio } = usePeriod();
@@ -274,6 +277,12 @@ export function Inicio() {
       </div>
 
       <StatGrid>
+        <KpiCard
+          label="CMV disponible"
+          value={fARS(fondo.disponible_total)}
+          sub={`Masa y packaging ${fARS(fondo.disponible_masa_packaging)} · Rellenos ${fARS(fondo.disponible_relleno)}`}
+          color={fondo.disponible_total >= 0 ? "green" : "red"}
+        />
         <KpiCard label="Facturación del mes" value={fARS(metricas.ventas_totales)} color="gold" icon={Receipt} />
         <KpiCard label="Cobrado del mes" value={fARS(cobros)} sub="Caja real, no lo facturado" color="gold" icon={Receipt} />
         <KpiCard label="Pedidos entregados" value={fNum(metricas.cantidad_pedidos, 0)} color="blue" icon={ShoppingCart} />
@@ -295,6 +304,8 @@ export function Inicio() {
         />
         <KpiCard label="Compras sin pagar" value={fARS(totalComprasPendientes)} sub={`${comprasPendientes.length} compra(s)`} color="orange" icon={PackagePlus} />
       </StatGrid>
+
+      <FondoReposicionCard />
 
       {alertasIngredientes.length > 0 && (
         <Alert kind="warning">

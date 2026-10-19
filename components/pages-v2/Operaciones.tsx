@@ -26,7 +26,7 @@ import {
   Alert,
 } from "@/components/ui";
 import { Modal } from "@/components/Modal";
-import { gramosRellenoPorUnidad, kgRellenoDisponible, kgRellenoParaCajas, resumenRellenos, usaRellenoPorUnidad } from "@/lib/rellenos";
+import { gramosRellenoPorUnidad, kgRellenoDisponible, kgRellenoParaCajasGusto, registrarProduccion, resumenRellenos, usaRellenoPorUnidad } from "@/lib/rellenos";
 import { fARS, fNum, deshacerSaldoHistoricoCompra } from "@/lib/calc-v2";
 import type { EstadoPagoCompra } from "@/lib/types-v2";
 import type { Proveedor } from "@/lib/types";
@@ -435,50 +435,34 @@ function ProduccionTab() {
   const { data, setData } = useStoreV2();
   const { toast } = useToast();
   const [modalOpen, setModalOpen] = useState(false);
-  const [form, setForm] = useState({ producto_variante_id: "", cantidad: 1, fecha: new Date().toISOString().slice(0, 10), notas: "" });
+  const hoy = () => new Date().toISOString().slice(0, 10);
+  const [form, setForm] = useState({ producto_id: "", cajas: 1, fecha: hoy(), notas: "" });
 
-  const varianteNombre = (id: string) => data.producto_variantes.find((v) => v.id === id)?.nombre ?? "(eliminado)";
+  const nombreGusto = (p: (typeof data.produccion)[number]) => {
+    const productoId = p.producto_id ?? data.producto_variantes.find((v) => v.id === p.producto_variante_id)?.producto_id;
+    return data.productos.find((x) => x.id === productoId)?.nombre ?? data.producto_variantes.find((v) => v.id === p.producto_variante_id)?.nombre ?? "(eliminado)";
+  };
   const producciones = useMemo(() => [...data.produccion].sort((a, b) => b.fecha.localeCompare(a.fecha)), [data.produccion]);
-  const varianteElegida = data.producto_variantes.find((v) => v.id === form.producto_variante_id);
-  const kgNecesarios = varianteElegida ? kgRellenoParaCajas(data, varianteElegida, form.cantidad) : 0;
-  const kgDisponibles = varianteElegida ? kgRellenoDisponible(data, varianteElegida.producto_id) : 0;
+  const gustos = data.productos.filter((p) => p.activo);
+  const esPasta = form.producto_id ? usaRellenoPorUnidad(data, form.producto_id) : true;
+  const kgNecesarios = form.producto_id ? kgRellenoParaCajasGusto(data, form.producto_id, form.cajas) : 0;
+  const kgDisponibles = form.producto_id ? kgRellenoDisponible(data, form.producto_id) : 0;
 
   function registrar() {
-    if (!form.producto_variante_id || form.cantidad <= 0) {
-      toast("Elegí un producto y una cantidad mayor a 0", "error");
+    if (!form.producto_id || form.cajas <= 0) {
+      toast("Elegí un gusto y una cantidad mayor a 0", "error");
       return;
     }
-    const variante = data.producto_variantes.find((v) => v.id === form.producto_variante_id);
-    if (!variante) return;
-    const produccionId = uid("PRD");
-    // Armar NO descuenta insumos: la masa y el packaging se descuentan al cargar la venta, y el
-    // relleno se controla por kilo cocido (Operaciones → Rellenos). Acá solo entran las cajas al
-    // freezer y se registra cuánto relleno cocido se usó.
-    // El stock de productos terminados es un solo pool por sabor (variante.producto_id), en
-    // unidades sueltas (ver TipoItemStock en types-v2.ts).
-    const unidadesProducidas = form.cantidad * (variante.unidades_por_paquete ?? 1);
-    const kgRelleno = kgRellenoParaCajas(data, variante, form.cantidad);
-    setData((d) => ({
-      ...d,
-      produccion: [
-        ...d.produccion,
-        {
-          id: produccionId,
-          producto_variante_id: form.producto_variante_id,
-          cantidad: form.cantidad,
-          fecha: form.fecha,
-          notas: form.notas || undefined,
-          kg_relleno: kgRelleno > 0 ? kgRelleno : undefined,
-        },
-      ],
-      inventario_movimientos: [
-        ...d.inventario_movimientos,
-        { id: uid("MOV"), fecha: form.fecha, tipo: "produccion" as const, origen_tipo: "produccion", origen_id: produccionId, item_tipo: "producto" as const, item_id: variante.producto_id, cantidad: unidadesProducidas },
-      ],
-    }));
+    // Armar NO descuenta insumos: la masa y el packaging se descuentan al confirmar el pedido, y el
+    // relleno se controla por kilo cocido (Operaciones → Rellenos). Acá solo entran las cajas de 12
+    // al stock de terminados de ese gusto y se registra cuánto relleno cocido se usó.
+    const kgRelleno = kgRellenoParaCajasGusto(data, form.producto_id, form.cajas);
+    setData((d) =>
+      registrarProduccion(d, { id: uid("PRD"), movId: uid("MOV"), producto_id: form.producto_id, cajas: form.cajas, fecha: form.fecha, notas: form.notas })
+    );
     toast(kgRelleno > 0 ? `Producción registrada: ${fNum(kgRelleno, 3)} kg de relleno usados` : "Producción registrada");
     setModalOpen(false);
-    setForm({ producto_variante_id: "", cantidad: 1, fecha: new Date().toISOString().slice(0, 10), notas: "" });
+    setForm({ producto_id: "", cajas: 1, fecha: hoy(), notas: "" });
   }
 
   return (
@@ -495,8 +479,8 @@ function ProduccionTab() {
               <thead>
                 <tr>
                   <Th>Fecha</Th>
-                  <Th>Producto</Th>
-                  <Th>Cantidad</Th>
+                  <Th>Gusto</Th>
+                  <Th>Cajas</Th>
                   <Th>Relleno usado</Th>
                   <Th>Notas</Th>
                 </tr>
@@ -505,7 +489,7 @@ function ProduccionTab() {
                 {producciones.map((p) => (
                   <TrHover key={p.id}>
                     <Td>{p.fecha}</Td>
-                    <Td main>{varianteNombre(p.producto_variante_id)}</Td>
+                    <Td main>{nombreGusto(p)}</Td>
                     <Td>{fNum(p.cantidad, 0)}</Td>
                     <Td>{p.kg_relleno ? `${fNum(p.kg_relleno, 3)} kg` : "—"}</Td>
                     <Td>{p.notas ?? "—"}</Td>
@@ -531,18 +515,18 @@ function ProduccionTab() {
         }
       >
         <FormGrid>
-          <Field label="Producto" full>
-            <Select value={form.producto_variante_id} onChange={(e) => setForm({ ...form, producto_variante_id: e.target.value })}>
+          <Field label="Gusto" full>
+            <Select value={form.producto_id} onChange={(e) => setForm({ ...form, producto_id: e.target.value })}>
               <option value="">Seleccionar…</option>
-              {data.producto_variantes.filter((v) => v.activo).map((v) => (
-                <option key={v.id} value={v.id}>
-                  {v.nombre}
+              {gustos.map((p) => (
+                <option key={p.id} value={p.id}>
+                  {p.nombre}
                 </option>
               ))}
             </Select>
           </Field>
-          <Field label="Cajas armadas">
-            <Input type="number" value={form.cantidad} onChange={(e) => setForm({ ...form, cantidad: Number(e.target.value) })} />
+          <Field label={esPasta ? "Cajas de 12 armadas" : "Unidades producidas"}>
+            <Input type="number" value={form.cajas} onChange={(e) => setForm({ ...form, cajas: Number(e.target.value) })} />
           </Field>
           <Field label="Fecha">
             <Input type="date" value={form.fecha} onChange={(e) => setForm({ ...form, fecha: e.target.value })} />
@@ -559,7 +543,7 @@ function ProduccionTab() {
             </Alert>
           </div>
         )}
-        <p className="mt-2 text-[11.5px] text-text3">Armar no descuenta masa ni packaging: eso se descuenta al cargar la venta.</p>
+        <p className="mt-2 text-[11.5px] text-text3">Armar no descuenta masa ni packaging: eso se descuenta al confirmar el pedido.</p>
       </Modal>
     </div>
   );
