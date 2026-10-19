@@ -27,7 +27,8 @@ import {
   SearchInput,
 } from "@/components/ui";
 import { Modal } from "@/components/Modal";
-import { conConsumoInsumosVenta, ORIGEN_CONSUMO_VENTA } from "@/lib/rellenos";
+import { ORIGEN_CONSUMO_VENTA } from "@/lib/rellenos";
+import { aplicarEfectosPedido } from "@/lib/pedido-efectos";
 import { AnaliticaVentasTab } from "./AnaliticaVentas";
 import {
   fARS,
@@ -38,13 +39,12 @@ import {
   margenVariante,
   productosConVariantes,
   estadoCobroPedido,
-  diferenciaRepartoPedido,
   costoRealEnvioCalculado,
   deshacerSaldoHistoricoPedido,
 } from "@/lib/calc-v2";
 import { geocodificarDireccion } from "@/lib/mapas";
 import type { EstadoCobro } from "@/lib/calc-v2";
-import type { Canal, EstadoPedido, Pedido, PedidoItem, ProductoVariante, Reserva, RicordoDataV2, ZonaEntrega, TipoDescuento } from "@/lib/types-v2";
+import type { Canal, EstadoPedido, Pedido, PedidoItem, ProductoVariante, RicordoDataV2, ZonaEntrega, TipoDescuento } from "@/lib/types-v2";
 import { ZONAS_ENTREGA } from "@/lib/types-v2";
 import type { Cliente } from "@/lib/types";
 
@@ -183,121 +183,6 @@ function totalPedido(form: PedidoForm, data: RicordoDataV2): number {
   return form.items.reduce((acc, i) => acc + subtotalItem(i) + costoSalsaItem(data, i), 0) - form.descuento + form.costo_envio;
 }
 
-/** Registrar una entrega genera, de forma idempotente (por `origen_id`), el movimiento de salida
- * de stock por cada ítem — la trazabilidad pedido→inventario que pide el esquema nuevo. Entregar
- * un pedido NO genera caja: una venta entregada y no cobrada es una cuenta por cobrar, no plata en
- * la cuenta (ver Finanzas → Cuentas pendientes para registrar el cobro real, total o parcial). */
-function conMovimientosDeEntrega(
-  d: ReturnType<typeof useStoreV2>["data"],
-  pedido: Pedido,
-  items: PedidoItem[]
-): Pick<typeof d, "inventario_movimientos"> {
-  const yaTieneMovStock = d.inventario_movimientos.some((m) => m.origen_tipo === "pedido" && m.origen_id === pedido.id);
-  // El stock de productos terminados es un solo pool por sabor (ver TipoItemStock en
-  // types-v2.ts): cualquier canal/presentación que se venda descuenta el mismo pool, convertido
-  // a unidades sueltas vía unidades_por_paquete de la variante realmente vendida.
-  const nuevosMovStock = yaTieneMovStock
-    ? []
-    : items
-        .flatMap((i) => {
-          if (!i.producto_variante_id) return [];
-          const variante = d.producto_variantes.find((v) => v.id === i.producto_variante_id);
-          if (!variante) return [];
-          return [
-            {
-              id: uid("MOV"),
-              fecha: pedido.fecha,
-              tipo: "venta" as const,
-              origen_tipo: "pedido",
-              origen_id: pedido.id,
-              item_tipo: "producto" as const,
-              item_id: variante.producto_id,
-              cantidad: -(i.cantidad * (variante.unidades_por_paquete ?? 1)),
-            },
-          ];
-        });
-
-  return {
-    inventario_movimientos: [...d.inventario_movimientos, ...nuevosMovStock],
-  };
-}
-
-const CATEGORIA_REPARTO = "Costo Indirecto — Reparto";
-
-/** Si el pedido entregado costó de envío más de lo que se cobró, genera (o actualiza, si se vuelve
- * a guardar después con otros números) un gasto por la diferencia en "Costo Indirecto — Reparto" —
- * idempotente por pedido_id vía `origen_tipo`/`origen_id` (nunca duplica ni deja un monto viejo
- * dando vueltas). Si el pedido deja de estar Entregado o la diferencia vuelve a 0, el gasto
- * generado antes se saca. */
-function conGastoRepartoPedido(
-  d: ReturnType<typeof useStoreV2>["data"],
-  pedido: Pedido
-): Pick<typeof d, "categorias" | "movimientos_financieros"> {
-  const sinReparto = d.movimientos_financieros.filter((m) => !(m.origen_tipo === "diferencia_envio" && m.origen_id === pedido.id));
-  const diferencia = diferenciaRepartoPedido(pedido);
-  if (pedido.estado !== "Entregado" || diferencia <= 0) {
-    return { categorias: d.categorias, movimientos_financieros: sinReparto };
-  }
-  let categorias = d.categorias;
-  let categoria = categorias.find((c) => c.ambito === "financiero" && c.nombre === CATEGORIA_REPARTO);
-  if (!categoria) {
-    categoria = { id: uid("CAT"), nombre: CATEGORIA_REPARTO, ambito: "financiero", activo: true };
-    categorias = [...categorias, categoria];
-  }
-  return {
-    categorias,
-    movimientos_financieros: [
-      ...sinReparto,
-      {
-        id: uid("MOVF"),
-        fecha: pedido.fecha,
-        tipo: "egreso",
-        categoria_id: categoria.id,
-        concepto: `Diferencia de envío — pedido ${pedido.id}${pedido.zona ? ` (${pedido.zona})` : ""}`,
-        monto: diferencia,
-        origen_tipo: "diferencia_envio",
-        origen_id: pedido.id,
-        estado: "confirmado",
-      },
-    ],
-  };
-}
-
-/** Reservas de producto terminado del pedido — Sección 8: confirmar un pedido reserva lo que
- * vendió (sin descontarlo del stock físico todavía); despachar (Entregado) consume esa reserva al
- * mismo tiempo que el movimiento físico real ya la descuenta de verdad; cancelar la libera. Se
- * resincroniza siempre con los ítems ACTUALES del pedido (libera lo viejo, crea lo nuevo) para
- * que editar cantidades o cambiar de producto en un pedido Confirmado/En producción nunca deje
- * una reserva vieja huérfana. */
-function reservasActualizadasParaPedido(d: ReturnType<typeof useStoreV2>["data"], pedido: Pedido, items: PedidoItem[]): Reserva[] {
-  const activasPrevias = new Set(d.reservas.filter((r) => r.origen_tipo === "pedido" && r.origen_id === pedido.id && r.estado === "activa").map((r) => r.id));
-  if (pedido.estado === "Entregado") {
-    return d.reservas.map((r) => (activasPrevias.has(r.id) ? { ...r, estado: "consumida" } : r));
-  }
-  if (pedido.estado === "Cancelado") {
-    return d.reservas.map((r) => (activasPrevias.has(r.id) ? { ...r, estado: "liberada" } : r));
-  }
-  const liberadas = d.reservas.map((r) => (activasPrevias.has(r.id) ? { ...r, estado: "liberada" as const } : r));
-  const nuevas: Reserva[] = items.flatMap((i) => {
-    if (!i.producto_variante_id) return [];
-    const variante = d.producto_variantes.find((v) => v.id === i.producto_variante_id);
-    if (!variante) return [];
-    return [
-      {
-        id: uid("RSV"),
-        item_tipo: "producto" as const,
-        item_id: variante.producto_id,
-        cantidad: i.cantidad * (variante.unidades_por_paquete ?? 1),
-        origen_tipo: "pedido" as const,
-        origen_id: pedido.id,
-        estado: "activa" as const,
-        fecha: pedido.fecha,
-      },
-    ];
-  });
-  return [...liberadas, ...nuevas];
-}
-
 // --- Fase 3.2: contrato con la web de pedidos ------------------------------------------------------
 // Alcance de esta fase: solo dejar la app lista para recibir pedidos de la web (Supabase + Netlify),
 // sin conectarla todavía (eso es otro prompt aparte). `crearPedidoDesdeWeb` es la función que esa
@@ -418,9 +303,7 @@ export function crearPedidoDesdeWeb(data: RicordoDataV2, pedidoWeb: PedidoWeb): 
   };
 
   let out: RicordoDataV2 = { ...data, clientes, pedidos: [...data.pedidos, nuevoPedido], pedido_items: [...data.pedido_items, ...items] };
-  out = { ...out, reservas: reservasActualizadasParaPedido(out, nuevoPedido, items) };
-  out = { ...out, ...conGastoRepartoPedido(out, nuevoPedido) };
-  out = { ...out, ...conConsumoInsumosVenta(out, nuevoPedido, items) };
+  out = aplicarEfectosPedido(out, nuevoPedido, items);
 
   if (/pagad/i.test(pedidoWeb.estado_pago)) {
     out = {
@@ -687,13 +570,7 @@ function PedidosTab() {
       const otrosItems = d.pedido_items.filter((i) => i.pedido_id !== pedidoId);
       const otrosPedidos = d.pedidos.filter((p) => p.id !== pedidoId);
       const base = { ...d, pedidos: [...otrosPedidos, nuevoPedido], pedido_items: [...otrosItems, ...nuevosItems] };
-      const conReservas = { ...base, reservas: reservasActualizadasParaPedido(base, nuevoPedido, nuevosItems) };
-      const conReparto = { ...conReservas, ...conGastoRepartoPedido(conReservas, nuevoPedido) };
-      const conConsumo = { ...conReparto, ...conConsumoInsumosVenta(conReparto, nuevoPedido, nuevosItems) };
-      if (nuevoPedido.estado === "Entregado") {
-        return { ...conConsumo, ...conMovimientosDeEntrega(conConsumo, nuevoPedido, nuevosItems) };
-      }
-      return conConsumo;
+      return aplicarEfectosPedido(base, nuevoPedido, nuevosItems);
     });
     toast(editando ? "Pedido actualizado" : "Pedido creado");
     if (editando === null) borrarBorradorPedido();
@@ -706,13 +583,7 @@ function PedidosTab() {
       const pedidos = d.pedidos.map((p) => (p.id === pedido.id ? { ...p, estado } : p));
       const base = { ...d, pedidos };
       const items = d.pedido_items.filter((i) => i.pedido_id === pedido.id);
-      const conReservas = { ...base, reservas: reservasActualizadasParaPedido(base, { ...pedido, estado }, items) };
-      const conReparto = { ...conReservas, ...conGastoRepartoPedido(conReservas, { ...pedido, estado }) };
-      const conConsumo = { ...conReparto, ...conConsumoInsumosVenta(conReparto, { ...pedido, estado }, items) };
-      if (estado === "Entregado") {
-        return { ...conConsumo, ...conMovimientosDeEntrega(conConsumo, { ...pedido, estado }, items) };
-      }
-      return conConsumo;
+      return aplicarEfectosPedido(base, { ...pedido, estado }, items);
     });
     toast(`Estado → ${estado}`);
   }
@@ -1381,12 +1252,8 @@ function EntregasTab() {
     setData((d) => {
       const pedidos = d.pedidos.map((x) => (x.id === p.id ? { ...x, estado: siguiente } : x));
       const base = { ...d, pedidos };
-      if (siguiente === "Entregado") {
-        const items = d.pedido_items.filter((i) => i.pedido_id === p.id);
-        const conReparto = { ...base, ...conGastoRepartoPedido(base, { ...p, estado: siguiente }) };
-        return { ...conReparto, ...conMovimientosDeEntrega(conReparto, { ...p, estado: siguiente }, items) };
-      }
-      return base;
+      const items = d.pedido_items.filter((i) => i.pedido_id === p.id);
+      return aplicarEfectosPedido(base, { ...p, estado: siguiente }, items);
     });
     toast(`Pedido → ${siguiente}`);
   }

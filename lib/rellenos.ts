@@ -118,3 +118,41 @@ export function conConsumoInsumosVenta(
   const sinPrevios = d.inventario_movimientos.filter((m) => !(m.origen_tipo === ORIGEN_CONSUMO_VENTA && m.origen_id === pedido.id));
   return { inventario_movimientos: [...sinPrevios, ...consumoInsumosVenta(d, pedido, items)] };
 }
+
+/** Registra una tanda de armado: suma las cajas al freezer (pool por producto, en unidades) y
+ * guarda el relleno cocido usado. No descuenta insumos: masa y packaging se descuentan al vender. */
+export function registrarProduccion(
+  d: RicordoDataV2,
+  args: { id: string; movId: string; producto_variante_id: string; cantidad: number; fecha: string; notas?: string }
+): RicordoDataV2 {
+  const variante = d.producto_variantes.find((v) => v.id === args.producto_variante_id);
+  if (!variante || args.cantidad <= 0) return d;
+  const kgRelleno = kgRellenoParaCajas(d, variante, args.cantidad);
+  return {
+    ...d,
+    produccion: [
+      ...d.produccion,
+      {
+        id: args.id,
+        producto_variante_id: args.producto_variante_id,
+        cantidad: args.cantidad,
+        fecha: args.fecha,
+        notas: args.notas || undefined,
+        kg_relleno: kgRelleno > 0 ? kgRelleno : undefined,
+      },
+    ],
+    inventario_movimientos: [
+      ...d.inventario_movimientos,
+      {
+        id: args.movId,
+        fecha: args.fecha,
+        tipo: "produccion",
+        origen_tipo: "produccion",
+        origen_id: args.id,
+        item_tipo: "producto",
+        item_id: variante.producto_id,
+        cantidad: args.cantidad * (variante.unidades_por_paquete ?? 1),
+      },
+    ],
+  };
+}

@@ -26,7 +26,7 @@ import {
   Alert,
 } from "@/components/ui";
 import { Modal } from "@/components/Modal";
-import { gramosRellenoPorUnidad, kgRellenoDisponible, kgRellenoParaCajas, resumenRellenos, usaRellenoPorUnidad } from "@/lib/rellenos";
+import { gramosRellenoPorUnidad, kgRellenoDisponible, kgRellenoParaCajas, registrarProduccion, resumenRellenos, usaRellenoPorUnidad } from "@/lib/rellenos";
 import { fARS, fNum, deshacerSaldoHistoricoCompra } from "@/lib/calc-v2";
 import type { EstadoPagoCompra } from "@/lib/types-v2";
 import type { Proveedor } from "@/lib/types";
@@ -456,26 +456,17 @@ function ProduccionTab() {
     // freezer y se registra cuánto relleno cocido se usó.
     // El stock de productos terminados es un solo pool por sabor (variante.producto_id), en
     // unidades sueltas (ver TipoItemStock en types-v2.ts).
-    const unidadesProducidas = form.cantidad * (variante.unidades_por_paquete ?? 1);
     const kgRelleno = kgRellenoParaCajas(data, variante, form.cantidad);
-    setData((d) => ({
-      ...d,
-      produccion: [
-        ...d.produccion,
-        {
-          id: produccionId,
-          producto_variante_id: form.producto_variante_id,
-          cantidad: form.cantidad,
-          fecha: form.fecha,
-          notas: form.notas || undefined,
-          kg_relleno: kgRelleno > 0 ? kgRelleno : undefined,
-        },
-      ],
-      inventario_movimientos: [
-        ...d.inventario_movimientos,
-        { id: uid("MOV"), fecha: form.fecha, tipo: "produccion" as const, origen_tipo: "produccion", origen_id: produccionId, item_tipo: "producto" as const, item_id: variante.producto_id, cantidad: unidadesProducidas },
-      ],
-    }));
+    setData((d) =>
+      registrarProduccion(d, {
+        id: produccionId,
+        movId: uid("MOV"),
+        producto_variante_id: form.producto_variante_id,
+        cantidad: form.cantidad,
+        fecha: form.fecha,
+        notas: form.notas,
+      })
+    );
     toast(kgRelleno > 0 ? `Producción registrada: ${fNum(kgRelleno, 3)} kg de relleno usados` : "Producción registrada");
     setModalOpen(false);
     setForm({ producto_variante_id: "", cantidad: 1, fecha: new Date().toISOString().slice(0, 10), notas: "" });
