@@ -9,6 +9,8 @@ import {
   ORIGEN_CONSUMO_VENTA,
   resumenRellenos,
   produccionPendientePorSabor,
+  insumosRellenoControlados,
+  movimientosTandaRelleno,
 } from "./rellenos";
 import { resumenImportApp, HEADERS_IMPORT_APP } from "./resumen-sheets";
 
@@ -102,6 +104,37 @@ test("consumoInsumosVenta: sin unidades_por_paquete en la variante vendida, la m
   const porInsumo = Object.fromEntries(movs.map((m) => [m.item_id, m.cantidad]));
   assert.equal(porInsumo.PREMEZCLA, undefined); // masa escalada × 0: se omite, no se inventa un valor
   assert.equal(porInsumo.BOLSA, -1); // packaging no escala por unidades_por_paquete: no se ve afectado
+});
+
+test("insumosRellenoControlados: solo lista los insumos de etapa relleno con stock controlado, escalados por kilo de relleno cocido", () => {
+  const data = fixture();
+  // A diferencia del Osobuco (se compra fresco para la tanda, sin stock), las Almendras se compran
+  // en cantidad y sí se guardan — por eso llevan stock controlado aunque estén en la misma etapa.
+  data.insumos.push({ id: "ALMENDRAS", nombre: "Almendras", tipo: "ingrediente", unidad: "kg", precio_actual: 8000, controla_stock: true, activo: true });
+  data.receta_items.push({ id: "R3", receta_id: "REC-OSO", insumo_id: "ALMENDRAS", etapa: "relleno", cantidad: 0.002 });
+  const insumos = insumosRellenoControlados(data, "OSO");
+  assert.equal(insumos.length, 1); // OSOBUCO queda afuera: no tiene controla_stock
+  const almendras = insumos.find((i) => i.insumo_id === "ALMENDRAS")!;
+  assert.ok(almendras);
+  assert.equal(almendras.cantidad_por_kg, 0.002 / 0.013); // 0,002 kg/unidad ÷ 13 g (0,013 kg) de relleno cocido por unidad
+});
+
+test("insumosRellenoControlados: un producto sin receta activa no rompe, da lista vacía", () => {
+  const data = fixture();
+  assert.deepEqual(insumosRellenoControlados(data, "LAS"), []); // Lasaña no tiene receta en el fixture
+});
+
+test("movimientosTandaRelleno: genera un consumo por insumo, descartando cantidades en 0", () => {
+  const movs = movimientosTandaRelleno("REL-1", "2026-10-22", [
+    { insumo_id: "ALMENDRAS", cantidad: 0.4 },
+    { insumo_id: "OTRO", cantidad: 0 },
+  ]);
+  assert.equal(movs.length, 1);
+  assert.equal(movs[0].item_id, "ALMENDRAS");
+  assert.equal(movs[0].cantidad, -0.4);
+  assert.equal(movs[0].origen_tipo, "relleno_tanda");
+  assert.equal(movs[0].origen_id, "REL-1");
+  assert.equal(movs[0].tipo, "consumo");
 });
 
 test("produccionPendientePorSabor: agrupa por sabor (producto), no por presentación/canal, y expresa el total en cajas de 12 para pasta", () => {
