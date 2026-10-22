@@ -151,6 +151,40 @@ export function kgRellenoParaCajasGusto(data: RicordoDataV2, productoId: string,
   return Math.round(((cajas * 12 * gramosRellenoPorUnidad(data)) / 1000) * 1000) / 1000;
 }
 
+export interface ItemProduccionPendiente {
+  nombre: string;
+  cantidad: number;
+  pedidos: number;
+}
+
+/** Pedidos marcados "En producción" (Ventas → Pedidos), agrupados por sabor (producto) — no por
+ * presentación/canal: el freezer por gusto (ver `conSalidaFreezerPedido`) ya es un solo pool
+ * compartido entre todas las variantes del mismo producto. Cada ítem se lleva primero a unidades
+ * sueltas (cantidad × unidades_por_paquete de su variante) para poder sumar presentaciones de
+ * distinto tamaño sin mezclar unidades, y el total se expresa en "cajas de 12" para pasta o en
+ * unidades para el resto (ver `unidadesPorCajaStock`). */
+export function produccionPendientePorSabor(data: RicordoDataV2, pedidos: Pedido[]): ItemProduccionPendiente[] {
+  const idsPedidos = new Set(pedidos.map((p) => p.id));
+  const items = data.pedido_items.filter((i) => idsPedidos.has(i.pedido_id));
+  const porProducto = new Map<string, { productoId: string | null; nombre: string; unidades: number; pedidos: Set<string> }>();
+  for (const item of items) {
+    const variante = item.producto_variante_id ? data.producto_variantes.find((v) => v.id === item.producto_variante_id) : undefined;
+    const producto = variante ? data.productos.find((p) => p.id === variante.producto_id) : undefined;
+    const clave = producto?.id ?? item.producto_variante_id ?? item.id;
+    const unidadesItem = item.cantidad * (variante?.unidades_por_paquete ?? 1);
+    const actual = porProducto.get(clave) ?? { productoId: producto?.id ?? null, nombre: producto?.nombre ?? item.nombre_historico, unidades: 0, pedidos: new Set<string>() };
+    actual.unidades += unidadesItem;
+    actual.pedidos.add(item.pedido_id);
+    porProducto.set(clave, actual);
+  }
+  return Array.from(porProducto.values())
+    .map((v) => {
+      const ref = v.productoId ? unidadesPorCajaStock(data, v.productoId) : 1;
+      return { nombre: v.nombre, cantidad: Math.round((v.unidades / ref) * 100) / 100, pedidos: v.pedidos.size };
+    })
+    .sort((a, b) => b.cantidad - a.cantidad);
+}
+
 /** Registra una tanda de armado por gusto: suma `cajas` cajas de 12 (pasta) o unidades (resto) al
  * stock de terminados de ese gusto y guarda el relleno cocido usado. No descuenta insumos: masa y
  * packaging se descuentan al confirmar el pedido. */

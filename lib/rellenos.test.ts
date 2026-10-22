@@ -8,6 +8,7 @@ import {
   kgRellenoParaCajas,
   ORIGEN_CONSUMO_VENTA,
   resumenRellenos,
+  produccionPendientePorSabor,
 } from "./rellenos";
 import { resumenImportApp, HEADERS_IMPORT_APP } from "./resumen-sheets";
 
@@ -87,6 +88,38 @@ test("consumoInsumosVenta: descuenta masa y packaging controlados, nunca el rell
   assert.equal(porInsumo.BOLSA, -2);
   assert.equal(porInsumo.OSOBUCO, undefined);
   assert.ok(movs.every((m) => m.origen_tipo === ORIGEN_CONSUMO_VENTA && m.origen_id === "PED-1" && m.tipo === "consumo"));
+});
+
+test("consumoInsumosVenta: sin unidades_por_paquete en la variante vendida, la masa no se descuenta (nunca se inventa un factor) pero el packaging sigue andando", () => {
+  const data = fixture();
+  // Variante real, sin "unidades_por_paquete" cargado — el mismo vacío de datos que deja la masa
+  // en $0 en Productos → Variantes ("Falta — receta en $0").
+  data.producto_variantes.push({ id: "OSO-SIN-UP", producto_id: "OSO", nombre: "Osobuco sin paquete", canal: "Minorista", precio_venta: 14000, activo: true });
+  data.ajustes_receta_variante.push({ id: "A3", variante_id: "OSO-SIN-UP", insumo_id: "BOLSA", operacion: "sumar", cantidad: 1, etapa: "packaging" });
+  const p: Pedido = { id: "PED-2", fecha: "2026-10-20", cliente_id: "C1", estado: "Confirmado", canal: "Minorista", descuento: 0, costo_envio: 0, total: 14000 };
+  const items: PedidoItem[] = [{ id: "I2", pedido_id: "PED-2", producto_variante_id: "OSO-SIN-UP", nombre_historico: "Osobuco sin paquete", cantidad: 1, precio_unitario: 14000, descuento: 0, subtotal: 14000 }];
+  const movs = consumoInsumosVenta(data, p, items);
+  const porInsumo = Object.fromEntries(movs.map((m) => [m.item_id, m.cantidad]));
+  assert.equal(porInsumo.PREMEZCLA, undefined); // masa escalada × 0: se omite, no se inventa un valor
+  assert.equal(porInsumo.BOLSA, -1); // packaging no escala por unidades_por_paquete: no se ve afectado
+});
+
+test("produccionPendientePorSabor: agrupa por sabor (producto), no por presentación/canal, y expresa el total en cajas de 12 para pasta", () => {
+  const data = fixture();
+  data.clientes = [{ id: "C1", nombre: "Cliente" } as never];
+  data.pedidos = [
+    { id: "PED-A", fecha: "2026-10-20", cliente_id: "C1", estado: "Produccion", canal: "Minorista", descuento: 0, costo_envio: 0, total: 14000 },
+    { id: "PED-B", fecha: "2026-10-21", cliente_id: "C1", estado: "Produccion", canal: "Mayorista", descuento: 0, costo_envio: 0, total: 9000 },
+  ];
+  data.pedido_items = [
+    { id: "I-A", pedido_id: "PED-A", producto_variante_id: "OSO-12", nombre_historico: "Osobuco 12", cantidad: 1, precio_unitario: 14000, descuento: 0, subtotal: 14000 }, // 12u
+    { id: "I-B", pedido_id: "PED-B", producto_variante_id: "OSO-8", nombre_historico: "Osobuco 8", cantidad: 1, precio_unitario: 9000, descuento: 0, subtotal: 9000 }, // 8u
+  ];
+  const items = produccionPendientePorSabor(data, data.pedidos);
+  assert.equal(items.length, 1); // un solo sabor, no "Osobuco 12" + "Osobuco 8" por separado
+  assert.equal(items[0].nombre, "Medialuna de osobuco");
+  assert.equal(items[0].cantidad, Math.round(((12 + 8) / 12) * 100) / 100); // 20 unidades / 12 por caja
+  assert.equal(items[0].pedidos, 2);
 });
 
 test("conConsumoInsumosVenta: idempotente al editar y vacío al cancelar", () => {

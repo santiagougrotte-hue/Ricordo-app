@@ -44,6 +44,7 @@ import {
   ultimoDiaMes,
   mesAnterior,
   sumarDias,
+  variantesSinFactorReceta,
 } from "@/lib/calc-v2";
 import {
   pctCambio,
@@ -54,6 +55,7 @@ import {
   calcularVentasPendientes,
 } from "@/lib/analitica-ventas";
 import { generarResumenInteligente } from "@/lib/resumen-inteligente";
+import { produccionPendientePorSabor } from "@/lib/rellenos";
 import type { Conclusion } from "@/lib/resumen-inteligente";
 import type { InsumoBajoMinimo } from "@/lib/calc-v2";
 import type { EstadoPedido, Canal } from "@/lib/types-v2";
@@ -192,21 +194,9 @@ export function Inicio() {
     () => data.pedidos.filter((p) => p.estado === "Produccion").sort((a, b) => a.fecha.localeCompare(b.fecha)),
     [data.pedidos]
   );
-  const itemsEnProduccion = useMemo(() => {
-    const idsPedidos = new Set(pedidosEnProduccion.map((p) => p.id));
-    const items = data.pedido_items.filter((i) => idsPedidos.has(i.pedido_id));
-    const porVariante = new Map<string, { nombre: string; cantidad: number; pedidos: Set<string> }>();
-    for (const item of items) {
-      const clave = item.producto_variante_id ?? item.id;
-      const actual = porVariante.get(clave) ?? { nombre: item.nombre_historico, cantidad: 0, pedidos: new Set<string>() };
-      actual.cantidad += item.cantidad;
-      actual.pedidos.add(item.pedido_id);
-      porVariante.set(clave, actual);
-    }
-    return Array.from(porVariante.values())
-      .map((v) => ({ nombre: v.nombre, cantidad: v.cantidad, pedidos: v.pedidos.size }))
-      .sort((a, b) => b.cantidad - a.cantidad);
-  }, [data.pedido_items, pedidosEnProduccion]);
+  // Agrupado por sabor (producto), no por presentación/canal — el freezer por gusto ya es un solo
+  // pool compartido entre todas las variantes del mismo producto (ver conSalidaFreezerPedido).
+  const itemsEnProduccion = useMemo(() => produccionPendientePorSabor(data, pedidosEnProduccion), [data, pedidosEnProduccion]);
 
   const comprasPendientes = useMemo(() => data.compras.filter((c) => c.estado_pago === "pendiente"), [data.compras]);
   const totalComprasPendientes = comprasPendientes.reduce((acc, c) => acc + c.total, 0);
@@ -214,6 +204,11 @@ export function Inicio() {
   const alertasStock = useMemo(() => insumosBajoMinimo(data), [data]);
   const alertasIngredientes = alertasStock.filter((a) => a.insumo.tipo === "ingrediente");
   const alertasPackaging = alertasStock.filter((a) => a.insumo.tipo === "packaging");
+
+  // Sin "unidades_por_paquete" en una variante activa, el costo de esa presentación sale en $0 Y
+  // además la masa de esa receta se descuenta en $0 al confirmar una venta (nunca se inventa un
+  // factor de conversión) — por eso esto se avisa acá, no solo como un detalle en Productos.
+  const variantesSinUnidades = useMemo(() => variantesSinFactorReceta(data), [data]);
 
   // Alerta de pedidos de mañana sin entregar — regla verificable sobre datos reales.
   const pedidosMananaSinEntregar = useMemo(() => {
@@ -315,6 +310,17 @@ export function Inicio() {
       {alertasPackaging.length > 0 && (
         <Alert kind="warning">
           {alertasPackaging.length} envase(s)/packaging por debajo del mínimo: {alertasPackaging.map((a) => a.insumo.nombre).join(", ")}.
+        </Alert>
+      )}
+      {variantesSinUnidades.length > 0 && (
+        <Alert kind="warning">
+          {variantesSinUnidades.length} presentación(es) activa(s) sin &ldquo;Unidades por paquete&rdquo;:{" "}
+          {variantesSinUnidades.map((v) => v.variante_nombre).join(", ")}. El costo de esas presentaciones sale en $0 y la masa de esa
+          receta no se descuenta al vender — cargalo en{" "}
+          <button className="underline" onClick={() => router.go("productos")}>
+            Productos → Variantes
+          </button>
+          .
         </Alert>
       )}
 
@@ -475,7 +481,7 @@ export function Inicio() {
               <thead>
                 <tr>
                   <Th>Producto</Th>
-                  <Th>Cantidad</Th>
+                  <Th>Cantidad (cajas)</Th>
                   <Th>Pedidos</Th>
                 </tr>
               </thead>
@@ -483,7 +489,7 @@ export function Inicio() {
                 {itemsEnProduccion.map((it) => (
                   <TrHover key={it.nombre}>
                     <Td main>{it.nombre}</Td>
-                    <Td>{fNum(it.cantidad, 0)}</Td>
+                    <Td>{fNum(it.cantidad, 2)}</Td>
                     <Td className="text-text3">{it.pedidos}</Td>
                   </TrHover>
                 ))}
