@@ -11,6 +11,8 @@ import {
   produccionPendientePorSabor,
   insumosRellenoControlados,
   movimientosTandaRelleno,
+  gramosRellenoPorUnidad,
+  kgRellenoParaCajasGusto,
 } from "./rellenos";
 import { resumenImportApp, HEADERS_IMPORT_APP } from "./resumen-sheets";
 
@@ -57,6 +59,16 @@ test("kgRellenoParaCajas: 13 g por unidad, solo línea Pasta", () => {
   assert.equal(kgRellenoParaCajas(data, data.producto_variantes[2], 10), 0);
   data.configuracion.gramos_relleno_por_unidad = 15;
   assert.equal(kgRellenoParaCajas(data, data.producto_variantes[0], 1), 0.18);
+});
+
+test("gramosRellenoPorUnidad/kgRellenoParaCajasGusto: un gusto con su propio gramaje pisa el general, el resto sigue con el general", () => {
+  const data = fixture();
+  data.productos.find((p) => p.id === "OSO")!.gramos_relleno_por_unidad = 11; // este gusto usa menos
+  assert.equal(gramosRellenoPorUnidad(data, "OSO"), 11);
+  assert.equal(gramosRellenoPorUnidad(data, "LAS"), 13); // Lasaña sigue con el general (default)
+  assert.equal(gramosRellenoPorUnidad(data), 13); // sin producto, el general
+  // 10 cajas de 12 = 120 unidades × 11 g = 1,32 kg (antes, con 13 g, daba 1,56 kg)
+  assert.equal(kgRellenoParaCajasGusto(data, "OSO", 10), 1.32);
 });
 
 test("resumenRellenos: kilos cargados menos kilos usados al armar, en cajas de 12", () => {

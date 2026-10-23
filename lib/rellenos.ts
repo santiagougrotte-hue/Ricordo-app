@@ -18,7 +18,14 @@ export const ORIGEN_CONSUMO_VENTA = "pedido_insumos";
  * se confirma. Cancelado no descuenta (y devuelve lo que se había descontado). */
 export const ESTADOS_QUE_DESCUENTAN: ReadonlySet<Pedido["estado"]> = new Set<Pedido["estado"]>(["Confirmado", "Produccion", "Entregado"]);
 
-export function gramosRellenoPorUnidad(data: RicordoDataV2): number {
+/** Gramos de relleno cocido por unidad — por defecto el general de `configuracion`, salvo que el
+ * gusto (`productoId`) tenga cargado el suyo propio (`Producto.gramos_relleno_por_unidad`),
+ * porque no todos los rellenos rinden igual. */
+export function gramosRellenoPorUnidad(data: RicordoDataV2, productoId?: string): number {
+  if (productoId) {
+    const propio = data.productos.find((p) => p.id === productoId)?.gramos_relleno_por_unidad;
+    if (propio != null && propio > 0) return propio;
+  }
   const g = data.configuracion.gramos_relleno_por_unidad;
   return g != null && g > 0 ? g : GRAMOS_RELLENO_POR_UNIDAD_DEFAULT;
 }
@@ -37,7 +44,7 @@ export function usaRellenoPorUnidad(data: RicordoDataV2, productoId: string): bo
 export function kgRellenoParaCajas(data: RicordoDataV2, variante: ProductoVariante, cajas: number): number {
   if (!usaRellenoPorUnidad(data, variante.producto_id)) return 0;
   const unidades = cajas * (variante.unidades_por_paquete ?? 12);
-  return Math.round(((unidades * gramosRellenoPorUnidad(data)) / 1000) * 1000) / 1000;
+  return Math.round(((unidades * gramosRellenoPorUnidad(data, variante.producto_id)) / 1000) * 1000) / 1000;
 }
 
 export interface ResumenRelleno {
@@ -55,7 +62,6 @@ export interface ResumenRelleno {
  * lista productos con alguna tanda cargada o algún uso registrado. */
 export function resumenRellenos(data: RicordoDataV2): ResumenRelleno[] {
   const rellenos = data.rellenos_cocidos ?? [];
-  const kgPorCaja12 = (gramosRellenoPorUnidad(data) * 12) / 1000;
   const usados = new Map<string, number>();
   for (const p of data.produccion) {
     if (!p.kg_relleno) continue;
@@ -70,6 +76,7 @@ export function resumenRellenos(data: RicordoDataV2): ResumenRelleno[] {
       const cargados = tandas.reduce((acc, r) => acc + r.kg, 0);
       const usado = usados.get(id) ?? 0;
       const disponibles = Math.round((cargados - usado) * 1000) / 1000;
+      const kgPorCaja12 = (gramosRellenoPorUnidad(data, id) * 12) / 1000;
       return {
         producto_id: id,
         producto: data.productos.find((p) => p.id === id)?.nombre ?? id,
@@ -105,7 +112,7 @@ export interface InsumoRellenoControlado {
 export function insumosRellenoControlados(data: RicordoDataV2, productoId: string): InsumoRellenoControlado[] {
   const receta = data.recetas.find((r) => r.producto_id === productoId && r.activa);
   if (!receta) return [];
-  const kgCocidoPorUnidad = gramosRellenoPorUnidad(data) / 1000;
+  const kgCocidoPorUnidad = gramosRellenoPorUnidad(data, productoId) / 1000;
   if (kgCocidoPorUnidad <= 0) return [];
   const porInsumo = new Map<string, number>();
   for (const item of data.receta_items) {
@@ -201,7 +208,7 @@ export function varianteDeProduccion(data: RicordoDataV2, productoId: string): P
 /** Kilos de relleno cocido para `cajas` cajas de 12 de un gusto (0 si no es pasta). */
 export function kgRellenoParaCajasGusto(data: RicordoDataV2, productoId: string, cajas: number): number {
   if (!usaRellenoPorUnidad(data, productoId)) return 0;
-  return Math.round(((cajas * 12 * gramosRellenoPorUnidad(data)) / 1000) * 1000) / 1000;
+  return Math.round(((cajas * 12 * gramosRellenoPorUnidad(data, productoId)) / 1000) * 1000) / 1000;
 }
 
 export interface ItemProduccionPendiente {
