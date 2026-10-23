@@ -159,6 +159,10 @@ export interface Producto {
   linea?: LineaProducto;
   activo: boolean;
   foto?: Adjunto;
+  /** Gramos de relleno cocido que lleva armar 1 unidad de ESTE gusto — pisa, solo para este
+   * producto, el valor general de `configuracion.gramos_relleno_por_unidad` (distintos rellenos
+   * rinden distinto). Sin cargar, sigue usando el general. */
+  gramos_relleno_por_unidad?: number;
 }
 
 /** Presentación comercial de un producto base — antes era "otro Producto más" con su propia
