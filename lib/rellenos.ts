@@ -1,4 +1,4 @@
-// Rellenos cocidos por kilo + consumo de masa/packaging al confirmar el pedido.
+// Rellenos cocidos por kilo + consumo de masa, armado y pote al producir.
 //
 // Cómo trabaja Ricordo: los rellenos se cocinan una vez por mes y se pesan; los ingredientes del
 // relleno se compran para esa tanda y no llevan stock. Lo que sí se controla semana a semana es la
@@ -151,9 +151,46 @@ export function kgRellenoParaCajasGusto(data: RicordoDataV2, productoId: string,
   return Math.round(((cajas * 12 * gramosRellenoPorUnidad(data)) / 1000) * 1000) / 1000;
 }
 
+/** El único packaging que se descuenta solo es el pote (salsa de tomate y salsa de la lasaña):
+ * bolsas, film y stickers se controlan con conteo manual. */
+export function esPote(nombreInsumo: string): boolean {
+  return /\bpote/i.test(nombreInsumo);
+}
+
+/** Insumos que descuenta producir `cajas` de un gusto: toda la receta efectiva de la presentación
+ * de producción (cajas de 12 para pasta, unidad para el resto) salvo la etapa relleno (se controla
+ * por kilo cocido), solo de insumos con «Controla stock», y del packaging únicamente el pote. */
+export function consumoInsumosProduccion(
+  d: RicordoDataV2,
+  args: { produccionId: string; producto_id: string; cajas: number; fecha: string }
+): InventarioMovimiento[] {
+  const base = varianteDeProduccion(d, args.producto_id);
+  if (!base || args.cajas <= 0) return [];
+  const variante = { ...base, unidades_por_paquete: unidadesPorCajaStock(d, args.producto_id) };
+  const porInsumo = new Map<string, number>();
+  for (const c of recetaEfectivaVariante(d, variante)) {
+    if (c.etapa === "relleno" || c.cantidad <= 0) continue;
+    const insumo = d.insumos.find((i) => i.id === c.insumo_id);
+    if (!insumo?.controla_stock) continue;
+    if (insumo.tipo === "packaging" && !esPote(insumo.nombre)) continue;
+    porInsumo.set(c.insumo_id, (porInsumo.get(c.insumo_id) ?? 0) + c.cantidad * args.cajas);
+  }
+  return [...porInsumo.entries()].map(([insumoId, cantidad], idx) => ({
+    id: `MOV-${args.produccionId}-INS-${idx + 1}`,
+    fecha: args.fecha,
+    tipo: "consumo" as const,
+    origen_tipo: "produccion",
+    origen_id: args.produccionId,
+    item_tipo: "insumo" as const,
+    item_id: insumoId,
+    cantidad: -Math.round(cantidad * 100000) / 100000,
+    notas: "Masa, armado y pote de la producción",
+  }));
+}
+
 /** Registra una tanda de armado por gusto: suma `cajas` cajas de 12 (pasta) o unidades (resto) al
- * stock de terminados de ese gusto y guarda el relleno cocido usado. No descuenta insumos: masa y
- * packaging se descuentan al confirmar el pedido. */
+ * stock de terminados de ese gusto, guarda el relleno cocido usado y descuenta la masa, el armado y
+ * el pote de la receta (`consumoInsumosProduccion`). */
 export function registrarProduccion(
   d: RicordoDataV2,
   args: { id: string; movId: string; producto_id: string; cajas: number; fecha: string; notas?: string }
@@ -188,6 +225,7 @@ export function registrarProduccion(
         item_id: producto.id,
         cantidad: args.cajas * unidadesPorCajaStock(d, producto.id),
       },
+      ...consumoInsumosProduccion(d, { produccionId: args.id, producto_id: producto.id, cajas: args.cajas, fecha: args.fecha }),
     ],
   };
 }
