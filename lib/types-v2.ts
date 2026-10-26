@@ -157,6 +157,10 @@ export interface Producto {
    * resto → Pasta) y el formulario de producto no deja un valor en blanco — opcional acá solo para
    * tolerar un documento viejo que todavía no pasó por esa migración. */
   linea?: LineaProducto;
+  /** Gramos de relleno cocido por unidad producida, para gustos que no son pasta en cajas de 12
+   * (ej. el ragú de la lasaña). Con valor > 0 el relleno de ese gusto se controla por kilo cocido
+   * igual que el de la pasta (Operaciones → Rellenos). La pasta usa `configuracion.gramos_relleno_por_unidad`. */
+  gramos_relleno_por_unidad?: number;
   activo: boolean;
   foto?: Adjunto;
 }

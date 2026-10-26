@@ -1,20 +1,21 @@
 // Rellenos cocidos por kilo + consumo de masa, armado y pote al producir.
 //
-// Cómo trabaja Ricordo: los rellenos se cocinan una vez por mes y se pesan; los ingredientes del
-// relleno se compran para esa tanda y no llevan stock. Lo que sí se controla semana a semana es la
-// masa (premezcla, goma xántica, huevos…) y el packaging (bolsas de vacío, film…), y eso se
-// descuenta al confirmar el pedido (no al armar).
+// Cómo trabaja Ricordo: los rellenos (de la pasta y el ragú de la lasaña) se cocinan una vez por mes
+// y se pesan; los ingredientes del relleno se compran para esa tanda y no llevan stock. Al registrar
+// una producción se descuentan los kilos de relleno cocido y, de la receta, la masa, el armado, la
+// salsa y el pote (bolsas, film y stickers van por conteo manual). La venta, al confirmarse, solo
+// descuenta el producto terminado del freezer.
 
-import type { InventarioMovimiento, Pedido, PedidoItem, ProductoVariante, RicordoDataV2 } from "./types-v2";
+import type { InventarioMovimiento, Pedido, ProductoVariante, RicordoDataV2 } from "./types-v2";
 import { recetaEfectivaVariante } from "./calc-v2";
 
 export const GRAMOS_RELLENO_POR_UNIDAD_DEFAULT = 13;
 
-/** Origen de los movimientos de consumo que genera una venta — distinto de "pedido" (salida de
- * producto terminado al entregar) para poder recrearlos sin tocar aquellos. */
+/** Origen de los movimientos de consumo de masa y packaging que generaba una venta antes de que se
+ * descontaran al producir. Ya no se crean; se conserva para limpiarlos al eliminar un pedido viejo. */
 export const ORIGEN_CONSUMO_VENTA = "pedido_insumos";
 
-/** Estados en los que un pedido ya descontó stock (masa, packaging y producto terminado): desde que
+/** Estados en los que un pedido ya descontó stock de producto terminado: desde que
  * se confirma. Cancelado no descuenta (y devuelve lo que se había descontado). */
 export const ESTADOS_QUE_DESCUENTAN: ReadonlySet<Pedido["estado"]> = new Set<Pedido["estado"]>(["Confirmado", "Produccion", "Entregado"]);
 
@@ -46,8 +47,10 @@ export interface ResumenRelleno {
   kg_cargados: number;
   kg_usados: number;
   kg_disponibles: number;
-  /** Cajas de 12 u. que todavía se pueden armar con el relleno disponible. */
-  cajas_12_disponibles: number;
+  /** Cajas de 12 (pasta) o unidades (lasaña) que todavía se pueden producir con el relleno disponible. */
+  produccion_disponible: number;
+  /** "cajas de 12" o "unidades": en qué se cuenta `produccion_disponible`. */
+  unidad_produccion: string;
   ultima_tanda?: string;
 }
 
@@ -55,7 +58,6 @@ export interface ResumenRelleno {
  * lista productos con alguna tanda cargada o algún uso registrado. */
 export function resumenRellenos(data: RicordoDataV2): ResumenRelleno[] {
   const rellenos = data.rellenos_cocidos ?? [];
-  const kgPorCaja12 = (gramosRellenoPorUnidad(data) * 12) / 1000;
   const usados = new Map<string, number>();
   for (const p of data.produccion) {
     if (!p.kg_relleno) continue;
@@ -76,7 +78,8 @@ export function resumenRellenos(data: RicordoDataV2): ResumenRelleno[] {
         kg_cargados: Math.round(cargados * 1000) / 1000,
         kg_usados: Math.round(usado * 1000) / 1000,
         kg_disponibles: disponibles,
-        cajas_12_disponibles: Math.floor(Math.max(0, disponibles) / kgPorCaja12),
+        produccion_disponible: produccionQueRinde(data, id, disponibles),
+        unidad_produccion: unidadesPorCajaStock(data, id) > 1 ? "cajas de 12" : "unidades",
         ultima_tanda: tandas.map((t) => t.fecha).sort().at(-1),
       };
     })
@@ -85,47 +88,6 @@ export function resumenRellenos(data: RicordoDataV2): ResumenRelleno[] {
 
 export function kgRellenoDisponible(data: RicordoDataV2, productoId: string): number {
   return resumenRellenos(data).find((r) => r.producto_id === productoId)?.kg_disponibles ?? 0;
-}
-
-/** Insumos que una venta descuenta: los de stock controlado (`controla_stock`) de la receta
- * efectiva de la variante, salvo la etapa relleno (el relleno se controla por kilo cocido). */
-export function consumoInsumosVenta(data: RicordoDataV2, pedido: Pedido, items: PedidoItem[]): InventarioMovimiento[] {
-  if (!ESTADOS_QUE_DESCUENTAN.has(pedido.estado)) return [];
-  const porInsumo = new Map<string, number>();
-  for (const item of items) {
-    if (!item.producto_variante_id) continue;
-    const variante = data.producto_variantes.find((v) => v.id === item.producto_variante_id);
-    if (!variante) continue;
-    for (const c of recetaEfectivaVariante(data, variante)) {
-      if (c.etapa === "relleno" || c.cantidad <= 0) continue;
-      const insumo = data.insumos.find((i) => i.id === c.insumo_id);
-      if (!insumo?.controla_stock) continue;
-      porInsumo.set(c.insumo_id, (porInsumo.get(c.insumo_id) ?? 0) + c.cantidad * item.cantidad);
-    }
-  }
-  return [...porInsumo.entries()].map(([insumoId, cantidad], idx) => ({
-    id: `MOV-${pedido.id}-INS-${idx + 1}`,
-    fecha: pedido.fecha,
-    tipo: "consumo" as const,
-    origen_tipo: ORIGEN_CONSUMO_VENTA,
-    origen_id: pedido.id,
-    item_tipo: "insumo" as const,
-    item_id: insumoId,
-    cantidad: -Math.round(cantidad * 100000) / 100000,
-    notas: "Masa y packaging de la venta",
-  }));
-}
-
-/** Resincroniza (idempotente) el consumo de masa y packaging de un pedido: borra lo que había
- * generado antes y lo vuelve a crear con los ítems actuales. Solo descuenta desde que el pedido está
- * confirmado; un pedido cancelado queda sin consumo. */
-export function conConsumoInsumosVenta(
-  d: RicordoDataV2,
-  pedido: Pedido,
-  items: PedidoItem[]
-): Pick<RicordoDataV2, "inventario_movimientos"> {
-  const sinPrevios = d.inventario_movimientos.filter((m) => !(m.origen_tipo === ORIGEN_CONSUMO_VENTA && m.origen_id === pedido.id));
-  return { inventario_movimientos: [...sinPrevios, ...consumoInsumosVenta(d, pedido, items)] };
 }
 
 /** Unidades por caja del stock de terminados: la pasta se produce y se cuenta siempre en cajas de
@@ -145,10 +107,31 @@ export function varianteDeProduccion(data: RicordoDataV2, productoId: string): P
   );
 }
 
-/** Kilos de relleno cocido para `cajas` cajas de 12 de un gusto (0 si no es pasta). */
+/** Gramos de relleno cocido que lleva una unidad de producción de un gusto: una caja de 12 en la
+ * pasta (12 × gramos por unidad de la configuración) o una unidad en el resto, si el gusto tiene
+ * cargados sus gramos de relleno (ej. el ragú de la lasaña). 0 = su relleno no se controla por kilo. */
+export function gramosRellenoProduccion(data: RicordoDataV2, productoId: string): number {
+  if (usaRellenoPorUnidad(data, productoId)) return gramosRellenoPorUnidad(data) * 12;
+  const g = data.productos.find((p) => p.id === productoId)?.gramos_relleno_por_unidad;
+  return g != null && g > 0 ? g : 0;
+}
+
+/** El gusto lleva relleno en su receta (etapa relleno), aunque no sea pasta: la lasaña con su ragú. */
+export function llevaRelleno(data: RicordoDataV2, productoId: string): boolean {
+  if (usaRellenoPorUnidad(data, productoId)) return true;
+  const recetas = new Set(data.recetas.filter((r) => r.producto_id === productoId && r.activa).map((r) => r.id));
+  return data.receta_items.some((i) => recetas.has(i.receta_id) && i.etapa === "relleno" && i.cantidad > 0);
+}
+
+/** Kilos de relleno cocido para `cajas` cajas de 12 (pasta) o unidades (lasaña) de un gusto. */
 export function kgRellenoParaCajasGusto(data: RicordoDataV2, productoId: string, cajas: number): number {
-  if (!usaRellenoPorUnidad(data, productoId)) return 0;
-  return Math.round(((cajas * 12 * gramosRellenoPorUnidad(data)) / 1000) * 1000) / 1000;
+  return Math.round(((cajas * gramosRellenoProduccion(data, productoId)) / 1000) * 1000) / 1000;
+}
+
+/** Cuántas unidades de producción (cajas de 12 o unidades) rinden `kg` de relleno cocido. */
+export function produccionQueRinde(data: RicordoDataV2, productoId: string, kg: number): number {
+  const g = gramosRellenoProduccion(data, productoId);
+  return g > 0 ? Math.floor((Math.max(0, kg) * 1000 + 1e-6) / g) : 0;
 }
 
 /** El único packaging que se descuenta solo es el pote (salsa de tomate y salsa de la lasaña):

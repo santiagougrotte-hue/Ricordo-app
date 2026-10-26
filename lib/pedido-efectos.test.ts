@@ -1,8 +1,8 @@
-// Ciclo completo de stock: relleno cocido → armado → pedido → entrega (o cancelación). Verifica
+// Ciclo completo de stock: relleno cocido → producción → pedido → entrega (o cancelación). Verifica
 // que cada cosa se descuente una sola vez y en el momento correcto:
-// - relleno: al armar (por kilo cocido)
-// - masa y packaging: al cargar la venta (no al armar, no de nuevo al entregar)
-// - producto terminado: sale del freezer al cargar la venta, por gusto (no al entregar)
+// - relleno: al producir (por kilo cocido)
+// - masa, armado, salsa y pote: al producir, según la receta (bolsas y film no: van por conteo)
+// - producto terminado: sale del freezer al confirmar la venta, por gusto (no de nuevo al entregar)
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { emptyDataV2, type Pedido, type PedidoItem, type RicordoDataV2 } from "./types-v2";
@@ -61,67 +61,59 @@ function guardar(d: RicordoDataV2, p: Pedido, its: PedidoItem[]): RicordoDataV2 
   return aplicarEfectosPedido(sinPrevio, p, its);
 }
 
-test("ciclo completo: armar descuenta solo relleno; vender descuenta masa, packaging y freezer una sola vez", () => {
+test("ciclo completo: producir descuenta relleno y masa (no bolsas); vender solo saca del freezer, una sola vez", () => {
   let d = base();
 
-  // 1) Armar 10 cajas de 12: suma 120 unidades al freezer, usa 1,56 kg de relleno, NO toca masa ni packaging
+  // 1) Producir 10 cajas de 12: suma 120 unidades al freezer, usa 1,56 kg de relleno y la masa de 120 u.
   d = registrarProduccion(d, { id: "P1", movId: "M-P1", producto_id: "OSO", cajas: 10, fecha: "2026-10-20" });
   assert.equal(freezer(d), 120);
   assert.equal(kgRellenoDisponible(d, "OSO"), 1.44);
-  assert.equal(stock(d, "PREMEZCLA"), 5);
-  assert.equal(stock(d, "BOLSA"), 50);
+  assert.equal(stock(d, "PREMEZCLA"), 3.92); // 5 − 0,009 × 120
+  assert.equal(stock(d, "HUEVO"), 2.244); // 3 − 0,0063 × 120
+  assert.equal(stock(d, "BOLSA"), 50); // bolsas y film: conteo manual
+  assert.equal(stock(d, "FILM"), 40);
 
-  // 2) Cargar pedido confirmado: 2 cajas de 12 + 1 caja de 8 (mayorista)
+  // 2) Pedido confirmado: 2 cajas de 12 + 1 caja de 8 (mayorista) → solo sale del freezer
   const { p, its } = pedido("PED-1", "Confirmado", [["OSO-12", 2], ["OSO-8", 1]]);
   d = guardar(d, p, its);
-  // masa: 0,009 kg × (24 + 8) unidades = 0,288 kg de premezcla; 0,0063 × 32 = 0,2016 kg de huevo
-  assert.equal(stock(d, "PREMEZCLA"), 4.712);
-  assert.equal(stock(d, "HUEVO"), 2.7984);
-  assert.equal(stock(d, "BOLSA"), 47); // 1 bolsa por caja × 3 cajas
-  assert.equal(stock(d, "FILM"), 37);
-  assert.equal(freezer(d), 88); // sale del freezer al cargar la venta: 24 + 8 unidades del mismo gusto
+  assert.equal(freezer(d), 88); // 24 + 8 unidades del mismo gusto
   assert.equal(calcularStockDisponible(d, "producto", "OSO"), 88); // sin reservas aparte
-  assert.equal(kgRellenoDisponible(d, "OSO"), 1.44); // vender no toca el relleno
+  assert.equal(stock(d, "PREMEZCLA"), 3.92); // vender no toca la masa
+  assert.equal(stock(d, "BOLSA"), 50);
+  assert.equal(kgRellenoDisponible(d, "OSO"), 1.44); // ni el relleno
 
   // 3) Pasar a "En producción": nada cambia
   d = guardar(d, { ...p, estado: "Produccion" }, its);
-  assert.equal(stock(d, "PREMEZCLA"), 4.712);
   assert.equal(calcularStockDisponible(d, "producto", "OSO"), 88);
 
   // 4) Entregar: no vuelve a descontar nada
   d = guardar(d, { ...p, estado: "Entregado" }, its);
   assert.equal(freezer(d), 88);
-  assert.equal(calcularStockDisponible(d, "producto", "OSO"), 88);
-  assert.equal(stock(d, "PREMEZCLA"), 4.712);
-  assert.equal(stock(d, "BOLSA"), 47);
+  assert.equal(stock(d, "PREMEZCLA"), 3.92);
   assert.equal(d.reservas.filter((r) => r.origen_id === "PED-1" && r.estado === "activa").length, 0);
 
   // 5) Volver a guardar el pedido entregado (editar una nota): no duplica nada
   d = guardar(d, { ...p, estado: "Entregado", notas: "ok" }, its);
   assert.equal(freezer(d), 88);
-  assert.equal(stock(d, "PREMEZCLA"), 4.712);
   assert.equal(d.inventario_movimientos.filter((m) => m.origen_id === "PED-1" && m.item_tipo === "producto").length, 1); // un solo movimiento por gusto
+  assert.equal(d.inventario_movimientos.filter((m) => m.origen_id === "PED-1" && m.item_tipo === "insumo").length, 0);
 });
 
-test("editar las cantidades de un pedido confirmado recalcula el consumo; cancelarlo lo devuelve todo", () => {
+test("editar las cantidades de un pedido confirmado recalcula el freezer; cancelarlo lo devuelve", () => {
   let d = base();
   d = registrarProduccion(d, { id: "P1", movId: "M-P1", producto_id: "OSO", cajas: 10, fecha: "2026-10-20" });
   const { p, its } = pedido("PED-2", "Confirmado", [["OSO-12", 3]]);
   d = guardar(d, p, its);
-  assert.equal(stock(d, "BOLSA"), 47);
   assert.equal(freezer(d), 84);
 
   const menos = [{ ...its[0], cantidad: 1 }];
   d = guardar(d, p, menos);
-  assert.equal(stock(d, "BOLSA"), 49);
-  assert.equal(stock(d, "PREMEZCLA"), 4.892); // 5 − 0,009 × 12
   assert.equal(freezer(d), 108);
 
   d = guardar(d, { ...p, estado: "Cancelado" }, menos);
-  assert.equal(stock(d, "BOLSA"), 50);
-  assert.equal(stock(d, "PREMEZCLA"), 5);
   assert.equal(calcularStockDisponible(d, "producto", "OSO"), 120);
   assert.equal(freezer(d), 120);
+  assert.equal(stock(d, "PREMEZCLA"), 3.92); // la masa ya se usó al producir: cancelar no la devuelve
 });
 
 test("un pedido viejo sin descuentos cargados los recibe al volver a guardarse, y cierra su reserva vieja", () => {
@@ -134,9 +126,7 @@ test("un pedido viejo sin descuentos cargados los recibe al volver a guardarse, 
     pedido_items: its,
     reservas: [{ id: "RSV-VIEJA", item_tipo: "producto", item_id: "OSO", cantidad: 12, origen_tipo: "pedido", origen_id: "PED-VIEJO", estado: "activa", fecha: "2026-10-10" }],
   };
-  assert.equal(stock(d, "BOLSA"), 50);
   d = guardar(d, { ...p, estado: "Entregado" }, its);
-  assert.equal(stock(d, "BOLSA"), 49);
   assert.equal(freezer(d), -12); // sin producción registrada el freezer queda negativo: hay que contar
   assert.equal(d.reservas[0].estado, "consumida");
   assert.equal(calcularStockDisponible(d, "producto", "OSO"), -12); // no descuenta dos veces
@@ -161,12 +151,9 @@ test("el descuento se ata a la confirmación: un estado fuera de Confirmado/En p
   // Un estado no confirmado (p. ej. un futuro "Borrador") no toca el stock.
   d = guardar(d, { ...p, estado: "Borrador" as unknown as Pedido["estado"] }, its);
   assert.equal(freezer(d), 24);
-  assert.equal(stock(d, "BOLSA"), 50);
-  // Al confirmarlo, descuenta todo junto.
+  // Al confirmarlo, sale del freezer.
   d = guardar(d, p, its);
   assert.equal(freezer(d), 12);
-  assert.equal(stock(d, "BOLSA"), 49);
-  assert.equal(stock(d, "PREMEZCLA"), 4.892);
 });
 
 test("producción por gusto: la pasta entra en cajas de 12; un gusto que se vende por unidad (lasaña) entra por unidad", async () => {
@@ -179,4 +166,71 @@ test("producción por gusto: la pasta entra en cajas de 12; un gusto que se vend
   d = registrarProduccion(d, { id: "P1", movId: "M1", producto_id: "LAS", cajas: 6, fecha: "2026-10-20" });
   assert.equal(calcularStock(d, "producto", "LAS"), 6);
   assert.equal(d.produccion[0].kg_relleno, undefined); // la lasaña no usa los 13 g por unidad
+});
+
+/** Lasaña (masa + ragú + armado + salsa + pote) y salsa de tomate (salsa + pote), como en Ricordo. */
+function conLasanaYSalsa(d: RicordoDataV2): RicordoDataV2 {
+  d.insumos.push(
+    { id: "MOZZA", nombre: "Mozzarella", tipo: "ingrediente", unidad: "kg", precio_actual: 8000, controla_stock: true, activo: true },
+    { id: "PASSATTA", nombre: "Passatta", tipo: "ingrediente", unidad: "kg", precio_actual: 3000, controla_stock: true, activo: true },
+    { id: "AJO", nombre: "Ajo", tipo: "ingrediente", unidad: "kg", precio_actual: 6000, controla_stock: false, activo: true },
+    { id: "ROAST", nombre: "Roastbeef", tipo: "ingrediente", unidad: "kg", precio_actual: 12000, controla_stock: false, activo: true },
+    { id: "POTE", nombre: "Pote 500 cc", tipo: "packaging", unidad: "unidad", precio_actual: 300, controla_stock: true, activo: true }
+  );
+  d.productos.push(
+    { id: "LAS", nombre: "Lasaña", linea: "Pasta", activo: true, gramos_relleno_por_unidad: 250 },
+    { id: "SAL", nombre: "Salsa de tomate", linea: "Salsa", activo: true }
+  );
+  d.producto_variantes.push(
+    { id: "LAS-1", producto_id: "LAS", nombre: "Lasaña", canal: "Minorista", unidades_por_paquete: 1, precio_venta: 18000, activo: true },
+    { id: "SAL-1", producto_id: "SAL", nombre: "Salsa", canal: "Minorista", unidades_por_paquete: 1, precio_venta: 5000, activo: true }
+  );
+  d.recetas.push({ id: "REC-LAS", producto_id: "LAS", nombre: "Lasaña", activa: true }, { id: "REC-SAL", producto_id: "SAL", nombre: "Salsa", activa: true });
+  d.receta_items.push(
+    { id: "L1", receta_id: "REC-LAS", insumo_id: "PREMEZCLA", etapa: "masa", cantidad: 0.097 },
+    { id: "L2", receta_id: "REC-LAS", insumo_id: "ROAST", etapa: "relleno", cantidad: 0.11 },
+    { id: "L3", receta_id: "REC-LAS", insumo_id: "MOZZA", etapa: "armado", cantidad: 0.18 },
+    { id: "L4", receta_id: "REC-LAS", insumo_id: "PASSATTA", etapa: "salsa", cantidad: 0.15 },
+    { id: "L5", receta_id: "REC-LAS", insumo_id: "POTE", etapa: "packaging", cantidad: 1 },
+    { id: "L6", receta_id: "REC-LAS", insumo_id: "FILM", etapa: "packaging", cantidad: 1 },
+    { id: "S1", receta_id: "REC-SAL", insumo_id: "PASSATTA", etapa: "salsa", cantidad: 0.188 },
+    { id: "S2", receta_id: "REC-SAL", insumo_id: "AJO", etapa: "salsa", cantidad: 0.002 },
+    { id: "S3", receta_id: "REC-SAL", insumo_id: "POTE", etapa: "packaging", cantidad: 1 }
+  );
+  d.inventario_movimientos.push(
+    { id: "C5", fecha: "2026-10-19", tipo: "conteo", item_tipo: "insumo", item_id: "MOZZA", cantidad: 2 },
+    { id: "C6", fecha: "2026-10-19", tipo: "conteo", item_tipo: "insumo", item_id: "PASSATTA", cantidad: 5 },
+    { id: "C7", fecha: "2026-10-19", tipo: "conteo", item_tipo: "insumo", item_id: "POTE", cantidad: 30 }
+  );
+  d.rellenos_cocidos!.push({ id: "T2", fecha: "2026-10-19", producto_id: "LAS", kg: 2 });
+  return d;
+}
+
+test("lasaña: producir descuenta masa, armado, salsa, pote y ragú por kilo; no el film ni los ingredientes del ragú", () => {
+  let d = conLasanaYSalsa(base());
+  d = registrarProduccion(d, { id: "P1", movId: "M1", producto_id: "LAS", cajas: 4, fecha: "2026-10-20" });
+  assert.equal(calcularStock(d, "producto", "LAS"), 4);
+  assert.equal(stock(d, "PREMEZCLA"), 4.612); // 5 − 0,097 × 4
+  assert.equal(stock(d, "MOZZA"), 1.28); // 2 − 0,18 × 4
+  assert.equal(stock(d, "PASSATTA"), 4.4); // 5 − 0,15 × 4
+  assert.equal(stock(d, "POTE"), 26);
+  assert.equal(stock(d, "FILM"), 40);
+  assert.equal(d.produccion[0].kg_relleno, 1); // 250 g × 4
+  assert.equal(kgRellenoDisponible(d, "LAS"), 1);
+  assert.ok(!d.inventario_movimientos.some((m) => m.item_id === "ROAST"));
+  // Vender la lasaña solo la saca del freezer.
+  const { p, its } = pedido("PED-L", "Confirmado", [["LAS-1", 2]]);
+  d = guardar(d, p, its);
+  assert.equal(calcularStock(d, "producto", "LAS"), 2);
+  assert.equal(stock(d, "POTE"), 26);
+});
+
+test("salsa de tomate: producir descuenta la salsa controlada y un pote por unidad", () => {
+  let d = conLasanaYSalsa(base());
+  d = registrarProduccion(d, { id: "P1", movId: "M1", producto_id: "SAL", cajas: 10, fecha: "2026-10-20" });
+  assert.equal(calcularStock(d, "producto", "SAL"), 10);
+  assert.equal(stock(d, "PASSATTA"), 3.12); // 5 − 0,188 × 10
+  assert.equal(stock(d, "POTE"), 20);
+  assert.ok(!d.inventario_movimientos.some((m) => m.item_id === "AJO")); // sin «Controla stock»
+  assert.equal(d.produccion[0].kg_relleno, undefined);
 });

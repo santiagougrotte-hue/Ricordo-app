@@ -16,7 +16,7 @@ import {
   costoRealEnvioCalculado,
 } from "./calc-v2";
 import { calcularCuponesMes } from "./analitica-ventas";
-import { unidadesPorCajaStock } from "./rellenos";
+import { produccionQueRinde, unidadesPorCajaStock } from "./rellenos";
 
 function redondear(n: number, decimales: number): number {
   const factor = 10 ** decimales;
@@ -857,12 +857,11 @@ export function resumenImportApp(data: RicordoDataV2, desde: string = fechaInici
   }
 
   // RELLENO (tandas de relleno cocido, en kilos)
-  const gRelleno = data.configuracion.gramos_relleno_por_unidad && data.configuracion.gramos_relleno_por_unidad > 0 ? data.configuracion.gramos_relleno_por_unidad : 13;
   for (const r of [...(data.rellenos_cocidos ?? [])].sort((a, b) => a.fecha.localeCompare(b.fecha))) {
     if (!enRango(r.fecha)) continue;
     filas.push({
       Tipo: "RELLENO", Fecha: r.fecha, Referencia: r.id, Producto_ID: r.producto_id, Producto: producto(r.producto_id)?.nombre ?? "",
-      Cantidad: r.kg, Unidad: "kg", Cajas_que_rinde: Math.floor(r.kg / ((gRelleno * 12) / 1000)),
+      Cantidad: r.kg, Unidad: "kg", Cajas_que_rinde: produccionQueRinde(data, r.producto_id, r.kg),
     });
   }
 
