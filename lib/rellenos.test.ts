@@ -1,14 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { emptyDataV2, type Pedido, type PedidoItem } from "./types-v2";
-import {
-  conConsumoInsumosVenta,
-  consumoInsumosVenta,
-  kgRellenoDisponible,
-  kgRellenoParaCajas,
-  ORIGEN_CONSUMO_VENTA,
-  resumenRellenos,
-} from "./rellenos";
+import { consumoInsumosProduccion, kgRellenoDisponible, kgRellenoParaCajas, kgRellenoParaCajasGusto, llevaRelleno, resumenRellenos } from "./rellenos";
 import { resumenImportApp, HEADERS_IMPORT_APP } from "./resumen-sheets";
 
 function fixture() {
@@ -67,7 +60,8 @@ test("resumenRellenos: kilos cargados menos kilos usados al armar, en cajas de 1
   assert.equal(r.kg_cargados, 4);
   assert.equal(r.kg_usados, 1.56);
   assert.equal(r.kg_disponibles, 2.44);
-  assert.equal(r.cajas_12_disponibles, 15); // 2.44 / 0.156 = 15.6
+  assert.equal(r.produccion_disponible, 15); // 2.44 / 0.156 = 15.6
+  assert.equal(r.unidad_produccion, "cajas de 12");
   assert.equal(r.ultima_tanda, "2026-10-15");
   assert.equal(kgRellenoDisponible(data, "OSO"), 2.44);
 });
@@ -78,27 +72,28 @@ test("resumenRellenos: documento viejo sin rellenos_cocidos no rompe", () => {
   assert.deepEqual(resumenRellenos(data), []);
 });
 
-test("consumoInsumosVenta: descuenta masa y packaging controlados, nunca el relleno", () => {
+test("consumoInsumosProduccion: masa controlada por caja de 12, sin relleno ni bolsas", () => {
   const data = fixture();
-  const { p, items } = pedido();
-  const movs = consumoInsumosVenta(data, p, items);
-  const porInsumo = Object.fromEntries(movs.map((m) => [m.item_id, m.cantidad]));
-  assert.equal(porInsumo.PREMEZCLA, -0.24); // 0,01 kg × 12 u × 2 cajas
-  assert.equal(porInsumo.BOLSA, -2);
-  assert.equal(porInsumo.OSOBUCO, undefined);
-  assert.ok(movs.every((m) => m.origen_tipo === ORIGEN_CONSUMO_VENTA && m.origen_id === "PED-1" && m.tipo === "consumo"));
+  const movs = consumoInsumosProduccion(data, { produccionId: "P1", producto_id: "OSO", cajas: 2, fecha: "2026-10-20" });
+  assert.deepEqual(
+    movs.map((m) => [m.item_id, m.cantidad, m.origen_tipo, m.origen_id]),
+    [["PREMEZCLA", -0.24, "produccion", "P1"]] // 0,01 kg × 12 u × 2 cajas; la bolsa va por conteo
+  );
 });
 
-test("conConsumoInsumosVenta: idempotente al editar y vacío al cancelar", () => {
+test("relleno por unidad (lasaña): solo con gramos cargados y receta con relleno", () => {
   const data = fixture();
-  const { p, items } = pedido();
-  const una = { ...data, ...conConsumoInsumosVenta(data, p, items) };
-  const dos = { ...una, ...conConsumoInsumosVenta(una, p, items) };
-  assert.equal(dos.inventario_movimientos.length, una.inventario_movimientos.length);
-  const editado = { ...dos, ...conConsumoInsumosVenta(dos, p, [{ ...items[0], cantidad: 1 }]) };
-  assert.equal(editado.inventario_movimientos.find((m) => m.item_id === "BOLSA")?.cantidad, -1);
-  const cancelado = { ...editado, ...conConsumoInsumosVenta(editado, { ...p, estado: "Cancelado" }, items) };
-  assert.equal(cancelado.inventario_movimientos.length, 0);
+  data.recetas.push({ id: "REC-LAS", producto_id: "LAS", nombre: "Lasaña", activa: true });
+  assert.equal(llevaRelleno(data, "LAS"), false);
+  data.receta_items.push({ id: "RL", receta_id: "REC-LAS", insumo_id: "OSOBUCO", etapa: "relleno", cantidad: 0.11 });
+  assert.equal(llevaRelleno(data, "LAS"), true);
+  assert.equal(kgRellenoParaCajasGusto(data, "LAS", 4), 0); // sin gramos cargados no se controla
+  data.productos[1].gramos_relleno_por_unidad = 300;
+  assert.equal(kgRellenoParaCajasGusto(data, "LAS", 4), 1.2);
+  data.rellenos_cocidos = [{ id: "T", fecha: "2026-10-01", producto_id: "LAS", kg: 2 }];
+  const r = resumenRellenos(data).find((x) => x.producto_id === "LAS")!;
+  assert.equal(r.produccion_disponible, 6);
+  assert.equal(r.unidad_produccion, "unidades");
 });
 
 test("resumenImportApp: renglones de venta, pedido, relleno, stock y receta con el formato de las planillas", () => {

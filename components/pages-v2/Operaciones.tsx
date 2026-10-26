@@ -26,7 +26,7 @@ import {
   Alert,
 } from "@/components/ui";
 import { Modal } from "@/components/Modal";
-import { gramosRellenoPorUnidad, kgRellenoDisponible, kgRellenoParaCajasGusto, registrarProduccion, resumenRellenos, usaRellenoPorUnidad } from "@/lib/rellenos";
+import { gramosRellenoPorUnidad, kgRellenoDisponible, kgRellenoParaCajasGusto, llevaRelleno, registrarProduccion, resumenRellenos, usaRellenoPorUnidad } from "@/lib/rellenos";
 import { fARS, fNum, deshacerSaldoHistoricoCompra } from "@/lib/calc-v2";
 import type { EstadoPagoCompra } from "@/lib/types-v2";
 import type { Proveedor } from "@/lib/types";
@@ -447,15 +447,16 @@ function ProduccionTab() {
   const esPasta = form.producto_id ? usaRellenoPorUnidad(data, form.producto_id) : true;
   const kgNecesarios = form.producto_id ? kgRellenoParaCajasGusto(data, form.producto_id, form.cajas) : 0;
   const kgDisponibles = form.producto_id ? kgRellenoDisponible(data, form.producto_id) : 0;
+  const rellenoSinGramos = !!form.producto_id && kgNecesarios === 0 && llevaRelleno(data, form.producto_id);
 
   function registrar() {
     if (!form.producto_id || form.cajas <= 0) {
       toast("Elegí un gusto y una cantidad mayor a 0", "error");
       return;
     }
-    // Armar NO descuenta insumos: la masa y el packaging se descuentan al confirmar el pedido, y el
-    // relleno se controla por kilo cocido (Operaciones → Rellenos). Acá solo entran las cajas de 12
-    // al stock de terminados de ese gusto y se registra cuánto relleno cocido se usó.
+    // Producir suma al stock de terminados del gusto (cajas de 12 o unidades), descuenta los kilos
+    // de relleno cocido (Operaciones → Rellenos) y, de la receta, la masa, el armado, la salsa y el
+    // pote de los insumos con «Controla stock». Bolsas, film y stickers van por conteo manual.
     const kgRelleno = kgRellenoParaCajasGusto(data, form.producto_id, form.cajas);
     setData((d) =>
       registrarProduccion(d, { id: uid("PRD"), movId: uid("MOV"), producto_id: form.producto_id, cajas: form.cajas, fecha: form.fecha, notas: form.notas })
@@ -543,7 +544,14 @@ function ProduccionTab() {
             </Alert>
           </div>
         )}
-        <p className="mt-2 text-[11.5px] text-text3">Armar no descuenta masa ni packaging: eso se descuenta al confirmar el pedido.</p>
+        {rellenoSinGramos && (
+          <div className="mt-3">
+            <Alert kind="info">Este gusto lleva relleno pero no tiene cargados sus gramos por unidad: cargalos al cargar la tanda en Operaciones → Rellenos.</Alert>
+          </div>
+        )}
+        <p className="mt-2 text-[11.5px] text-text3">
+          Al registrar se descuentan la masa, el armado, la salsa y el pote de la receta (insumos con «Controla stock»). Bolsas, film y stickers se controlan con el conteo.
+        </p>
       </Modal>
     </div>
   );
@@ -554,25 +562,40 @@ function RellenosTab() {
   const { toast } = useToast();
   const [modalOpen, setModalOpen] = useState(false);
   const hoy = new Date().toISOString().slice(0, 10);
-  const [form, setForm] = useState({ producto_id: "", kg: 0, fecha: hoy, notas: "" });
+  const [form, setForm] = useState({ producto_id: "", kg: 0, fecha: hoy, notas: "", gramos: 0 });
   const resumen = useMemo(() => resumenRellenos(data), [data]);
   const tandas = useMemo(() => [...(data.rellenos_cocidos ?? [])].sort((a, b) => b.fecha.localeCompare(a.fecha)), [data.rellenos_cocidos]);
-  const productosPasta = data.productos.filter((p) => p.activo && usaRellenoPorUnidad(data, p.id));
+  const productosConRelleno = data.productos.filter((p) => p.activo && llevaRelleno(data, p.id));
   const gramos = gramosRellenoPorUnidad(data);
   const nombreProducto = (id: string) => data.productos.find((p) => p.id === id)?.nombre ?? id;
+  // Gustos que no son pasta en cajas de 12 (la lasaña): sus gramos de relleno por unidad se cargan acá.
+  const productoForm = data.productos.find((p) => p.id === form.producto_id);
+  const porUnidad = !!productoForm && !usaRellenoPorUnidad(data, productoForm.id);
+  const gramosForm = porUnidad ? form.gramos : gramos * 12;
+  const rinde = gramosForm > 0 ? Math.floor((form.kg * 1000 + 1e-6) / gramosForm) : 0;
+  const unidadRinde = porUnidad ? "unidades" : "cajas de 12";
+
+  function elegirProducto(id: string) {
+    setForm({ ...form, producto_id: id, gramos: data.productos.find((p) => p.id === id)?.gramos_relleno_por_unidad ?? 0 });
+  }
 
   function guardar() {
     if (!form.producto_id || !(form.kg > 0)) {
       toast("Elegí el relleno y cargá los kilos cocidos", "error");
       return;
     }
+    if (porUnidad && !(form.gramos > 0)) {
+      toast("Cargá cuántos gramos de relleno lleva cada unidad", "error");
+      return;
+    }
     setData((d) => ({
       ...d,
+      productos: porUnidad ? d.productos.map((p) => (p.id === form.producto_id ? { ...p, gramos_relleno_por_unidad: form.gramos } : p)) : d.productos,
       rellenos_cocidos: [...(d.rellenos_cocidos ?? []), { id: uid("REL"), fecha: form.fecha, producto_id: form.producto_id, kg: form.kg, notas: form.notas || undefined }],
     }));
-    toast(`Relleno cargado: alcanza para ${Math.floor(form.kg / ((gramos * 12) / 1000))} cajas de 12`);
+    toast(`Relleno cargado: alcanza para ${rinde} ${unidadRinde}`);
     setModalOpen(false);
-    setForm({ producto_id: "", kg: 0, fecha: hoy, notas: "" });
+    setForm({ producto_id: "", kg: 0, fecha: hoy, notas: "", gramos: 0 });
   }
 
   function eliminar(id: string) {
@@ -585,7 +608,7 @@ function RellenosTab() {
     <div>
       <div className="mb-4 flex items-center justify-between gap-3">
         <p className="text-[12.5px] text-text3">
-          Al terminar cada relleno, pesalo y cargá los kilos cocidos. A {fNum(gramos, 0)} g por unidad, cada caja de 12 usa {fNum((gramos * 12) / 1000, 3)} kg.
+          Al terminar cada relleno, pesalo y cargá los kilos cocidos. A {fNum(gramos, 0)} g por unidad, cada caja de 12 usa {fNum((gramos * 12) / 1000, 3)} kg. La lasaña usa los gramos por unidad que le cargues.
         </p>
         <Button onClick={() => setModalOpen(true)}>+ Cargar relleno</Button>
       </div>
@@ -601,7 +624,7 @@ function RellenosTab() {
                   <Th>Cargado</Th>
                   <Th>Usado al armar</Th>
                   <Th>Disponible</Th>
-                  <Th>Cajas de 12 que alcanza</Th>
+                  <Th>Alcanza para</Th>
                   <Th>Última tanda</Th>
                 </tr>
               </thead>
@@ -613,7 +636,9 @@ function RellenosTab() {
                     <Td>{fNum(r.kg_usados, 3)} kg</Td>
                     <Td>{fNum(r.kg_disponibles, 3)} kg</Td>
                     <Td>
-                      <Badge color={r.cajas_12_disponibles <= 4 ? "red" : "green"}>{fNum(r.cajas_12_disponibles, 0)}</Badge>
+                      <Badge color={r.produccion_disponible <= 4 ? "red" : "green"}>
+                        {fNum(r.produccion_disponible, 0)} {r.unidad_produccion}
+                      </Badge>
                     </Td>
                     <Td>{r.ultima_tanda ?? "—"}</Td>
                   </TrHover>
@@ -673,9 +698,9 @@ function RellenosTab() {
       >
         <FormGrid>
           <Field label="Relleno" full>
-            <Select value={form.producto_id} onChange={(e) => setForm({ ...form, producto_id: e.target.value })}>
+            <Select value={form.producto_id} onChange={(e) => elegirProducto(e.target.value)}>
               <option value="">Seleccionar…</option>
-              {productosPasta.map((p) => (
+              {productosConRelleno.map((p) => (
                 <option key={p.id} value={p.id}>
                   {p.nombre}
                 </option>
@@ -685,6 +710,11 @@ function RellenosTab() {
           <Field label="Kilos cocidos (pesados)">
             <Input type="number" step="0.001" value={form.kg || ""} onChange={(e) => setForm({ ...form, kg: Number(e.target.value) })} />
           </Field>
+          {porUnidad && (
+            <Field label="Gramos de relleno por unidad">
+              <Input type="number" step="1" value={form.gramos || ""} onChange={(e) => setForm({ ...form, gramos: Number(e.target.value) })} />
+            </Field>
+          )}
           <Field label="Fecha">
             <Input type="date" value={form.fecha} onChange={(e) => setForm({ ...form, fecha: e.target.value })} />
           </Field>
@@ -692,8 +722,10 @@ function RellenosTab() {
             <Textarea rows={2} value={form.notas} onChange={(e) => setForm({ ...form, notas: e.target.value })} />
           </Field>
         </FormGrid>
-        {form.kg > 0 && (
-          <p className="mt-2 text-[12.5px] text-text2">Alcanza para {Math.floor(form.kg / ((gramos * 12) / 1000))} cajas de 12.</p>
+        {form.kg > 0 && gramosForm > 0 && (
+          <p className="mt-2 text-[12.5px] text-text2">
+            Alcanza para {rinde} {unidadRinde}.
+          </p>
         )}
       </Modal>
     </div>
