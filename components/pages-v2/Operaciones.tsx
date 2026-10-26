@@ -26,7 +26,17 @@ import {
   Alert,
 } from "@/components/ui";
 import { Modal } from "@/components/Modal";
-import { gramosRellenoPorUnidad, kgRellenoDisponible, kgRellenoParaCajasGusto, registrarProduccion, resumenRellenos, usaRellenoPorUnidad } from "@/lib/rellenos";
+import {
+  gramosRellenoPorUnidad,
+  insumosRellenoControlados,
+  kgRellenoDisponible,
+  kgRellenoParaCajasGusto,
+  movimientosTandaRelleno,
+  ORIGEN_TANDA_RELLENO,
+  registrarProduccion,
+  resumenRellenos,
+  usaRellenoPorUnidad,
+} from "@/lib/rellenos";
 import { fARS, fNum, deshacerSaldoHistoricoCompra } from "@/lib/calc-v2";
 import type { EstadoPagoCompra } from "@/lib/types-v2";
 import type { Proveedor } from "@/lib/types";
@@ -555,29 +565,72 @@ function RellenosTab() {
   const [modalOpen, setModalOpen] = useState(false);
   const hoy = new Date().toISOString().slice(0, 10);
   const [form, setForm] = useState({ producto_id: "", kg: 0, fecha: hoy, notas: "" });
+  // Insumos del relleno con stock controlado (ej. almendras compradas en cantidad) — a diferencia
+  // del resto del relleno, que se compra fresco para la tanda y no lleva stock, estos sí hay que
+  // descontarlos cuando se carga la tanda. undefined = sigue la sugerencia en vivo (cantidad_por_kg
+  // × kilos); un número = el usuario ya lo corrigió a mano y queda fijo aunque cambien los kilos.
+  const [cantidadesInsumos, setCantidadesInsumos] = useState<Record<string, number | undefined>>({});
+  const [editandoGramos, setEditandoGramos] = useState(false);
+  const [gramosPorGusto, setGramosPorGusto] = useState<Record<string, number | undefined>>({});
   const resumen = useMemo(() => resumenRellenos(data), [data]);
   const tandas = useMemo(() => [...(data.rellenos_cocidos ?? [])].sort((a, b) => b.fecha.localeCompare(a.fecha)), [data.rellenos_cocidos]);
   const productosPasta = data.productos.filter((p) => p.activo && usaRellenoPorUnidad(data, p.id));
   const gramos = gramosRellenoPorUnidad(data);
   const nombreProducto = (id: string) => data.productos.find((p) => p.id === id)?.nombre ?? id;
+  const insumosControlados = useMemo(
+    () => (form.producto_id ? insumosRellenoControlados(data, form.producto_id) : []),
+    [data, form.producto_id]
+  );
+  const gramosEfectivo = form.producto_id ? gramosRellenoPorUnidad(data, form.producto_id) : gramos;
+
+  function abrirEditarGramos() {
+    const inicial: Record<string, number | undefined> = {};
+    for (const p of productosPasta) inicial[p.id] = p.gramos_relleno_por_unidad;
+    setGramosPorGusto(inicial);
+    setEditandoGramos(true);
+  }
+  function guardarGramos() {
+    setData((d) => ({
+      ...d,
+      productos: d.productos.map((p) => (p.id in gramosPorGusto ? { ...p, gramos_relleno_por_unidad: gramosPorGusto[p.id] } : p)),
+    }));
+    toast("Gramos de relleno por gusto actualizados");
+    setEditandoGramos(false);
+  }
 
   function guardar() {
     if (!form.producto_id || !(form.kg > 0)) {
       toast("Elegí el relleno y cargá los kilos cocidos", "error");
       return;
     }
+    const tandaId = uid("REL");
+    const cantidades = insumosControlados.map((i) => ({
+      insumo_id: i.insumo_id,
+      cantidad: cantidadesInsumos[i.insumo_id] ?? i.cantidad_por_kg * form.kg,
+    }));
+    const movs = movimientosTandaRelleno(tandaId, form.fecha, cantidades);
     setData((d) => ({
       ...d,
-      rellenos_cocidos: [...(d.rellenos_cocidos ?? []), { id: uid("REL"), fecha: form.fecha, producto_id: form.producto_id, kg: form.kg, notas: form.notas || undefined }],
+      rellenos_cocidos: [...(d.rellenos_cocidos ?? []), { id: tandaId, fecha: form.fecha, producto_id: form.producto_id, kg: form.kg, notas: form.notas || undefined }],
+      inventario_movimientos: [...d.inventario_movimientos, ...movs],
     }));
-    toast(`Relleno cargado: alcanza para ${Math.floor(form.kg / ((gramos * 12) / 1000))} cajas de 12`);
+    toast(
+      movs.length > 0
+        ? `Relleno cargado: alcanza para ${Math.floor(form.kg / ((gramosEfectivo * 12) / 1000))} cajas de 12 — se descontaron ${movs.length} insumo(s)`
+        : `Relleno cargado: alcanza para ${Math.floor(form.kg / ((gramosEfectivo * 12) / 1000))} cajas de 12`
+    );
     setModalOpen(false);
     setForm({ producto_id: "", kg: 0, fecha: hoy, notas: "" });
+    setCantidadesInsumos({});
   }
 
   function eliminar(id: string) {
-    if (!window.confirm("¿Eliminar esta tanda de relleno?")) return;
-    setData((d) => ({ ...d, rellenos_cocidos: (d.rellenos_cocidos ?? []).filter((r) => r.id !== id) }));
+    if (!window.confirm("¿Eliminar esta tanda de relleno? También revierte el descuento de insumos que haya generado.")) return;
+    setData((d) => ({
+      ...d,
+      rellenos_cocidos: (d.rellenos_cocidos ?? []).filter((r) => r.id !== id),
+      inventario_movimientos: d.inventario_movimientos.filter((m) => !(m.origen_tipo === ORIGEN_TANDA_RELLENO && m.origen_id === id)),
+    }));
     toast("Tanda eliminada");
   }
 
@@ -587,8 +640,59 @@ function RellenosTab() {
         <p className="text-[12.5px] text-text3">
           Al terminar cada relleno, pesalo y cargá los kilos cocidos. A {fNum(gramos, 0)} g por unidad, cada caja de 12 usa {fNum((gramos * 12) / 1000, 3)} kg.
         </p>
-        <Button onClick={() => setModalOpen(true)}>+ Cargar relleno</Button>
+        <div className="flex gap-2">
+          <Button variant="ghost" onClick={abrirEditarGramos}>
+            Editar gramos por gusto
+          </Button>
+          <Button onClick={() => setModalOpen(true)}>+ Cargar relleno</Button>
+        </div>
       </div>
+
+      {editandoGramos ? (
+        <Card title="Gramos de relleno por gusto" className="mb-4">
+          <p className="mb-3 text-[12.5px] text-text3">
+            Cuánto relleno cocido lleva 1 unidad de cada gusto — sin cargar, usa el general ({fNum(gramos, 0)} g). No todos los
+            rellenos rinden igual: dejá en blanco el que coincida con el general.
+          </p>
+          {productosPasta.length === 0 ? (
+            <EmptyState text="No hay gustos de pasta activos." />
+          ) : (
+            <TableWrap>
+              <table className="w-full">
+                <thead>
+                  <tr>
+                    <Th>Gusto</Th>
+                    <Th>Gramos por unidad</Th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {productosPasta.map((p) => (
+                    <TrHover key={p.id}>
+                      <Td main>{p.nombre}</Td>
+                      <Td>
+                        <Input
+                          type="number"
+                          className="w-28"
+                          placeholder={`${fNum(gramos, 0)} (general)`}
+                          value={gramosPorGusto[p.id] ?? ""}
+                          onChange={(e) => setGramosPorGusto({ ...gramosPorGusto, [p.id]: e.target.value ? Number(e.target.value) : undefined })}
+                        />
+                      </Td>
+                    </TrHover>
+                  ))}
+                </tbody>
+              </table>
+            </TableWrap>
+          )}
+          <div className="mt-3 flex justify-end gap-2">
+            <Button variant="ghost" onClick={() => setEditandoGramos(false)}>
+              Cancelar
+            </Button>
+            <Button onClick={guardarGramos}>Guardar</Button>
+          </div>
+        </Card>
+      ) : null}
+
       <Card title="Relleno disponible" className="mb-4">
         {resumen.length === 0 ? (
           <EmptyState text="Todavía no cargaste ningún relleno." />
@@ -692,8 +796,31 @@ function RellenosTab() {
             <Textarea rows={2} value={form.notas} onChange={(e) => setForm({ ...form, notas: e.target.value })} />
           </Field>
         </FormGrid>
-        {form.kg > 0 && (
-          <p className="mt-2 text-[12.5px] text-text2">Alcanza para {Math.floor(form.kg / ((gramos * 12) / 1000))} cajas de 12.</p>
+        {form.producto_id && (
+          <p className="mt-2 text-[12.5px] text-text2">
+            Este gusto usa {fNum(gramosEfectivo, 0)} g por unidad{gramosEfectivo === gramos ? " (general)" : " (propio de este gusto)"}.
+            {form.kg > 0 && ` Alcanza para ${Math.floor(form.kg / ((gramosEfectivo * 12) / 1000))} cajas de 12.`}
+          </p>
+        )}
+        {insumosControlados.length > 0 && (
+          <div className="mt-3">
+            <p className="mb-2 text-[11.5px] text-text3">
+              Insumos de esta receta con stock controlado (ej. comprados en cantidad, a diferencia del resto del relleno) — se
+              descuentan al guardar. Sugerido según los kilos cargados; corregilo si pesaste distinto.
+            </p>
+            <FormGrid>
+              {insumosControlados.map((i) => (
+                <Field key={i.insumo_id} label={`${i.nombre} (${i.unidad})`}>
+                  <Input
+                    type="number"
+                    step="0.001"
+                    value={cantidadesInsumos[i.insumo_id] ?? Math.round(i.cantidad_por_kg * form.kg * 1000) / 1000}
+                    onChange={(e) => setCantidadesInsumos({ ...cantidadesInsumos, [i.insumo_id]: Number(e.target.value) })}
+                  />
+                </Field>
+              ))}
+            </FormGrid>
+          </div>
         )}
       </Modal>
     </div>
