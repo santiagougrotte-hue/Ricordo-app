@@ -32,7 +32,9 @@ export function gramosRellenoPorUnidad(data: RicordoDataV2, productoId?: string)
 
 /** Gustos que se producen y se cuentan en cajas de 12 (y llevan los gramos de relleno por unidad):
  * los de línea Pasta que tienen alguna presentación de más de 1 unidad. Un gusto que solo se vende
- * por unidad (lasaña, salsa, pizza) se cuenta por unidad, aunque tenga cargada la línea Pasta. */
+ * por unidad (lasaña, salsa, pizza) se cuenta por unidad, aunque tenga cargada la línea Pasta. Esto
+ * es solo sobre el TAMAÑO de caja — para si el gusto tiene relleno cocido en tanda, ver
+ * `usaRellenoCocido`. */
 export function usaRellenoPorUnidad(data: RicordoDataV2, productoId: string): boolean {
   const producto = data.productos.find((p) => p.id === productoId);
   if ((producto?.linea ?? "Pasta") !== "Pasta") return false;
@@ -40,9 +42,21 @@ export function usaRellenoPorUnidad(data: RicordoDataV2, productoId: string): bo
   return variantes.length === 0 || variantes.some((v) => (v.unidades_por_paquete ?? 1) > 1);
 }
 
-/** Kilos de relleno cocido que lleva armar `cajas` de una variante. 0 si no es pasta. */
+/** El gusto se carga en Operaciones → Rellenos (tandas de relleno cocido, por kilo): toda la
+ * pasta rellena (`usaRellenoPorUnidad`, cajas de 12) más cualquier otro gusto, sea cual sea la
+ * línea, cuya receta activa tenga una etapa "relleno" explícita — por ejemplo el ragú de la
+ * lasaña, que se cocina en tanda y se pesa igual que el relleno de un sorrentino aunque se venda
+ * por unidad y no en cajas de 12. */
+export function usaRellenoCocido(data: RicordoDataV2, productoId: string): boolean {
+  if (usaRellenoPorUnidad(data, productoId)) return true;
+  const receta = data.recetas.find((r) => r.producto_id === productoId && r.activa);
+  if (!receta) return false;
+  return data.receta_items.some((i) => i.receta_id === receta.id && i.etapa === "relleno");
+}
+
+/** Kilos de relleno cocido que lleva armar `cajas` de una variante. 0 si no tiene relleno. */
 export function kgRellenoParaCajas(data: RicordoDataV2, variante: ProductoVariante, cajas: number): number {
-  if (!usaRellenoPorUnidad(data, variante.producto_id)) return 0;
+  if (!usaRellenoCocido(data, variante.producto_id)) return 0;
   const unidades = cajas * (variante.unidades_por_paquete ?? 12);
   return Math.round(((unidades * gramosRellenoPorUnidad(data, variante.producto_id)) / 1000) * 1000) / 1000;
 }
@@ -53,8 +67,12 @@ export interface ResumenRelleno {
   kg_cargados: number;
   kg_usados: number;
   kg_disponibles: number;
-  /** Cajas de 12 u. que todavía se pueden armar con el relleno disponible. */
-  cajas_12_disponibles: number;
+  /** Cuántas "unidades de referencia" (cajas de 12 para pasta, unidades sueltas para el resto, ver
+   * `unidadesPorCajaStock`) todavía se pueden armar con el relleno disponible. */
+  unidades_ref_disponibles: number;
+  /** Unidades sueltas por "unidad de referencia" de este gusto (12 o 1) — para mostrar "cajas de
+   * 12" o "unidades" según corresponda. */
+  unidades_por_ref: number;
   ultima_tanda?: string;
 }
 
@@ -76,14 +94,16 @@ export function resumenRellenos(data: RicordoDataV2): ResumenRelleno[] {
       const cargados = tandas.reduce((acc, r) => acc + r.kg, 0);
       const usado = usados.get(id) ?? 0;
       const disponibles = Math.round((cargados - usado) * 1000) / 1000;
-      const kgPorCaja12 = (gramosRellenoPorUnidad(data, id) * 12) / 1000;
+      const unidadesPorRef = unidadesPorCajaStock(data, id);
+      const kgPorRef = (gramosRellenoPorUnidad(data, id) * unidadesPorRef) / 1000;
       return {
         producto_id: id,
         producto: data.productos.find((p) => p.id === id)?.nombre ?? id,
         kg_cargados: Math.round(cargados * 1000) / 1000,
         kg_usados: Math.round(usado * 1000) / 1000,
         kg_disponibles: disponibles,
-        cajas_12_disponibles: Math.floor(Math.max(0, disponibles) / kgPorCaja12),
+        unidades_ref_disponibles: kgPorRef > 0 ? Math.floor(Math.max(0, disponibles) / kgPorRef) : 0,
+        unidades_por_ref: unidadesPorRef,
         ultima_tanda: tandas.map((t) => t.fecha).sort().at(-1),
       };
     })
@@ -205,10 +225,13 @@ export function varianteDeProduccion(data: RicordoDataV2, productoId: string): P
   );
 }
 
-/** Kilos de relleno cocido para `cajas` cajas de 12 de un gusto (0 si no es pasta). */
+/** Kilos de relleno cocido para `cajas` unidades de referencia de un gusto (cajas de 12 para
+ * pasta, unidades sueltas para el resto — ver `unidadesPorCajaStock`). 0 si el gusto no tiene
+ * relleno. */
 export function kgRellenoParaCajasGusto(data: RicordoDataV2, productoId: string, cajas: number): number {
-  if (!usaRellenoPorUnidad(data, productoId)) return 0;
-  return Math.round(((cajas * 12 * gramosRellenoPorUnidad(data, productoId)) / 1000) * 1000) / 1000;
+  if (!usaRellenoCocido(data, productoId)) return 0;
+  const unidades = cajas * unidadesPorCajaStock(data, productoId);
+  return Math.round(((unidades * gramosRellenoPorUnidad(data, productoId)) / 1000) * 1000) / 1000;
 }
 
 export interface ItemProduccionPendiente {

@@ -13,6 +13,8 @@ import {
   movimientosTandaRelleno,
   gramosRellenoPorUnidad,
   kgRellenoParaCajasGusto,
+  usaRellenoCocido,
+  unidadesPorCajaStock,
 } from "./rellenos";
 import { resumenImportApp, HEADERS_IMPORT_APP } from "./resumen-sheets";
 
@@ -82,7 +84,8 @@ test("resumenRellenos: kilos cargados menos kilos usados al armar, en cajas de 1
   assert.equal(r.kg_cargados, 4);
   assert.equal(r.kg_usados, 1.56);
   assert.equal(r.kg_disponibles, 2.44);
-  assert.equal(r.cajas_12_disponibles, 15); // 2.44 / 0.156 = 15.6
+  assert.equal(r.unidades_ref_disponibles, 15); // 2.44 / 0.156 = 15.6
+  assert.equal(r.unidades_por_ref, 12);
   assert.equal(r.ultima_tanda, "2026-10-15");
   assert.equal(kgRellenoDisponible(data, "OSO"), 2.44);
 });
@@ -232,4 +235,31 @@ test("calcularFondoReposicion: CMV de pedidos entregados menos compras, separado
   assert.equal(f.compras_masa_packaging, 2000);
   assert.equal(f.compras_relleno, 1000);
   assert.equal(f.disponible_total, 796);
+});
+
+test("usaRellenoCocido: depende de si la receta activa tiene una etapa relleno, no de la línea — el ragú de la lasaña cuenta igual que el relleno de un sorrentino", () => {
+  const data = fixture();
+  assert.equal(usaRellenoCocido(data, "OSO"), true);
+  assert.equal(usaRellenoCocido(data, "LAS"), false); // LAS no tiene receta en el fixture base
+  data.recetas.push({ id: "REC-LAS", producto_id: "LAS", nombre: "Receta lasaña", activa: true });
+  data.receta_items.push({ id: "R3", receta_id: "REC-LAS", insumo_id: "OSOBUCO", etapa: "relleno", cantidad: 0.05 });
+  assert.equal(usaRellenoCocido(data, "LAS"), true);
+});
+
+test("kgRellenoParaCajasGusto/resumenRellenos: un gusto que se vende por unidad (lasaña) usa unidades, no cajas de 12", () => {
+  const data = fixture();
+  data.recetas.push({ id: "REC-LAS", producto_id: "LAS", nombre: "Receta lasaña", activa: true });
+  data.receta_items.push({ id: "R3", receta_id: "REC-LAS", insumo_id: "OSOBUCO", etapa: "relleno", cantidad: 0.05 });
+  data.productos.find((p) => p.id === "LAS")!.gramos_relleno_por_unidad = 300;
+
+  assert.equal(unidadesPorCajaStock(data, "LAS"), 1);
+  // 10 "cajas" de referencia = 10 unidades (no 10×12) × 300 g = 3 kg
+  assert.equal(kgRellenoParaCajasGusto(data, "LAS", 10), 3);
+
+  data.rellenos_cocidos = [{ id: "T1", fecha: "2026-10-01", producto_id: "LAS", kg: 6 }];
+  data.produccion = [{ id: "P1", producto_variante_id: "LAS-1", producto_id: "LAS", cantidad: 10, fecha: "2026-10-16", kg_relleno: 3 }];
+  const r = resumenRellenos(data).find((x) => x.producto_id === "LAS")!;
+  assert.equal(r.kg_disponibles, 3);
+  assert.equal(r.unidades_por_ref, 1);
+  assert.equal(r.unidades_ref_disponibles, 10); // 3 kg disponibles / 0.3 kg por unidad
 });
