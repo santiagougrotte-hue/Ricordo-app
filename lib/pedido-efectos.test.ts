@@ -1,13 +1,14 @@
 // Ciclo completo de stock: relleno cocido → armado → pedido → entrega (o cancelación). Verifica
 // que cada cosa se descuente una sola vez y en el momento correcto:
 // - relleno: al armar (por kilo cocido)
-// - masa y packaging: al cargar la venta (no al armar, no de nuevo al entregar)
+// - masa, packaging y armado: al armar, con la receta de la presentación de referencia (no al
+//   cargar la venta, no de nuevo al entregar) — ver `consumoInsumosProduccion` en lib/rellenos.ts
 // - producto terminado: sale del freezer al cargar la venta, por gusto (no al entregar)
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { emptyDataV2, type Pedido, type PedidoItem, type RicordoDataV2 } from "./types-v2";
 import { aplicarEfectosPedido } from "./pedido-efectos";
-import { kgRellenoDisponible, registrarProduccion } from "./rellenos";
+import { kgRellenoDisponible, quitarProduccion, registrarProduccion } from "./rellenos";
 import { calcularStock } from "./calc-v2";
 import { calcularStockDisponible } from "./produccion-v2";
 
@@ -61,70 +62,88 @@ function guardar(d: RicordoDataV2, p: Pedido, its: PedidoItem[]): RicordoDataV2 
   return aplicarEfectosPedido(sinPrevio, p, its);
 }
 
-test("ciclo completo: armar descuenta solo relleno; vender descuenta masa, packaging y freezer una sola vez", () => {
+test("ciclo completo: armar descuenta relleno, masa, packaging y armado; vender y entregar solo mueven el freezer", () => {
   let d = base();
 
-  // 1) Armar 10 cajas de 12: suma 120 unidades al freezer, usa 1,56 kg de relleno, NO toca masa ni packaging
+  // 1) Armar 10 cajas de 12: suma 120 unidades al freezer, usa 1,56 kg de relleno y descuenta la
+  // masa/packaging de la presentación de referencia (OSO-12) × 10.
   d = registrarProduccion(d, { id: "P1", movId: "M-P1", producto_id: "OSO", cajas: 10, fecha: "2026-10-20" });
   assert.equal(freezer(d), 120);
   assert.equal(kgRellenoDisponible(d, "OSO"), 1.44);
-  assert.equal(stock(d, "PREMEZCLA"), 5);
-  assert.equal(stock(d, "BOLSA"), 50);
+  assert.equal(stock(d, "PREMEZCLA"), 3.92); // 5 − 0,009 × 12 u/caja × 10 cajas
+  assert.equal(stock(d, "HUEVO"), 2.244); // 3 − 0,0063 × 12 × 10
+  assert.equal(stock(d, "BOLSA"), 40); // 50 − 1 bolsa/caja × 10
+  assert.equal(stock(d, "FILM"), 30);
 
-  // 2) Cargar pedido confirmado: 2 cajas de 12 + 1 caja de 8 (mayorista)
+  // 2) Cargar pedido confirmado: 2 cajas de 12 + 1 caja de 8 (mayorista) — ya está armado y
+  // empaquetado, así que vender NO vuelve a tocar masa ni packaging, solo el freezer.
   const { p, its } = pedido("PED-1", "Confirmado", [["OSO-12", 2], ["OSO-8", 1]]);
   d = guardar(d, p, its);
-  // masa: 0,009 kg × (24 + 8) unidades = 0,288 kg de premezcla; 0,0063 × 32 = 0,2016 kg de huevo
-  assert.equal(stock(d, "PREMEZCLA"), 4.712);
-  assert.equal(stock(d, "HUEVO"), 2.7984);
-  assert.equal(stock(d, "BOLSA"), 47); // 1 bolsa por caja × 3 cajas
-  assert.equal(stock(d, "FILM"), 37);
+  assert.equal(stock(d, "PREMEZCLA"), 3.92);
+  assert.equal(stock(d, "HUEVO"), 2.244);
+  assert.equal(stock(d, "BOLSA"), 40);
+  assert.equal(stock(d, "FILM"), 30);
   assert.equal(freezer(d), 88); // sale del freezer al cargar la venta: 24 + 8 unidades del mismo gusto
   assert.equal(calcularStockDisponible(d, "producto", "OSO"), 88); // sin reservas aparte
   assert.equal(kgRellenoDisponible(d, "OSO"), 1.44); // vender no toca el relleno
 
   // 3) Pasar a "En producción": nada cambia
   d = guardar(d, { ...p, estado: "Produccion" }, its);
-  assert.equal(stock(d, "PREMEZCLA"), 4.712);
+  assert.equal(stock(d, "PREMEZCLA"), 3.92);
   assert.equal(calcularStockDisponible(d, "producto", "OSO"), 88);
 
   // 4) Entregar: no vuelve a descontar nada
   d = guardar(d, { ...p, estado: "Entregado" }, its);
   assert.equal(freezer(d), 88);
   assert.equal(calcularStockDisponible(d, "producto", "OSO"), 88);
-  assert.equal(stock(d, "PREMEZCLA"), 4.712);
-  assert.equal(stock(d, "BOLSA"), 47);
+  assert.equal(stock(d, "PREMEZCLA"), 3.92);
+  assert.equal(stock(d, "BOLSA"), 40);
   assert.equal(d.reservas.filter((r) => r.origen_id === "PED-1" && r.estado === "activa").length, 0);
 
   // 5) Volver a guardar el pedido entregado (editar una nota): no duplica nada
   d = guardar(d, { ...p, estado: "Entregado", notas: "ok" }, its);
   assert.equal(freezer(d), 88);
-  assert.equal(stock(d, "PREMEZCLA"), 4.712);
+  assert.equal(stock(d, "PREMEZCLA"), 3.92);
   assert.equal(d.inventario_movimientos.filter((m) => m.origen_id === "PED-1" && m.item_tipo === "producto").length, 1); // un solo movimiento por gusto
 });
 
-test("editar las cantidades de un pedido confirmado recalcula el consumo; cancelarlo lo devuelve todo", () => {
+test("editar las cantidades de un pedido confirmado solo ajusta el freezer; cancelarlo lo devuelve. Masa y packaging no se tocan (ya se armaron)", () => {
   let d = base();
   d = registrarProduccion(d, { id: "P1", movId: "M-P1", producto_id: "OSO", cajas: 10, fecha: "2026-10-20" });
   const { p, its } = pedido("PED-2", "Confirmado", [["OSO-12", 3]]);
   d = guardar(d, p, its);
-  assert.equal(stock(d, "BOLSA"), 47);
+  assert.equal(stock(d, "BOLSA"), 40);
   assert.equal(freezer(d), 84);
 
   const menos = [{ ...its[0], cantidad: 1 }];
   d = guardar(d, p, menos);
-  assert.equal(stock(d, "BOLSA"), 49);
-  assert.equal(stock(d, "PREMEZCLA"), 4.892); // 5 − 0,009 × 12
+  assert.equal(stock(d, "BOLSA"), 40); // editar la venta no mueve insumos
+  assert.equal(stock(d, "PREMEZCLA"), 3.92);
   assert.equal(freezer(d), 108);
 
   d = guardar(d, { ...p, estado: "Cancelado" }, menos);
-  assert.equal(stock(d, "BOLSA"), 50);
-  assert.equal(stock(d, "PREMEZCLA"), 5);
+  assert.equal(stock(d, "BOLSA"), 40); // cancelar la venta tampoco: los insumos ya se gastaron al armar
+  assert.equal(stock(d, "PREMEZCLA"), 3.92);
   assert.equal(calcularStockDisponible(d, "producto", "OSO"), 120);
   assert.equal(freezer(d), 120);
 });
 
-test("un pedido viejo sin descuentos cargados los recibe al volver a guardarse, y cierra su reserva vieja", () => {
+test("registrarProduccion es reversible: quitarProduccion devuelve el freezer, el relleno y los insumos de masa/packaging", () => {
+  let d = base();
+  d = registrarProduccion(d, { id: "P1", movId: "M-P1", producto_id: "OSO", cajas: 10, fecha: "2026-10-20" });
+  assert.equal(freezer(d), 120);
+  assert.equal(stock(d, "PREMEZCLA"), 3.92);
+  assert.equal(kgRellenoDisponible(d, "OSO"), 1.44);
+
+  d = quitarProduccion(d, "P1");
+  assert.equal(freezer(d), 0);
+  assert.equal(stock(d, "PREMEZCLA"), 5);
+  assert.equal(stock(d, "BOLSA"), 50);
+  assert.equal(kgRellenoDisponible(d, "OSO"), 3);
+  assert.equal(d.produccion.length, 0);
+});
+
+test("un pedido viejo sin su efecto de freezer aplicado lo recibe al volver a guardarse, y cierra su reserva vieja — pero no toca masa/packaging (eso ya no depende del pedido)", () => {
   let d = base();
   const { p, its } = pedido("PED-VIEJO", "Confirmado", [["OSO-12", 1]]);
   // Simula un pedido guardado antes del cambio: está en el documento pero sin efectos aplicados.
@@ -136,10 +155,27 @@ test("un pedido viejo sin descuentos cargados los recibe al volver a guardarse, 
   };
   assert.equal(stock(d, "BOLSA"), 50);
   d = guardar(d, { ...p, estado: "Entregado" }, its);
-  assert.equal(stock(d, "BOLSA"), 49);
+  assert.equal(stock(d, "BOLSA"), 50); // masa/packaging no dependen del pedido: no se tocan acá
   assert.equal(freezer(d), -12); // sin producción registrada el freezer queda negativo: hay que contar
   assert.equal(d.reservas[0].estado, "consumida");
   assert.equal(calcularStockDisponible(d, "producto", "OSO"), -12); // no descuenta dos veces
+});
+
+test("un pedido con consumo de insumos generado antes del cambio lo pierde al volver a guardarse (se limpia, no se recalcula)", () => {
+  let d = base();
+  const { p, its } = pedido("PED-LEGACY", "Confirmado", [["OSO-12", 1]]);
+  d = {
+    ...d,
+    pedidos: [p],
+    pedido_items: its,
+    inventario_movimientos: [
+      ...d.inventario_movimientos,
+      { id: "MOV-LEGACY", fecha: "2026-10-20", tipo: "consumo", origen_tipo: "pedido_insumos", origen_id: p.id, item_tipo: "insumo", item_id: "PREMEZCLA", cantidad: -0.1 },
+    ],
+  };
+  assert.equal(stock(d, "PREMEZCLA"), 4.9); // con el movimiento legacy aplicado
+  d = guardar(d, p, its);
+  assert.equal(stock(d, "PREMEZCLA"), 5); // se limpió el movimiento viejo, no se generó uno nuevo
 });
 
 test("stock de terminados por gusto: distintas presentaciones y canales del mismo sabor salen del mismo stock", () => {
@@ -154,19 +190,16 @@ test("stock de terminados por gusto: distintas presentaciones y canales del mism
   assert.equal(calcularStock(d, "producto", "CAL"), 26); // calabaza: 36 − 10 (vendida en caja de 10)
 });
 
-test("el descuento se ata a la confirmación: un estado fuera de Confirmado/En producción/Entregado no descuenta", () => {
+test("el descuento del freezer se ata a la confirmación: un estado fuera de Confirmado/En producción/Entregado no descuenta", () => {
   let d = base();
   d = registrarProduccion(d, { id: "P1", movId: "M1", producto_id: "OSO", cajas: 2, fecha: "2026-10-20" });
   const { p, its } = pedido("PED-4", "Confirmado", [["OSO-12", 1]]);
   // Un estado no confirmado (p. ej. un futuro "Borrador") no toca el stock.
   d = guardar(d, { ...p, estado: "Borrador" as unknown as Pedido["estado"] }, its);
   assert.equal(freezer(d), 24);
-  assert.equal(stock(d, "BOLSA"), 50);
-  // Al confirmarlo, descuenta todo junto.
+  // Al confirmarlo, sale del freezer (masa/packaging ya se habían descontado al armar).
   d = guardar(d, p, its);
   assert.equal(freezer(d), 12);
-  assert.equal(stock(d, "BOLSA"), 49);
-  assert.equal(stock(d, "PREMEZCLA"), 4.892);
 });
 
 test("producción por gusto: la pasta entra en cajas de 12; un gusto que se vende por unidad (lasaña) entra por unidad", async () => {

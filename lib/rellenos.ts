@@ -1,21 +1,30 @@
-// Rellenos cocidos por kilo + consumo de masa/packaging al confirmar el pedido.
+// Rellenos cocidos por kilo + consumo de masa/packaging/armado al registrar producción.
 //
 // Cómo trabaja Ricordo: los rellenos se cocinan una vez por mes y se pesan; los ingredientes del
-// relleno se compran para esa tanda y no llevan stock. Lo que sí se controla semana a semana es la
-// masa (premezcla, goma xántica, huevos…) y el packaging (bolsas de vacío, film…), y eso se
-// descuenta al confirmar el pedido (no al armar).
+// relleno se compran para esa tanda y no llevan stock (salvo que alguno se compre en cantidad, ver
+// `insumosRellenoControlados`). La masa (premezcla, goma xántica, huevos…), el packaging (bolsas
+// de vacío, film…) y el armado se gastan al ARMAR, no al vender: una caja ya está hecha y
+// empaquetada antes de saber a qué canal va a terminar yendo, así que el consumo se registra al
+// cargar la producción con la receta de la presentación de referencia (ver `varianteDeProduccion`),
+// no al confirmar el pedido. Confirmar el pedido solo mueve el producto terminado (freezer).
 
-import type { InventarioMovimiento, Pedido, PedidoItem, ProductoVariante, RicordoDataV2 } from "./types-v2";
+import type { InventarioMovimiento, Pedido, ProductoVariante, RicordoDataV2 } from "./types-v2";
 import { recetaEfectivaVariante } from "./calc-v2";
 
 export const GRAMOS_RELLENO_POR_UNIDAD_DEFAULT = 13;
 
-/** Origen de los movimientos de consumo que genera una venta — distinto de "pedido" (salida de
- * producto terminado al entregar) para poder recrearlos sin tocar aquellos. */
+/** Origen histórico de los movimientos de consumo que generaba una venta, antes de que masa,
+ * packaging y armado pasaran a descontarse al registrar producción (ver `ORIGEN_CONSUMO_PRODUCCION`).
+ * Se mantiene solo para poder limpiar movimientos de pedidos guardados antes de ese cambio. */
 export const ORIGEN_CONSUMO_VENTA = "pedido_insumos";
 
-/** Estados en los que un pedido ya descontó stock (masa, packaging y producto terminado): desde que
- * se confirma. Cancelado no descuenta (y devuelve lo que se había descontado). */
+/** Origen de los movimientos de consumo de insumos (masa, packaging, armado) que genera registrar
+ * una producción — distinto de "produccion" (la entrada de producto terminado) para poder
+ * recrearlos o revertirlos sin tocar aquella. */
+export const ORIGEN_CONSUMO_PRODUCCION = "produccion_insumos";
+
+/** Estados en los que un pedido ya descontó el producto terminado del freezer: desde que se
+ * confirma. Cancelado no descuenta (y devuelve lo que se había descontado). */
 export const ESTADOS_QUE_DESCUENTAN: ReadonlySet<Pedido["estado"]> = new Set<Pedido["estado"]>(["Confirmado", "Produccion", "Entregado"]);
 
 /** Gramos de relleno cocido por unidad — por defecto el general de `configuracion`, salvo que el
@@ -167,45 +176,61 @@ export function movimientosTandaRelleno(tandaId: string, fecha: string, cantidad
     }));
 }
 
-/** Insumos que una venta descuenta: los de stock controlado (`controla_stock`) de la receta
- * efectiva de la variante, salvo la etapa relleno (el relleno se controla por kilo cocido). */
-export function consumoInsumosVenta(data: RicordoDataV2, pedido: Pedido, items: PedidoItem[]): InventarioMovimiento[] {
-  if (!ESTADOS_QUE_DESCUENTAN.has(pedido.estado)) return [];
-  const porInsumo = new Map<string, number>();
-  for (const item of items) {
-    if (!item.producto_variante_id) continue;
-    const variante = data.producto_variantes.find((v) => v.id === item.producto_variante_id);
-    if (!variante) continue;
-    for (const c of recetaEfectivaVariante(data, variante)) {
-      if (c.etapa === "relleno" || c.cantidad <= 0) continue;
-      const insumo = data.insumos.find((i) => i.id === c.insumo_id);
-      if (!insumo?.controla_stock) continue;
-      porInsumo.set(c.insumo_id, (porInsumo.get(c.insumo_id) ?? 0) + c.cantidad * item.cantidad);
-    }
-  }
-  return [...porInsumo.entries()].map(([insumoId, cantidad], idx) => ({
-    id: `MOV-${pedido.id}-INS-${idx + 1}`,
-    fecha: pedido.fecha,
-    tipo: "consumo" as const,
-    origen_tipo: ORIGEN_CONSUMO_VENTA,
-    origen_id: pedido.id,
-    item_tipo: "insumo" as const,
-    item_id: insumoId,
-    cantidad: -Math.round(cantidad * 100000) / 100000,
-    notas: "Masa y packaging de la venta",
-  }));
+/** Limpieza de compatibilidad: masa, packaging y armado se descontaban acá, al confirmar el
+ * pedido — ahora se descuentan al registrar producción (`movimientosInsumosProduccion`), porque
+ * son insumos que se gastan al armar la caja, no al venderla (y no dependen de a qué canal
+ * termine yendo). Esta función ya no genera consumo nuevo: solo saca los movimientos que un
+ * pedido guardado antes de este cambio pueda tener, si se lo vuelve a guardar. */
+export function conConsumoInsumosVenta(d: RicordoDataV2, pedidoId: string): Pick<RicordoDataV2, "inventario_movimientos"> {
+  return { inventario_movimientos: d.inventario_movimientos.filter((m) => !(m.origen_tipo === ORIGEN_CONSUMO_VENTA && m.origen_id === pedidoId)) };
 }
 
-/** Resincroniza (idempotente) el consumo de masa y packaging de un pedido: borra lo que había
- * generado antes y lo vuelve a crear con los ítems actuales. Solo descuenta desde que el pedido está
- * confirmado; un pedido cancelado queda sin consumo. */
-export function conConsumoInsumosVenta(
-  d: RicordoDataV2,
-  pedido: Pedido,
-  items: PedidoItem[]
-): Pick<RicordoDataV2, "inventario_movimientos"> {
-  const sinPrevios = d.inventario_movimientos.filter((m) => !(m.origen_tipo === ORIGEN_CONSUMO_VENTA && m.origen_id === pedido.id));
-  return { inventario_movimientos: [...sinPrevios, ...consumoInsumosVenta(d, pedido, items)] };
+/** Insumos que registrar una tanda de producción descuenta: los de stock controlado
+ * (`controla_stock`) de la receta efectiva de la presentación de referencia de ese gusto
+ * (`varianteDeProduccion`), salvo la etapa relleno (se controla por kilo cocido, ver Operaciones →
+ * Rellenos). Se arma siempre con esa misma presentación en planta, así que no depende de a qué
+ * canal/variante termine vendiéndose cada unidad. */
+export function consumoInsumosProduccion(
+  data: RicordoDataV2,
+  productoId: string,
+  cajas: number
+): { insumo_id: string; nombre: string; unidad: string; cantidad: number }[] {
+  if (cajas <= 0) return [];
+  const variante = varianteDeProduccion(data, productoId);
+  if (!variante) return [];
+  const porInsumo = new Map<string, number>();
+  for (const c of recetaEfectivaVariante(data, variante)) {
+    if (c.etapa === "relleno" || c.cantidad <= 0) continue;
+    const insumo = data.insumos.find((i) => i.id === c.insumo_id);
+    if (!insumo?.controla_stock) continue;
+    porInsumo.set(c.insumo_id, (porInsumo.get(c.insumo_id) ?? 0) + c.cantidad * cajas);
+  }
+  return [...porInsumo.entries()].map(([insumo_id, cantidad]) => {
+    const insumo = data.insumos.find((i) => i.id === insumo_id)!;
+    return { insumo_id, nombre: insumo.nombre, unidad: insumo.unidad, cantidad };
+  });
+}
+
+/** Movimientos de consumo de una producción — uno por cada insumo de `consumoInsumosProduccion`
+ * (masa, packaging, armado con stock controlado). Las cantidades en 0 o negativas se omiten. */
+export function movimientosInsumosProduccion(
+  produccionId: string,
+  fecha: string,
+  consumo: { insumo_id: string; cantidad: number }[]
+): InventarioMovimiento[] {
+  return consumo
+    .filter((c) => c.cantidad > 0)
+    .map((c, idx) => ({
+      id: `MOV-${produccionId}-INS-${idx + 1}`,
+      fecha,
+      tipo: "consumo" as const,
+      origen_tipo: ORIGEN_CONSUMO_PRODUCCION,
+      origen_id: produccionId,
+      item_tipo: "insumo" as const,
+      item_id: c.insumo_id,
+      cantidad: -Math.round(c.cantidad * 100000) / 100000,
+      notas: "Masa, packaging y armado al registrar producción",
+    }));
 }
 
 /** Unidades por caja del stock de terminados: la pasta se produce y se cuenta siempre en cajas de
@@ -269,8 +294,9 @@ export function produccionPendientePorSabor(data: RicordoDataV2, pedidos: Pedido
 }
 
 /** Registra una tanda de armado por gusto: suma `cajas` cajas de 12 (pasta) o unidades (resto) al
- * stock de terminados de ese gusto y guarda el relleno cocido usado. No descuenta insumos: masa y
- * packaging se descuentan al confirmar el pedido. */
+ * stock de terminados de ese gusto, guarda el relleno cocido usado y descuenta los insumos de
+ * masa, packaging y armado con stock controlado (ver `consumoInsumosProduccion`). Confirmar el
+ * pedido ya no vuelve a tocar esos insumos — solo mueve el producto terminado. */
 export function registrarProduccion(
   d: RicordoDataV2,
   args: { id: string; movId: string; producto_id: string; cajas: number; fecha: string; notas?: string }
@@ -279,6 +305,8 @@ export function registrarProduccion(
   if (!producto || args.cajas <= 0) return d;
   const variante = varianteDeProduccion(d, producto.id);
   const kgRelleno = kgRellenoParaCajasGusto(d, producto.id, args.cajas);
+  const consumo = consumoInsumosProduccion(d, producto.id, args.cajas);
+  const movsInsumos = movimientosInsumosProduccion(args.id, args.fecha, consumo);
   return {
     ...d,
     produccion: [
@@ -305,6 +333,21 @@ export function registrarProduccion(
         item_id: producto.id,
         cantidad: args.cajas * unidadesPorCajaStock(d, producto.id),
       },
+      ...movsInsumos,
     ],
+  };
+}
+
+/** Elimina una producción ya registrada y revierte todo lo que generó: la salida de producto
+ * terminado, el consumo de insumos de masa/packaging/armado, y (al sacar el registro de
+ * `produccion`) los kilos de relleno cocido que había usado, ya que `resumenRellenos` los resta en
+ * vivo a partir de `Produccion.kg_relleno`. */
+export function quitarProduccion(d: RicordoDataV2, produccionId: string): RicordoDataV2 {
+  return {
+    ...d,
+    produccion: d.produccion.filter((p) => p.id !== produccionId),
+    inventario_movimientos: d.inventario_movimientos.filter(
+      (m) => !((m.origen_tipo === "produccion" || m.origen_tipo === ORIGEN_CONSUMO_PRODUCCION) && m.origen_id === produccionId)
+    ),
   };
 }

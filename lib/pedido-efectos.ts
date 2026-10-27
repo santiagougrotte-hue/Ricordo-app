@@ -1,7 +1,8 @@
-// Efectos de guardar un pedido sobre el resto del documento: gasto de reparto, consumo de masa y
-// packaging, y salida de producto terminado del freezer por gusto, todo al confirmar el pedido. Todos los
-// caminos que crean, editan o cambian el estado de un pedido pasan por `aplicarEfectosPedido`,
-// para que ninguno se saltee un paso.
+// Efectos de guardar un pedido sobre el resto del documento: gasto de reparto y salida de producto
+// terminado del freezer por gusto, al confirmar el pedido (masa, packaging y armado ya se
+// descontaron antes, al registrar la producción — ver lib/rellenos.ts). Todos los caminos que
+// crean, editan o cambian el estado de un pedido pasan por `aplicarEfectosPedido`, para que
+// ninguno se saltee un paso.
 
 import { uid } from "./id";
 import { diferenciaRepartoPedido } from "./calc-v2";
@@ -92,12 +93,13 @@ export function reservasActualizadasParaPedido(d: RicordoDataV2, pedido: Pedido)
 
 
 /** Aplica, en orden y de forma idempotente, todos los efectos de un pedido ya guardado con su
- * estado actual: cierra reservas viejas, gasto de reparto, consumo de masa/packaging y salida de
- * producto terminado del freezer (por gusto). Cancelado = sin consumo ni salida. */
+ * estado actual: cierra reservas viejas, gasto de reparto, limpieza de consumo de insumos viejo
+ * (ver `conConsumoInsumosVenta`) y salida de producto terminado del freezer (por gusto). Cancelado
+ * = sin salida. */
 export function aplicarEfectosPedido(d: RicordoDataV2, pedido: Pedido, items: PedidoItem[]): RicordoDataV2 {
   let out: RicordoDataV2 = { ...d, reservas: reservasActualizadasParaPedido(d, pedido) };
   out = { ...out, ...conGastoRepartoPedido(out, pedido) };
-  out = { ...out, ...conConsumoInsumosVenta(out, pedido, items) };
+  out = { ...out, ...conConsumoInsumosVenta(out, pedido.id) };
   out = { ...out, ...conSalidaFreezerPedido(out, pedido, items) };
   return out;
 }

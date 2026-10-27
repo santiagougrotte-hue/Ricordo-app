@@ -27,12 +27,14 @@ import {
 } from "@/components/ui";
 import { Modal } from "@/components/Modal";
 import {
+  consumoInsumosProduccion,
   gramosRellenoPorUnidad,
   insumosRellenoControlados,
   kgRellenoDisponible,
   kgRellenoParaCajasGusto,
   movimientosTandaRelleno,
   ORIGEN_TANDA_RELLENO,
+  quitarProduccion,
   registrarProduccion,
   resumenRellenos,
   unidadesPorCajaStock,
@@ -459,22 +461,36 @@ function ProduccionTab() {
   const esPasta = form.producto_id ? usaRellenoPorUnidad(data, form.producto_id) : true;
   const kgNecesarios = form.producto_id ? kgRellenoParaCajasGusto(data, form.producto_id, form.cajas) : 0;
   const kgDisponibles = form.producto_id ? kgRellenoDisponible(data, form.producto_id) : 0;
+  const insumosAConsumir = useMemo(
+    () => (form.producto_id && form.cajas > 0 ? consumoInsumosProduccion(data, form.producto_id, form.cajas) : []),
+    [data, form.producto_id, form.cajas]
+  );
 
   function registrar() {
     if (!form.producto_id || form.cajas <= 0) {
       toast("Elegí un gusto y una cantidad mayor a 0", "error");
       return;
     }
-    // Armar NO descuenta insumos: la masa y el packaging se descuentan al confirmar el pedido, y el
-    // relleno se controla por kilo cocido (Operaciones → Rellenos). Acá solo entran las cajas de 12
-    // al stock de terminados de ese gusto y se registra cuánto relleno cocido se usó.
+    // Armar descuenta masa, packaging y armado (con stock controlado) de la receta de la
+    // presentación de referencia de ese gusto, y el relleno se controla por kilo cocido
+    // (Operaciones → Rellenos) — ver consumoInsumosProduccion/registrarProduccion.
     const kgRelleno = kgRellenoParaCajasGusto(data, form.producto_id, form.cajas);
     setData((d) =>
       registrarProduccion(d, { id: uid("PRD"), movId: uid("MOV"), producto_id: form.producto_id, cajas: form.cajas, fecha: form.fecha, notas: form.notas })
     );
-    toast(kgRelleno > 0 ? `Producción registrada: ${fNum(kgRelleno, 3)} kg de relleno usados` : "Producción registrada");
+    const partes = [
+      kgRelleno > 0 ? `${fNum(kgRelleno, 3)} kg de relleno` : null,
+      insumosAConsumir.length > 0 ? `${insumosAConsumir.length} insumo(s)` : null,
+    ].filter(Boolean);
+    toast(partes.length > 0 ? `Producción registrada: se usaron ${partes.join(" y ")}` : "Producción registrada");
     setModalOpen(false);
     setForm({ producto_id: "", cajas: 1, fecha: hoy(), notas: "" });
+  }
+
+  function eliminar(id: string) {
+    if (!window.confirm("¿Eliminar esta producción? También revierte el stock de terminados y los insumos que haya descontado.")) return;
+    setData((d) => quitarProduccion(d, id));
+    toast("Producción eliminada");
   }
 
   return (
@@ -495,6 +511,7 @@ function ProduccionTab() {
                   <Th>Cajas</Th>
                   <Th>Relleno usado</Th>
                   <Th>Notas</Th>
+                  <Th></Th>
                 </tr>
               </thead>
               <tbody>
@@ -505,6 +522,11 @@ function ProduccionTab() {
                     <Td>{fNum(p.cantidad, 0)}</Td>
                     <Td>{p.kg_relleno ? `${fNum(p.kg_relleno, 3)} kg` : "—"}</Td>
                     <Td>{p.notas ?? "—"}</Td>
+                    <Td>
+                      <Button size="sm" variant="danger" onClick={() => eliminar(p.id)}>
+                        Eliminar
+                      </Button>
+                    </Td>
                   </TrHover>
                 ))}
               </tbody>
@@ -555,7 +577,23 @@ function ProduccionTab() {
             </Alert>
           </div>
         )}
-        <p className="mt-2 text-[11.5px] text-text3">Armar no descuenta masa ni packaging: eso se descuenta al confirmar el pedido.</p>
+        {insumosAConsumir.length > 0 && (
+          <div className="mt-3">
+            <p className="mb-2 text-[11.5px] text-text3">
+              Esto va a descontar (masa, packaging y armado con stock controlado, según la presentación de referencia de este gusto):
+            </p>
+            <ul className="space-y-1 text-[12.5px] text-text2">
+              {insumosAConsumir.map((i) => (
+                <li key={i.insumo_id}>
+                  {i.nombre}: {fNum(i.cantidad, 3)} {i.unidad}
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
+        <p className="mt-2 text-[11.5px] text-text3">
+          Armar descuenta masa, packaging y armado; vender solo mueve el producto terminado del freezer.
+        </p>
       </Modal>
     </div>
   );
