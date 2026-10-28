@@ -4,8 +4,11 @@
 // nombre histórico de pedido_items, descuento repartido, ventas_netas = bruto − descuento + envío
 // cobrado — mismo criterio que el EERR) en vez de recalcular esa lógica de nuevo acá.
 //
-// "Caja" = MargenItemDetalle.tipo_unidad_venta === "caja" (ver default en types-v2.ts: sin cargar,
-// se asume caja). Salsa/complementos/otros insumos vendidos sueltos nunca suman a "cajas vendidas".
+// "Caja" (a los fines de este archivo) = una presentación completa de un gusto: tipo_unidad_venta
+// "caja" (pasta vendida de a 12/10/8…, ver default en types-v2.ts: sin cargar, se asume caja) o
+// "unidad" (gustos que se venden de a uno, ej. lasaña — 1 unidad vendida = 1 "caja" de ese gusto,
+// mismo criterio que `unidadesPorCajaStock` en lib/rellenos.ts). "pote"/"bolsa"/"otro" quedan
+// afuera a propósito: salsa vendida suelta y otros complementos nunca suman a "cajas vendidas".
 
 import type { RicordoDataV2, Canal } from "./types-v2";
 import type { Cliente } from "./types";
@@ -25,7 +28,7 @@ export function pctCambio(actual: number, anterior: number): number | null {
 }
 
 function esCaja(item: MargenItemDetalle): boolean {
-  return item.tipo_unidad_venta === "caja";
+  return item.tipo_unidad_venta === "caja" || item.tipo_unidad_venta === "unidad";
 }
 
 function itemsDelPeriodo(data: RicordoDataV2, desde: string, hasta: string, canal?: Canal): MargenItemDetalle[] {

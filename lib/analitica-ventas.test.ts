@@ -80,6 +80,24 @@ test("calcularMetricasVentas: solo cuenta pedidos Entregados, cajas excluye la s
   assert.equal(m.precio_promedio_caja, Math.round((16000 + 45000) / 7));
 });
 
+test("calcularMetricasVentas/calcularVentasPorGusto: un gusto vendido por unidad (ej. lasaña) cuenta como caja; la salsa (tipo_unidad_venta \"otro\") sigue sin contar", () => {
+  const data = fixture();
+  data.productos.push({ id: "PROD-LAS", nombre: "Lasaña", activo: true });
+  data.producto_variantes.push({ id: "V-LAS", producto_id: "PROD-LAS", nombre: "Lasaña", canal: "Minorista", precio_venta: 18000, activo: true, tipo_unidad_venta: "unidad" });
+  data.pedidos.push({ id: "PED-5", fecha: "2026-01-18", cliente_id: "CLI-MIN", estado: "Entregado", canal: "Minorista", descuento: 0, costo_envio: 0, total: 18000 });
+  data.pedido_items.push({ id: "I-5", pedido_id: "PED-5", producto_variante_id: "V-LAS", nombre_historico: "Lasaña", cantidad: 1, precio_unitario: 18000, descuento: 0, subtotal: 18000 });
+
+  const m = calcularMetricasVentas(data, "2026-01-01", "2026-01-31");
+  assert.equal(m.cajas_vendidas, 8); // 7 cajas de jamón + 1 lasaña (la salsa nunca cuenta)
+
+  const porGusto = calcularVentasPorGusto(data, "2026-01-01", "2026-01-31");
+  const lasagna = porGusto.find((g) => g.producto_id === "PROD-LAS")!;
+  assert.equal(lasagna.cajas, 1);
+  const salsa = porGusto.find((g) => g.producto_id === "PROD-SALSA")!;
+  assert.equal(salsa.cajas, 0); // sigue sin contar como caja, solo facturación
+  assert.equal(salsa.facturacion, 2000);
+});
+
 test("calcularVentasPorCanal: separa Minorista/Mayorista con participación sobre el total", () => {
   const data = fixture();
   const canales = calcularVentasPorCanal(data, "2026-01-01", "2026-01-31");

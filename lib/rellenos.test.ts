@@ -3,16 +3,22 @@ import assert from "node:assert/strict";
 import { emptyDataV2, type Pedido, type PedidoItem } from "./types-v2";
 import {
   conConsumoInsumosVenta,
-  consumoInsumosVenta,
+  consumoInsumosProduccion,
   kgRellenoDisponible,
   kgRellenoParaCajas,
   ORIGEN_CONSUMO_VENTA,
+  ORIGEN_CONSUMO_PRODUCCION,
   resumenRellenos,
   produccionPendientePorSabor,
   insumosRellenoControlados,
+  movimientosInsumosProduccion,
   movimientosTandaRelleno,
   gramosRellenoPorUnidad,
   kgRellenoParaCajasGusto,
+  quitarProduccion,
+  registrarProduccion,
+  usaRellenoCocido,
+  unidadesPorCajaStock,
 } from "./rellenos";
 import { resumenImportApp, HEADERS_IMPORT_APP } from "./resumen-sheets";
 
@@ -82,7 +88,8 @@ test("resumenRellenos: kilos cargados menos kilos usados al armar, en cajas de 1
   assert.equal(r.kg_cargados, 4);
   assert.equal(r.kg_usados, 1.56);
   assert.equal(r.kg_disponibles, 2.44);
-  assert.equal(r.cajas_12_disponibles, 15); // 2.44 / 0.156 = 15.6
+  assert.equal(r.unidades_ref_disponibles, 15); // 2.44 / 0.156 = 15.6
+  assert.equal(r.unidades_por_ref, 12);
   assert.equal(r.ultima_tanda, "2026-10-15");
   assert.equal(kgRellenoDisponible(data, "OSO"), 2.44);
 });
@@ -93,29 +100,68 @@ test("resumenRellenos: documento viejo sin rellenos_cocidos no rompe", () => {
   assert.deepEqual(resumenRellenos(data), []);
 });
 
-test("consumoInsumosVenta: descuenta masa y packaging controlados, nunca el relleno", () => {
+test("consumoInsumosProduccion: descuenta masa y packaging controlados de la presentación de referencia, nunca el relleno", () => {
   const data = fixture();
-  const { p, items } = pedido();
-  const movs = consumoInsumosVenta(data, p, items);
-  const porInsumo = Object.fromEntries(movs.map((m) => [m.item_id, m.cantidad]));
-  assert.equal(porInsumo.PREMEZCLA, -0.24); // 0,01 kg × 12 u × 2 cajas
-  assert.equal(porInsumo.BOLSA, -2);
-  assert.equal(porInsumo.OSOBUCO, undefined);
-  assert.ok(movs.every((m) => m.origen_tipo === ORIGEN_CONSUMO_VENTA && m.origen_id === "PED-1" && m.tipo === "consumo"));
+  const consumo = consumoInsumosProduccion(data, "OSO", 10);
+  const porInsumo = Object.fromEntries(consumo.map((c) => [c.insumo_id, c.cantidad]));
+  assert.equal(porInsumo.PREMEZCLA, 1.2); // 0,01 kg × 12 u/caja (receta) × 10 cajas
+  assert.equal(porInsumo.BOLSA, 10); // 1 bolsa por caja, de la variante de referencia (OSO-12, Minorista)
+  assert.equal(porInsumo.OSOBUCO, undefined); // etapa relleno: nunca se descuenta acá
 });
 
-test("consumoInsumosVenta: sin unidades_por_paquete en la variante vendida, la masa no se descuenta (nunca se inventa un factor) pero el packaging sigue andando", () => {
+test("consumoInsumosProduccion: sin unidades_por_paquete en la variante de referencia, la masa no se descuenta (nunca se inventa un factor) pero el packaging sigue andando", () => {
   const data = fixture();
-  // Variante real, sin "unidades_por_paquete" cargado — el mismo vacío de datos que deja la masa
-  // en $0 en Productos → Variantes ("Falta — receta en $0").
-  data.producto_variantes.push({ id: "OSO-SIN-UP", producto_id: "OSO", nombre: "Osobuco sin paquete", canal: "Minorista", precio_venta: 14000, activo: true });
-  data.ajustes_receta_variante.push({ id: "A3", variante_id: "OSO-SIN-UP", insumo_id: "BOLSA", operacion: "sumar", cantidad: 1, etapa: "packaging" });
-  const p: Pedido = { id: "PED-2", fecha: "2026-10-20", cliente_id: "C1", estado: "Confirmado", canal: "Minorista", descuento: 0, costo_envio: 0, total: 14000 };
-  const items: PedidoItem[] = [{ id: "I2", pedido_id: "PED-2", producto_variante_id: "OSO-SIN-UP", nombre_historico: "Osobuco sin paquete", cantidad: 1, precio_unitario: 14000, descuento: 0, subtotal: 14000 }];
-  const movs = consumoInsumosVenta(data, p, items);
-  const porInsumo = Object.fromEntries(movs.map((m) => [m.item_id, m.cantidad]));
+  // Gusto nuevo con una sola presentación, sin "unidades_por_paquete" cargado — el mismo vacío de
+  // datos que deja la masa en $0 en Productos → Variantes ("Falta — receta en $0").
+  data.productos.push({ id: "SINUP", nombre: "Sorrentino sin paquete", linea: "Pasta", activo: true });
+  data.producto_variantes.push({ id: "SINUP-1", producto_id: "SINUP", nombre: "Sorrentino sin paquete", canal: "Minorista", precio_venta: 14000, activo: true });
+  data.recetas.push({ id: "REC-SINUP", producto_id: "SINUP", nombre: "Receta", activa: true });
+  data.receta_items.push(
+    { id: "RS1", receta_id: "REC-SINUP", insumo_id: "PREMEZCLA", etapa: "masa", cantidad: 0.01 },
+    { id: "RS2", receta_id: "REC-SINUP", insumo_id: "BOLSA", etapa: "packaging", cantidad: 1 }
+  );
+  const consumo = consumoInsumosProduccion(data, "SINUP", 10);
+  const porInsumo = Object.fromEntries(consumo.map((c) => [c.insumo_id, c.cantidad]));
   assert.equal(porInsumo.PREMEZCLA, undefined); // masa escalada × 0: se omite, no se inventa un valor
-  assert.equal(porInsumo.BOLSA, -1); // packaging no escala por unidades_por_paquete: no se ve afectado
+  assert.equal(porInsumo.BOLSA, 10); // packaging no escala por unidades_por_paquete: no se ve afectado
+});
+
+test("movimientosInsumosProduccion: genera un consumo negativo por insumo, descartando cantidades en 0", () => {
+  const movs = movimientosInsumosProduccion("PRD-1", "2026-10-20", [
+    { insumo_id: "PREMEZCLA", cantidad: 1.2 },
+    { insumo_id: "OTRO", cantidad: 0 },
+  ]);
+  assert.equal(movs.length, 1);
+  assert.equal(movs[0].item_id, "PREMEZCLA");
+  assert.equal(movs[0].cantidad, -1.2);
+  assert.equal(movs[0].origen_tipo, ORIGEN_CONSUMO_PRODUCCION);
+  assert.equal(movs[0].origen_id, "PRD-1");
+  assert.equal(movs[0].tipo, "consumo");
+});
+
+test("registrarProduccion: descuenta insumos de masa/packaging al armar, y queda todo reversible con quitarProduccion", () => {
+  const data = fixture();
+  const out = registrarProduccion(data, { id: "PRD-1", movId: "MOV-1", producto_id: "OSO", cajas: 10, fecha: "2026-10-20" });
+  const consumo = out.inventario_movimientos.filter((m) => m.origen_tipo === ORIGEN_CONSUMO_PRODUCCION && m.origen_id === "PRD-1");
+  assert.equal(consumo.length, 2); // PREMEZCLA + BOLSA
+  assert.equal(out.produccion.length, 1);
+
+  const revertido = quitarProduccion(out, "PRD-1");
+  assert.equal(revertido.produccion.length, 0);
+  assert.equal(revertido.inventario_movimientos.filter((m) => m.origen_id === "PRD-1").length, 0);
+});
+
+test("conConsumoInsumosVenta: ya no genera consumo nuevo, solo limpia movimientos viejos de antes del cambio", () => {
+  const data = fixture();
+  const conMovimientoViejo = {
+    ...data,
+    inventario_movimientos: [
+      ...data.inventario_movimientos,
+      { id: "MOV-VIEJO", fecha: "2026-01-01", tipo: "consumo" as const, origen_tipo: ORIGEN_CONSUMO_VENTA, origen_id: "PED-1", item_tipo: "insumo" as const, item_id: "PREMEZCLA", cantidad: -1 },
+    ],
+  };
+  const limpio = { ...conMovimientoViejo, ...conConsumoInsumosVenta(conMovimientoViejo, "PED-1") };
+  assert.equal(limpio.inventario_movimientos.length, data.inventario_movimientos.length);
 });
 
 test("insumosRellenoControlados: solo lista los insumos de etapa relleno con stock controlado, escalados por kilo de relleno cocido", () => {
@@ -165,18 +211,6 @@ test("produccionPendientePorSabor: agrupa por sabor (producto), no por presentac
   assert.equal(items[0].nombre, "Medialuna de osobuco");
   assert.equal(items[0].cantidad, Math.round(((12 + 8) / 12) * 100) / 100); // 20 unidades / 12 por caja
   assert.equal(items[0].pedidos, 2);
-});
-
-test("conConsumoInsumosVenta: idempotente al editar y vacío al cancelar", () => {
-  const data = fixture();
-  const { p, items } = pedido();
-  const una = { ...data, ...conConsumoInsumosVenta(data, p, items) };
-  const dos = { ...una, ...conConsumoInsumosVenta(una, p, items) };
-  assert.equal(dos.inventario_movimientos.length, una.inventario_movimientos.length);
-  const editado = { ...dos, ...conConsumoInsumosVenta(dos, p, [{ ...items[0], cantidad: 1 }]) };
-  assert.equal(editado.inventario_movimientos.find((m) => m.item_id === "BOLSA")?.cantidad, -1);
-  const cancelado = { ...editado, ...conConsumoInsumosVenta(editado, { ...p, estado: "Cancelado" }, items) };
-  assert.equal(cancelado.inventario_movimientos.length, 0);
 });
 
 test("resumenImportApp: renglones de venta, pedido, relleno, stock y receta con el formato de las planillas", () => {
@@ -232,4 +266,31 @@ test("calcularFondoReposicion: CMV de pedidos entregados menos compras, separado
   assert.equal(f.compras_masa_packaging, 2000);
   assert.equal(f.compras_relleno, 1000);
   assert.equal(f.disponible_total, 796);
+});
+
+test("usaRellenoCocido: depende de si la receta activa tiene una etapa relleno, no de la línea — el ragú de la lasaña cuenta igual que el relleno de un sorrentino", () => {
+  const data = fixture();
+  assert.equal(usaRellenoCocido(data, "OSO"), true);
+  assert.equal(usaRellenoCocido(data, "LAS"), false); // LAS no tiene receta en el fixture base
+  data.recetas.push({ id: "REC-LAS", producto_id: "LAS", nombre: "Receta lasaña", activa: true });
+  data.receta_items.push({ id: "R3", receta_id: "REC-LAS", insumo_id: "OSOBUCO", etapa: "relleno", cantidad: 0.05 });
+  assert.equal(usaRellenoCocido(data, "LAS"), true);
+});
+
+test("kgRellenoParaCajasGusto/resumenRellenos: un gusto que se vende por unidad (lasaña) usa unidades, no cajas de 12", () => {
+  const data = fixture();
+  data.recetas.push({ id: "REC-LAS", producto_id: "LAS", nombre: "Receta lasaña", activa: true });
+  data.receta_items.push({ id: "R3", receta_id: "REC-LAS", insumo_id: "OSOBUCO", etapa: "relleno", cantidad: 0.05 });
+  data.productos.find((p) => p.id === "LAS")!.gramos_relleno_por_unidad = 300;
+
+  assert.equal(unidadesPorCajaStock(data, "LAS"), 1);
+  // 10 "cajas" de referencia = 10 unidades (no 10×12) × 300 g = 3 kg
+  assert.equal(kgRellenoParaCajasGusto(data, "LAS", 10), 3);
+
+  data.rellenos_cocidos = [{ id: "T1", fecha: "2026-10-01", producto_id: "LAS", kg: 6 }];
+  data.produccion = [{ id: "P1", producto_variante_id: "LAS-1", producto_id: "LAS", cantidad: 10, fecha: "2026-10-16", kg_relleno: 3 }];
+  const r = resumenRellenos(data).find((x) => x.producto_id === "LAS")!;
+  assert.equal(r.kg_disponibles, 3);
+  assert.equal(r.unidades_por_ref, 1);
+  assert.equal(r.unidades_ref_disponibles, 10); // 3 kg disponibles / 0.3 kg por unidad
 });
