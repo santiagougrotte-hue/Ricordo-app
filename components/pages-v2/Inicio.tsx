@@ -55,7 +55,7 @@ import {
   calcularVentasPendientes,
 } from "@/lib/analitica-ventas";
 import { generarResumenInteligente } from "@/lib/resumen-inteligente";
-import { produccionPendientePorSabor } from "@/lib/rellenos";
+import { produccionPendientePorSabor, gustosSinVarianteActiva } from "@/lib/rellenos";
 import type { Conclusion } from "@/lib/resumen-inteligente";
 import type { InsumoBajoMinimo } from "@/lib/calc-v2";
 import type { EstadoPedido, Canal } from "@/lib/types-v2";
@@ -209,6 +209,7 @@ export function Inicio() {
   // además la masa de esa receta se descuenta en $0 al confirmar una venta (nunca se inventa un
   // factor de conversión) — por eso esto se avisa acá, no solo como un detalle en Productos.
   const variantesSinUnidades = useMemo(() => variantesSinFactorReceta(data), [data]);
+  const gustosSinPresentacion = useMemo(() => gustosSinVarianteActiva(data), [data]);
 
   // Alerta de pedidos de mañana sin entregar — regla verificable sobre datos reales.
   const pedidosMananaSinEntregar = useMemo(() => {
@@ -317,6 +318,18 @@ export function Inicio() {
           {variantesSinUnidades.length} presentación(es) activa(s) sin &ldquo;Unidades por paquete&rdquo;:{" "}
           {variantesSinUnidades.map((v) => v.variante_nombre).join(", ")}. El costo de esas presentaciones sale en $0 y la masa de esa
           receta no se descuenta al vender — cargalo en{" "}
+          <button className="underline" onClick={() => router.go("productos")}>
+            Productos → Variantes
+          </button>
+          .
+        </Alert>
+      )}
+      {gustosSinPresentacion.length > 0 && (
+        <Alert kind="warning">
+          {gustosSinPresentacion.length} gusto(s) activo(s) sin ninguna presentación activa:{" "}
+          {gustosSinPresentacion.map((g) => g.producto_nombre).join(", ")}. Al registrar producción de esos gustos no hay de dónde sacar
+          la receta de referencia, así que suma al freezer pero NO descuenta masa, packaging ni armado — activá al menos una
+          presentación en{" "}
           <button className="underline" onClick={() => router.go("productos")}>
             Productos → Variantes
           </button>

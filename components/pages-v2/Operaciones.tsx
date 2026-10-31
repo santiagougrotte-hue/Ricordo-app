@@ -29,6 +29,7 @@ import { Modal } from "@/components/Modal";
 import {
   consumoInsumosProduccion,
   gramosRellenoPorUnidad,
+  gustosSinVarianteActiva,
   insumosRellenoControlados,
   kgRellenoDisponible,
   kgRellenoParaCajasGusto,
@@ -465,6 +466,8 @@ function ProduccionTab() {
     () => (form.producto_id && form.cajas > 0 ? consumoInsumosProduccion(data, form.producto_id, form.cajas) : []),
     [data, form.producto_id, form.cajas]
   );
+  const gustosSinPresentacion = useMemo(() => new Set(gustosSinVarianteActiva(data).map((g) => g.producto_id)), [data]);
+  const sinPresentacionActiva = form.producto_id ? gustosSinPresentacion.has(form.producto_id) : false;
 
   function registrar() {
     if (!form.producto_id || form.cajas <= 0) {
@@ -574,6 +577,15 @@ function ProduccionTab() {
             <Alert kind={kgNecesarios > kgDisponibles ? "warning" : "info"}>
               Usa {fNum(kgNecesarios, 3)} kg de relleno cocido. Disponible: {fNum(kgDisponibles, 3)} kg.
               {kgNecesarios > kgDisponibles && " No alcanza con lo cargado: revisá la tanda en Operaciones → Rellenos."}
+            </Alert>
+          </div>
+        )}
+        {sinPresentacionActiva && (
+          <div className="mt-3">
+            <Alert kind="warning">
+              Este gusto no tiene ninguna presentación activa en Productos → Variantes, así que no hay de dónde sacar la receta de
+              referencia: esta producción va a sumar al freezer pero NO va a descontar masa, packaging ni armado. Activá al menos una
+              presentación de este gusto para que el descuento funcione.
             </Alert>
           </div>
         )}
