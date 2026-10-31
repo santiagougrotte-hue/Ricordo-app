@@ -242,6 +242,16 @@ test("resumenImportApp: renglones de venta, pedido, relleno, stock y receta con 
   const stock = filas.filter((f) => f[0] === "STOCK").map((f) => col(f, "Item_ID"));
   assert.deepEqual(stock.sort(), ["BOLSA", "PREMEZCLA"]);
 
+  // Freezer por gusto y relleno cocido disponible, en Tipos propios (no se mezclan con STOCK de insumos).
+  const pt = filas.filter((f) => f[0] === "STOCK_PT");
+  assert.deepEqual(pt.map((f) => col(f, "Producto_ID")).sort(), ["LAS", "OSO"]);
+  assert.equal(col(pt.find((f) => col(f, "Producto_ID") === "OSO")!, "Formato_u"), 12);
+  const rel = filas.filter((f) => f[0] === "STOCK_RELLENO");
+  assert.equal(rel.length, 1);
+  assert.equal(col(rel[0], "Cantidad"), 3.12);
+  assert.equal(col(rel[0], "Precio_unit"), 13); // gramos por unidad
+  assert.equal(col(rel[0], "Cajas_que_rinde"), 20);
+
   const receta = filas.filter((f) => f[0] === "RECETA" && col(f, "Producto_ID") === "OSO");
   assert.equal(receta.find((f) => col(f, "Item_ID") === "OSOBUCO")?.[HEADERS_IMPORT_APP.indexOf("Clase")], "relleno");
   assert.equal(receta.find((f) => col(f, "Item_ID") === "PREMEZCLA")?.[HEADERS_IMPORT_APP.indexOf("Cantidad")], 0.12);
