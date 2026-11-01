@@ -202,7 +202,9 @@ export interface VarianteSinFactor {
 /** Variantes activas que heredan una receta compartida (hay una Receta con su mismo producto_id)
  * pero no tienen `unidades_por_paquete` cargado — en recetaEfectivaVariante eso hace que el factor
  * de escala de masa/relleno sea 0, así que esas líneas quedan en cantidad 0 (costo $0 por esa
- * parte) hasta que se cargue el dato. Packaging/salsa/terminación de la receta compartida (si los
+ * parte) hasta que se cargue el dato. Si esta es la presentación que `varianteDeProduccion`
+ * (lib/rellenos.ts) toma como referencia de ese gusto, el mismo 0 hace que la masa tampoco se
+ * descuente al registrar producción. Packaging/salsa/terminación de la receta compartida (si los
  * hay) no dependen de este factor y no se ven afectados. */
 export function variantesSinFactorReceta(data: RicordoDataV2): VarianteSinFactor[] {
   const resultado: VarianteSinFactor[] = [];
