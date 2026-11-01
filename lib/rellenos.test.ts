@@ -4,6 +4,7 @@ import { emptyDataV2, type Pedido, type PedidoItem } from "./types-v2";
 import {
   conConsumoInsumosVenta,
   consumoInsumosProduccion,
+  gustosSinVarianteActiva,
   kgRellenoDisponible,
   kgRellenoParaCajas,
   ORIGEN_CONSUMO_VENTA,
@@ -149,6 +150,22 @@ test("registrarProduccion: descuenta insumos de masa/packaging al armar, y queda
   const revertido = quitarProduccion(out, "PRD-1");
   assert.equal(revertido.produccion.length, 0);
   assert.equal(revertido.inventario_movimientos.filter((m) => m.origen_id === "PRD-1").length, 0);
+});
+
+test("gustosSinVarianteActiva: un gusto activo sin ninguna presentación activa no descuenta masa/packaging al producir, en silencio, salvo que se avise", () => {
+  const data = fixture();
+  assert.deepEqual(gustosSinVarianteActiva(data), []); // OSO y LAS tienen variantes activas en el fixture
+
+  data.producto_variantes.find((v) => v.id === "OSO-12")!.activo = false;
+  data.producto_variantes.find((v) => v.id === "OSO-8")!.activo = false;
+  const sinVariante = gustosSinVarianteActiva(data);
+  assert.equal(sinVariante.length, 1);
+  assert.equal(sinVariante[0].producto_id, "OSO");
+
+  // registrarProduccion no rompe, pero no genera ningún consumo de insumos (nada que usar de
+  // referencia) — confirma por qué hace falta el aviso.
+  const out = registrarProduccion(data, { id: "PRD-X", movId: "MOV-X", producto_id: "OSO", cajas: 10, fecha: "2026-10-20" });
+  assert.equal(out.inventario_movimientos.filter((m) => m.origen_tipo === ORIGEN_CONSUMO_PRODUCCION).length, 0);
 });
 
 test("conConsumoInsumosVenta: ya no genera consumo nuevo, solo limpia movimientos viejos de antes del cambio", () => {

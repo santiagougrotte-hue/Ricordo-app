@@ -154,13 +154,45 @@ export function Badge({ color, children }: { color: BadgeColor; children: React.
   );
 }
 
-export function Input(props: React.InputHTMLAttributes<HTMLInputElement>) {
+const inputClassName = (className?: string) =>
+  `w-full rounded-md border border-border bg-surface2 px-[11px] py-2 text-[12.5px] text-text outline-none transition-colors focus:border-accent ${className ?? ""}`;
+
+/** `type="number"` controlado por un `value` numérico (el patrón de toda la app: `onChange={(e) =>
+ * setForm({ ...form, x: Number(e.target.value) })}`) se rompe apenas se vacía el campo: `Number("")`
+ * da 0, ese 0 vuelve como `value`, y el input muestra "0" en vez de quedar vacío — lo próximo que
+ * se tipea se pega a continuación de ese "0" fantasma ("125" queda "0125"), y se siente como que
+ * "se borra lo que escribo". Mientras el campo tiene foco, el texto que se ve es el que el usuario
+ * tipeó (sin importar qué número termine calculando el padre); solo se resincroniza contra el
+ * `value` del padre cuando el campo NO tiene foco (ej. al cambiar de variante/gusto, o al resetear
+ * el formulario) — ahí si debe reflejar el valor real. */
+function NumberInput(props: React.InputHTMLAttributes<HTMLInputElement>) {
+  const { value, onChange, className, ...rest } = props;
+  const ref = React.useRef<HTMLInputElement>(null);
+  const [texto, setTexto] = React.useState(() => (value === undefined || value === null ? "" : String(value)));
+
+  React.useEffect(() => {
+    if (document.activeElement === ref.current) return;
+    setTexto(value === undefined || value === null ? "" : String(value));
+  }, [value]);
+
   return (
     <input
-      {...props}
-      className={`w-full rounded-md border border-border bg-surface2 px-[11px] py-2 text-[12.5px] text-text outline-none transition-colors focus:border-accent ${props.className ?? ""}`}
+      {...rest}
+      ref={ref}
+      type="number"
+      value={texto}
+      onChange={(e) => {
+        setTexto(e.target.value);
+        onChange?.(e);
+      }}
+      className={inputClassName(className)}
     />
   );
+}
+
+export function Input(props: React.InputHTMLAttributes<HTMLInputElement>) {
+  if (props.type === "number") return <NumberInput {...props} />;
+  return <input {...props} className={inputClassName(props.className)} />;
 }
 
 export function Select(props: React.SelectHTMLAttributes<HTMLSelectElement>) {

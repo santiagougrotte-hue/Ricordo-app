@@ -250,6 +250,21 @@ export function varianteDeProduccion(data: RicordoDataV2, productoId: string): P
   );
 }
 
+export interface GustoSinVarianteActiva {
+  producto_id: string;
+  producto_nombre: string;
+}
+
+/** Gustos activos sin ninguna presentación activa — `varianteDeProduccion` no tiene de qué
+ * presentación sacar la receta de referencia, así que registrar producción suma el gusto al
+ * freezer igual, pero NO descuenta masa/packaging/armado (nunca se inventa qué presentación usar
+ * en su lugar). Sin este aviso el descuento se salta en silencio. */
+export function gustosSinVarianteActiva(data: RicordoDataV2): GustoSinVarianteActiva[] {
+  return data.productos
+    .filter((p) => p.activo && !varianteDeProduccion(data, p.id))
+    .map((p) => ({ producto_id: p.id, producto_nombre: p.nombre }));
+}
+
 /** Kilos de relleno cocido para `cajas` unidades de referencia de un gusto (cajas de 12 para
  * pasta, unidades sueltas para el resto — ver `unidadesPorCajaStock`). 0 si el gusto no tiene
  * relleno. */
