@@ -36,6 +36,7 @@ import {
   movimientosTandaRelleno,
   ORIGEN_TANDA_RELLENO,
   quitarProduccion,
+  recalcularConsumoProduccion,
   registrarProduccion,
   resumenRellenos,
   unidadesPorCajaStock,
@@ -496,6 +497,20 @@ function ProduccionTab() {
     toast("Producción eliminada");
   }
 
+  // Si la receta se corrige DESPUÉS de registrar una producción (ej. faltaba "unidades por
+  // paquete" y la masa se había quedado sin descontar), esta producción vieja no se entera sola —
+  // hay que recalcularla a propósito con los datos de ahora.
+  function recalcular(p: (typeof data.produccion)[number]) {
+    const productoId = p.producto_id ?? data.producto_variantes.find((v) => v.id === p.producto_variante_id)?.producto_id;
+    const consumo = productoId ? consumoInsumosProduccion(data, productoId, p.cantidad) : [];
+    setData((d) => recalcularConsumoProduccion(d, p.id));
+    toast(
+      consumo.length > 0
+        ? `Recalculado: ahora descuenta ${consumo.length} insumo(s)`
+        : "Recalculado: esta producción sigue sin insumos para descontar — revisá la receta y la presentación de referencia de ese gusto"
+    );
+  }
+
   return (
     <div>
       <div className="mb-4 flex justify-end">
@@ -526,9 +541,14 @@ function ProduccionTab() {
                     <Td>{p.kg_relleno ? `${fNum(p.kg_relleno, 3)} kg` : "—"}</Td>
                     <Td>{p.notas ?? "—"}</Td>
                     <Td>
-                      <Button size="sm" variant="danger" onClick={() => eliminar(p.id)}>
-                        Eliminar
-                      </Button>
+                      <div className="flex gap-2">
+                        <Button size="sm" variant="ghost" onClick={() => recalcular(p)}>
+                          Recalcular
+                        </Button>
+                        <Button size="sm" variant="danger" onClick={() => eliminar(p.id)}>
+                          Eliminar
+                        </Button>
+                      </div>
                     </Td>
                   </TrHover>
                 ))}
