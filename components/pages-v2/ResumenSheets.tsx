@@ -243,7 +243,7 @@ export function ResumenSheetsButton() {
 
         <BloqueExportacion
           titulo="Planillas Ricordo · Finanzas y Productos y compras — cada semana, se pega ENCIMA"
-          explicacion={`Todo junto en una sola tabla (ventas, pedidos, compras, caja, producción, rellenos, stock de masa y packaging, y recetas) desde ${inicioImportApp || "el inicio"}. En Finanzas → pestaña IMPORT_APP: seleccioná A1:AB, borrá y pegá en A1. El archivo de Productos y compras lo lee solo de Finanzas.`}
+          explicacion={`Todo junto en una sola tabla (ventas, pedidos, compras, caja, producción, rellenos, stock de masa y packaging, stock del freezer y relleno cocido, y recetas) desde ${inicioImportApp || "el inicio"}. En Finanzas → pestaña IMPORT_APP: seleccioná A1:AB, borrá y pegá en A1. El archivo de Productos y compras lo lee solo de Finanzas.`}
         >
           <TablaResumen
             titulo="IMPORT_APP"

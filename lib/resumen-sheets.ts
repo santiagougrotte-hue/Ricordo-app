@@ -16,7 +16,7 @@ import {
   costoRealEnvioCalculado,
 } from "./calc-v2";
 import { calcularCuponesMes } from "./analitica-ventas";
-import { unidadesPorCajaStock } from "./rellenos";
+import { gramosRellenoPorUnidad, resumenRellenos, unidadesPorCajaStock, usaRellenoCocido } from "./rellenos";
 
 function redondear(n: number, decimales: number): number {
   const factor = 10 ** decimales;
@@ -876,6 +876,28 @@ export function resumenImportApp(data: RicordoDataV2, desde: string = fechaInici
       Tipo: "STOCK", Fecha: hoy, Item_ID: insumo.id, Item: insumo.nombre.trim(), Clase: clase,
       Cantidad: Math.max(0, redondear(calcularStock(data, "insumo", insumo.id), 3)), Unidad: insumo.unidad.trim(),
       Precio_unit: insumo.precio_actual, Stock_minimo: insumo.stock_minimo ?? "",
+    });
+  }
+
+  // STOCK_PT (foto de hoy del freezer, por gusto: unidades y cajas de referencia — 12 u. en pasta,
+  // 1 u. en lasaña y salsa) y STOCK_RELLENO (relleno cocido disponible por gusto, en kg). Van con
+  // otro Tipo para no mezclarse con el stock de insumos de control semanal. En STOCK_RELLENO,
+  // Precio_unit lleva los gramos de relleno cocido por unidad (para proyectar cuánto relleno cocinar).
+  const rellenos = new Map(resumenRellenos(data).map((r) => [r.producto_id, r]));
+  for (const p of data.productos.filter((x) => x.activo)) {
+    const formato = unidadesPorCajaStock(data, p.id);
+    const unidades = redondear(calcularStock(data, "producto", p.id), 1);
+    filas.push({
+      Tipo: "STOCK_PT", Fecha: hoy, Producto_ID: p.id, Producto: p.nombre, Formato_u: formato,
+      Item_ID: p.id, Item: p.nombre, Clase: "terminado", Cantidad: unidades, Unidad: "unidad",
+      Cajas_que_rinde: redondear(unidades / formato, 1),
+    });
+    if (!usaRellenoCocido(data, p.id)) continue;
+    const r = rellenos.get(p.id);
+    filas.push({
+      Tipo: "STOCK_RELLENO", Fecha: hoy, Producto_ID: p.id, Producto: p.nombre, Formato_u: formato,
+      Item_ID: p.id, Item: `Relleno de ${p.nombre}`, Clase: "relleno_cocido", Cantidad: Math.max(0, r?.kg_disponibles ?? 0), Unidad: "kg",
+      Precio_unit: gramosRellenoPorUnidad(data, p.id), Cajas_que_rinde: r?.unidades_ref_disponibles ?? 0,
     });
   }
 
