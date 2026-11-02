@@ -17,6 +17,7 @@ import {
   gramosRellenoPorUnidad,
   kgRellenoParaCajasGusto,
   quitarProduccion,
+  recalcularConsumoProduccion,
   registrarProduccion,
   usaRellenoCocido,
   unidadesPorCajaStock,
@@ -150,6 +151,44 @@ test("registrarProduccion: descuenta insumos de masa/packaging al armar, y queda
   const revertido = quitarProduccion(out, "PRD-1");
   assert.equal(revertido.produccion.length, 0);
   assert.equal(revertido.inventario_movimientos.filter((m) => m.origen_id === "PRD-1").length, 0);
+});
+
+test("recalcularConsumoProduccion: si la receta se corrige después (ej. se cargó unidades_por_paquete), recalcula el consumo de esa producción sin tocar el freezer ni duplicar nada", () => {
+  const data = fixture();
+  data.productos.push({ id: "SINUP", nombre: "Sorrentino sin paquete", linea: "Pasta", activo: true });
+  data.producto_variantes.push({ id: "SINUP-1", producto_id: "SINUP", nombre: "Sorrentino sin paquete", canal: "Minorista", precio_venta: 14000, activo: true });
+  data.recetas.push({ id: "REC-SINUP", producto_id: "SINUP", nombre: "Receta", activa: true });
+  data.receta_items.push(
+    { id: "RSX1", receta_id: "REC-SINUP", insumo_id: "PREMEZCLA", etapa: "masa", cantidad: 0.01 },
+    { id: "RSX2", receta_id: "REC-SINUP", insumo_id: "BOLSA", etapa: "packaging", cantidad: 1 }
+  );
+
+  let out = registrarProduccion(data, { id: "PRD-2", movId: "MOV-2", producto_id: "SINUP", cajas: 10, fecha: "2026-10-20" });
+  let consumo = out.inventario_movimientos.filter((m) => m.origen_tipo === ORIGEN_CONSUMO_PRODUCCION && m.origen_id === "PRD-2");
+  assert.equal(consumo.length, 1); // solo BOLSA: la masa se quedó sin descontar (falta unidades_por_paquete)
+  const movFreezerAntes = out.inventario_movimientos.find((m) => m.origen_id === "PRD-2" && m.item_tipo === "producto");
+
+  // Se corrige la receta: la presentación de referencia ya tiene unidades_por_paquete cargado.
+  out = {
+    ...out,
+    producto_variantes: out.producto_variantes.map((v) => (v.id === "SINUP-1" ? { ...v, unidades_por_paquete: 12 } : v)),
+  };
+  out = recalcularConsumoProduccion(out, "PRD-2");
+
+  consumo = out.inventario_movimientos.filter((m) => m.origen_tipo === ORIGEN_CONSUMO_PRODUCCION && m.origen_id === "PRD-2");
+  assert.equal(consumo.length, 2); // ahora sí: PREMEZCLA + BOLSA
+  const porInsumo = Object.fromEntries(consumo.map((m) => [m.item_id, m.cantidad]));
+  assert.equal(porInsumo.PREMEZCLA, -1.2); // 0,01 kg × 12 u/caja × 10 cajas
+  assert.equal(porInsumo.BOLSA, -10); // sin cambios respecto de antes
+
+  // El movimiento de producto terminado (freezer) no se tocó.
+  const movFreezerDespues = out.inventario_movimientos.find((m) => m.origen_id === "PRD-2" && m.item_tipo === "producto");
+  assert.deepEqual(movFreezerDespues, movFreezerAntes);
+  assert.equal(out.inventario_movimientos.filter((m) => m.origen_id === "PRD-2" && m.item_tipo === "producto").length, 1);
+
+  // Recalcular de nuevo es idempotente: no duplica nada.
+  out = recalcularConsumoProduccion(out, "PRD-2");
+  assert.equal(out.inventario_movimientos.filter((m) => m.origen_tipo === ORIGEN_CONSUMO_PRODUCCION && m.origen_id === "PRD-2").length, 2);
 });
 
 test("gustosSinVarianteActiva: un gusto activo sin ninguna presentación activa no descuenta masa/packaging al producir, en silencio, salvo que se avise", () => {

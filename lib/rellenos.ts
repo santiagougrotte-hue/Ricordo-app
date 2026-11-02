@@ -353,6 +353,23 @@ export function registrarProduccion(
   };
 }
 
+/** Recalcula (idempotente) el consumo de insumos de masa/packaging/armado de una producción ya
+ * registrada, con los datos ACTUALES de la receta — borra lo que había generado antes para esa
+ * producción y lo vuelve a crear. Pensado para cuando la receta se corrige DESPUÉS de registrar la
+ * producción (ej. faltaba "unidades por paquete" y la masa se había quedado sin descontar): no hay
+ * forma de saber esto solo con mirar `data`, así que lo dispara la persona a propósito. No toca el
+ * movimiento de producto terminado ni los kilos de relleno usados — esos no dependen de este dato. */
+export function recalcularConsumoProduccion(d: RicordoDataV2, produccionId: string): RicordoDataV2 {
+  const produccion = d.produccion.find((p) => p.id === produccionId);
+  if (!produccion) return d;
+  const productoId = produccion.producto_id ?? d.producto_variantes.find((v) => v.id === produccion.producto_variante_id)?.producto_id;
+  if (!productoId) return d;
+  const sinPrevios = d.inventario_movimientos.filter((m) => !(m.origen_tipo === ORIGEN_CONSUMO_PRODUCCION && m.origen_id === produccionId));
+  const consumo = consumoInsumosProduccion(d, productoId, produccion.cantidad);
+  const movsInsumos = movimientosInsumosProduccion(produccionId, produccion.fecha, consumo);
+  return { ...d, inventario_movimientos: [...sinPrevios, ...movsInsumos] };
+}
+
 /** Elimina una producción ya registrada y revierte todo lo que generó: la salida de producto
  * terminado, el consumo de insumos de masa/packaging/armado, y (al sacar el registro de
  * `produccion`) los kilos de relleno cocido que había usado, ya que `resumenRellenos` los resta en

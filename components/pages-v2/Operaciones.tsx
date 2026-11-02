@@ -36,13 +36,14 @@ import {
   movimientosTandaRelleno,
   ORIGEN_TANDA_RELLENO,
   quitarProduccion,
+  recalcularConsumoProduccion,
   registrarProduccion,
   resumenRellenos,
   unidadesPorCajaStock,
   usaRellenoCocido,
   usaRellenoPorUnidad,
 } from "@/lib/rellenos";
-import { fARS, fNum, deshacerSaldoHistoricoCompra } from "@/lib/calc-v2";
+import { fARS, fNum, deshacerSaldoHistoricoCompra, quitarCompra } from "@/lib/calc-v2";
 import type { EstadoPagoCompra } from "@/lib/types-v2";
 import type { Proveedor } from "@/lib/types";
 
@@ -137,6 +138,12 @@ function ComprasTab() {
     toast(`Compra ${compraId} vuelve a estar pendiente de pago`);
   }
 
+  function eliminar(compraId: string) {
+    if (!window.confirm("¿Eliminar esta compra? También revierte el stock que sumó y cualquier pago que tenga cargado.")) return;
+    setData((d) => quitarCompra(d, compraId));
+    toast("Compra eliminada");
+  }
+
   function marcarPagada(compraId: string) {
     setData((d) => {
       const compra = d.compras.find((c) => c.id === compraId);
@@ -211,6 +218,9 @@ function ComprasTab() {
                                   )}
                                 </>
                               )}
+                              <Button size="sm" variant="danger" onClick={() => eliminar(c.id)}>
+                                Eliminar
+                              </Button>
                             </div>
                           </div>
                         </Td>
@@ -496,6 +506,20 @@ function ProduccionTab() {
     toast("Producción eliminada");
   }
 
+  // Si la receta se corrige DESPUÉS de registrar una producción (ej. faltaba "unidades por
+  // paquete" y la masa se había quedado sin descontar), esta producción vieja no se entera sola —
+  // hay que recalcularla a propósito con los datos de ahora.
+  function recalcular(p: (typeof data.produccion)[number]) {
+    const productoId = p.producto_id ?? data.producto_variantes.find((v) => v.id === p.producto_variante_id)?.producto_id;
+    const consumo = productoId ? consumoInsumosProduccion(data, productoId, p.cantidad) : [];
+    setData((d) => recalcularConsumoProduccion(d, p.id));
+    toast(
+      consumo.length > 0
+        ? `Recalculado: ahora descuenta ${consumo.length} insumo(s)`
+        : "Recalculado: esta producción sigue sin insumos para descontar — revisá la receta y la presentación de referencia de ese gusto"
+    );
+  }
+
   return (
     <div>
       <div className="mb-4 flex justify-end">
@@ -526,9 +550,14 @@ function ProduccionTab() {
                     <Td>{p.kg_relleno ? `${fNum(p.kg_relleno, 3)} kg` : "—"}</Td>
                     <Td>{p.notas ?? "—"}</Td>
                     <Td>
-                      <Button size="sm" variant="danger" onClick={() => eliminar(p.id)}>
-                        Eliminar
-                      </Button>
+                      <div className="flex gap-2">
+                        <Button size="sm" variant="ghost" onClick={() => recalcular(p)}>
+                          Recalcular
+                        </Button>
+                        <Button size="sm" variant="danger" onClick={() => eliminar(p.id)}>
+                          Eliminar
+                        </Button>
+                      </div>
                     </Td>
                   </TrHover>
                 ))}

@@ -202,7 +202,9 @@ export interface VarianteSinFactor {
 /** Variantes activas que heredan una receta compartida (hay una Receta con su mismo producto_id)
  * pero no tienen `unidades_por_paquete` cargado — en recetaEfectivaVariante eso hace que el factor
  * de escala de masa/relleno sea 0, así que esas líneas quedan en cantidad 0 (costo $0 por esa
- * parte) hasta que se cargue el dato. Packaging/salsa/terminación de la receta compartida (si los
+ * parte) hasta que se cargue el dato. Si esta es la presentación que `varianteDeProduccion`
+ * (lib/rellenos.ts) toma como referencia de ese gusto, el mismo 0 hace que la masa tampoco se
+ * descuente al registrar producción. Packaging/salsa/terminación de la receta compartida (si los
  * hay) no dependen de este factor y no se ven afectados. */
 export function variantesSinFactorReceta(data: RicordoDataV2): VarianteSinFactor[] {
   const resultado: VarianteSinFactor[] = [];
@@ -1613,6 +1615,22 @@ export function saldarComprasHistoricas(data: RicordoDataV2, compraIds: string[]
   const ids = new Set(compraIds);
   if (ids.size === 0) return data;
   return { ...data, compras: data.compras.map((c) => (ids.has(c.id) ? { ...c, saldo_historico: true, saldado_el: fecha } : c)) };
+}
+
+/** Elimina una compra ya registrada y revierte todo lo que generó: la entrada de stock de cada
+ * insumo comprado y cualquier pago que se le haya cargado (el pago inicial al guardarla si estaba
+ * "Pagado", más cualquier pago parcial posterior desde Finanzas → Cuentas por pagar) — todos los
+ * `movimientos_financieros` con `origen_tipo: "compra_pago"` para esta compra, sin importar
+ * cuántos haya. Para errores de carga: no hay forma de "editar" una compra hoy, así que la
+ * corrección es borrar y volver a cargarla bien. */
+export function quitarCompra(data: RicordoDataV2, compraId: string): RicordoDataV2 {
+  return {
+    ...data,
+    compras: data.compras.filter((c) => c.id !== compraId),
+    compra_items: data.compra_items.filter((i) => i.compra_id !== compraId),
+    inventario_movimientos: data.inventario_movimientos.filter((m) => !(m.origen_tipo === "compra" && m.origen_id === compraId)),
+    movimientos_financieros: data.movimientos_financieros.filter((m) => !(m.origen_tipo === "compra_pago" && m.origen_id === compraId)),
+  };
 }
 
 export function deshacerSaldoHistoricoCompra(data: RicordoDataV2, compraId: string): RicordoDataV2 {

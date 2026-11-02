@@ -316,8 +316,8 @@ export function Inicio() {
       {variantesSinUnidades.length > 0 && (
         <Alert kind="warning">
           {variantesSinUnidades.length} presentación(es) activa(s) sin &ldquo;Unidades por paquete&rdquo;:{" "}
-          {variantesSinUnidades.map((v) => v.variante_nombre).join(", ")}. El costo de esas presentaciones sale en $0 y la masa de esa
-          receta no se descuenta al vender — cargalo en{" "}
+          {variantesSinUnidades.map((v) => v.variante_nombre).join(", ")}. El costo de esas presentaciones sale en $0 y la masa de ese
+          gusto no se descuenta al registrar producción (el packaging sí, ese no depende de este dato) — cargalo en{" "}
           <button className="underline" onClick={() => router.go("productos")}>
             Productos → Variantes
           </button>
