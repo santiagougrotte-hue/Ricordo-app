@@ -12,6 +12,18 @@ const TZ_OFFSET = '-03:00';
 const arDay = (iso: string) => new Date(new Date(iso).getTime() - 3 * 3600_000).toISOString().slice(0, 10);
 const nextDay = (d: string) => new Date(new Date(`${d}T00:00:00${TZ_OFFSET}`).getTime() + 86400_000).toISOString();
 
+/** "de 1 a 3 cajas: 10% off · desde 4 cajas: 10% off + 1 salsa de regalo" */
+function promoPlainText(promo: Promo): string {
+  const tiers = [...promo.tiers].sort((a, b) => a.minBoxes - b.minBoxes);
+  const caj = (n: number) => `${n} ${n === 1 ? 'caja' : 'cajas'}`;
+  return tiers.map((t, i) => {
+    const next = tiers[i + 1];
+    const range = next ? (next.minBoxes - 1 === t.minBoxes ? `con ${caj(t.minBoxes)}` : `de ${t.minBoxes} a ${caj(next.minBoxes - 1)}`) : `desde ${caj(t.minBoxes)}`;
+    const what = [t.pct > 0 ? `${t.pct}% off` : '', t.gifts > 0 ? `${t.gifts} ${t.gifts === 1 ? 'salsa' : 'salsas'} de regalo` : ''].filter(Boolean).join(' + ') || 'nada';
+    return `${range}: ${what}`;
+  }).join(' · ');
+}
+
 /** Promo (Día de la Madre u otra): prender/apagar, fechas, cartel y opciones. Una promo a la vez. */
 function PromoFields({ promo, onChange }: { promo: Promo; onChange: (p: Promo) => void }) {
   const set = <K extends keyof Promo>(k: K, v: Promo[K]) => onChange({ ...promo, [k]: v });
@@ -78,6 +90,7 @@ function PromoFields({ promo, onChange }: { promo: Promo; onChange: (p: Promo) =
           ))}
         </tbody>
       </table></div>
+      <p className="adm-promo-summary" role="status"><b>Así lo ve el cliente:</b> {promoPlainText(promo)}</p>
       <p className="small muted">“Desde 1 caja” = el % vale para cualquier compra. Guardá los ajustes para que se vea en la tienda.</p>
     </>
   );
