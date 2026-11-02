@@ -43,7 +43,7 @@ import {
   usaRellenoCocido,
   usaRellenoPorUnidad,
 } from "@/lib/rellenos";
-import { fARS, fNum, deshacerSaldoHistoricoCompra } from "@/lib/calc-v2";
+import { fARS, fNum, deshacerSaldoHistoricoCompra, quitarCompra } from "@/lib/calc-v2";
 import type { EstadoPagoCompra } from "@/lib/types-v2";
 import type { Proveedor } from "@/lib/types";
 
@@ -138,6 +138,12 @@ function ComprasTab() {
     toast(`Compra ${compraId} vuelve a estar pendiente de pago`);
   }
 
+  function eliminar(compraId: string) {
+    if (!window.confirm("¿Eliminar esta compra? También revierte el stock que sumó y cualquier pago que tenga cargado.")) return;
+    setData((d) => quitarCompra(d, compraId));
+    toast("Compra eliminada");
+  }
+
   function marcarPagada(compraId: string) {
     setData((d) => {
       const compra = d.compras.find((c) => c.id === compraId);
@@ -212,6 +218,9 @@ function ComprasTab() {
                                   )}
                                 </>
                               )}
+                              <Button size="sm" variant="danger" onClick={() => eliminar(c.id)}>
+                                Eliminar
+                              </Button>
                             </div>
                           </div>
                         </Td>

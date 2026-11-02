@@ -1617,6 +1617,22 @@ export function saldarComprasHistoricas(data: RicordoDataV2, compraIds: string[]
   return { ...data, compras: data.compras.map((c) => (ids.has(c.id) ? { ...c, saldo_historico: true, saldado_el: fecha } : c)) };
 }
 
+/** Elimina una compra ya registrada y revierte todo lo que generó: la entrada de stock de cada
+ * insumo comprado y cualquier pago que se le haya cargado (el pago inicial al guardarla si estaba
+ * "Pagado", más cualquier pago parcial posterior desde Finanzas → Cuentas por pagar) — todos los
+ * `movimientos_financieros` con `origen_tipo: "compra_pago"` para esta compra, sin importar
+ * cuántos haya. Para errores de carga: no hay forma de "editar" una compra hoy, así que la
+ * corrección es borrar y volver a cargarla bien. */
+export function quitarCompra(data: RicordoDataV2, compraId: string): RicordoDataV2 {
+  return {
+    ...data,
+    compras: data.compras.filter((c) => c.id !== compraId),
+    compra_items: data.compra_items.filter((i) => i.compra_id !== compraId),
+    inventario_movimientos: data.inventario_movimientos.filter((m) => !(m.origen_tipo === "compra" && m.origen_id === compraId)),
+    movimientos_financieros: data.movimientos_financieros.filter((m) => !(m.origen_tipo === "compra_pago" && m.origen_id === compraId)),
+  };
+}
+
 export function deshacerSaldoHistoricoCompra(data: RicordoDataV2, compraId: string): RicordoDataV2 {
   return {
     ...data,

@@ -49,6 +49,7 @@ import {
   comprasPendientesAntesDe,
   saldarComprasHistoricas,
   deshacerSaldoHistoricoCompra,
+  quitarCompra,
   insumosBajoMinimo,
 } from "./calc-v2";
 
@@ -763,6 +764,37 @@ test("comprasPendientesAntesDe/saldarComprasHistoricas/deshacerSaldoHistoricoCom
   const deshecho = deshacerSaldoHistoricoCompra(saldado, "COM-AGO");
   assert.deepEqual(deshecho, data);
   assert.equal(saldoCaja(deshecho), saldoCajaAntes);
+});
+
+test("quitarCompra: elimina la compra, sus ítems, el stock que sumó y TODOS los pagos que tenga (inicial + parciales), sin tocar otra compra", () => {
+  const data = emptyDataV2();
+  data.compras = [
+    { id: "COM-1", fecha: "2026-10-10", proveedor_id: "P1", estado_pago: "pagado", total: 5000 },
+    { id: "COM-2", fecha: "2026-10-12", proveedor_id: "P1", estado_pago: "pendiente", total: 9000 },
+  ];
+  data.compra_items = [
+    { id: "CI-1", compra_id: "COM-1", insumo_id: "HARINA", cantidad: 10, precio_unitario: 500, subtotal: 5000 },
+    { id: "CI-2", compra_id: "COM-2", insumo_id: "HARINA", cantidad: 5, precio_unitario: 1800, subtotal: 9000 },
+  ];
+  data.inventario_movimientos = [
+    { id: "MOV-1", fecha: "2026-10-10", tipo: "compra", origen_tipo: "compra", origen_id: "COM-1", item_tipo: "insumo", item_id: "HARINA", cantidad: 10 },
+    { id: "MOV-2", fecha: "2026-10-12", tipo: "compra", origen_tipo: "compra", origen_id: "COM-2", item_tipo: "insumo", item_id: "HARINA", cantidad: 5 },
+  ];
+  data.movimientos_financieros = [
+    // Pago inicial (al guardarla como "Pagado") + un pago parcial posterior desde Cuentas por pagar.
+    { id: "MOVF-1", fecha: "2026-10-10", tipo: "egreso", concepto: "Compra COM-1", monto: 5000, origen_tipo: "compra_pago", origen_id: "COM-1", estado: "confirmado" },
+    { id: "MOVF-2", fecha: "2026-10-15", tipo: "egreso", concepto: "Pago compra COM-2", monto: 3000, origen_tipo: "compra_pago", origen_id: "COM-2", estado: "confirmado" },
+  ];
+
+  const out = quitarCompra(data, "COM-1");
+  assert.equal(out.compras.length, 1);
+  assert.equal(out.compras[0].id, "COM-2");
+  assert.equal(out.compra_items.length, 1);
+  assert.equal(out.compra_items[0].compra_id, "COM-2");
+  assert.equal(out.inventario_movimientos.length, 1);
+  assert.equal(out.inventario_movimientos[0].origen_id, "COM-2");
+  assert.equal(out.movimientos_financieros.length, 1);
+  assert.equal(out.movimientos_financieros[0].origen_id, "COM-2"); // el pago de COM-2 queda intacto
 });
 
 test("insumosBajoMinimo: un packaging bajo su mínimo aparece con cuánto falta; uno sin mínimo cargado nunca aparece", () => {
