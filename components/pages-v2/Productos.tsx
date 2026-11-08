@@ -22,6 +22,7 @@ import {
   Input,
   Select,
   SearchInput,
+  Alert,
 } from "@/components/ui";
 import { Modal } from "@/components/Modal";
 import {
@@ -104,6 +105,24 @@ function FichaProducto({ productoId }: { productoId: string }) {
   const idsSinFactor = new Set(variantesSinFactorReceta(data).map((s) => s.variante_id));
   const costoNuevoItem = precioInsumo(nuevoItem.insumo_id) * nuevoItem.cantidad;
   const costoNuevoAjuste = precioInsumo(nuevoAjuste.insumo_id) * nuevoAjuste.cantidad;
+  // Receta "guardada": bloquea agregar/quitar/editar insumos (base, ajustes por variante y
+  // complementos) hasta que se desbloquee a propósito — para que no se cuele ningún insumo que no
+  // sea parte de la receta real.
+  const recetaBloqueada = receta?.bloqueada ?? false;
+  function avisoBloqueada() {
+    toast("La receta está guardada — desbloqueala para poder editarla", "error");
+  }
+  function toggleBloqueo() {
+    setData((d) => {
+      const existente = d.recetas.find((r) => r.producto_id === productoId);
+      if (existente) {
+        return { ...d, recetas: d.recetas.map((r) => (r.id === existente.id ? { ...r, bloqueada: !r.bloqueada } : r)) };
+      }
+      if (recetaBloqueada) return d; // no hay receta: nada que desbloquear
+      return { ...d, recetas: [...d.recetas, { id: uid("REC"), producto_id: productoId, nombre: `Receta de ${nombreProducto}`, activa: true, bloqueada: true }] };
+    });
+    toast(recetaBloqueada ? "Receta desbloqueada" : "Receta guardada — no se van a poder agregar, quitar ni editar insumos hasta desbloquearla");
+  }
   const costoUnidad = costoUnidadProductoBase(data, productoId);
 
   function abrirNuevaVariante() {
@@ -158,6 +177,7 @@ function FichaProducto({ productoId }: { productoId: string }) {
   }
 
   function agregarRecetaItem() {
+    if (recetaBloqueada) return avisoBloqueada();
     if (!nuevoItem.insumo_id || nuevoItem.cantidad <= 0) {
       toast("Elegí un insumo y una cantidad mayor a 0", "error");
       return;
@@ -178,13 +198,16 @@ function FichaProducto({ productoId }: { productoId: string }) {
     setNuevoItem({ insumo_id: "", etapa: "masa", cantidad: 0 });
   }
   function quitarRecetaItem(id: string) {
+    if (recetaBloqueada) return avisoBloqueada();
     setData((d) => ({ ...d, receta_items: d.receta_items.filter((i) => i.id !== id) }));
   }
   function actualizarCantidadRecetaItem(id: string, cantidad: number) {
+    if (recetaBloqueada) return avisoBloqueada();
     if (cantidad < 0) return; // una cantidad negativa generaría un costo (y CMV) negativo
     setData((d) => ({ ...d, receta_items: d.receta_items.map((i) => (i.id === id ? { ...i, cantidad } : i)) }));
   }
   function actualizarEtapaRecetaItem(id: string, etapa: EtapaReceta) {
+    if (recetaBloqueada) return avisoBloqueada();
     setData((d) => ({ ...d, receta_items: d.receta_items.map((i) => (i.id === id ? { ...i, etapa } : i)) }));
   }
 
@@ -203,6 +226,7 @@ function FichaProducto({ productoId }: { productoId: string }) {
   }
 
   function agregarAjuste() {
+    if (recetaBloqueada) return avisoBloqueada();
     if (!varianteSeleccionadaAjustes || !nuevoAjuste.insumo_id) {
       toast("Elegí una variante y un insumo", "error");
       return;
@@ -224,10 +248,12 @@ function FichaProducto({ productoId }: { productoId: string }) {
     setNuevoAjuste({ insumo_id: "", operacion: "sumar", cantidad: 0, etapa: "" });
   }
   function quitarAjuste(id: string) {
+    if (recetaBloqueada) return avisoBloqueada();
     setData((d) => ({ ...d, ajustes_receta_variante: d.ajustes_receta_variante.filter((a) => a.id !== id) }));
   }
 
   function agregarComplemento() {
+    if (recetaBloqueada) return avisoBloqueada();
     if (!varianteSeleccionadaAjustes || !nuevoComplemento.producto_id) {
       toast("Elegí una variante y un producto complemento", "error");
       return;
@@ -242,6 +268,7 @@ function FichaProducto({ productoId }: { productoId: string }) {
     setNuevoComplemento({ producto_id: "", cantidad: 1 });
   }
   function quitarComplemento(id: string) {
+    if (recetaBloqueada) return avisoBloqueada();
     setData((d) => ({ ...d, complementos_variante: d.complementos_variante.filter((c) => c.id !== id) }));
   }
 
@@ -383,7 +410,23 @@ function FichaProducto({ productoId }: { productoId: string }) {
         )}
       </Card>
 
-      <Card title="Receta por unidad">
+      <Card
+        title="Receta por unidad"
+        right={
+          <div className="flex items-center gap-2">
+            {recetaBloqueada && <Badge color="blue">Guardada</Badge>}
+            <Button size="sm" variant={recetaBloqueada ? "ghost" : "danger"} onClick={toggleBloqueo}>
+              {recetaBloqueada ? "Desbloquear" : "Guardar receta (bloquear)"}
+            </Button>
+          </div>
+        }
+      >
+        {recetaBloqueada && (
+          <Alert kind="info">
+            Esta receta está guardada: no se pueden agregar, quitar ni editar insumos (base, ajustes por variante ni
+            complementos) hasta desbloquearla con el botón de arriba.
+          </Alert>
+        )}
         <p className="mb-3 text-[12.5px] text-text3">
           Ingresá las cantidades de masa y relleno utilizadas para fabricar 1 unidad. La app multiplicará
           automáticamente estas cantidades según las unidades que contenga cada presentación — no hace falta cargar
@@ -416,6 +459,7 @@ function FichaProducto({ productoId }: { productoId: string }) {
                       <Select
                         className="w-28"
                         value={i.etapa}
+                        disabled={recetaBloqueada}
                         onChange={(e) => actualizarEtapaRecetaItem(i.id, e.target.value as EtapaReceta)}
                       >
                         {ETAPAS.map((e) => (
@@ -434,13 +478,14 @@ function FichaProducto({ productoId }: { productoId: string }) {
                         type="number"
                         className="w-24"
                         value={i.cantidad}
+                        disabled={recetaBloqueada}
                         onChange={(e) => actualizarCantidadRecetaItem(i.id, Number(e.target.value))}
                       />
                     </Td>
                     <Td>{insumoUnidad(i.insumo_id)}</Td>
                     <Td className="font-medium text-text">{fARS(precioInsumo(i.insumo_id) * i.cantidad)}</Td>
                     <Td>
-                      <Button size="sm" variant="danger" onClick={() => quitarRecetaItem(i.id)}>
+                      <Button size="sm" variant="danger" disabled={recetaBloqueada} onClick={() => quitarRecetaItem(i.id)}>
                         Quitar
                       </Button>
                     </Td>
@@ -475,7 +520,11 @@ function FichaProducto({ productoId }: { productoId: string }) {
         </div>
         <div className="flex flex-wrap items-end gap-2 rounded-md border border-border bg-surface2/40 p-2.5">
           <div className="w-full sm:w-auto sm:flex-[2]">
-            <Select value={nuevoItem.insumo_id} onChange={(e) => setNuevoItem({ ...nuevoItem, insumo_id: e.target.value })}>
+            <Select
+              value={nuevoItem.insumo_id}
+              disabled={recetaBloqueada}
+              onChange={(e) => setNuevoItem({ ...nuevoItem, insumo_id: e.target.value })}
+            >
               <option value="">Insumo…</option>
               {data.insumos.map((i) => (
                 <option key={i.id} value={i.id}>
@@ -484,7 +533,12 @@ function FichaProducto({ productoId }: { productoId: string }) {
               ))}
             </Select>
           </div>
-          <Select value={nuevoItem.etapa} onChange={(e) => setNuevoItem({ ...nuevoItem, etapa: e.target.value as EtapaReceta })} className="w-full sm:w-32">
+          <Select
+            value={nuevoItem.etapa}
+            disabled={recetaBloqueada}
+            onChange={(e) => setNuevoItem({ ...nuevoItem, etapa: e.target.value as EtapaReceta })}
+            className="w-full sm:w-32"
+          >
             {ETAPAS.map((e) => (
               <option key={e} value={e}>
                 {e}
@@ -496,6 +550,7 @@ function FichaProducto({ productoId }: { productoId: string }) {
             placeholder="Cantidad"
             className="w-full sm:w-28"
             value={nuevoItem.cantidad}
+            disabled={recetaBloqueada}
             onChange={(e) => setNuevoItem({ ...nuevoItem, cantidad: Number(e.target.value) })}
           />
           {nuevoItem.insumo_id && (
@@ -504,18 +559,27 @@ function FichaProducto({ productoId }: { productoId: string }) {
               <span className="font-medium text-accent">{fARS(costoNuevoItem)}</span>
             </div>
           )}
-          <Button size="sm" onClick={agregarRecetaItem}>
+          <Button size="sm" disabled={recetaBloqueada} onClick={agregarRecetaItem}>
             + Agregar
           </Button>
         </div>
       </Card>
 
       {variantes.length > 0 && (
-        <Card title="Insumos por canal de venta (sin tocar la receta base)">
+        <Card
+          title="Insumos por canal de venta (sin tocar la receta base)"
+          right={recetaBloqueada ? <Badge color="blue">Guardada</Badge> : undefined}
+        >
           <p className="mb-3 text-[12.5px] text-text3">
             Esta variante hereda la receta base tal cual. Acá podés agregarle insumos propios (por ejemplo, algo distinto
             para Mayorista que para Minorista) sin modificar la receta compartida por el resto de las variantes.
           </p>
+          {recetaBloqueada && (
+            <Alert kind="info">
+              La receta de este producto está guardada — desbloqueala arriba, en &ldquo;Receta por unidad&rdquo;, para poder
+              editar estos ajustes.
+            </Alert>
+          )}
           <div className="mb-3 max-w-[260px]">
             <Select value={varianteSeleccionadaAjustes} onChange={(e) => setVarianteAjusteId(e.target.value)}>
               {variantes.map((v) => (
@@ -542,7 +606,7 @@ function FichaProducto({ productoId }: { productoId: string }) {
                     <Td>{a.etapa ?? "—"}</Td>
                     <Td>{fARS(precioInsumo(a.insumo_id) * a.cantidad)}</Td>
                     <Td>
-                      <Button size="sm" variant="danger" onClick={() => quitarAjuste(a.id)}>
+                      <Button size="sm" variant="danger" disabled={recetaBloqueada} onClick={() => quitarAjuste(a.id)}>
                         Quitar
                       </Button>
                     </Td>
@@ -552,7 +616,12 @@ function FichaProducto({ productoId }: { productoId: string }) {
             </table>
           )}
           <div className="mb-4 flex flex-wrap items-end gap-2 rounded-md border border-border bg-surface2/40 p-2.5">
-            <Select value={nuevoAjuste.insumo_id} onChange={(e) => setNuevoAjuste({ ...nuevoAjuste, insumo_id: e.target.value })} className="w-full sm:w-40">
+            <Select
+              value={nuevoAjuste.insumo_id}
+              disabled={recetaBloqueada}
+              onChange={(e) => setNuevoAjuste({ ...nuevoAjuste, insumo_id: e.target.value })}
+              className="w-full sm:w-40"
+            >
               <option value="">Insumo…</option>
               {data.insumos.map((i) => (
                 <option key={i.id} value={i.id}>
@@ -562,6 +631,7 @@ function FichaProducto({ productoId }: { productoId: string }) {
             </Select>
             <Select
               value={nuevoAjuste.operacion}
+              disabled={recetaBloqueada}
               onChange={(e) => setNuevoAjuste({ ...nuevoAjuste, operacion: e.target.value as OperacionAjusteReceta })}
               className="w-full sm:w-64"
             >
@@ -576,10 +646,12 @@ function FichaProducto({ productoId }: { productoId: string }) {
               placeholder="Cantidad"
               className="w-full sm:w-24"
               value={nuevoAjuste.cantidad}
+              disabled={recetaBloqueada}
               onChange={(e) => setNuevoAjuste({ ...nuevoAjuste, cantidad: Number(e.target.value) })}
             />
             <Select
               value={nuevoAjuste.etapa}
+              disabled={recetaBloqueada}
               onChange={(e) => setNuevoAjuste({ ...nuevoAjuste, etapa: e.target.value as EtapaReceta | "" })}
               className="w-full sm:w-32"
             >
@@ -596,7 +668,7 @@ function FichaProducto({ productoId }: { productoId: string }) {
                 <span className="font-medium text-accent">{fARS(costoNuevoAjuste)}</span>
               </div>
             )}
-            <Button size="sm" onClick={agregarAjuste}>
+            <Button size="sm" disabled={recetaBloqueada} onClick={agregarAjuste}>
               + Agregar ajuste
             </Button>
           </div>
@@ -612,7 +684,7 @@ function FichaProducto({ productoId }: { productoId: string }) {
                     <Td main>{data.productos.find((p) => p.id === c.producto_id)?.nombre ?? "(producto eliminado)"}</Td>
                     <Td>{fNum(c.cantidad, 3)}</Td>
                     <Td>
-                      <Button size="sm" variant="danger" onClick={() => quitarComplemento(c.id)}>
+                      <Button size="sm" variant="danger" disabled={recetaBloqueada} onClick={() => quitarComplemento(c.id)}>
                         Quitar
                       </Button>
                     </Td>
@@ -622,7 +694,12 @@ function FichaProducto({ productoId }: { productoId: string }) {
             </table>
           )}
           <div className="flex flex-wrap items-end gap-2 rounded-md border border-border bg-surface2/40 p-2.5">
-            <Select value={nuevoComplemento.producto_id} onChange={(e) => setNuevoComplemento({ ...nuevoComplemento, producto_id: e.target.value })} className="w-full sm:w-48">
+            <Select
+              value={nuevoComplemento.producto_id}
+              disabled={recetaBloqueada}
+              onChange={(e) => setNuevoComplemento({ ...nuevoComplemento, producto_id: e.target.value })}
+              className="w-full sm:w-48"
+            >
               <option value="">Producto…</option>
               {data.productos
                 .filter((p) => p.id !== productoId)
@@ -637,9 +714,10 @@ function FichaProducto({ productoId }: { productoId: string }) {
               placeholder="Cantidad"
               className="w-full sm:w-24"
               value={nuevoComplemento.cantidad}
+              disabled={recetaBloqueada}
               onChange={(e) => setNuevoComplemento({ ...nuevoComplemento, cantidad: Number(e.target.value) })}
             />
-            <Button size="sm" onClick={agregarComplemento}>
+            <Button size="sm" disabled={recetaBloqueada} onClick={agregarComplemento}>
               + Agregar complemento
             </Button>
           </div>
