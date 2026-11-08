@@ -211,6 +211,10 @@ export interface Receta {
    * solo se envasa) — apaga el aviso de "sin mano de obra" (Productos y Exportar a Sheets) sin
    * necesidad de cargar minutos falsos solo para que el aviso desaparezca. */
   sin_mano_obra_ok?: boolean;
+  /** Receta "guardada": mientras esté en true, Productos no deja agregar, quitar ni editar
+   * insumos de la receta base (`receta_items`) ni de los ajustes por variante
+   * (`ajustes_receta_variante`) de este producto — hay que desbloquearla primero a propósito. */
+  bloqueada?: boolean;
 }
 
 export interface RecetaItem {
