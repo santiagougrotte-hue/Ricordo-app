@@ -1,64 +1,40 @@
 "use client";
 
 import React, { useMemo, useState } from "react";
-import { ShoppingCart, PackagePlus, Factory, ClipboardList, Receipt, Truck } from "lucide-react";
+import { ShoppingCart, PackagePlus, Factory, Truck } from "lucide-react";
 import { useStoreV2 } from "@/lib/store-v2";
 import { useRouter } from "@/lib/nav-context";
 import { useToast } from "@/lib/toast";
 import { uid } from "@/lib/id";
 import { usePeriod, MESES } from "@/lib/period";
-import {
-  PageHeader,
-  Card,
-  StatGrid,
-  KpiCard,
-  QuickActionButton,
-  TableWrap,
-  Th,
-  Td,
-  TrHover,
-  EmptyState,
-  Badge,
-  Alert,
-  FilterTabs,
-  Select,
-  Field,
-  FormGrid,
-  Input,
-  Button,
-} from "@/components/ui";
-import { FondoReposicionCard } from "@/components/FondoReposicionCard";
+import { TableWrap, Td, EmptyState, Badge, Alert, Field, FormGrid, Input, Button } from "@/components/ui";
 import { calcularFondoReposicion } from "@/lib/fondo-reposicion";
 import { Modal } from "@/components/Modal";
-import { GraficoLinea, IndicadorCrecimiento } from "@/components/charts";
+import { Bloque, SeguimientoMes, CompraJueves, PlataPanel, MargenesPanel, Simulador } from "@/components/tablero";
 import {
-  cmvPeriodo,
+  calcularEerr,
   saldoCaja,
-  insumosBajoMinimo,
-  cobrosPeriodo,
   itemsSinCostoDeterminado,
   fARS,
   fNum,
-  inPeriod,
   primerDiaMes,
   ultimoDiaMes,
-  mesAnterior,
   sumarDias,
   variantesSinFactorReceta,
 } from "@/lib/calc-v2";
+import { fFechaCorta } from "@/lib/calc";
 import {
-  pctCambio,
-  calcularMetricasVentas,
-  calcularVentasPorCanal,
-  calcularVentasPorGusto,
-  calcularEvolucionMensual,
-  calcularVentasPendientes,
-} from "@/lib/analitica-ventas";
+  calcularEquilibrioMes,
+  ritmoDelMes,
+  semanasDelMes,
+  calcularCompraSemanal,
+  proximoJueves,
+  rankingProductos,
+} from "@/lib/tablero";
 import { generarResumenInteligente } from "@/lib/resumen-inteligente";
 import { produccionPendientePorSabor, gustosSinVarianteActiva } from "@/lib/rellenos";
 import type { Conclusion } from "@/lib/resumen-inteligente";
-import type { InsumoBajoMinimo } from "@/lib/calc-v2";
-import type { EstadoPedido, Canal } from "@/lib/types-v2";
+import type { EstadoPedido } from "@/lib/types-v2";
 
 const ESTADO_COLOR: Record<EstadoPedido, "blue" | "orange" | "green" | "red"> = {
   Confirmado: "blue",
@@ -66,9 +42,6 @@ const ESTADO_COLOR: Record<EstadoPedido, "blue" | "orange" | "green" | "red"> = 
   Entregado: "green",
   Cancelado: "red",
 };
-
-type MetricaEvolucion = "facturacion" | "cajas" | "pedidos";
-const METRICA_LABEL: Record<MetricaEvolucion, string> = { facturacion: "Facturación", cajas: "Cajas", pedidos: "Pedidos" };
 
 const CATEGORIA_COLOR: Record<Conclusion["categoria"], "green" | "red" | "blue"> = { positivo: "green", negativo: "red", neutral: "blue" };
 
@@ -109,8 +82,6 @@ export function Inicio() {
   const { toast } = useToast();
   const router = useRouter();
   const { mes, anio } = usePeriod();
-  const [canalFiltro, setCanalFiltro] = useState<Canal | "todos">("todos");
-  const [metricaEvolucion, setMetricaEvolucion] = useState<MetricaEvolucion>("facturacion");
   const [viajeModalOpen, setViajeModalOpen] = useState(false);
   const [viajeForm, setViajeForm] = useState({ monto: 0, fecha: new Date().toISOString().slice(0, 10), nota: "" });
 
@@ -148,89 +119,82 @@ export function Inicio() {
     setViajeForm({ monto: 0, fecha: new Date().toISOString().slice(0, 10), nota: "" });
   }
 
+  const hoy = useMemo(() => new Date().toLocaleDateString("sv-SE"), []);
+  const fechaLarga = useMemo(() => {
+    const t = new Date().toLocaleDateString("es-AR", { weekday: "long", day: "numeric", month: "long" });
+    return t.charAt(0).toUpperCase() + t.slice(1);
+  }, []);
   const desde = primerDiaMes(mes, anio);
   const hasta = ultimoDiaMes(mes, anio);
-  const anterior = mesAnterior(mes, anio);
-  const desdeAnt = primerDiaMes(anterior.mes, anterior.anio);
-  const hastaAnt = ultimoDiaMes(anterior.mes, anterior.anio);
-  const canalParaMetricas = canalFiltro === "todos" ? undefined : canalFiltro;
 
-  const metricas = useMemo(
-    () => calcularMetricasVentas(data, desde, hasta, canalParaMetricas),
-    [data, desde, hasta, canalParaMetricas]
-  );
-  const metricasAnt = useMemo(
-    () => calcularMetricasVentas(data, desdeAnt, hastaAnt, canalParaMetricas),
-    [data, desdeAnt, hastaAnt, canalParaMetricas]
-  );
-  const facturacionPendiente = useMemo(() => calcularVentasPendientes(data, desde, hasta), [data, desde, hasta]);
-  const porCanal = useMemo(() => calcularVentasPorCanal(data, desde, hasta), [data, desde, hasta]);
-  const topGustos = useMemo(() => calcularVentasPorGusto(data, desde, hasta, canalParaMetricas).slice(0, 5), [data, desde, hasta, canalParaMetricas]);
-  const evolucion = useMemo(() => calcularEvolucionMensual(data, anio, canalParaMetricas), [data, anio, canalParaMetricas]);
+  const equilibrio = useMemo(() => calcularEquilibrioMes(data, mes, anio, hoy), [data, mes, anio, hoy]);
+  const ritmo = useMemo(() => ritmoDelMes(data, mes, anio, hoy, equilibrio.punto_equilibrio), [data, mes, anio, hoy, equilibrio.punto_equilibrio]);
+  const semanas = useMemo(() => semanasDelMes(data, mes, anio, hoy, equilibrio.punto_equilibrio), [data, mes, anio, hoy, equilibrio.punto_equilibrio]);
+  const resultadoNeto = useMemo(() => calcularEerr(data, desde, hasta).resultado_neto, [data, desde, hasta]);
+  const compra = useMemo(() => calcularCompraSemanal(data, hoy), [data, hoy]);
+  const jueves = proximoJueves(hoy);
+  const ranking = useMemo(() => rankingProductos(data, sumarDias(hoy, -90), hoy), [data, hoy]);
   const resumen = useMemo(() => generarResumenInteligente(data, mes, anio), [data, mes, anio]);
-
-  const pedidosDelMes = useMemo(() => data.pedidos.filter((p) => inPeriod(p.fecha, mes, anio)), [data.pedidos, mes, anio]);
-  const cmv = useMemo(() => cmvPeriodo(data, pedidosDelMes), [data, pedidosDelMes]);
-  const margenBruto = metricas.ventas_totales > 0 ? ((metricas.ventas_totales - cmv) / metricas.ventas_totales) * 100 : 0;
   const caja = useMemo(() => saldoCaja(data), [data]);
-  const cobros = useMemo(() => cobrosPeriodo(data, desde, hasta), [data, desde, hasta]);
-  // Si hay ventas del período cuyo costo no se pudo determinar (producto sin receta cargada, o sin
-  // variante vinculada), el margen/ganancia que se muestra está incompleto — nunca se inventa el
-  // costo faltante, se avisa en vez de mostrar un número que parece completo sin serlo.
-  const itemsSinCosto = useMemo(() => itemsSinCostoDeterminado(data, desde, hasta, canalParaMetricas), [data, desde, hasta, canalParaMetricas]);
-  const productosSinCosto = useMemo(
-    () => Array.from(new Set(itemsSinCosto.map((i) => i.nombre_historico))),
-    [itemsSinCosto]
-  );
 
   const pedidosPendientes = useMemo(
     () => data.pedidos.filter((p) => p.estado === "Confirmado" || p.estado === "Produccion").sort((a, b) => a.fecha.localeCompare(b.fecha)),
     [data.pedidos]
   );
-  // Proxy de "producción pendiente" con lo que existe hoy: pedidos ya marcados "En producción"
-  // (Ventas → Pedidos) y sus líneas — todavía no hay un tablero de producción propio con estados
-  // Pendiente/En elaboración/Terminado por preparación, eso es una mejora más grande aparte.
-  const pedidosEnProduccion = useMemo(
-    () => data.pedidos.filter((p) => p.estado === "Produccion").sort((a, b) => a.fecha.localeCompare(b.fecha)),
-    [data.pedidos]
-  );
+  const porEntregar = pedidosPendientes.reduce((acc, p) => acc + p.total, 0);
   // Agrupado por sabor (producto), no por presentación/canal — el freezer por gusto ya es un solo
   // pool compartido entre todas las variantes del mismo producto (ver conSalidaFreezerPedido).
-  const itemsEnProduccion = useMemo(() => produccionPendientePorSabor(data, pedidosEnProduccion), [data, pedidosEnProduccion]);
+  const itemsEnProduccion = useMemo(
+    () => produccionPendientePorSabor(data, pedidosPendientes.filter((p) => p.estado === "Produccion")),
+    [data, pedidosPendientes]
+  );
+  const totalComprasPendientes = data.compras.filter((c) => c.estado_pago === "pendiente").reduce((acc, c) => acc + c.total, 0);
 
-  const comprasPendientes = useMemo(() => data.compras.filter((c) => c.estado_pago === "pendiente"), [data.compras]);
-  const totalComprasPendientes = comprasPendientes.reduce((acc, c) => acc + c.total, 0);
-
-  const alertasStock = useMemo(() => insumosBajoMinimo(data), [data]);
-  const alertasIngredientes = alertasStock.filter((a) => a.insumo.tipo === "ingrediente");
-  const alertasPackaging = alertasStock.filter((a) => a.insumo.tipo === "packaging");
-
-  // Sin "unidades_por_paquete" en una variante activa, el costo de esa presentación sale en $0 Y
-  // además la masa de esa receta se descuenta en $0 al confirmar una venta (nunca se inventa un
-  // factor de conversión) — por eso esto se avisa acá, no solo como un detalle en Productos.
+  // Avisos de datos que dejan un número incompleto o un descuento de stock sin hacer — se juntan en
+  // un solo recuadro corto en vez de un aviso largo por cada uno.
   const variantesSinUnidades = useMemo(() => variantesSinFactorReceta(data), [data]);
   const gustosSinPresentacion = useMemo(() => gustosSinVarianteActiva(data), [data]);
-
-  // Alerta de pedidos de mañana sin entregar — regla verificable sobre datos reales.
+  const itemsSinCosto = useMemo(() => itemsSinCostoDeterminado(data, desde, hasta), [data, desde, hasta]);
   const pedidosMananaSinEntregar = useMemo(() => {
-    const manana = sumarDias(new Date().toISOString().slice(0, 10), 1);
+    const manana = sumarDias(hoy, 1);
     return data.pedidos.filter((p) => p.fecha === manana && (p.estado === "Confirmado" || p.estado === "Produccion"));
-  }, [data]);
+  }, [data.pedidos, hoy]);
+  const irProductos = { label: "Ir a Productos", accion: () => router.go("productos") };
+  const avisos: { texto: string; ir?: { label: string; accion: () => void } }[] = [];
+  if (pedidosMananaSinEntregar.length > 0)
+    avisos.push({ texto: `${pedidosMananaSinEntregar.length} pedido(s) para mañana todavía sin entregar.`, ir: { label: "Ver pedidos", accion: () => router.go("ventas", "pedidos") } });
+  if (variantesSinUnidades.length > 0)
+    avisos.push({ texto: `${variantesSinUnidades.map((v) => v.variante_nombre).join(", ")}: sin “unidades por paquete”, su costo sale en $0.`, ir: irProductos });
+  if (gustosSinPresentacion.length > 0)
+    avisos.push({ texto: `${gustosSinPresentacion.map((g) => g.producto_nombre).join(", ")}: sin presentación activa, la producción no descuenta insumos.`, ir: irProductos });
+  if (itemsSinCosto.length > 0)
+    avisos.push({ texto: `${Array.from(new Set(itemsSinCosto.map((i) => i.nombre_historico))).join(", ")}: vendidos sin costo cargado, el margen del mes está incompleto.`, ir: irProductos });
 
   const clienteNombre = (id: string) => data.clientes.find((c) => c.id === id)?.nombre ?? "—";
-  const valorEvolucion = (e: (typeof evolucion)[number]) => (metricaEvolucion === "facturacion" ? e.facturacion : metricaEvolucion === "cajas" ? e.cajas : e.pedidos);
-  const formatoEvolucion = (v: number) => (metricaEvolucion === "facturacion" ? fARS(v) : fNum(v, 0));
 
   return (
-    <div>
-      <PageHeader title="Inicio" sub={`Resumen de ${MESES[mes - 1]} ${anio}`} />
-
-      <div className="mb-4 flex flex-wrap gap-2.5">
-        <QuickActionButton icon={ShoppingCart} label="Nuevo pedido / venta" onClick={() => router.go("ventas", "pedidos")} />
-        <QuickActionButton icon={PackagePlus} label="Cargar compra" onClick={() => router.go("operaciones", "compras")} />
-        <QuickActionButton icon={Factory} label="Planificar producción" onClick={() => router.go("operaciones", "produccion")} />
-        <QuickActionButton icon={ClipboardList} label="Ver pedidos pendientes" onClick={() => router.go("ventas", "pedidos")} />
-        <QuickActionButton icon={Truck} label="Viaje de compra" onClick={() => setViajeModalOpen(true)} />
+    <div className="mx-auto max-w-[1180px] space-y-5">
+      <div className="flex flex-wrap items-end justify-between gap-4">
+        <div>
+          <h1 className="text-[26px] font-semibold tracking-[-0.4px] text-text">
+            {MESES[mes - 1]} {anio}
+          </h1>
+          <p className="mt-1 text-[13px] text-text3">{fechaLarga}</p>
+        </div>
+        <div className="flex flex-wrap gap-2">
+          <Button onClick={() => router.go("ventas", "pedidos")}>
+            <ShoppingCart className="h-4 w-4" /> Nuevo pedido
+          </Button>
+          <Button variant="ghost" onClick={() => router.go("operaciones", "compras")}>
+            <PackagePlus className="h-4 w-4" /> Cargar compra
+          </Button>
+          <Button variant="ghost" onClick={() => router.go("operaciones", "produccion")}>
+            <Factory className="h-4 w-4" /> Producción
+          </Button>
+          <Button variant="ghost" onClick={() => setViajeModalOpen(true)}>
+            <Truck className="h-4 w-4" /> Viaje de compra
+          </Button>
+        </div>
       </div>
 
       <Modal
@@ -242,7 +206,7 @@ export function Inicio() {
             <Button variant="ghost" onClick={() => setViajeModalOpen(false)}>
               Cancelar
             </Button>
-            <Button onClick={guardarViaje}>Guardar</Button>
+            <Button onClick={guardarViaje}>Guardar viaje</Button>
           </>
         }
       >
@@ -259,307 +223,93 @@ export function Inicio() {
         </FormGrid>
       </Modal>
 
-      <div className="mb-4 flex flex-wrap items-center gap-3">
-        <span className="text-[11px] font-semibold uppercase tracking-wide text-text3">Canal</span>
-        <FilterTabs
-          value={canalFiltro}
-          onChange={(v) => setCanalFiltro(v as Canal | "todos")}
-          options={[
-            { value: "todos", label: "Todos" },
-            { value: "Minorista", label: "Minorista" },
-            { value: "Mayorista", label: "Mayorista" },
-          ]}
-        />
-      </div>
-
-      <StatGrid>
-        <KpiCard
-          label="CMV disponible"
-          value={fARS(fondo.disponible_total)}
-          sub={`Masa y packaging ${fARS(fondo.disponible_masa_packaging)} · Rellenos ${fARS(fondo.disponible_relleno)}`}
-          color={fondo.disponible_total >= 0 ? "green" : "red"}
-        />
-        <KpiCard label="Facturación del mes" value={fARS(metricas.ventas_totales)} color="gold" icon={Receipt} />
-        <KpiCard label="Cobrado del mes" value={fARS(cobros)} sub="Caja real, no lo facturado" color="gold" icon={Receipt} />
-        <KpiCard label="Pedidos entregados" value={fNum(metricas.cantidad_pedidos, 0)} color="blue" icon={ShoppingCart} />
-        <KpiCard label="Cajas vendidas" value={fNum(metricas.cajas_vendidas, 0)} color="blue" icon={ShoppingCart} />
-        <KpiCard label="Ticket promedio" value={fARS(metricas.ticket_promedio)} color="gold" />
-        <KpiCard
-          label="Margen bruto"
-          value={fNum(margenBruto, 1) + "%"}
-          sub={productosSinCosto.length > 0 ? `Parcial: sin costo cargado para ${productosSinCosto.join(", ")}` : undefined}
-          color={productosSinCosto.length > 0 ? "orange" : margenBruto >= 0 ? "green" : "red"}
-        />
-        <KpiCard label="Saldo de caja" value={fARS(caja)} color={caja >= 0 ? "green" : "red"} />
-        <KpiCard
-          label="Pedidos pendientes"
-          value={fNum(pedidosPendientes.length, 0)}
-          sub={`Facturación comprometida: ${fARS(facturacionPendiente)}`}
-          color="orange"
-          icon={ClipboardList}
-        />
-        <KpiCard label="Compras sin pagar" value={fARS(totalComprasPendientes)} sub={`${comprasPendientes.length} compra(s)`} color="orange" icon={PackagePlus} />
-      </StatGrid>
-
-      <FondoReposicionCard />
-
-      {alertasIngredientes.length > 0 && (
+      {avisos.length > 0 && (
         <Alert kind="warning">
-          {alertasIngredientes.length} ingrediente(s) por debajo del mínimo: {alertasIngredientes.map((a) => a.insumo.nombre).join(", ")}.
-        </Alert>
-      )}
-      {alertasPackaging.length > 0 && (
-        <Alert kind="warning">
-          {alertasPackaging.length} envase(s)/packaging por debajo del mínimo: {alertasPackaging.map((a) => a.insumo.nombre).join(", ")}.
-        </Alert>
-      )}
-      {variantesSinUnidades.length > 0 && (
-        <Alert kind="warning">
-          {variantesSinUnidades.length} presentación(es) activa(s) sin &ldquo;Unidades por paquete&rdquo;:{" "}
-          {variantesSinUnidades.map((v) => v.variante_nombre).join(", ")}. El costo de esas presentaciones sale en $0 y la masa de ese
-          gusto no se descuenta al registrar producción (el packaging sí, ese no depende de este dato) — cargalo en{" "}
-          <button className="underline" onClick={() => router.go("productos")}>
-            Productos → Variantes
-          </button>
-          .
-        </Alert>
-      )}
-      {gustosSinPresentacion.length > 0 && (
-        <Alert kind="warning">
-          {gustosSinPresentacion.length} gusto(s) activo(s) sin ninguna presentación activa:{" "}
-          {gustosSinPresentacion.map((g) => g.producto_nombre).join(", ")}. Al registrar producción de esos gustos no hay de dónde sacar
-          la receta de referencia, así que suma al freezer pero NO descuenta masa, packaging ni armado — activá al menos una
-          presentación en{" "}
-          <button className="underline" onClick={() => router.go("productos")}>
-            Productos → Variantes
-          </button>
-          .
-        </Alert>
-      )}
-
-      {pedidosMananaSinEntregar.length > 0 && (
-        <button className="mb-2.5 block w-full text-left" onClick={() => router.go("ventas", "pedidos")}>
-          <Alert kind="warning">
-            Hay {pedidosMananaSinEntregar.length} pedido(s) para mañana todavía sin marcar Entregado — revisá si la producción
-            está lista. Tocá para ver Ventas → Pedidos.
-          </Alert>
-        </button>
-      )}
-
-      {resumen.length > 0 && (
-        <Card title="Resumen inteligente" className="mb-4">
-          <p className="mb-3 text-[12.5px] text-text3">
-            Conclusiones calculadas a partir de los datos cargados este mes — nunca inventadas. Cada una tiene un
-            &ldquo;¿Por qué?&rdquo; con los números exactos usados.
-          </p>
-          <ul className="flex flex-col gap-2">
-            {resumen.map((c) => (
-              <FilaConclusion key={c.id} conclusion={c} />
+          <div className="space-y-1">
+            {avisos.map((a) => (
+              <div key={a.texto}>
+                {a.texto}{" "}
+                {a.ir && (
+                  <button className="font-medium underline" onClick={a.ir.accion}>
+                    {a.ir.label}
+                  </button>
+                )}
+              </div>
             ))}
-          </ul>
-        </Card>
-      )}
-
-      <div className="mb-4 grid grid-cols-1 gap-4 lg:grid-cols-2">
-        <Card title="Crecimiento vs. mes anterior">
-          <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-4">
-            <IndicadorCrecimiento label="Facturación" valor={pctCambio(metricas.ventas_totales, metricasAnt.ventas_totales)} />
-            <IndicadorCrecimiento label="Pedidos" valor={pctCambio(metricas.cantidad_pedidos, metricasAnt.cantidad_pedidos)} />
-            <IndicadorCrecimiento label="Cajas" valor={pctCambio(metricas.cajas_vendidas, metricasAnt.cajas_vendidas)} />
-            <IndicadorCrecimiento label="Ticket promedio" valor={pctCambio(metricas.ticket_promedio, metricasAnt.ticket_promedio)} />
           </div>
-        </Card>
+        </Alert>
+      )}
 
-        <Card title="Mayorista vs. Minorista">
-          <TableWrap>
-            <table className="w-full">
-              <thead>
-                <tr>
-                  <Th>Canal</Th>
-                  <Th>Facturación</Th>
-                  <Th>Cajas</Th>
-                  <Th>Ticket prom.</Th>
-                  <Th>Participación</Th>
-                </tr>
-              </thead>
-              <tbody>
-                {porCanal.map((c) => (
-                  <TrHover key={c.canal}>
-                    <Td main>{c.canal}</Td>
-                    <Td>{fARS(c.ventas_totales)}</Td>
-                    <Td>{fNum(c.cajas_vendidas, 0)}</Td>
-                    <Td>{fARS(c.ticket_promedio)}</Td>
-                    <Td>{c.participacion_pct === null ? "—" : fNum(c.participacion_pct, 1) + "%"}</Td>
-                  </TrHover>
-                ))}
-              </tbody>
-            </table>
-          </TableWrap>
-        </Card>
+      <SeguimientoMes eq={equilibrio} ritmo={ritmo} semanas={semanas} resultadoNeto={resultadoNeto} nombreMes={MESES[mes - 1]} />
+
+      <div className="grid grid-cols-1 gap-5 lg:grid-cols-[minmax(0,7fr)_minmax(0,5fr)]">
+        <CompraJueves compra={compra} jueves={jueves} disponibleMasaPackaging={fondo.disponible_masa_packaging} />
+        <PlataPanel
+          caja={caja}
+          disponibleMasaPackaging={fondo.disponible_masa_packaging}
+          disponibleRelleno={fondo.disponible_relleno}
+          comprasSinPagar={totalComprasPendientes}
+          porCobrar={porEntregar}
+        />
       </div>
 
-      <Card
-        title="Evolución de ventas"
-        className="mb-4"
-        right={
-          <Select value={metricaEvolucion} onChange={(e) => setMetricaEvolucion(e.target.value as MetricaEvolucion)} style={{ width: 130 }}>
-            {(Object.keys(METRICA_LABEL) as MetricaEvolucion[]).map((m) => (
-              <option key={m} value={m}>
-                {METRICA_LABEL[m]}
-              </option>
-            ))}
-          </Select>
-        }
-      >
-        <p className="mb-2 text-[12.5px] text-text3">
-          {METRICA_LABEL[metricaEvolucion]} mes a mes durante {anio}. Para comparar contra {anio - 1} o un rango
-          personalizado, ver Ventas → Analítica.
-        </p>
-        <GraficoLinea puntos={evolucion.map((e) => ({ label: e.label, valor: valorEvolucion(e) }))} />
-        <div className="mt-1 text-right text-[11px] text-text3">Este mes: {formatoEvolucion(valorEvolucion(evolucion[mes - 1]))}</div>
-      </Card>
+      <div className="grid grid-cols-1 gap-5 lg:grid-cols-[minmax(0,5fr)_minmax(0,7fr)]">
+        <MargenesPanel ranking={ranking} />
+        <Simulador data={data} mes={mes} anio={anio} hoy={hoy} />
+      </div>
 
-      <div className="mb-4 grid grid-cols-1 gap-4 lg:grid-cols-2">
-        <Card title="Cajas vendidas por gusto">
-          {topGustos.length === 0 ? (
-            <EmptyState text="Sin ventas registradas en el período." />
-          ) : (
-            <TableWrap>
-              <table className="w-full">
-                <thead>
-                  <tr>
-                    <Th>Producto</Th>
-                    <Th>Cajas</Th>
-                    <Th>Facturación</Th>
-                    <Th>% de cajas</Th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {topGustos.map((g) => (
-                    <TrHover key={g.producto_id}>
-                      <Td main>{g.producto_nombre}</Td>
-                      <Td>{fNum(g.cajas, 0)}</Td>
-                      <Td>{fARS(g.facturacion)}</Td>
-                      <Td>{g.pct_cajas === null ? "—" : fNum(g.pct_cajas, 1) + "%"}</Td>
-                    </TrHover>
-                  ))}
-                </tbody>
-              </table>
-            </TableWrap>
-          )}
-        </Card>
-
-        <Card title="Próximos pedidos">
+      <div className="grid grid-cols-1 gap-5 lg:grid-cols-2">
+        <Bloque titulo="Para atender" bajada="Pedidos confirmados o en producción.">
           {pedidosPendientes.length === 0 ? (
-            <EmptyState text="No hay pedidos confirmados o en producción." />
+            <EmptyState text="No hay pedidos pendientes. Cuando cargues uno, aparece acá." />
           ) : (
-            <TableWrap>
-              <table className="w-full">
-                <thead>
-                  <tr>
-                    <Th>Fecha</Th>
-                    <Th>Cliente</Th>
-                    <Th>Total</Th>
-                    <Th>Estado</Th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {pedidosPendientes.slice(0, 8).map((p) => (
-                    <TrHover key={p.id}>
-                      <Td>{p.fecha}</Td>
-                      <Td main>{clienteNombre(p.cliente_id)}</Td>
-                      <Td>{fARS(p.total)}</Td>
-                      <Td>
-                        <Badge color={ESTADO_COLOR[p.estado]}>{p.estado}</Badge>
-                      </Td>
-                    </TrHover>
-                  ))}
-                </tbody>
-              </table>
-            </TableWrap>
+            <ul className="divide-y divide-border">
+              {pedidosPendientes.slice(0, 6).map((p) => (
+                <li key={p.id}>
+                  <button
+                    onClick={() => router.go("ventas", "pedidos")}
+                    className="flex w-full min-h-[48px] items-center justify-between gap-3 py-2.5 text-left hover:bg-surface2/50"
+                  >
+                    <span className="min-w-0">
+                      <span className="block truncate text-[13.5px] font-medium text-text">{clienteNombre(p.cliente_id)}</span>
+                      <span className="text-[12px] text-text3">{fFechaCorta(p.fecha)}</span>
+                    </span>
+                    <span className="flex shrink-0 items-center gap-3">
+                      <span className="text-[13px] font-semibold text-text [font-variant-numeric:tabular-nums]">{fARS(p.total)}</span>
+                      <Badge color={ESTADO_COLOR[p.estado]}>{p.estado === "Produccion" ? "En producción" : p.estado}</Badge>
+                    </span>
+                  </button>
+                </li>
+              ))}
+            </ul>
           )}
-        </Card>
-      </div>
-
-      <Card title="Producción pendiente" className="mb-4">
-        <p className="mb-3 text-[12.5px] text-text3">
-          Pedidos marcados &ldquo;En producción&rdquo; (Ventas → Pedidos) y lo que falta elaborar para completarlos —
-          todavía no hay un tablero de producción con lotes/rellenos propio; eso es una mejora más grande, pendiente.
-        </p>
-        {itemsEnProduccion.length === 0 ? (
-          <EmptyState text="No hay pedidos en producción en este momento." />
-        ) : (
-          <TableWrap>
-            <table className="w-full">
-              <thead>
-                <tr>
-                  <Th>Producto</Th>
-                  <Th>Cantidad (cajas)</Th>
-                  <Th>Pedidos</Th>
-                </tr>
-              </thead>
-              <tbody>
+          {itemsEnProduccion.length > 0 && (
+            <div className="mt-4 rounded-2xl bg-surface2 p-4">
+              <div className="mb-2 text-[12.5px] text-text2">Falta producir para esos pedidos</div>
+              <ul className="space-y-1.5 text-[13px]">
                 {itemsEnProduccion.map((it) => (
-                  <TrHover key={it.nombre}>
-                    <Td main>{it.nombre}</Td>
-                    <Td>{fNum(it.cantidad, 2)}</Td>
-                    <Td className="text-text3">{it.pedidos}</Td>
-                  </TrHover>
+                  <li key={it.nombre} className="flex justify-between gap-3">
+                    <span className="text-text">{it.nombre}</span>
+                    <span className="font-medium text-text [font-variant-numeric:tabular-nums]">{fNum(it.cantidad, 1)} cajas</span>
+                  </li>
                 ))}
-              </tbody>
-            </table>
-          </TableWrap>
-        )}
-      </Card>
+              </ul>
+            </div>
+          )}
+        </Bloque>
 
-      <Card title="Ingredientes bajo mínimo">
-        {alertasIngredientes.length === 0 ? (
-          <EmptyState text="Todos los ingredientes están por encima de su stock mínimo." />
-        ) : (
-          <TablaBajoMinimo alertas={alertasIngredientes} />
-        )}
-      </Card>
-
-      <Card title="Packaging bajo mínimo">
-        {alertasPackaging.length === 0 ? (
-          <EmptyState text="Todo el packaging está por encima de su stock mínimo." />
-        ) : (
-          <TablaBajoMinimo alertas={alertasPackaging} />
-        )}
-      </Card>
+        <Bloque titulo="Lo que dicen tus números" bajada="Conclusiones calculadas con tus datos del mes.">
+          {resumen.length === 0 ? (
+            <EmptyState text="Todavía no hay movimientos suficientes este mes para sacar conclusiones." />
+          ) : (
+            <ul className="flex flex-col gap-2">
+              {resumen.slice(0, 4).map((c) => (
+                <FilaConclusion key={c.id} conclusion={c} />
+              ))}
+            </ul>
+          )}
+        </Bloque>
+      </div>
     </div>
-  );
-}
-
-function TablaBajoMinimo({ alertas }: { alertas: InsumoBajoMinimo[] }) {
-  return (
-    <TableWrap>
-      <table className="w-full">
-        <thead>
-          <tr>
-            <Th>Insumo</Th>
-            <Th>Stock actual</Th>
-            <Th>Mínimo</Th>
-            <Th>Falta</Th>
-          </tr>
-        </thead>
-        <tbody>
-          {alertas.map(({ insumo, stock, falta }) => (
-            <TrHover key={insumo.id}>
-              <Td main>{insumo.nombre}</Td>
-              <Td className="text-red">
-                {fNum(stock, 2)} {insumo.unidad}
-              </Td>
-              <Td>
-                {fNum(insumo.stock_minimo ?? 0, 2)} {insumo.unidad}
-              </Td>
-              <Td className="font-medium text-orange">
-                {fNum(falta, 2)} {insumo.unidad}
-              </Td>
-            </TrHover>
-          ))}
-        </tbody>
-      </table>
-    </TableWrap>
   );
 }
