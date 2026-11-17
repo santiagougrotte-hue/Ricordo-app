@@ -1,5 +1,8 @@
 "use client";
 
+import { MargenesObjetivoTab, MatrizBcgTab, CosteoNuevoTab } from "@/components/productos-extra";
+import { Simulador } from "@/components/tablero";
+import { usePeriod } from "@/lib/period";
 import React, { useMemo, useState } from "react";
 import { useStoreV2 } from "@/lib/store-v2";
 import { useToast } from "@/lib/toast";
@@ -9,8 +12,6 @@ import {
   Card,
   Button,
   FilterTabs,
-  StatGrid,
-  KpiCard,
   TableWrap,
   Th,
   Td,
@@ -32,7 +33,6 @@ import {
   costoUnidadProductoBase,
   costoManoDeObraVariante,
   margenVariante,
-  recetaEfectivaVariante,
   categoriasPorAmbito,
   detectarCanalInconsistente,
   variantesSinFactorReceta,
@@ -930,163 +930,33 @@ function ProductosTab() {
   );
 }
 
-function CostosMargenesTab() {
+function SimuladorPrecios() {
   const { data } = useStoreV2();
-  const filas = useMemo(
-    () =>
-      data.producto_variantes
-        .filter((v) => v.activo)
-        .map((v) => ({
-          variante: v,
-          producto: data.productos.find((p) => p.id === v.producto_id),
-          costo: costoVariante(data, v.id),
-          margen: margenVariante(data, v),
-          items: recetaEfectivaVariante(data, v),
-        }))
-        .sort((a, b) => a.margen - b.margen),
-    [data]
-  );
-
-  return (
-    <Card>
-      {filas.length === 0 ? (
-        <EmptyState text="No hay variantes activas." />
-      ) : (
-        <TableWrap>
-          <table className="w-full">
-            <thead>
-              <tr>
-                <Th>Producto</Th>
-                <Th>Variante</Th>
-                <Th># insumos en receta</Th>
-                <Th>Precio venta</Th>
-                <Th>Costo</Th>
-                <Th>Margen</Th>
-              </tr>
-            </thead>
-            <tbody>
-              {filas.map(({ variante, producto, costo, margen, items }) => (
-                <TrHover key={variante.id} className={margen < 0 ? "bg-red-dim/30" : ""}>
-                  <Td main>{producto?.nombre ?? "—"}</Td>
-                  <Td>{variante.presentacion || variante.nombre}</Td>
-                  <Td>{items.length}</Td>
-                  <Td>{fARS(variante.precio_venta)}</Td>
-                  <Td>{fARS(costo)}</Td>
-                  <Td className={margen >= 0 ? "text-green" : "text-red"}>{fNum(margen, 1)}%</Td>
-                </TrHover>
-              ))}
-            </tbody>
-          </table>
-        </TableWrap>
-      )}
-    </Card>
-  );
-}
-
-function SimuladorTab() {
-  const { data } = useStoreV2();
-  const variantesActivas = useMemo(() => data.producto_variantes.filter((v) => v.activo), [data.producto_variantes]);
-  const [varianteId, setVarianteId] = useState(variantesActivas[0]?.id ?? "");
-  const variante = variantesActivas.find((v) => v.id === varianteId);
-  const producto = variante ? data.productos.find((p) => p.id === variante.producto_id) : undefined;
-  const costo = variante ? costoVariante(data, variante.id) : 0;
-  const [precioSimulado, setPrecioSimulado] = useState(variante?.precio_venta ?? 0);
-
-  // Reinicia el precio simulado al precio cargado cada vez que se cambia de variante — ajuste de
-  // estado durante el render (no en un efecto) siguiendo el patrón recomendado para "resetear
-  // estado cuando cambia una prop", en vez de un useEffect que dispare un setState en cascada.
-  const [varianteIdPrevia, setVarianteIdPrevia] = useState(varianteId);
-  if (varianteId !== varianteIdPrevia) {
-    setVarianteIdPrevia(varianteId);
-    setPrecioSimulado(variante?.precio_venta ?? 0);
-  }
-
-  const margenPesos = precioSimulado - costo;
-  const margenPct = precioSimulado > 0 ? (margenPesos / precioSimulado) * 100 : 0;
-  const markupPct = costo > 0 ? ((precioSimulado - costo) / costo) * 100 : 0;
-
-  return (
-    <div>
-      <p className="mb-4 text-[12.5px] text-text3">
-        Simula un precio distinto para una variante sin modificar nada guardado — el margen actual sigue siendo el
-        que está cargado en Productos hasta que lo cambies ahí mismo.
-      </p>
-      <Card title="Simulador de precios">
-        {variantesActivas.length === 0 ? (
-          <EmptyState text="No hay variantes activas para simular." />
-        ) : (
-          <>
-            <Field label="Variante" full>
-              <Select value={varianteId} onChange={(e) => setVarianteId(e.target.value)}>
-                {variantesActivas.map((v) => {
-                  const base = data.productos.find((p) => p.id === v.producto_id);
-                  return (
-                    <option key={v.id} value={v.id}>
-                      {base?.nombre ?? "(producto eliminado)"} — {v.nombre}
-                    </option>
-                  );
-                })}
-              </Select>
-            </Field>
-
-            {variante && (
-              <>
-                <StatGrid>
-                  <KpiCard label="Costo actual" value={fARS(costo)} color="orange" />
-                  <KpiCard label="Precio cargado" value={fARS(variante.precio_venta)} color="gold" />
-                  <KpiCard label="Margen cargado" value={fNum(margenVariante(data, variante), 1) + "%"} color={margenVariante(data, variante) >= 0 ? "green" : "red"} />
-                </StatGrid>
-
-                <div className="mt-2 mb-4">
-                  <Field label={`Precio a simular — ${producto?.nombre ?? ""} ${variante.nombre}`}>
-                    <Input type="number" value={precioSimulado} onChange={(e) => setPrecioSimulado(Number(e.target.value))} />
-                  </Field>
-                </div>
-
-                <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-                  <div className="rounded-md border border-border p-3">
-                    <div className="text-[11px] text-text3">Margen $ simulado</div>
-                    <div className={`text-lg font-semibold ${margenPesos >= 0 ? "text-green" : "text-red"}`}>{fARS(margenPesos)}</div>
-                  </div>
-                  <div className="rounded-md border border-border p-3">
-                    <div className="text-[11px] text-text3">Margen % simulado</div>
-                    <div className={`text-lg font-semibold ${margenPct >= 0 ? "text-green" : "text-red"}`}>{fNum(margenPct, 1)}%</div>
-                  </div>
-                  <div className="rounded-md border border-border p-3">
-                    <div className="text-[11px] text-text3">Markup simulado</div>
-                    <div className="text-lg font-semibold text-text">{fNum(markupPct, 1)}%</div>
-                  </div>
-                </div>
-
-                <p className="mt-3 text-[11px] text-text3">
-                  Este precio no se guarda acá — para aplicarlo de verdad, editá la variante en la pestaña Productos.
-                </p>
-              </>
-            )}
-          </>
-        )}
-      </Card>
-    </div>
-  );
+  const { mes, anio } = usePeriod();
+  return <Simulador data={data} mes={mes} anio={anio} hoy={new Date().toLocaleDateString("sv-SE")} />;
 }
 
 export function Productos() {
   const [tab, setTab] = useState("productos");
   return (
     <div>
-      <PageHeader title="Productos" sub="Productos base, variantes, recetas y costeo" />
+      <PageHeader title="Productos" sub="Productos, recetas, márgenes, matriz BCG y costeo de productos nuevos" />
       <FilterTabs
         value={tab}
         onChange={setTab}
         options={[
           { value: "productos", label: "Productos" },
-          { value: "costos", label: "Costos y márgenes" },
+          { value: "costos", label: "Márgenes" },
+          { value: "bcg", label: "Matriz BCG" },
           { value: "simulador", label: "Simulador de precios" },
+          { value: "nuevo", label: "Producto nuevo" },
         ]}
       />
       {tab === "productos" && <ProductosTab />}
-      {tab === "costos" && <CostosMargenesTab />}
-      {tab === "simulador" && <SimuladorTab />}
+      {tab === "costos" && <MargenesObjetivoTab />}
+      {tab === "bcg" && <MatrizBcgTab />}
+      {tab === "simulador" && <SimuladorPrecios />}
+      {tab === "nuevo" && <CosteoNuevoTab />}
     </div>
   );
 }

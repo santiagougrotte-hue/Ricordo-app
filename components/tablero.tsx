@@ -109,7 +109,7 @@ export function SeguimientoMes({
             nota={eq.cajas_por_semana_necesarias ? `≈ ${eq.cajas_por_semana_necesarias} cajas a ${fARS(eq.precio_promedio_caja)}` : undefined}
           />
           <Dato
-            label="Margen de contribución"
+            label="Margen antes de tu sueldo"
             valor={eq.margen_contribucion_pct != null ? `${fNum(eq.margen_contribucion_pct, 0)}%` : "—"}
             nota={eq.meses_referencia.length ? `Promedio de ${eq.meses_referencia.join(", ")}` : undefined}
           />
@@ -117,7 +117,7 @@ export function SeguimientoMes({
             label="Resultado del mes hasta hoy"
             valor={fARSFirmado(resultadoNeto)}
             tono={resultadoNeto >= 0 ? "text-green" : "text-red"}
-            nota={`Costos fijos ${fARS(eq.costos_fijos)}`}
+            nota={`A cubrir ${fARS(eq.costos_fijos)} entre fijos, gastos y sueldo`}
           />
         </div>
       </div>
@@ -380,7 +380,7 @@ export function PlataPanel({
       </ul>
       {prestado > 0 && (
         <div className="mt-2 flex items-baseline justify-between gap-4 rounded-2xl bg-orange-dim px-3.5 py-3 text-[13px]">
-          <span className="text-text">Le debés a tus fondos</span>
+          <span className="text-text">Le debés a tus fondos y a vos</span>
           <span className="font-semibold text-text [font-variant-numeric:tabular-nums]">{fARS(prestado)}</span>
         </div>
       )}

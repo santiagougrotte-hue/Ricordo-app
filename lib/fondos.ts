@@ -10,7 +10,8 @@
 // Estos fondos son una forma de repartir la plata de la caja; no cambian el saldo de caja.
 
 import type { RicordoDataV2, ConfigFondos, FondoId, MovimientoFondo } from "./types-v2";
-import { calcularEerr, costosFijosTotales, mesAnterior, primerDiaMes, ultimoDiaMes } from "./calc-v2";
+import { mesAnterior, ultimoDiaMes } from "./calc-v2";
+import { amortizacionesMensuales, configNegocio, costosFijosMensuales, deudaConSanti, maquinariaComprada, resultadoMes } from "./negocio";
 
 export const NOMBRE_FONDO: Record<FondoId, string> = {
   reinversion: "Reinversión de maquinaria",
@@ -57,15 +58,21 @@ export interface EstadoFondos {
   meses_cubiertos: number | null;
   prestamos_pendientes: MovimientoFondo[];
   total_prestado: number;
+  /** Gastos que pagaste de tu bolsillo y todavía no te devolviste. */
+  te_debe: number;
 }
 
 export function estadoFondos(data: RicordoDataV2, mes: number, anio: number): EstadoFondos {
   const cfg = configFondos(data);
-  const costoMensual = costosFijosTotales(data, mes, anio);
+  void mes;
+  void anio;
+  // Meta de seguridad = meses × (costos fijos + sueldo objetivo), como en la planilla.
+  const costoMensual = costosFijosMensuales(data, "casa") + configNegocio(data).sueldo_objetivo;
   const calc = (fondo: FondoId): EstadoFondo => {
     const movs = cfg.movimientos.filter((m) => m.fondo === fondo);
     const aportes = movs.filter((m) => m.tipo === "aporte").reduce((a, m) => a + m.monto, 0);
-    const usos = movs.filter((m) => m.tipo === "uso").reduce((a, m) => a + m.monto, 0);
+    // Las máquinas anotadas en Gastos (categoría Maquinaria y equipos) salen de reinversión.
+    const usos = movs.filter((m) => m.tipo === "uso").reduce((a, m) => a + m.monto, 0) + (fondo === "reinversion" ? maquinariaComprada(data) : 0);
     const prestado = movs.filter((m) => m.tipo === "prestamo" && !m.devuelto_el).reduce((a, m) => a + m.monto, 0);
     const inicial = fondo === "reinversion" ? cfg.saldo_inicial_reinversion : cfg.saldo_inicial_seguridad;
     const saldo_con_devoluciones = inicial + aportes - usos;
@@ -91,6 +98,7 @@ export function estadoFondos(data: RicordoDataV2, mes: number, anio: number): Es
     meses_cubiertos: costoMensual > 0 ? seguridad.saldo / costoMensual : null,
     prestamos_pendientes,
     total_prestado: prestamos_pendientes.reduce((a, m) => a + m.monto, 0),
+    te_debe: deudaConSanti(data).total,
   };
 }
 
@@ -119,7 +127,7 @@ export function sugerenciasPendientes(data: RicordoDataV2, hoy: string): Sugeren
     const clave = `${m.anio}-${String(m.mes).padStart(2, "0")}`;
     if (clave < inicio) break;
     if (!registrados.has(clave)) {
-      const resultado_neto = calcularEerr(data, primerDiaMes(m.mes, m.anio), ultimoDiaMes(m.mes, m.anio)).resultado_neto;
+      const resultado_neto = resultadoMes(data, m.mes, m.anio).resultado_neto;
       const ganancia = Math.max(0, resultado_neto);
       const a_reinversion = Math.round((ganancia * cfg.pct_reinversion) / 100);
       const a_seguridad = Math.round((ganancia * cfg.pct_seguridad) / 100);
@@ -127,15 +135,16 @@ export function sugerenciasPendientes(data: RicordoDataV2, hoy: string): Sugeren
       const etiqueta = `${MESES_LARGOS[m.mes - 1]} ${m.anio}`;
       const fecha = ultimoDiaMes(m.mes, m.anio);
       const movimientos: Omit<MovimientoFondo, "id">[] = [];
-      if (cfg.amortizacion_mensual > 0)
-        movimientos.push({ fecha, fondo: "reinversion", tipo: "aporte", monto: cfg.amortizacion_mensual, concepto: `Amortizaciones de ${etiqueta}`, mes_origen: clave });
+      const amortizacion = amortizacionesMensuales(data) || cfg.amortizacion_mensual;
+      if (amortizacion > 0)
+        movimientos.push({ fecha, fondo: "reinversion", tipo: "aporte", monto: amortizacion, concepto: `Amortizaciones de ${etiqueta}`, mes_origen: clave });
       if (a_reinversion > 0)
         movimientos.push({ fecha, fondo: "reinversion", tipo: "aporte", monto: a_reinversion, concepto: `Ganancia de ${etiqueta} (${cfg.pct_reinversion}%)`, mes_origen: clave });
       if (a_seguridad > 0)
         movimientos.push({ fecha, fondo: "seguridad", tipo: "aporte", monto: a_seguridad, concepto: `Ganancia de ${etiqueta} (${cfg.pct_seguridad}%)`, mes_origen: clave });
       if (perdida > 0)
         movimientos.push({ fecha, fondo: "seguridad", tipo: "uso", monto: perdida, concepto: `Cubrir la pérdida de ${etiqueta}`, mes_origen: clave });
-      out.push({ mes_origen: clave, etiqueta, resultado_neto, amortizacion: cfg.amortizacion_mensual, a_reinversion, a_seguridad, perdida, movimientos });
+      out.push({ mes_origen: clave, etiqueta, resultado_neto, amortizacion, a_reinversion, a_seguridad, perdida, movimientos });
     }
     m = mesAnterior(m.mes, m.anio);
   }

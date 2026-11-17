@@ -28,6 +28,7 @@ import {
 import { FondoReposicionCard } from "@/components/FondoReposicionCard";
 import { Modal } from "@/components/Modal";
 import { FondosTab } from "@/components/fondos";
+import { CostosGastosTab, EerrMensualTab, EscenarioLocalTab } from "@/components/negocio";
 import {
   fARS,
   fNum,
@@ -1362,18 +1363,24 @@ export function Finanzas() {
   const [tab, setTab] = useState(tabInicial ?? "resumen");
   return (
     <div>
-      <PageHeader title="Finanzas" sub="Resumen, fondos de reinversión y seguridad, y tesorería" />
+      <PageHeader title="Finanzas" sub="Resultados, costos fijos y gastos, fondos, escenario del local y tesorería" />
       <FilterTabs
         value={tab}
         onChange={setTab}
         options={[
           { value: "resumen", label: "Resumen" },
+          { value: "eerr", label: "Estado de resultados" },
+          { value: "costos", label: "Costos fijos y gastos" },
           { value: "fondos", label: "Fondos" },
+          { value: "local", label: "Abrir un local" },
           { value: "tesoreria", label: "Tesorería" },
         ]}
       />
       {tab === "resumen" && <ResumenTab />}
+      {tab === "eerr" && <EerrMensualTab />}
+      {tab === "costos" && <CostosGastosTab />}
       {tab === "fondos" && <FondosTab />}
+      {tab === "local" && <EscenarioLocalTab />}
       {tab === "tesoreria" && <TesoreriaTab />}
     </div>
   );

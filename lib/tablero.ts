@@ -12,7 +12,6 @@ import {
   calcularEerr,
   calcularMargenPorItem,
   costoVariante,
-  costosFijosTotales,
   recetaEfectivaVariante,
   mesAnterior,
   primerDiaMes,
@@ -21,14 +20,15 @@ import {
 } from "./calc-v2";
 import { calcularAlertasStock, type AlertaStockInsumo } from "./ia-stock";
 import { claseInsumoImport } from "./resumen-sheets";
+import { configNegocio, costosFijosMensuales, gastosDelMes } from "./negocio";
 
 // --- 1. Punto de equilibrio del mes -------------------------------------------------------------
 
 export interface EquilibrioMes {
-  /** Costos fijos del mes (recurrentes + indirectos fijos del mes), igual que el EERR. */
+  /** Costos a cubrir en el mes: costos fijos + gastos anotados + sueldo objetivo. */
   costos_fijos: number;
-  /** Margen de contribución % (ventas − CMV − mano de obra − costos variables) de los meses de
-   * referencia; null si no hubo ventas para calcularlo. */
+  /** Margen antes de tu sueldo % (ventas − CMV − costos variables) de los meses de referencia;
+   * null si no hubo ventas para calcularlo. */
   margen_contribucion_pct: number | null;
   /** De qué meses salió el margen (texto corto para mostrar, ej. "ago–oct"). */
   meses_referencia: string[];
@@ -47,9 +47,11 @@ export interface EquilibrioMes {
 
 const MESES_CORTOS = ["ene", "feb", "mar", "abr", "may", "jun", "jul", "ago", "sep", "oct", "nov", "dic"];
 
+/** Margen antes de tu sueldo (ventas − CMV − costos variables), igual que la planilla: la mano de
+ * obra no se resta acá porque el sueldo objetivo completo ya está en los costos a cubrir. */
 function margenDeContribucion(data: RicordoDataV2, desde: string, hasta: string): { ventas: number; mc: number } {
   const e = calcularEerr(data, desde, hasta);
-  const mc = e.ventas_netas - e.cmv.total - e.mano_de_obra_directa.total - e.costos_indirectos_variables.total;
+  const mc = e.ventas_netas - e.cmv.total - e.costos_indirectos_variables.total;
   return { ventas: e.ventas_netas, mc };
 }
 
@@ -81,7 +83,9 @@ export function calcularEquilibrioMes(data: RicordoDataV2, mes: number, anio: nu
   }
   const margen_contribucion_pct = ventasRef > 0 ? (mcRef / ventasRef) * 100 : null;
 
-  const costos_fijos = costosFijosTotales(data, mes, anio);
+  // Costos a cubrir = costos fijos de la lista (taller en casa) + gastos anotados del mes + sueldo objetivo.
+  const costos_fijos =
+    costosFijosMensuales(data, "casa") + gastosDelMes(data, mes, anio).reduce((a, g) => a + g.monto, 0) + configNegocio(data).sueldo_objetivo;
   const punto_equilibrio =
     margen_contribucion_pct != null && margen_contribucion_pct > 0 ? Math.round(costos_fijos / (margen_contribucion_pct / 100)) : null;
 
