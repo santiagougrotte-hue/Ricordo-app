@@ -12,12 +12,12 @@ import { SyncConflictModal } from "@/components/SyncConflictModal";
 import { ThemeApplier } from "@/components/ThemeApplier";
 
 function AuthGate({ children }: { children: React.ReactNode }) {
-  const { session, ready } = useAuth();
+  const { session, ready, recovering } = useAuth();
 
   if (supabaseConfigured && !ready) {
     return <div className="flex min-h-screen items-center justify-center bg-bg text-text3">Cargando…</div>;
   }
-  if (supabaseConfigured && !session) {
+  if (supabaseConfigured && (!session || recovering)) {
     return <Login />;
   }
 
