@@ -14,7 +14,16 @@ function getClient(): Anthropic {
       "ANTHROPIC_API_KEY no está configurada. Definila como variable de entorno server-only en Vercel (nunca en el frontend)."
     );
   }
-  if (!client) client = new Anthropic({ apiKey });
+  // Claves de API que no pertenecen a un workspace (formato `sk-ant-usr-…`) exigen que cada
+  // request diga a qué workspace cobrar. Si está definida ANTHROPIC_WORKSPACE_ID (no es secreta,
+  // tiene formato `wrkspc_…`), se manda en el header `anthropic-workspace-id`.
+  const workspaceId = process.env.ANTHROPIC_WORKSPACE_ID?.trim();
+  if (!client) {
+    client = new Anthropic({
+      apiKey,
+      ...(workspaceId ? { defaultHeaders: { "anthropic-workspace-id": workspaceId } } : {}),
+    });
+  }
   return client;
 }
 
