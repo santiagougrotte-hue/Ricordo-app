@@ -14,8 +14,10 @@ export const dynamic = "force-dynamic";
 export const maxDuration = 60;
 
 export async function GET(req: NextRequest) {
-  const token = process.env.EXPORT_TOKEN;
-  if (!token || token.length < 20 || req.headers.get("authorization") !== `Bearer ${token}`) {
+  // trim(): un espacio pegado sin querer al cargar la contraseña no debería dejar afuera al script.
+  const token = process.env.EXPORT_TOKEN?.trim();
+  const recibido = req.headers.get("authorization")?.replace(/^Bearer\s+/i, "").trim();
+  if (!token || token.length < 20 || recibido !== token) {
     return NextResponse.json({ error: "No autorizado" }, { status: 401 });
   }
 
