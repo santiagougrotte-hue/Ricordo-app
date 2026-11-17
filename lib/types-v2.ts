@@ -434,6 +434,58 @@ export interface Configuracion {
   /** `id` de pedido_item confirmados en la conciliación de Caja como intencionalmente sin cobrar. */
   conciliacion_ignorados: string[];
   apariencia: ConfiguracionApariencia;
+  /** Datos que se cargan a mano en Operaciones → Planificación (antes en las planillas de Sheets).
+   * Claves `${mes}:${productoId}` (mes = "AAAA-MM") o `${semana}:${productoId}` (semana = fecha del
+   * jueves, "AAAA-MM-DD"). Opcional: sin cargar, todo usa la sugerencia calculada. */
+  plan_compras?: PlanCompras;
+  /** Fondos de reinversión (maquinaria, alimentado por las amortizaciones) y de seguridad, con
+   * los préstamos internos que se toman de ellos — antes en las pestañas SALDOS/FONDOS. */
+  fondos?: ConfigFondos;
+}
+
+export type FondoId = "reinversion" | "seguridad";
+
+export interface MovimientoFondo {
+  id: string;
+  fecha: string;
+  fondo: FondoId;
+  /** aporte: entra plata (ganancia del mes, amortizaciones). uso: sale y no vuelve (una máquina,
+   * cubrir una pérdida). prestamo: sale para algo del negocio (compras) y se devuelve. */
+  tipo: "aporte" | "uso" | "prestamo";
+  monto: number;
+  concepto: string;
+  /** Mes ("AAAA-MM") del que sale un aporte o la cobertura de una pérdida — evita registrarlo dos veces. */
+  mes_origen?: string;
+  /** Solo préstamos: fecha en que se devolvió. Sin fecha = todavía se debe. */
+  devuelto_el?: string;
+}
+
+export interface ConfigFondos {
+  /** % del resultado positivo del mes que va a cada fondo (suman 100). */
+  pct_reinversion: number;
+  pct_seguridad: number;
+  /** Amortizaciones que se separan todos los meses para reponer equipos (van a reinversión). */
+  amortizacion_mensual: number;
+  /** Meta del fondo de seguridad, en meses de costos fijos. */
+  meses_meta_seguridad: number;
+  /** Meta del fondo de reinversión (ej. la inversión para abrir el local). */
+  meta_reinversion: number;
+  /** Desde qué fecha se llevan los fondos en la app, y con qué saldo arrancaba cada uno. */
+  fecha_inicio: string;
+  saldo_inicial_reinversion: number;
+  saldo_inicial_seguridad: number;
+  movimientos: MovimientoFondo[];
+}
+
+export interface PlanCompras {
+  /** Ajuste % sobre la proyección sugerida de un gusto en un mes ("2026-11:PROD-01" → 10). */
+  ajuste_pct?: Record<string, number>;
+  /** Proyección manual que pisa la sugerida, en cajas de referencia. */
+  proyeccion_manual?: Record<string, number>;
+  /** Cajas a armar en una semana que pisan la sugerencia ("2026-11-19:PROD-01" → 4). */
+  cajas_semana?: Record<string, number>;
+  /** Ingredientes de relleno que ya hay en casa al planificar un mes ("2026-11:ING-001" → 1.5). */
+  relleno_en_casa?: Record<string, number>;
 }
 
 export type Tema = "oscuro" | "claro" | "sistema";

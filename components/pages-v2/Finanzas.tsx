@@ -27,6 +27,7 @@ import {
 } from "@/components/ui";
 import { FondoReposicionCard } from "@/components/FondoReposicionCard";
 import { Modal } from "@/components/Modal";
+import { FondosTab } from "@/components/fondos";
 import {
   fARS,
   fNum,
@@ -1361,16 +1362,18 @@ export function Finanzas() {
   const [tab, setTab] = useState(tabInicial ?? "resumen");
   return (
     <div>
-      <PageHeader title="Finanzas" sub="Resumen, fondo de reposición y tesorería (el análisis está en las planillas)" />
+      <PageHeader title="Finanzas" sub="Resumen, fondos de reinversión y seguridad, y tesorería" />
       <FilterTabs
         value={tab}
         onChange={setTab}
         options={[
           { value: "resumen", label: "Resumen" },
+          { value: "fondos", label: "Fondos" },
           { value: "tesoreria", label: "Tesorería" },
         ]}
       />
       {tab === "resumen" && <ResumenTab />}
+      {tab === "fondos" && <FondosTab />}
       {tab === "tesoreria" && <TesoreriaTab />}
     </div>
   );
