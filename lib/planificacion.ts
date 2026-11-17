@@ -152,7 +152,7 @@ export function planSemanal(data: RicordoDataV2, jueves: string): PlanSemanal {
     total_cajas: cajas.reduce((acc, c) => acc + c.a_armar, 0),
     insumos,
     costo_total: insumos.reduce((acc, f) => acc + f.costo, 0),
-    disponible_fondo: calcularFondoReposicion(data).disponible_masa_packaging,
+    disponible_fondo: calcularFondoReposicion(data).disponible_total,
   };
 }
 
@@ -169,8 +169,11 @@ export interface FilaProyeccion {
   sugerida: number;
   manual: number | null;
   a_usar: number;
+  /** Cajas en el freezer al empezar el mes (o hoy, si el mes todavía no empezó). */
   freezer: number;
   a_producir: number;
+  /** Cajas ya producidas en el mes (Operaciones → Producción). */
+  producido: number;
   usa_relleno: boolean;
   /** Kilos de relleno cocido que lleva la producción del mes, los que ya hay y los que faltan. */
   kg_relleno_necesario: number;
@@ -192,13 +195,37 @@ export interface PlanMensual {
   costo_relleno: number;
   costo_total: number;
   disponible_fondo: number;
-  disponible_masa: number;
-  disponible_relleno: number;
+  /** Planificado (a producir) contra lo producido en el mes, en cajas. */
+  total_planificado: number;
+  total_producido: number;
+  /** Lo que todavía falta producir del plan (lo producido de más en un gusto no cubre a otro). */
+  falta_producir: number;
+  /** Avance del plan en %, con cada gusto tope en lo planificado; null si no hay nada planificado. */
+  avance_pct: number | null;
   /** Positivo: sobra; negativo: falta esa plata para las compras del mes. */
   diferencia: number;
 }
 
-export function planMensual(data: RicordoDataV2, mes: number, anio: number): PlanMensual {
+/** Cajas producidas por gusto entre dos fechas. Las producciones nuevas ya se cargan en cajas por
+ * gusto; las viejas (por presentación) se pasan a cajas con las unidades del paquete. */
+export function producidoPorGusto(data: RicordoDataV2, desde: string, hasta: string): Map<string, number> {
+  const out = new Map<string, number>();
+  for (const p of data.produccion) {
+    if (p.fecha < desde || p.fecha > hasta) continue;
+    let productoId = p.producto_id;
+    let cajas = p.cantidad;
+    if (!productoId) {
+      const v = data.producto_variantes.find((x) => x.id === p.producto_variante_id);
+      if (!v) continue;
+      productoId = v.producto_id;
+      cajas = (p.cantidad * (v.unidades_por_paquete ?? 1)) / unidadesPorCajaStock(data, productoId);
+    }
+    out.set(productoId, (out.get(productoId) ?? 0) + cajas);
+  }
+  return out;
+}
+
+export function planMensual(data: RicordoDataV2, mes: number, anio: number, hoy = new Date().toLocaleDateString("sv-SE")): PlanMensual {
   const plan: PlanCompras = data.configuracion.plan_compras ?? {};
   const clave = claveMes(mes, anio);
   const colchon = configNegocio(data).colchon_pct;
@@ -213,6 +240,10 @@ export function planMensual(data: RicordoDataV2, mes: number, anio: number): Pla
   const ventasMes = meses.map((x) => ventasPorGustoRef(data, primerDiaMes(x.mes, x.anio), ultimoDiaMes(x.mes, x.anio)));
   const cuenta = ventasMes.map((v) => [...v.values()].some((n) => n > 0));
   const pesos = [1, 2, 3];
+  const inicioMes = primerDiaMes(mes, anio);
+  // El freezer se toma al empezar el mes, así lo planificado no cambia a medida que se produce.
+  const corteFreezer = inicioMes <= hoy ? sumarDias(inicioMes, -1) : undefined;
+  const producidoMes = producidoPorGusto(data, inicioMes, ultimoDiaMes(mes, anio));
 
   const productos: FilaProyeccion[] = productosPlanificables(data).map((p) => {
     const vendidos = ventasMes.map((v, idx) => (cuenta[idx] ? v.get(p.id) ?? 0 : null));
@@ -223,7 +254,7 @@ export function planMensual(data: RicordoDataV2, mes: number, anio: number): Pla
     const manual = plan.proyeccion_manual?.[`${clave}:${p.id}`] ?? null;
     const a_usar = manual ?? sugerida;
     const formato = unidadesPorCajaStock(data, p.id);
-    const freezer = Math.max(0, Math.round((calcularStock(data, "producto", p.id) / formato) * 10) / 10);
+    const freezer = Math.max(0, Math.round((calcularStock(data, "producto", p.id, corteFreezer) / formato) * 10) / 10);
     // A producir = proyección + colchón (PARAMETROS de la planilla, 15% por defecto) − freezer.
     const a_producir = Math.max(0, Math.ceil(a_usar * (1 + colchon / 100) - freezer - 1e-9));
     const usa_relleno = usaRellenoCocido(data, p.id);
@@ -243,6 +274,7 @@ export function planMensual(data: RicordoDataV2, mes: number, anio: number): Pla
       a_usar,
       freezer,
       a_producir,
+      producido: Math.round((producidoMes.get(p.id) ?? 0) * 10) / 10,
       usa_relleno,
       kg_relleno_necesario,
       kg_relleno_disponible,
@@ -279,6 +311,10 @@ export function planMensual(data: RicordoDataV2, mes: number, anio: number): Pla
   const costo_masa = insumos_masa.reduce((acc, f) => acc + f.costo, 0);
   const costo_relleno = insumos_relleno.reduce((acc, f) => acc + f.costo, 0);
   const costo_total = costo_masa + costo_relleno;
+  const total_planificado = productos.reduce((acc, p) => acc + p.a_producir, 0);
+  const total_producido = Math.round(productos.reduce((acc, p) => acc + p.producido, 0) * 10) / 10;
+  const cubierto = productos.reduce((acc, p) => acc + Math.min(p.producido, p.a_producir), 0);
+  const falta_producir = Math.round((total_planificado - cubierto) * 10) / 10;
   return {
     colchon_pct: colchon,
     mes,
@@ -291,8 +327,10 @@ export function planMensual(data: RicordoDataV2, mes: number, anio: number): Pla
     costo_relleno,
     costo_total,
     disponible_fondo: fondo.disponible_total,
-    disponible_masa: fondo.disponible_masa_packaging,
-    disponible_relleno: fondo.disponible_relleno,
+    total_planificado,
+    total_producido,
+    falta_producir,
+    avance_pct: total_planificado > 0 ? (cubierto / total_planificado) * 100 : null,
     diferencia: fondo.disponible_total - costo_total,
   };
 }
