@@ -12,7 +12,6 @@ import { calcularFondoReposicion } from "@/lib/fondo-reposicion";
 import { Modal } from "@/components/Modal";
 import { Bloque, SeguimientoMes, CompraJueves, PlataPanel, MargenesPanel, Simulador } from "@/components/tablero";
 import {
-  calcularEerr,
   saldoCaja,
   itemsSinCostoDeterminado,
   fARS,
@@ -32,6 +31,7 @@ import {
 } from "@/lib/tablero";
 import { planSemanal } from "@/lib/planificacion";
 import { estadoFondos, sugerenciasPendientes } from "@/lib/fondos";
+import { resultadoMes } from "@/lib/negocio";
 import { generarResumenInteligente } from "@/lib/resumen-inteligente";
 import { produccionPendientePorSabor, gustosSinVarianteActiva } from "@/lib/rellenos";
 import type { Conclusion } from "@/lib/resumen-inteligente";
@@ -131,7 +131,7 @@ export function Inicio() {
   const equilibrio = useMemo(() => calcularEquilibrioMes(data, mes, anio, hoy), [data, mes, anio, hoy]);
   const ritmo = useMemo(() => ritmoDelMes(data, mes, anio, hoy, equilibrio.punto_equilibrio), [data, mes, anio, hoy, equilibrio.punto_equilibrio]);
   const semanas = useMemo(() => semanasDelMes(data, mes, anio, hoy, equilibrio.punto_equilibrio), [data, mes, anio, hoy, equilibrio.punto_equilibrio]);
-  const resultadoNeto = useMemo(() => calcularEerr(data, desde, hasta).resultado_neto, [data, desde, hasta]);
+  const resultadoNeto = useMemo(() => resultadoMes(data, mes, anio).resultado_neto, [data, mes, anio]);
   const jueves = proximoJueves(hoy);
   const compra = useMemo(() => planSemanal(data, jueves), [data, jueves]);
   const ranking = useMemo(() => rankingProductos(data, sumarDias(hoy, -90), hoy), [data, hoy]);
@@ -251,7 +251,7 @@ export function Inicio() {
           disponibleRelleno={fondo.disponible_relleno}
           reinversion={fondos.reinversion.saldo}
           seguridad={fondos.seguridad.saldo}
-          prestado={fondos.total_prestado}
+          prestado={fondos.total_prestado + fondos.te_debe}
           mesesPorSeparar={porSeparar.map((s) => s.etiqueta)}
           onVerFondos={() => router.go("finanzas", "fondos")}
         />

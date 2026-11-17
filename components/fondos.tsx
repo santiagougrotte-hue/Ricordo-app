@@ -267,6 +267,12 @@ export function FondosTab() {
               </div>
             </>
           )}
+          {estado.te_debe > 0 && (
+            <div className="mt-3 flex justify-between rounded-xl bg-surface2 px-3 py-2.5 text-[13px]">
+              <span className="text-text2">Gastos que pagaste de tu bolsillo</span>
+              <span className="font-semibold text-orange">{fARS(estado.te_debe)}</span>
+            </div>
+          )}
         </Bloque>
       </div>
 

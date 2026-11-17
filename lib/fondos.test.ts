@@ -33,8 +33,11 @@ test("sugerenciasPendientes: un mes por cerrar desde la fecha de inicio, y no re
   const d = base();
   const s = sugerenciasPendientes(d, "2026-11-17");
   assert.deepEqual(s.map((x) => x.mes_origen), ["2026-10"]);
-  // Sin ventas el resultado es 0: solo se sugieren las amortizaciones.
-  assert.deepEqual(s[0].movimientos.map((m) => [m.fondo, m.tipo, m.monto]), [["reinversion", "aporte", 40000]]);
+  // Sin ventas: se separan las amortizaciones y la pérdida (costos fijos + sueldo objetivo) se cubre con seguridad.
+  assert.deepEqual(s[0].movimientos[0].fondo, "reinversion");
+  assert.equal(s[0].movimientos[0].monto, 40000);
+  assert.ok(s[0].perdida > 0);
+  assert.deepEqual(s[0].movimientos.at(-1)?.tipo, "uso");
   const registrado = conMovimientosFondo(d, s[0].movimientos.map((m, i) => ({ ...m, id: `M${i}` })));
   assert.deepEqual(sugerenciasPendientes(registrado, "2026-11-17"), []);
 });

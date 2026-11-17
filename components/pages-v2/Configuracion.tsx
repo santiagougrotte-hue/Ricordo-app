@@ -1,5 +1,6 @@
 "use client";
 
+import { ParametrosNegocio } from "@/components/negocio";
 import React, { useMemo, useRef, useState } from "react";
 import { useStoreV2, comoV3 } from "@/lib/store-v2";
 import { useAuth } from "@/lib/auth-context";
@@ -63,6 +64,8 @@ function GeneralTab() {
   }
 
   return (
+    <div className="space-y-5">
+      <ParametrosNegocio />
     <div className="flex flex-col gap-4">
       <Card title="Impuestos">
         <p className="mb-3 text-[12.5px] text-text3">
@@ -224,6 +227,7 @@ function GeneralTab() {
           </Field>
         </FormGrid>
       </Card>
+    </div>
     </div>
   );
 }

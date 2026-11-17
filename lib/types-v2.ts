@@ -441,6 +441,61 @@ export interface Configuracion {
   /** Fondos de reinversión (maquinaria, alimentado por las amortizaciones) y de seguridad, con
    * los préstamos internos que se toman de ellos — antes en las pestañas SALDOS/FONDOS. */
   fondos?: ConfigFondos;
+  /** Parámetros del negocio, costos fijos ítem por ítem, gastos anotados, escenario del local y
+   * fichas de costeo — antes en PARAMETROS, COSTOS_FIJOS, GASTOS, ESCENARIO_LOCAL y COSTEO_NUEVOS. */
+  negocio?: ConfigNegocio;
+}
+
+export interface ItemCostoFijo {
+  id: string;
+  nombre: string;
+  categoria: string;
+  /** Monto mensual en el taller en casa (estructura actual) y proyectado para el local. */
+  monto_casa: number;
+  monto_local: number;
+  /** Las amortizaciones se separan en el fondo de reinversión; el resto se paga de la cuenta de costos fijos. */
+  se_paga_desde: "costos_fijos" | "reinversion";
+  nota?: string;
+}
+
+export interface GastoAnotado {
+  id: string;
+  fecha: string;
+  concepto: string;
+  categoria: string;
+  monto: number;
+  /** "bolsillo": lo pagaste vos y el negocio te lo debe hasta `reintegrado_el`. */
+  con: "caja" | "bolsillo";
+  reintegrado_el?: string;
+}
+
+export interface FichaCosteo {
+  id: string;
+  nombre: string;
+  rinde: number;
+  minutos_mano_obra: number;
+  energia: number;
+  lineas: { id: string; insumo: string; cantidad: number; unidad: string; precio: number; tipo: "Masa" | "Relleno" | "Armado" | "Packaging" }[];
+}
+
+export interface ConfigNegocio {
+  sueldo_objetivo: number;
+  margen_objetivo_minorista: number;
+  margen_objetivo_mayorista: number;
+  /** % que se suma a la proyección de venta al planificar compras y rellenos. */
+  colchon_pct: number;
+  saldo_cuenta_costos_fijos: number;
+  costos_fijos: ItemCostoFijo[];
+  /** "AAAA-MM:itemId" → fecha en que se pagó ese costo fijo ese mes. */
+  pagos_costos_fijos: Record<string, string>;
+  gastos: GastoAnotado[];
+  escenario: {
+    capacidad_casa: number;
+    capacidad_local: number;
+    cajas_esperadas_local: number;
+    inversion: { id: string; concepto: string; monto: number }[];
+  };
+  costeos: FichaCosteo[];
 }
 
 export type FondoId = "reinversion" | "seguridad";

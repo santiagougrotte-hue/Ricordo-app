@@ -12,6 +12,7 @@ import type { RicordoDataV2, PlanCompras } from "./types-v2";
 import { calcularMargenPorItem, calcularStock, mesAnterior, primerDiaMes, ultimoDiaMes, sumarDias } from "./calc-v2";
 import { consumoInsumosProduccion, gramosRellenoPorUnidad, kgRellenoDisponible, unidadesPorCajaStock, usaRellenoCocido } from "./rellenos";
 import { calcularFondoReposicion } from "./fondo-reposicion";
+import { configNegocio } from "./negocio";
 
 export const claveMes = (mes: number, anio: number) => `${anio}-${String(mes).padStart(2, "0")}`;
 const MESES_CORTOS = ["ene", "feb", "mar", "abr", "may", "jun", "jul", "ago", "sep", "oct", "nov", "dic"];
@@ -180,6 +181,7 @@ export interface FilaProyeccion {
 }
 
 export interface PlanMensual {
+  colchon_pct: number;
   mes: number;
   anio: number;
   meses_ref: string[];
@@ -199,6 +201,7 @@ export interface PlanMensual {
 export function planMensual(data: RicordoDataV2, mes: number, anio: number): PlanMensual {
   const plan: PlanCompras = data.configuracion.plan_compras ?? {};
   const clave = claveMes(mes, anio);
+  const colchon = configNegocio(data).colchon_pct;
 
   // Los 3 meses anteriores, del más viejo al más nuevo; solo cuentan los que tuvieron ventas.
   const meses: { mes: number; anio: number }[] = [];
@@ -221,7 +224,8 @@ export function planMensual(data: RicordoDataV2, mes: number, anio: number): Pla
     const a_usar = manual ?? sugerida;
     const formato = unidadesPorCajaStock(data, p.id);
     const freezer = Math.max(0, Math.round((calcularStock(data, "producto", p.id) / formato) * 10) / 10);
-    const a_producir = Math.max(0, Math.ceil(a_usar - freezer - 1e-9));
+    // A producir = proyección + colchón (PARAMETROS de la planilla, 15% por defecto) − freezer.
+    const a_producir = Math.max(0, Math.ceil(a_usar * (1 + colchon / 100) - freezer - 1e-9));
     const usa_relleno = usaRellenoCocido(data, p.id);
     const kgPorCaja = usa_relleno ? (gramosRellenoPorUnidad(data, p.id) * formato) / 1000 : 0;
     const kg_relleno_necesario = Math.round(a_producir * kgPorCaja * 1000) / 1000;
@@ -276,6 +280,7 @@ export function planMensual(data: RicordoDataV2, mes: number, anio: number): Pla
   const costo_relleno = insumos_relleno.reduce((acc, f) => acc + f.costo, 0);
   const costo_total = costo_masa + costo_relleno;
   return {
+    colchon_pct: colchon,
     mes,
     anio,
     meses_ref: meses.filter((_, idx) => cuenta[idx]).map((x) => MESES_CORTOS[x.mes - 1]),
