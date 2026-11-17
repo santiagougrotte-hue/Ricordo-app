@@ -27,10 +27,10 @@ import {
   calcularEquilibrioMes,
   ritmoDelMes,
   semanasDelMes,
-  calcularCompraSemanal,
   proximoJueves,
   rankingProductos,
 } from "@/lib/tablero";
+import { planSemanal } from "@/lib/planificacion";
 import { generarResumenInteligente } from "@/lib/resumen-inteligente";
 import { produccionPendientePorSabor, gustosSinVarianteActiva } from "@/lib/rellenos";
 import type { Conclusion } from "@/lib/resumen-inteligente";
@@ -131,8 +131,8 @@ export function Inicio() {
   const ritmo = useMemo(() => ritmoDelMes(data, mes, anio, hoy, equilibrio.punto_equilibrio), [data, mes, anio, hoy, equilibrio.punto_equilibrio]);
   const semanas = useMemo(() => semanasDelMes(data, mes, anio, hoy, equilibrio.punto_equilibrio), [data, mes, anio, hoy, equilibrio.punto_equilibrio]);
   const resultadoNeto = useMemo(() => calcularEerr(data, desde, hasta).resultado_neto, [data, desde, hasta]);
-  const compra = useMemo(() => calcularCompraSemanal(data, hoy), [data, hoy]);
   const jueves = proximoJueves(hoy);
+  const compra = useMemo(() => planSemanal(data, jueves), [data, jueves]);
   const ranking = useMemo(() => rankingProductos(data, sumarDias(hoy, -90), hoy), [data, hoy]);
   const resumen = useMemo(() => generarResumenInteligente(data, mes, anio), [data, mes, anio]);
   const caja = useMemo(() => saldoCaja(data), [data]);
@@ -243,7 +243,7 @@ export function Inicio() {
       <SeguimientoMes eq={equilibrio} ritmo={ritmo} semanas={semanas} resultadoNeto={resultadoNeto} nombreMes={MESES[mes - 1]} />
 
       <div className="grid grid-cols-1 gap-5 lg:grid-cols-[minmax(0,7fr)_minmax(0,5fr)]">
-        <CompraJueves compra={compra} jueves={jueves} disponibleMasaPackaging={fondo.disponible_masa_packaging} />
+        <CompraJueves plan={compra} onAjustar={() => router.go("operaciones", "planificacion")} />
         <PlataPanel
           caja={caja}
           disponibleMasaPackaging={fondo.disponible_masa_packaging}

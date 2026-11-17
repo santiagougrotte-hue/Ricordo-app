@@ -434,6 +434,21 @@ export interface Configuracion {
   /** `id` de pedido_item confirmados en la conciliación de Caja como intencionalmente sin cobrar. */
   conciliacion_ignorados: string[];
   apariencia: ConfiguracionApariencia;
+  /** Datos que se cargan a mano en Operaciones → Planificación (antes en las planillas de Sheets).
+   * Claves `${mes}:${productoId}` (mes = "AAAA-MM") o `${semana}:${productoId}` (semana = fecha del
+   * jueves, "AAAA-MM-DD"). Opcional: sin cargar, todo usa la sugerencia calculada. */
+  plan_compras?: PlanCompras;
+}
+
+export interface PlanCompras {
+  /** Ajuste % sobre la proyección sugerida de un gusto en un mes ("2026-11:PROD-01" → 10). */
+  ajuste_pct?: Record<string, number>;
+  /** Proyección manual que pisa la sugerida, en cajas de referencia. */
+  proyeccion_manual?: Record<string, number>;
+  /** Cajas a armar en una semana que pisan la sugerencia ("2026-11-19:PROD-01" → 4). */
+  cajas_semana?: Record<string, number>;
+  /** Ingredientes de relleno que ya hay en casa al planificar un mes ("2026-11:ING-001" → 1.5). */
+  relleno_en_casa?: Record<string, number>;
 }
 
 export type Tema = "oscuro" | "claro" | "sistema";

@@ -4,6 +4,7 @@ import React, { useMemo, useState } from "react";
 import { X } from "lucide-react";
 import { useStoreV2 } from "@/lib/store-v2";
 import { useRouter } from "@/lib/nav-context";
+import { PlanificacionTab } from "@/components/planificacion";
 import { useToast } from "@/lib/toast";
 import { uid } from "@/lib/id";
 import {
@@ -924,7 +925,7 @@ export function Operaciones() {
   const [tab, setTab] = useState(tabInicial ?? "compras");
   return (
     <div>
-      <PageHeader title="Operaciones" sub="Compras, proveedores, rellenos y producción" />
+      <PageHeader title="Operaciones" sub="Compras, proveedores, rellenos, producción y planificación" />
       <FilterTabs
         value={tab}
         onChange={setTab}
@@ -933,12 +934,14 @@ export function Operaciones() {
           { value: "proveedores", label: "Proveedores" },
           { value: "rellenos", label: "Rellenos" },
           { value: "produccion", label: "Producción" },
+          { value: "planificacion", label: "Planificación" },
         ]}
       />
       {tab === "compras" && <ComprasTab />}
       {tab === "proveedores" && <ProveedoresTab />}
       {tab === "rellenos" && <RellenosTab />}
       {tab === "produccion" && <ProduccionTab />}
+      {tab === "planificacion" && <PlanificacionTab />}
     </div>
   );
 }

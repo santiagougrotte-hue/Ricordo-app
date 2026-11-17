@@ -12,7 +12,8 @@ import { fARS, fNum } from "@/lib/calc-v2";
 import { Bar, NUM_BIG } from "@/components/ds";
 import { Select, Input } from "@/components/ui";
 import type { RicordoDataV2 } from "@/lib/types-v2";
-import type { EquilibrioMes, PuntoRitmo, SemanaSeguimiento, CompraSemanal, RankingProducto, CambiosSimulacion } from "@/lib/tablero";
+import type { EquilibrioMes, PuntoRitmo, SemanaSeguimiento, RankingProducto, CambiosSimulacion } from "@/lib/tablero";
+import type { PlanSemanal } from "@/lib/planificacion";
 import { simularCambios, vendidasPorMes } from "@/lib/tablero";
 
 const fK = (n: number) => (Math.abs(n) >= 1000 ? `$${fNum(n / 1000, 0)}k` : `$${fNum(n, 0)}`);
@@ -236,72 +237,79 @@ export function SeguimientoMes({
 
 // --- Compra del jueves ---------------------------------------------------------------------------
 
-const ESTADO_COBERTURA = {
-  critica: { color: "red" as const, texto: "text-red", Icono: CircleAlert, label: "Falta para pedidos" },
-  importante: { color: "orange" as const, texto: "text-orange", Icono: AlertTriangle, label: "Menos de 1 semana" },
-  informativa: { color: "green" as const, texto: "text-green", Icono: CheckCircle2, label: "Alcanza" },
+const ESTADO_INSUMO = {
+  "no alcanza": { texto: "text-red", Icono: CircleAlert, label: "No alcanza" },
+  justo: { texto: "text-orange", Icono: AlertTriangle, label: "Justo" },
+  ok: { texto: "text-green", Icono: CheckCircle2, label: "Alcanza" },
 };
 
-export function CompraJueves({
-  compra,
-  jueves,
-  disponibleMasaPackaging,
-}: {
-  compra: CompraSemanal;
-  jueves: string;
-  disponibleMasaPackaging: number;
-}) {
-  const [verTodo, setVerTodo] = useState(false);
-  const urgentes = compra.filas.filter((f) => f.severidad !== "informativa");
-  const visibles = verTodo ? compra.filas : urgentes.length > 0 ? urgentes : compra.filas.slice(0, 5);
-  const alcanzaPlata = disponibleMasaPackaging >= compra.costo_total_sugerido;
+export function CompraJueves({ plan, onAjustar }: { plan: PlanSemanal; onAjustar: () => void }) {
+  const aComprar = plan.insumos.filter((f) => f.comprar > 0);
+  const justos = plan.insumos.filter((f) => f.comprar === 0 && f.estado === "justo");
+  const lista = [...aComprar, ...justos].slice(0, 6);
+  const armando = plan.cajas.filter((c) => c.a_armar > 0);
+  const alcanzaPlata = plan.disponible_fondo >= plan.costo_total;
   return (
-    <Bloque titulo={`Compra del jueves ${fDiaMes(jueves)}`} bajada="Masa y packaging, al ritmo de consumo de los últimos 30 días.">
-      <div className="mb-5 grid grid-cols-2 gap-4 rounded-2xl bg-surface2 p-4">
-        <Dato label="Compra sugerida" valor={fARS(compra.costo_total_sugerido)} nota={`${urgentes.length} insumo(s) para reponer`} />
+    <Bloque
+      titulo={`Compra del jueves ${fDiaMes(plan.jueves)}`}
+      bajada={`Para armar ${fNum(plan.total_cajas, 0)} cajas esta semana, según lo que venís vendiendo.`}
+      derecha={
+        <button onClick={onAjustar} className="min-h-[34px] rounded-full border border-border px-3.5 text-[12.5px] font-medium text-text2 hover:border-accent hover:text-text">
+          Ajustar el plan
+        </button>
+      }
+    >
+      {armando.length > 0 && (
+        <div className="mb-4 flex flex-wrap gap-1.5">
+          {armando.map((c) => (
+            <span key={c.producto_id} className="rounded-full bg-surface2 px-3 py-1 text-[12px] text-text2">
+              <span className="font-semibold text-text">{c.a_armar}</span> {c.nombre}
+            </span>
+          ))}
+        </div>
+      )}
+      <div className="mb-4 grid grid-cols-2 gap-4 rounded-2xl bg-surface2 p-4">
+        <Dato label="A comprar" valor={fARS(plan.costo_total)} nota={aComprar.length ? `${aComprar.length} insumo(s)` : "No hace falta comprar"} />
         <Dato
-          label="CMV disponible para reponer"
-          valor={fARS(disponibleMasaPackaging)}
+          label="Fondo para masa y packaging"
+          valor={fARS(plan.disponible_fondo)}
           tono={alcanzaPlata ? "text-green" : "text-red"}
-          nota={alcanzaPlata ? "Alcanza para la compra" : "No alcanza: compraste más de lo que vendiste"}
+          nota={alcanzaPlata ? "Alcanza para la compra" : `Faltan ${fARS(plan.costo_total - plan.disponible_fondo)}`}
         />
       </div>
-      {compra.filas.length === 0 ? (
-        <p className="py-6 text-center text-[13px] text-text3">Marcá “controla stock” en los insumos de masa y packaging para verlos acá.</p>
+      {lista.length === 0 ? (
+        <p className="py-4 text-center text-[13px] text-text3">Con el stock que tenés alcanza para lo que vas a armar.</p>
       ) : (
         <ul className="divide-y divide-border">
-          {visibles.map((f) => {
-            const e = ESTADO_COBERTURA[f.severidad];
-            const dias = f.dias_cobertura;
+          {lista.map((f) => {
+            const e = ESTADO_INSUMO[f.estado];
+            const cobertura = f.necesario > 0 ? ((f.stock ?? 0) / f.necesario) * 100 : 100;
             return (
-              <li key={f.insumo_id} className="grid grid-cols-[1fr_auto] items-center gap-x-4 gap-y-2 py-3">
+              <li key={f.insumo_id} className="grid grid-cols-[1fr_auto] items-center gap-x-4 py-3">
                 <div className="min-w-0">
                   <div className="flex items-center gap-2">
                     <e.Icono className={`h-4 w-4 shrink-0 ${e.texto}`} aria-label={e.label} />
-                    <span className="truncate text-[13.5px] font-medium text-text">{f.insumo_nombre}</span>
-                    <span className="shrink-0 text-[12px] text-text3">
-                      {fNum(f.stock_actual, 2)} {f.unidad.trim()}
-                    </span>
+                    <span className="truncate text-[13.5px] font-medium text-text">{f.nombre}</span>
                   </div>
                   <div className="mt-2 flex items-center gap-3 pl-6">
-                    <div className="w-full max-w-[220px]">
-                      <Bar pct={dias == null ? 100 : (dias / 14) * 100} color={e.color} height={5} />
+                    <div className="w-full max-w-[200px]">
+                      <Bar pct={cobertura} color={f.estado === "no alcanza" ? "red" : f.estado === "justo" ? "orange" : "green"} height={5} />
                     </div>
-                    <span className={`shrink-0 text-[12px] ${e.texto}`}>
-                      {dias == null ? "sin consumo reciente" : dias >= 60 ? "+2 meses" : `${fNum(Math.floor(dias), 0)} días`}
+                    <span className="shrink-0 text-[12px] text-text3">
+                      tenés {fNum(f.stock ?? 0, 2)} de {fNum(f.necesario, 2)} {f.unidad}
                     </span>
                   </div>
                 </div>
                 <div className="text-right">
-                  {f.cantidad_sugerida_compra > 0 ? (
+                  {f.comprar > 0 ? (
                     <>
                       <div className="text-[13.5px] font-semibold text-text">
-                        Comprar {fNum(f.cantidad_sugerida_compra, 2)} {f.unidad.trim()}
+                        Comprar {fNum(f.comprar, 2)} {f.unidad}
                       </div>
-                      <div className="text-[12px] text-text3">{fARS(f.costo_sugerido)}</div>
+                      <div className="text-[12px] text-text3">{fARS(f.costo)}</div>
                     </>
                   ) : (
-                    <span className="text-[12px] text-text3">No hace falta</span>
+                    <span className="text-[12px] text-text3">Queda justo</span>
                   )}
                 </div>
               </li>
@@ -309,14 +317,6 @@ export function CompraJueves({
           })}
         </ul>
       )}
-      {compra.filas.length > visibles.length || verTodo ? (
-        <button
-          onClick={() => setVerTodo((v) => !v)}
-          className="mt-3 min-h-[36px] text-[12.5px] font-medium text-accent hover:text-accent2"
-        >
-          {verTodo ? "Ver solo lo urgente" : `Ver los ${compra.filas.length} insumos`}
-        </button>
-      ) : null}
     </Bloque>
   );
 }
