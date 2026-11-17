@@ -18,7 +18,9 @@ import type { PlanCompras } from "@/lib/types-v2";
 const fDiaMes = (iso: string) => `${iso.slice(8, 10)}/${iso.slice(5, 7)}`;
 const fCant = (n: number) => fNum(n, n >= 10 ? 1 : n >= 1 ? 2 : 3);
 
-/** Input numérico chico para cargar un dato a mano; vacío = usar la sugerencia. */
+/** Input numérico chico para cargar un dato a mano; vacío = usar la sugerencia. Mientras se escribe
+ * guarda el texto tal cual (para poder escribir "-", "0," o "1.5" sin que se borre) y solo manda el
+ * número cuando el texto ya es un número válido. Acepta coma o punto decimal. */
 function CampoNumero({
   valor,
   placeholder,
@@ -32,14 +34,29 @@ function CampoNumero({
   ancho?: string;
   sufijo?: string;
 }) {
+  const externo = valor == null ? "" : String(valor).replace(".", ",");
+  const [texto, setTexto] = useState(externo);
+  const [editando, setEditando] = useState(false);
+  const mostrado = editando ? texto : externo;
   return (
     <span className="inline-flex items-center gap-1">
       <input
-        type="number"
+        type="text"
         inputMode="decimal"
-        value={valor ?? ""}
+        value={mostrado}
         placeholder={placeholder}
-        onChange={(e) => onCambio(e.target.value === "" ? null : Number(e.target.value))}
+        onFocus={() => {
+          setTexto(externo);
+          setEditando(true);
+        }}
+        onBlur={() => setEditando(false)}
+        onChange={(e) => {
+          const t = e.target.value.replace(/[^0-9,.-]/g, "");
+          setTexto(t);
+          if (t.trim() === "") return onCambio(null);
+          const n = Number(t.replace(",", "."));
+          if (Number.isFinite(n) && !/[.,-]$/.test(t)) onCambio(n);
+        }}
         className={`${ancho} rounded-lg border border-border bg-surface2 px-2 py-1.5 text-right text-[12.5px] text-text outline-none transition-colors placeholder:text-text3 focus:border-accent`}
       />
       {sufijo && <span className="text-[11.5px] text-text3">{sufijo}</span>}
@@ -107,7 +124,7 @@ function TablaInsumos({
                       {f.stock_minimo ? <div className="text-[11.5px] text-text3">mínimo {fCant(f.stock_minimo)}</div> : null}
                     </>
                   ) : (
-                    <CampoNumero valor={f.en_casa || null} placeholder="0" sufijo={f.unidad} onCambio={(v) => onEnCasa?.(f.insumo_id, v)} />
+                    <CampoNumero valor={f.en_casa ?? null} placeholder="0" sufijo={f.unidad} onCambio={(v) => onEnCasa?.(f.insumo_id, v)} />
                   )}
                 </td>
                 <td className={`px-2 py-2.5 text-right font-semibold ${f.comprar > 0 ? "text-text" : "text-text3"}`}>
@@ -284,7 +301,7 @@ function PlanMensualVista() {
                   <td className="px-2 py-2.5 text-right text-text2">{fNum(p.promedio_ponderado, 1)}</td>
                   <td className="px-2 py-2.5 text-right">
                     <CampoNumero
-                      valor={p.ajuste_pct || null}
+                      valor={p.ajuste_pct === 0 && !(`${clave}:${p.producto_id}` in (data.configuracion.plan_compras?.ajuste_pct ?? {})) ? null : p.ajuste_pct}
                       placeholder="0"
                       sufijo="%"
                       ancho="w-14"

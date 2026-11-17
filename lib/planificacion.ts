@@ -142,7 +142,8 @@ export function planSemanal(data: RicordoDataV2, jueves: string): PlanSemanal {
       unidad: unidadesPorCajaStock(data, p.id) > 1 ? "cajas" : "unidades",
     };
   });
-  cajas.sort((a, b) => b.a_armar - a.a_armar || a.nombre.localeCompare(b.nombre));
+  // Orden fijo por lo que se vende (no por lo cargado a mano), para que las filas no salten al escribir.
+  cajas.sort((a, b) => b.promedio_semanal - a.promedio_semanal || a.nombre.localeCompare(b.nombre));
   const insumos = insumosMasaPackaging(data, new Map(cajas.filter((c) => c.a_armar > 0).map((c) => [c.producto_id, c.a_armar])));
   return {
     jueves,
@@ -245,7 +246,7 @@ export function planMensual(data: RicordoDataV2, mes: number, anio: number): Pla
       cajas_relleno_a_cocinar: kgPorCaja > 0 ? kg_relleno_a_cocinar / kgPorCaja : 0,
     };
   });
-  productos.sort((a, b) => b.a_usar - a.a_usar || a.nombre.localeCompare(b.nombre));
+  productos.sort((a, b) => b.promedio_ponderado - a.promedio_ponderado || a.nombre.localeCompare(b.nombre));
 
   const insumos_masa = insumosMasaPackaging(data, new Map(productos.filter((p) => p.a_producir > 0).map((p) => [p.producto_id, p.a_producir])));
 
@@ -266,7 +267,7 @@ export function planMensual(data: RicordoDataV2, mes: number, anio: number): Pla
   }
   const insumos_relleno = ordenarFilas(
     [...necesidadRelleno.entries()].map(([id, n]) =>
-      filaInsumo(data, id, n.cantidad, [...n.usado], { conStock: false, enCasa: plan.relleno_en_casa?.[`${clave}:${id}`] ?? 0 })
+      filaInsumo(data, id, n.cantidad, [...n.usado], { conStock: false, enCasa: plan.relleno_en_casa?.[`${clave}:${id}`] })
     )
   );
 
