@@ -3,7 +3,7 @@ import { emptyDataV2, type RicordoDataV2 } from "@/lib/types-v2";
 import { conCobrosSeptiembreConfirmados, conStockPorProducto } from "@/lib/migration/v3";
 
 // Lectura del documento del negocio desde el servidor (para tareas automáticas como el export
-// semanal a Sheets). Usa la service role key de Supabase, que saltea RLS: vive SOLO como variable
+// semanal a Sheets). Usa una clave secreta de Supabase (`sb_secret_…` nueva o service_role legacy), que saltea RLS: vive SOLO como variable
 // de entorno server-only en Vercel (sin NEXT_PUBLIC_), nunca llega al navegador.
 
 const ROW_ID = "main";
@@ -27,7 +27,11 @@ export async function leerDatosNegocio(): Promise<{ data: RicordoDataV2; version
     throw new Error("Faltan NEXT_PUBLIC_SUPABASE_URL o SUPABASE_SERVICE_ROLE_KEY en las variables de entorno.");
   }
   const res = await fetch(`${url}/rest/v1/app_state?id=eq.${ROW_ID}&select=data,version,updated_at`, {
-    headers: { apikey: serviceKey, Authorization: `Bearer ${serviceKey}` },
+    // Clave nueva (`sb_secret_…`): va solo en `apikey`. Clave legacy service_role (JWT `eyJ…`):
+    // también como Bearer.
+    headers: serviceKey.startsWith("sb_secret_")
+      ? { apikey: serviceKey }
+      : { apikey: serviceKey, Authorization: `Bearer ${serviceKey}` },
     cache: "no-store",
   });
   if (!res.ok) throw new Error(`Supabase respondió ${res.status}: ${(await res.text()).slice(0, 200)}`);
