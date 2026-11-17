@@ -1,5 +1,5 @@
 {
   "crons": [
-    { "path": "/api/cron/export-sheets", "schedule": "0 11 * * 1" }
+    { "path": "/api/cron/export-sheets", "schedule": "0 11 * * 3" }
   ]
 }
