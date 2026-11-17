@@ -247,8 +247,7 @@ export function Inicio() {
         <CompraJueves plan={compra} onAjustar={() => router.go("operaciones", "planificacion")} />
         <PlataPanel
           caja={caja}
-          disponibleMasaPackaging={fondo.disponible_masa_packaging}
-          disponibleRelleno={fondo.disponible_relleno}
+          disponibleReposicion={fondo.disponible_total}
           reinversion={fondos.reinversion.saldo}
           seguridad={fondos.seguridad.saldo}
           prestado={fondos.total_prestado + fondos.te_debe}

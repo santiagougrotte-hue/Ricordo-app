@@ -80,6 +80,48 @@ function Cifra({ label, valor, tono = "text-text", nota }: { label: string; valo
   );
 }
 
+function PlanVsProducido({ plan, nombreMes, mes, anio }: { plan: ReturnType<typeof planMensual>; nombreMes: string; mes: number; anio: number }) {
+  const hoy = new Date();
+  const esMesActual = hoy.getMonth() + 1 === mes && hoy.getFullYear() === anio;
+  const diasMes = new Date(anio, mes, 0).getDate();
+  const esperado = esMesActual ? (hoy.getDate() / diasMes) * 100 : null;
+  const filas = plan.productos.filter((p) => p.a_producir > 0 || p.producido > 0);
+  const avance = plan.avance_pct;
+  const tono = avance == null ? "text-text" : esperado != null ? (avance >= esperado - 5 ? "text-green" : "text-orange") : avance >= 95 ? "text-green" : "text-orange";
+  return (
+    <Bloque titulo={`Planificado contra producido en ${nombreMes}`} bajada="Cajas a producir según el plan del mes contra las producciones cargadas. Lo producido de más en un gusto no cuenta para el avance de los otros.">
+      <div className="grid grid-cols-2 gap-4 rounded-2xl bg-surface2 p-4 sm:grid-cols-4">
+        <Cifra label="Planificado" valor={`${fNum(plan.total_planificado, 0)} cajas`} />
+        <Cifra label="Producido" valor={`${fNum(plan.total_producido, 1)} cajas`} />
+        <Cifra label="Avance del plan" valor={avance == null ? "—" : `${fNum(avance, 0)}%`} tono={tono} nota={esperado != null ? `A esta altura del mes, lo esperable es ${fNum(esperado, 0)}%` : undefined} />
+        <Cifra label="Falta producir" valor={`${fNum(plan.falta_producir, 1)} cajas`} />
+      </div>
+      {filas.length > 0 && (
+        <ul className="mt-4 divide-y divide-border">
+          {filas.map((p) => {
+            const pct = p.a_producir > 0 ? (p.producido / p.a_producir) * 100 : null;
+            return (
+              <li key={p.producto_id} className="grid grid-cols-[minmax(0,3fr)_minmax(0,5fr)_132px] items-center gap-4 py-2.5 text-[12.5px]">
+                <span className="truncate text-text">{p.nombre}</span>
+                <span className="relative h-2 overflow-hidden rounded-full bg-surface2" aria-hidden="true">
+                  <span
+                    className={`absolute inset-y-0 left-0 rounded-full ${pct != null && pct >= 100 ? "bg-green" : "bg-accent"}`}
+                    style={{ width: `${Math.min(100, pct ?? 100)}%` }}
+                  />
+                </span>
+                <span className="text-right text-text2 [font-variant-numeric:tabular-nums]">
+                  {fNum(p.producido, 1)} de {p.a_producir}
+                  <span className={`ml-2 ${pct != null && pct > 100 ? "text-orange" : "text-text3"}`}>{pct == null ? "sin plan" : `${fNum(pct, 0)}%`}</span>
+                </span>
+              </li>
+            );
+          })}
+        </ul>
+      )}
+    </Bloque>
+  );
+}
+
 function TablaInsumos({
   filas,
   modo,
@@ -253,6 +295,8 @@ function PlanMensualVista() {
 
   return (
     <div className="space-y-5">
+      <PlanVsProducido plan={plan} nombreMes={nombreMes} mes={mes} anio={anio} />
+
       <Bloque titulo={`¿Alcanza la plata para las compras de ${nombreMes}?`} bajada="Compras del mes para producir lo proyectado, contra el fondo de reposición.">
         <div className="grid grid-cols-2 gap-4 rounded-2xl bg-surface2 p-4 sm:grid-cols-4">
           <Cifra label="Masa, armado y packaging" valor={fARS(plan.costo_masa)} />
@@ -270,7 +314,7 @@ function PlanMensualVista() {
         bajada={`Promedio ponderado de ${plan.meses_ref.join(", ") || "los meses con ventas"}: el mes pasado pesa 3, el anterior 2 y el de antes 1. Ajustá si sabés algo que los números no muestran (una cena, un cliente nuevo).`}
       >
         <div className="overflow-x-auto">
-          <table className="w-full min-w-[860px] text-[12.5px] [font-variant-numeric:tabular-nums]">
+          <table className="w-full min-w-[940px] text-[12.5px] [font-variant-numeric:tabular-nums]">
             <thead>
               <tr className="text-left text-[12px] text-text3">
                 <th className="py-2 pr-3 font-medium">Gusto</th>
@@ -282,8 +326,9 @@ function PlanMensualVista() {
                 <th className="px-2 py-2 text-right font-medium">Promedio</th>
                 <th className="px-2 py-2 text-right font-medium">Ajuste</th>
                 <th className="px-2 py-2 text-right font-medium">Proyección</th>
-                <th className="px-2 py-2 text-right font-medium">Freezer</th>
-                <th className="py-2 pl-2 text-right font-medium">A producir</th>
+                <th className="px-2 py-2 text-right font-medium">Freezer al 1°</th>
+                <th className="px-2 py-2 text-right font-medium">A producir</th>
+                <th className="py-2 pl-2 text-right font-medium">Producido</th>
               </tr>
             </thead>
             <tbody>
@@ -317,7 +362,8 @@ function PlanMensualVista() {
                     />
                   </td>
                   <td className="px-2 py-2.5 text-right text-text2">{fNum(p.freezer, 1)}</td>
-                  <td className={`py-2.5 pl-2 text-right font-semibold ${p.a_producir > 0 ? "text-text" : "text-text3"}`}>{p.a_producir}</td>
+                  <td className={`px-2 py-2.5 text-right font-semibold ${p.a_producir > 0 ? "text-text" : "text-text3"}`}>{p.a_producir}</td>
+                  <td className="py-2.5 pl-2 text-right text-text2">{fNum(p.producido, 1)}</td>
                 </tr>
               ))}
             </tbody>

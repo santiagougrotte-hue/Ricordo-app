@@ -313,7 +313,7 @@ test("resumenImportApp: renglones de venta, pedido, relleno, stock y receta con 
   assert.equal(receta.find((f) => col(f, "Item_ID") === "PREMEZCLA")?.[HEADERS_IMPORT_APP.indexOf("Cantidad")], 0.12);
 });
 
-test("calcularFondoReposicion: CMV de pedidos entregados menos compras, separado masa/packaging y relleno", async () => {
+test("calcularFondoReposicion: CMV de pedidos entregados (masa, relleno y packaging juntos) menos compras", async () => {
   const { calcularFondoReposicion } = await import("./fondo-reposicion");
   const data = fixture();
   const { p, items } = pedido("Entregado");
@@ -326,11 +326,9 @@ test("calcularFondoReposicion: CMV de pedidos entregados menos compras, separado
     { id: "CI2", compra_id: "C1", insumo_id: "OSOBUCO", cantidad: 0.1, precio_unitario: 10000, subtotal: 1000 },
   ];
   const f = calcularFondoReposicion(data);
-  // Solo PED-1 (entregado): masa 1200 + packaging 1000 = 2200; relleno 1596.
-  assert.equal(f.cmv_masa_packaging, 2200);
-  assert.equal(f.cmv_relleno, 1596);
-  assert.equal(f.compras_masa_packaging, 2000);
-  assert.equal(f.compras_relleno, 1000);
+  // Solo PED-1 (entregado): masa 1200 + packaging 1000 + relleno 1596 = 3796, un solo CMV.
+  assert.equal(f.cmv_vendido, 3796);
+  assert.equal(f.compras, 3000);
   assert.equal(f.disponible_total, 796);
 });
 
@@ -359,4 +357,16 @@ test("kgRellenoParaCajasGusto/resumenRellenos: un gusto que se vende por unidad 
   assert.equal(r.kg_disponibles, 3);
   assert.equal(r.unidades_por_ref, 1);
   assert.equal(r.unidades_ref_disponibles, 10); // 3 kg disponibles / 0.3 kg por unidad
+});
+
+test("producidoPorGusto: cajas por gusto en el período; las producciones viejas por presentación se pasan a cajas", async () => {
+  const { producidoPorGusto } = await import("./planificacion");
+  const data = fixture();
+  const v = data.producto_variantes.find((x) => x.producto_id === "OSO")!;
+  data.produccion = [
+    { id: "P1", producto_id: "OSO", producto_variante_id: v.id, cantidad: 6, fecha: "2026-11-05" },
+    { id: "P2", producto_id: "OSO", producto_variante_id: v.id, cantidad: 2, fecha: "2026-10-30" },
+  ];
+  const m = producidoPorGusto(data, "2026-11-01", "2026-11-30");
+  assert.equal(m.get("OSO"), 6);
 });

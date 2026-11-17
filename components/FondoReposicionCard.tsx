@@ -6,8 +6,8 @@ import { fARS } from "@/lib/calc-v2";
 import { calcularFondoReposicion } from "@/lib/fondo-reposicion";
 import { Card, InfoRow } from "@/components/ui";
 
-/** Cuánta plata de la mercadería vendida (CMV) hay disponible para recomprar insumos, separada en
- * masa y packaging (compra semanal) y relleno (compra mensual). */
+/** Cuánta plata de la mercadería vendida (CMV: masa, relleno y packaging juntos) hay disponible
+ * para recomprar insumos. */
 export function FondoReposicionCard({ className = "mb-4" }: { className?: string }) {
   const { data } = useStoreV2();
   const f = useMemo(() => calcularFondoReposicion(data), [data]);
@@ -25,19 +25,10 @@ export function FondoReposicionCard({ className = "mb-4" }: { className?: string
           Compras acumuladas {fARS(f.compras_total)}
         </div>
       </div>
-      <div className="grid gap-4 md:grid-cols-2">
-        <div>
-          <div className="mb-1 text-[11.5px] font-semibold text-text2">Masa y packaging (compra semanal)</div>
-          <InfoRow label="CMV vendido" value={fARS(f.cmv_masa_packaging)} />
-          <InfoRow label="− Compras" value={fARS(f.compras_masa_packaging)} />
-          <InfoRow label="= Disponible" value={fARS(f.disponible_masa_packaging)} color={color(f.disponible_masa_packaging)} />
-        </div>
-        <div>
-          <div className="mb-1 text-[11.5px] font-semibold text-text2">Rellenos (compra mensual)</div>
-          <InfoRow label="CMV vendido" value={fARS(f.cmv_relleno)} />
-          <InfoRow label="− Compras" value={fARS(f.compras_relleno)} />
-          <InfoRow label="= Disponible" value={fARS(f.disponible_relleno)} color={color(f.disponible_relleno)} />
-        </div>
+      <div>
+        <InfoRow label="CMV vendido (masa, relleno y packaging)" value={fARS(f.cmv_vendido)} />
+        <InfoRow label="− Compras de insumos" value={fARS(f.compras)} />
+        <InfoRow label="= Disponible" value={fARS(f.cmv_vendido - f.compras)} color={color(f.cmv_vendido - f.compras)} />
       </div>
       <p className="mt-3 text-[11.5px] text-text3">
         Es lo que las ventas entregadas te devolvieron para reponer mercadería, menos lo que ya compraste. Si da negativo,

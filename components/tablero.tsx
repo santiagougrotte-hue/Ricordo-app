@@ -325,8 +325,7 @@ export function CompraJueves({ plan, onAjustar }: { plan: PlanSemanal; onAjustar
 
 export function PlataPanel({
   caja,
-  disponibleMasaPackaging,
-  disponibleRelleno,
+  disponibleReposicion,
   reinversion,
   seguridad,
   prestado,
@@ -334,8 +333,7 @@ export function PlataPanel({
   onVerFondos,
 }: {
   caja: number;
-  disponibleMasaPackaging: number;
-  disponibleRelleno: number;
+  disponibleReposicion: number;
   reinversion: number;
   seguridad: number;
   prestado: number;
@@ -343,8 +341,7 @@ export function PlataPanel({
   onVerFondos: () => void;
 }) {
   const filas: { label: string; valor: number; nota: string }[] = [
-    { label: "Reposición de masa y packaging", valor: disponibleMasaPackaging, nota: "Lo que devolvieron las ventas, menos lo ya comprado" },
-    { label: "Reposición de rellenos", valor: disponibleRelleno, nota: "Para la compra mensual de rellenos" },
+    { label: "Reposición de mercadería", valor: disponibleReposicion, nota: "CMV de lo vendido (masa, relleno y packaging), menos lo ya comprado" },
     { label: "Reinversión de maquinaria", valor: reinversion, nota: "Amortizaciones y parte de la ganancia" },
     { label: "Margen de seguridad", valor: seguridad, nota: "Para cubrir meses malos" },
   ];
