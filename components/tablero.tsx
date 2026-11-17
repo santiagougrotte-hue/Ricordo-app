@@ -327,26 +327,45 @@ export function PlataPanel({
   caja,
   disponibleMasaPackaging,
   disponibleRelleno,
-  comprasSinPagar,
-  porCobrar,
+  reinversion,
+  seguridad,
+  prestado,
+  mesesPorSeparar,
+  onVerFondos,
 }: {
   caja: number;
   disponibleMasaPackaging: number;
   disponibleRelleno: number;
-  comprasSinPagar: number;
-  porCobrar: number;
+  reinversion: number;
+  seguridad: number;
+  prestado: number;
+  mesesPorSeparar: string[];
+  onVerFondos: () => void;
 }) {
   const filas: { label: string; valor: number; nota: string }[] = [
-    { label: "Fondo para masa y packaging", valor: disponibleMasaPackaging, nota: "Lo que las ventas devolvieron para recomprar, menos lo ya comprado" },
-    { label: "Fondo para rellenos", valor: disponibleRelleno, nota: "Para la compra mensual de rellenos" },
-    { label: "Pedidos por entregar", valor: porCobrar, nota: "Confirmados o en producción, todavía sin cobrar" },
-    { label: "Compras sin pagar", valor: -comprasSinPagar, nota: "A pagar a proveedores" },
+    { label: "Reposición de masa y packaging", valor: disponibleMasaPackaging, nota: "Lo que devolvieron las ventas, menos lo ya comprado" },
+    { label: "Reposición de rellenos", valor: disponibleRelleno, nota: "Para la compra mensual de rellenos" },
+    { label: "Reinversión de maquinaria", valor: reinversion, nota: "Amortizaciones y parte de la ganancia" },
+    { label: "Margen de seguridad", valor: seguridad, nota: "Para cubrir meses malos" },
   ];
   return (
-    <Bloque titulo="La plata" bajada="Saldo real de caja y cómo se reparte.">
+    <Bloque
+      titulo="La plata"
+      bajada="Saldo real de caja y cómo se reparte."
+      derecha={
+        <button onClick={onVerFondos} className="min-h-[34px] rounded-full border border-border px-3.5 text-[12.5px] font-medium text-text2 hover:border-accent hover:text-text">
+          Ver fondos
+        </button>
+      }
+    >
       <div className={`text-[34px] leading-none ${NUM_BIG} ${caja >= 0 ? "text-text" : "text-red"}`}>{fARS(caja)}</div>
       <div className="mt-1.5 text-[12px] text-text3">Saldo de caja</div>
-      <ul className="mt-5 divide-y divide-border">
+      {mesesPorSeparar.length > 0 && (
+        <button onClick={onVerFondos} className="mt-4 w-full rounded-2xl bg-accent-dim px-3.5 py-3 text-left text-[12.5px] text-text hover:bg-accent/20">
+          Falta separar la ganancia y las amortizaciones de {mesesPorSeparar.join(" y ")}.
+        </button>
+      )}
+      <ul className="mt-4 divide-y divide-border">
         {filas.map((f) => (
           <li key={f.label} className="flex items-baseline justify-between gap-4 py-3">
             <div className="min-w-0">
@@ -354,11 +373,17 @@ export function PlataPanel({
               <div className="text-[11.5px] text-text3">{f.nota}</div>
             </div>
             <div className={`shrink-0 text-[14px] font-semibold [font-variant-numeric:tabular-nums] ${f.valor < 0 ? "text-red" : "text-text"}`}>
-              {f.valor < 0 ? fARSFirmado(f.valor) : fARS(Math.abs(f.valor))}
+              {f.valor < 0 ? fARSFirmado(f.valor) : fARS(f.valor)}
             </div>
           </li>
         ))}
       </ul>
+      {prestado > 0 && (
+        <div className="mt-2 flex items-baseline justify-between gap-4 rounded-2xl bg-orange-dim px-3.5 py-3 text-[13px]">
+          <span className="text-text">Le debés a tus fondos</span>
+          <span className="font-semibold text-text [font-variant-numeric:tabular-nums]">{fARS(prestado)}</span>
+        </div>
+      )}
     </Bloque>
   );
 }

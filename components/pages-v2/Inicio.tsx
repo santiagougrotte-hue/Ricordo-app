@@ -31,6 +31,7 @@ import {
   rankingProductos,
 } from "@/lib/tablero";
 import { planSemanal } from "@/lib/planificacion";
+import { estadoFondos, sugerenciasPendientes } from "@/lib/fondos";
 import { generarResumenInteligente } from "@/lib/resumen-inteligente";
 import { produccionPendientePorSabor, gustosSinVarianteActiva } from "@/lib/rellenos";
 import type { Conclusion } from "@/lib/resumen-inteligente";
@@ -136,19 +137,19 @@ export function Inicio() {
   const ranking = useMemo(() => rankingProductos(data, sumarDias(hoy, -90), hoy), [data, hoy]);
   const resumen = useMemo(() => generarResumenInteligente(data, mes, anio), [data, mes, anio]);
   const caja = useMemo(() => saldoCaja(data), [data]);
+  const fondos = useMemo(() => estadoFondos(data, mes, anio), [data, mes, anio]);
+  const porSeparar = useMemo(() => sugerenciasPendientes(data, hoy), [data, hoy]);
 
   const pedidosPendientes = useMemo(
     () => data.pedidos.filter((p) => p.estado === "Confirmado" || p.estado === "Produccion").sort((a, b) => a.fecha.localeCompare(b.fecha)),
     [data.pedidos]
   );
-  const porEntregar = pedidosPendientes.reduce((acc, p) => acc + p.total, 0);
   // Agrupado por sabor (producto), no por presentación/canal — el freezer por gusto ya es un solo
   // pool compartido entre todas las variantes del mismo producto (ver conSalidaFreezerPedido).
   const itemsEnProduccion = useMemo(
     () => produccionPendientePorSabor(data, pedidosPendientes.filter((p) => p.estado === "Produccion")),
     [data, pedidosPendientes]
   );
-  const totalComprasPendientes = data.compras.filter((c) => c.estado_pago === "pendiente").reduce((acc, c) => acc + c.total, 0);
 
   // Avisos de datos que dejan un número incompleto o un descuento de stock sin hacer — se juntan en
   // un solo recuadro corto en vez de un aviso largo por cada uno.
@@ -248,8 +249,11 @@ export function Inicio() {
           caja={caja}
           disponibleMasaPackaging={fondo.disponible_masa_packaging}
           disponibleRelleno={fondo.disponible_relleno}
-          comprasSinPagar={totalComprasPendientes}
-          porCobrar={porEntregar}
+          reinversion={fondos.reinversion.saldo}
+          seguridad={fondos.seguridad.saldo}
+          prestado={fondos.total_prestado}
+          mesesPorSeparar={porSeparar.map((s) => s.etiqueta)}
+          onVerFondos={() => router.go("finanzas", "fondos")}
         />
       </div>
 
